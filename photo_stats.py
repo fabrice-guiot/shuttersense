@@ -467,7 +467,7 @@ class PhotoStats:
 </html>"""
 
         output_file = Path(output_path)
-        output_file.write_text(html_content)
+        output_file.write_text(html_content, encoding='utf-8')
         print(f"Report generated: {output_file.resolve()}")
         return output_file
 
