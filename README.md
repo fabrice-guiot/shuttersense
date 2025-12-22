@@ -140,5 +140,21 @@ photo-admin/
 │   ├── __init__.py        # Test package
 │   ├── conftest.py        # Test fixtures and configuration
 │   └── test_photo_stats.py # Test suite
+├── LICENSE                # AGPL v3 license
 └── README.md              # This file
 ```
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+See the [LICENSE](LICENSE) file for details.
+
+### What this means:
+
+- ✅ You can use, modify, and distribute this software freely
+- ✅ If you run a modified version on a server, you must make the source code available to users
+- ✅ Any derivative works must also be licensed under AGPL v3
+- ✅ This ensures the software remains free and open for the community
+
+For more information, visit: https://www.gnu.org/licenses/agpl-3.0.html
