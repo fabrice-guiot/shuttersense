@@ -93,3 +93,58 @@ File counts:
 - **TIFF** (Tagged Image File Format)
 - **CR3** (Canon Raw 3)
 - **XMP** (Extensible Metadata Platform)
+
+## Development
+
+### Running Tests
+
+This project includes a comprehensive test suite using pytest. To run the tests:
+
+```bash
+# Install development dependencies
+pip install -r requirements.txt
+
+# Run all tests
+python -m pytest tests/
+
+# Run tests with verbose output
+python -m pytest tests/ -v
+
+# Run tests with coverage report
+pip install pytest-cov
+python -m pytest tests/ --cov=photo_stats --cov-report=html
+
+# Run specific test class
+python -m pytest tests/test_photo_stats.py::TestFileScanningFunctionality -v
+
+# Run specific test
+python -m pytest tests/test_photo_stats.py::TestFileScanningFunctionality::test_scan_valid_folder -v
+```
+
+### Test Coverage
+
+The test suite includes 34 tests covering:
+
+- **Initialization**: PhotoStats class instantiation and configuration
+- **File Scanning**: Recursive scanning, file filtering, and discovery
+- **Statistics Collection**: File counting, size tracking, and aggregation
+- **File Pairing Analysis**: Detecting paired and orphaned files
+- **XMP Metadata Extraction**: Parsing and extracting metadata from XMP files
+- **HTML Report Generation**: Report creation and content validation
+- **Utility Functions**: Size formatting and helper methods
+- **Edge Cases**: Special characters, large files, unicode, symlinks, etc.
+
+### Project Structure
+
+```
+photo-admin/
+├── photo_stats.py          # Main application
+├── requirements.txt        # Python dependencies
+├── pytest.ini             # Pytest configuration
+├── .coveragerc            # Coverage configuration
+├── tests/
+│   ├── __init__.py        # Test package
+│   ├── conftest.py        # Test fixtures and configuration
+│   └── test_photo_stats.py # Test suite
+└── README.md              # This file
+```
