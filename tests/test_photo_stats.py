@@ -570,16 +570,11 @@ metadata_extensions:
         test_dir = tmp_path / "no_template"
         test_dir.mkdir()
 
-        # Mock Path(__file__).parent to point to test_dir so template isn't found
-        import photo_stats
-        original_file = photo_stats.__file__
+        # Mock Path(__file__).parent in config_manager to point to test_dir so template isn't found
+        import config_manager
 
-        # Create a temporary module-like object
-        class MockModule:
-            __file__ = str(test_dir / "fake_module.py")
-
-        # Patch the __file__ attribute
-        monkeypatch.setattr(photo_stats, '__file__', str(test_dir / "fake_module.py"))
+        # Patch the __file__ attribute in config_manager module
+        monkeypatch.setattr(config_manager, '__file__', str(test_dir / "fake_module.py"))
 
         # No template file exists
         original_cwd = Path.cwd()

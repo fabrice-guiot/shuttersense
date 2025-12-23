@@ -26,7 +26,8 @@ from collections import defaultdict
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import json
-import yaml
+
+from config_manager import PhotoAdminConfig
 
 
 class PhotoStats:
@@ -34,10 +35,11 @@ class PhotoStats:
 
     def __init__(self, folder_path, config_path=None):
         self.folder_path = Path(folder_path)
-        self.config = self._load_config(config_path)
-        self.PHOTO_EXTENSIONS = set(self.config.get('photo_extensions', []))
-        self.METADATA_EXTENSIONS = set(self.config.get('metadata_extensions', []))
-        self.REQUIRE_SIDECAR = set(self.config.get('require_sidecar', []))
+        self.config_manager = PhotoAdminConfig(config_path)
+        self.config = self.config_manager.raw_config
+        self.PHOTO_EXTENSIONS = self.config_manager.photo_extensions
+        self.METADATA_EXTENSIONS = self.config_manager.metadata_extensions
+        self.REQUIRE_SIDECAR = self.config_manager.require_sidecar
 
         self.stats = {
             'file_counts': defaultdict(int),
@@ -56,97 +58,6 @@ class PhotoStats:
                 'require_sidecar': list(self.REQUIRE_SIDECAR)
             }
         }
-
-    def _load_config(self, config_path=None):
-        """Load configuration from YAML file."""
-        if config_path is None:
-            # Try to find config file in standard locations
-            possible_paths = [
-                Path('config/config.yaml'),
-                Path('config.yaml'),
-                Path.home() / '.photo_stats_config.yaml',
-                Path(__file__).parent / 'config' / 'config.yaml'
-            ]
-
-            for path in possible_paths:
-                if path.exists():
-                    config_path = path
-                    break
-
-        if config_path and Path(config_path).exists():
-            try:
-                with open(config_path, 'r') as f:
-                    config = yaml.safe_load(f)
-                    print(f"Loaded configuration from: {config_path}")
-                    return config
-            except Exception as e:
-                print(f"Error: Could not load config from {config_path}: {e}")
-                sys.exit(1)
-
-        # No config file found - check for template and offer to create
-        return self._handle_missing_config()
-
-    def _handle_missing_config(self):
-        """Handle missing configuration file by offering to create from template."""
-        # Look for template file
-        template_paths = [
-            Path('config/template-config.yaml'),
-            Path(__file__).parent / 'config' / 'template-config.yaml'
-        ]
-
-        template_path = None
-        for path in template_paths:
-            if path.exists():
-                template_path = path
-                break
-
-        if not template_path:
-            print("\nError: Configuration template file not found.")
-            print("The tool does not appear to be properly installed.")
-            print("Please refer to the README for installation instructions:")
-            print("  https://github.com/fabrice-guiot/photo-admin/blob/main/README.md")
-            sys.exit(1)
-
-        # Determine where to create the config file
-        config_dir = Path('config')
-        if not config_dir.exists():
-            config_dir = template_path.parent
-
-        config_path = config_dir / 'config.yaml'
-
-        print("\nNo configuration file found.")
-        print(f"Template found at: {template_path}")
-        print(f"\nWould you like to create a configuration file at: {config_path}")
-
-        # Prompt user for confirmation
-        response = input("Create config file? [Y/n]: ").strip().lower()
-
-        if response in ('', 'y', 'yes'):
-            try:
-                # Ensure config directory exists
-                config_dir.mkdir(parents=True, exist_ok=True)
-
-                # Copy template to config.yaml
-                import shutil
-                shutil.copy(template_path, config_path)
-
-                print(f"\n✓ Configuration file created: {config_path}")
-                print("\nYou can now modify this file to customize file type settings for your needs.")
-                print("The tool will use this configuration for all future runs.")
-
-                # Load the newly created config
-                with open(config_path, 'r') as f:
-                    config = yaml.safe_load(f)
-                    return config
-
-            except Exception as e:
-                print(f"\nError: Could not create configuration file: {e}")
-                sys.exit(1)
-        else:
-            print("\nConfiguration file creation cancelled.")
-            print("The tool requires a configuration file to run.")
-            print(f"You can manually copy the template: cp {template_path} {config_path}")
-            sys.exit(1)
 
     def scan_folder(self):
         """Scan the folder and collect file statistics."""
