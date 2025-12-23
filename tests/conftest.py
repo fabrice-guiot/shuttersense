@@ -6,11 +6,71 @@ import pytest
 from pathlib import Path
 import tempfile
 import shutil
+import os
+from photo_stats import PhotoStats
+
+
+# Store the original __init__ method
+_original_init = PhotoStats.__init__
+
+
+@pytest.fixture(scope="function", autouse=True)
+def auto_provide_config(request, tmp_path):
+    """Automatically provide a config file to PhotoStats for most tests."""
+    # Skip for TestConfigurationLoading tests as they need to test config behavior
+    if 'TestConfigurationLoading' in request.node.nodeid:
+        yield
+        return
+
+    # Create a default config file
+    config_content = """photo_extensions:
+  - .dng
+  - .tiff
+  - .tif
+  - .cr3
+metadata_extensions:
+  - .xmp
+require_sidecar:
+  - .cr3
+"""
+    config_file = tmp_path / "auto_config.yaml"
+    config_file.write_text(config_content)
+
+    # Monkeypatch PhotoStats.__init__ to use this config if none provided
+    def patched_init(self, folder_path, config_path=None):
+        if config_path is None:
+            config_path = config_file
+        _original_init(self, folder_path, config_path)
+
+    PhotoStats.__init__ = patched_init
+
+    yield
+
+    # Restore original __init__
+    PhotoStats.__init__ = _original_init
 
 
 @pytest.fixture
-def temp_photo_dir(tmp_path):
-    """Create a temporary directory with sample photo files."""
+def default_config_file(tmp_path):
+    """Create a default configuration file for tests."""
+    config_content = """photo_extensions:
+  - .dng
+  - .tiff
+  - .tif
+  - .cr3
+metadata_extensions:
+  - .xmp
+require_sidecar:
+  - .cr3
+"""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(config_content)
+    return config_file
+
+
+@pytest.fixture
+def temp_photo_dir(tmp_path, default_config_file):
+    """Create a temporary directory with sample photo files and config."""
     photo_dir = tmp_path / "photos"
     photo_dir.mkdir()
 
@@ -90,7 +150,7 @@ def empty_dir(tmp_path):
 
 
 @pytest.fixture
-def mixed_file_dir(tmp_path):
+def mixed_file_dir(tmp_path, default_config_file):
     """Create a directory with both photo and non-photo files."""
     mixed_dir = tmp_path / "mixed"
     mixed_dir.mkdir()

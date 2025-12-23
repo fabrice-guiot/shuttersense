@@ -197,7 +197,9 @@ class TestFilePairingAnalysis:
         stats.scan_folder()
 
         assert len(stats.stats['paired_files']) == 0
-        assert len(stats.stats['orphaned_images']) == 2
+        # Only CR3 requires sidecar, DNG embeds metadata
+        assert len(stats.stats['orphaned_images']) == 1
+        assert stats.stats['orphaned_images'][0].endswith('photo2.cr3')
         assert len(stats.stats['orphaned_xmp']) == 0
 
 
@@ -463,3 +465,271 @@ class TestEdgeCases:
         except OSError:
             # Skip on platforms that don't support symlinks
             pytest.skip("Symlinks not supported on this platform")
+
+
+class TestConfigurationLoading:
+    """Tests for configuration file loading."""
+
+    def test_interactive_config_creation_accepted(self, tmp_path, monkeypatch):
+        """Test interactive config file creation when user accepts."""
+        test_dir = tmp_path / "interactive_config"
+        test_dir.mkdir()
+
+        # Create template file
+        config_dir = test_dir / "config"
+        config_dir.mkdir()
+        template_file = config_dir / "template-config.yaml"
+        template_content = """
+photo_extensions:
+  - .dng
+  - .cr3
+metadata_extensions:
+  - .xmp
+"""
+        template_file.write_text(template_content)
+
+        # Mock user input to accept
+        monkeypatch.setattr('builtins.input', lambda _: 'y')
+
+        # Change to test directory
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(test_dir)
+            stats = PhotoStats(test_dir)
+
+            # Config file should have been created
+            assert (config_dir / 'config.yaml').exists()
+            assert '.dng' in stats.PHOTO_EXTENSIONS
+            assert '.cr3' in stats.PHOTO_EXTENSIONS
+        finally:
+            os.chdir(original_cwd)
+
+    def test_interactive_config_creation_declined(self, tmp_path, monkeypatch):
+        """Test that tool exits when user declines config creation."""
+        test_dir = tmp_path / "declined_config"
+        test_dir.mkdir()
+
+        # Create template file
+        config_dir = test_dir / "config"
+        config_dir.mkdir()
+        template_file = config_dir / "template-config.yaml"
+        template_file.write_text("photo_extensions:\n  - .dng\n")
+
+        # Mock user input to decline
+        monkeypatch.setattr('builtins.input', lambda _: 'n')
+
+        # Change to test directory
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(test_dir)
+            with pytest.raises(SystemExit) as exc_info:
+                PhotoStats(test_dir)
+            assert exc_info.value.code == 1
+        finally:
+            os.chdir(original_cwd)
+
+    def test_missing_template_error(self, tmp_path, monkeypatch):
+        """Test that proper error is shown when template is missing."""
+        test_dir = tmp_path / "no_template"
+        test_dir.mkdir()
+
+        # Mock Path(__file__).parent to point to test_dir so template isn't found
+        import photo_stats
+        original_file = photo_stats.__file__
+
+        # Create a temporary module-like object
+        class MockModule:
+            __file__ = str(test_dir / "fake_module.py")
+
+        # Patch the __file__ attribute
+        monkeypatch.setattr(photo_stats, '__file__', str(test_dir / "fake_module.py"))
+
+        # No template file exists
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(test_dir)
+            with pytest.raises(SystemExit) as exc_info:
+                PhotoStats(test_dir)
+            assert exc_info.value.code == 1
+        finally:
+            os.chdir(original_cwd)
+
+    def test_load_custom_config(self, tmp_path):
+        """Test loading a custom configuration file."""
+        test_dir = tmp_path / "custom_config"
+        test_dir.mkdir()
+
+        # Create a custom config file
+        config_file = test_dir / "custom_config.yaml"
+        config_content = """
+photo_extensions:
+  - .nef
+  - .arw
+  - .orf
+metadata_extensions:
+  - .xmp
+"""
+        config_file.write_text(config_content)
+
+        stats = PhotoStats(test_dir, config_path=config_file)
+
+        assert '.nef' in stats.PHOTO_EXTENSIONS
+        assert '.arw' in stats.PHOTO_EXTENSIONS
+        assert '.orf' in stats.PHOTO_EXTENSIONS
+        assert '.xmp' in stats.METADATA_EXTENSIONS
+        # Default extensions should not be present
+        assert '.dng' not in stats.PHOTO_EXTENSIONS
+
+    def test_config_auto_discovery_current_dir(self, tmp_path):
+        """Test automatic discovery of config file in current directory."""
+        test_dir = tmp_path / "auto_config"
+        test_dir.mkdir()
+
+        # Create config folder and config file
+        config_dir = test_dir / "config"
+        config_dir.mkdir()
+        config_file = config_dir / "config.yaml"
+        config_content = """
+photo_extensions:
+  - .cr2
+  - .raw
+metadata_extensions:
+  - .xmp
+"""
+        config_file.write_text(config_content)
+
+        # Change to the test directory
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(test_dir)
+            stats = PhotoStats(test_dir)
+
+            assert '.cr2' in stats.PHOTO_EXTENSIONS
+            assert '.raw' in stats.PHOTO_EXTENSIONS
+        finally:
+            os.chdir(original_cwd)
+
+    def test_custom_extensions_scanning(self, tmp_path):
+        """Test that custom file extensions are scanned correctly."""
+        test_dir = tmp_path / "custom_ext"
+        test_dir.mkdir()
+
+        # Create a custom config file
+        config_file = test_dir / "config.yaml"
+        config_content = """
+photo_extensions:
+  - .nef
+  - .arw
+metadata_extensions:
+  - .xmp
+"""
+        config_file.write_text(config_content)
+
+        # Create files with custom extensions
+        (test_dir / "photo1.nef").write_bytes(b"nef data")
+        (test_dir / "photo1.xmp").write_bytes(b"xmp data")
+        (test_dir / "photo2.arw").write_bytes(b"arw data")
+        (test_dir / "photo3.dng").write_bytes(b"dng data")  # Should be ignored
+
+        stats = PhotoStats(test_dir, config_path=config_file)
+        result = stats.scan_folder()
+
+        # Should find 2 NEF/ARW files and 1 XMP, but not the DNG
+        assert result['total_files'] == 3
+        assert result['file_counts']['.nef'] == 1
+        assert result['file_counts']['.arw'] == 1
+        assert result['file_counts']['.xmp'] == 1
+        assert '.dng' not in result['file_counts']
+
+    def test_custom_extensions_pairing(self, tmp_path):
+        """Test that file pairing works with custom extensions."""
+        test_dir = tmp_path / "custom_pairing"
+        test_dir.mkdir()
+
+        # Create a custom config file
+        config_file = test_dir / "config.yaml"
+        config_content = """
+photo_extensions:
+  - .nef
+metadata_extensions:
+  - .xmp
+require_sidecar:
+  - .nef
+"""
+        config_file.write_text(config_content)
+
+        # Create paired and orphaned files
+        (test_dir / "photo1.nef").write_bytes(b"nef data")
+        (test_dir / "photo1.xmp").write_bytes(b"xmp data")
+        (test_dir / "photo2.nef").write_bytes(b"nef data")  # Orphaned
+
+        stats = PhotoStats(test_dir, config_path=config_file)
+        result = stats.scan_folder()
+
+        assert len(result['paired_files']) == 1
+        assert len(result['orphaned_images']) == 1
+
+    def test_invalid_config_file(self, tmp_path):
+        """Test handling of invalid config file."""
+        test_dir = tmp_path / "invalid_config"
+        test_dir.mkdir()
+
+        # Create an invalid YAML file
+        config_file = test_dir / "bad_config.yaml"
+        config_file.write_text("invalid: yaml: content: [")
+
+        # Should exit with error when config file is invalid
+        with pytest.raises(SystemExit) as exc_info:
+            PhotoStats(test_dir, config_path=config_file)
+        assert exc_info.value.code == 1
+
+    def test_missing_config_file_specified(self, tmp_path, monkeypatch):
+        """Test handling when specified config file doesn't exist."""
+        test_dir = tmp_path / "missing_config"
+        test_dir.mkdir()
+
+        # Create template so we can test the interactive prompt
+        config_dir = test_dir / "config"
+        config_dir.mkdir()
+        template_file = config_dir / "template-config.yaml"
+        template_file.write_text("photo_extensions:\n  - .dng\n")
+
+        non_existent_config = test_dir / "does_not_exist.yaml"
+
+        # Mock user input to decline
+        monkeypatch.setattr('builtins.input', lambda _: 'n')
+
+        # Should trigger interactive config creation when explicit path doesn't exist
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(test_dir)
+            with pytest.raises(SystemExit) as exc_info:
+                PhotoStats(test_dir, config_path=non_existent_config)
+            assert exc_info.value.code == 1
+        finally:
+            os.chdir(original_cwd)
+
+    def test_config_in_stats_output(self, tmp_path):
+        """Test that configuration is included in stats output."""
+        test_dir = tmp_path / "config_output"
+        test_dir.mkdir()
+
+        # Create a custom config file
+        config_file = test_dir / "config.yaml"
+        config_content = """
+photo_extensions:
+  - .nef
+  - .arw
+metadata_extensions:
+  - .xmp
+"""
+        config_file.write_text(config_content)
+
+        stats = PhotoStats(test_dir, config_path=config_file)
+        result = stats.scan_folder()
+
+        assert 'config' in result
+        assert 'photo_extensions' in result['config']
+        assert 'metadata_extensions' in result['config']
+        assert '.nef' in result['config']['photo_extensions']
+        assert '.arw' in result['config']['photo_extensions']

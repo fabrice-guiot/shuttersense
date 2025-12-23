@@ -1,0 +1,47 @@
+# Photo Statistics Configuration Template
+# Copy this file to config.yaml and customize it for your needs
+#
+# This file defines:
+# 1. Which file types are considered photo/image files
+# 2. Which file types REQUIRE XMP sidecar files
+# 3. What metadata sidecar extensions are valid
+
+# File types that should be scanned
+# All extensions listed here will be counted in statistics
+photo_extensions:
+  - .dng      # DNG files (already contain metadata, no sidecar needed)
+  - .tiff     # TIFF files (already contain metadata, no sidecar needed)
+  - .tif      # TIFF files (already contain metadata, no sidecar needed)
+  - .cr3      # Canon CR3 RAW (requires XMP sidecar)
+  # Uncomment or add additional formats as needed:
+  # - .nef     # Nikon RAW (requires XMP sidecar)
+  # - .arw     # Sony RAW (requires XMP sidecar)
+  # - .orf     # Olympus RAW (requires XMP sidecar)
+  # - .rw2     # Panasonic RAW (requires XMP sidecar)
+  # - .pef     # Pentax RAW (requires XMP sidecar)
+  # - .raf     # Fujifilm RAW (requires XMP sidecar)
+  # - .raw     # Generic RAW (requires XMP sidecar)
+  # - .crw     # Canon RAW older (requires XMP sidecar)
+  # - .cr2     # Canon RAW (requires XMP sidecar)
+  # - .jpg     # JPEG (may or may not need sidecar)
+  # - .jpeg    # JPEG (may or may not need sidecar)
+
+# File types that REQUIRE XMP sidecar files
+# Only these will be flagged as "orphaned" if they don't have a matching .xmp file
+# Note: DNG and TIFF typically embed metadata, so they don't need sidecars
+require_sidecar:
+  - .cr3
+  # Uncomment formats that require sidecars in your workflow:
+  # - .nef
+  # - .arw
+  # - .orf
+  # - .rw2
+  # - .pef
+  # - .raf
+  # - .raw
+  # - .crw
+  # - .cr2
+
+# Valid metadata sidecar file extensions
+metadata_extensions:
+  - .xmp

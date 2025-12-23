@@ -26,16 +26,19 @@ from collections import defaultdict
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import json
+import yaml
 
 
 class PhotoStats:
     """Collects and analyzes statistics for photo files."""
 
-    PHOTO_EXTENSIONS = {'.dng', '.tiff', '.tif', '.cr3'}
-    METADATA_EXTENSIONS = {'.xmp'}
-
-    def __init__(self, folder_path):
+    def __init__(self, folder_path, config_path=None):
         self.folder_path = Path(folder_path)
+        self.config = self._load_config(config_path)
+        self.PHOTO_EXTENSIONS = set(self.config.get('photo_extensions', []))
+        self.METADATA_EXTENSIONS = set(self.config.get('metadata_extensions', []))
+        self.REQUIRE_SIDECAR = set(self.config.get('require_sidecar', []))
+
         self.stats = {
             'file_counts': defaultdict(int),
             'file_sizes': defaultdict(list),
@@ -46,8 +49,104 @@ class PhotoStats:
             'orphaned_xmp': [],
             'xmp_metadata': [],
             'scan_time': None,
-            'folder_path': str(self.folder_path.resolve())
+            'folder_path': str(self.folder_path.resolve()),
+            'config': {
+                'photo_extensions': list(self.PHOTO_EXTENSIONS),
+                'metadata_extensions': list(self.METADATA_EXTENSIONS),
+                'require_sidecar': list(self.REQUIRE_SIDECAR)
+            }
         }
+
+    def _load_config(self, config_path=None):
+        """Load configuration from YAML file."""
+        if config_path is None:
+            # Try to find config file in standard locations
+            possible_paths = [
+                Path('config/config.yaml'),
+                Path('config.yaml'),
+                Path.home() / '.photo_stats_config.yaml',
+                Path(__file__).parent / 'config' / 'config.yaml'
+            ]
+
+            for path in possible_paths:
+                if path.exists():
+                    config_path = path
+                    break
+
+        if config_path and Path(config_path).exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                    print(f"Loaded configuration from: {config_path}")
+                    return config
+            except Exception as e:
+                print(f"Error: Could not load config from {config_path}: {e}")
+                sys.exit(1)
+
+        # No config file found - check for template and offer to create
+        return self._handle_missing_config()
+
+    def _handle_missing_config(self):
+        """Handle missing configuration file by offering to create from template."""
+        # Look for template file
+        template_paths = [
+            Path('config/template-config.yaml'),
+            Path(__file__).parent / 'config' / 'template-config.yaml'
+        ]
+
+        template_path = None
+        for path in template_paths:
+            if path.exists():
+                template_path = path
+                break
+
+        if not template_path:
+            print("\nError: Configuration template file not found.")
+            print("The tool does not appear to be properly installed.")
+            print("Please refer to the README for installation instructions:")
+            print("  https://github.com/fabrice-guiot/photo-admin/blob/main/README.md")
+            sys.exit(1)
+
+        # Determine where to create the config file
+        config_dir = Path('config')
+        if not config_dir.exists():
+            config_dir = template_path.parent
+
+        config_path = config_dir / 'config.yaml'
+
+        print("\nNo configuration file found.")
+        print(f"Template found at: {template_path}")
+        print(f"\nWould you like to create a configuration file at: {config_path}")
+
+        # Prompt user for confirmation
+        response = input("Create config file? [Y/n]: ").strip().lower()
+
+        if response in ('', 'y', 'yes'):
+            try:
+                # Ensure config directory exists
+                config_dir.mkdir(parents=True, exist_ok=True)
+
+                # Copy template to config.yaml
+                import shutil
+                shutil.copy(template_path, config_path)
+
+                print(f"\n✓ Configuration file created: {config_path}")
+                print("\nYou can now modify this file to customize file type settings for your needs.")
+                print("The tool will use this configuration for all future runs.")
+
+                # Load the newly created config
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                    return config
+
+            except Exception as e:
+                print(f"\nError: Could not create configuration file: {e}")
+                sys.exit(1)
+        else:
+            print("\nConfiguration file creation cancelled.")
+            print("The tool requires a configuration file to run.")
+            print(f"You can manually copy the template: cp {template_path} {config_path}")
+            sys.exit(1)
 
     def scan_folder(self):
         """Scan the folder and collect file statistics."""
@@ -102,14 +201,19 @@ class PhotoStats:
         for base_name, files in file_groups.items():
             has_image = any(ext in self.PHOTO_EXTENSIONS for _, ext in files)
             has_xmp = any(ext in self.METADATA_EXTENSIONS for _, ext in files)
+            # Check if any image in this group requires a sidecar
+            has_image_requiring_sidecar = any(
+                ext in self.REQUIRE_SIDECAR for _, ext in files if ext in self.PHOTO_EXTENSIONS
+            )
 
             if has_image and has_xmp:
                 self.stats['paired_files'].append({
                     'base_name': base_name,
                     'files': [str(f[0]) for f in files]
                 })
-            elif has_image and not has_xmp:
-                image_files = [str(f[0]) for f in files if f[1] in self.PHOTO_EXTENSIONS]
+            elif has_image and not has_xmp and has_image_requiring_sidecar:
+                # Only flag as orphaned if the image type requires a sidecar
+                image_files = [str(f[0]) for f in files if f[1] in self.REQUIRE_SIDECAR]
                 self.stats['orphaned_images'].extend(image_files)
             elif has_xmp and not has_image:
                 xmp_files = [str(f[0]) for f in files if f[1] in self.METADATA_EXTENSIONS]
@@ -606,15 +710,23 @@ class PhotoStats:
 def main():
     """Main entry point for the photo statistics tool."""
     if len(sys.argv) < 2:
-        print("Usage: python photo_stats.py <folder_path> [output_report.html]")
+        print("Usage: python photo_stats.py <folder_path> [output_report.html] [config_file.yaml]")
         print("\nExample: python photo_stats.py /path/to/photos report.html")
+        print("         python photo_stats.py /path/to/photos report.html config/config.yaml")
+        print("\nIf no config file is specified, the tool will look for:")
+        print("  - config/config.yaml (in current directory)")
+        print("  - config.yaml (in current directory)")
+        print("  - ~/.photo_stats_config.yaml (in home directory)")
+        print("  - config/config.yaml (in script directory)")
+        print("\nTo create a configuration file, copy config/template-config.yaml to config/config.yaml")
         sys.exit(1)
 
     folder_path = sys.argv[1]
     output_path = sys.argv[2] if len(sys.argv) > 2 else 'photo_stats_report.html'
+    config_path = sys.argv[3] if len(sys.argv) > 3 else None
 
     try:
-        stats_tool = PhotoStats(folder_path)
+        stats_tool = PhotoStats(folder_path, config_path)
         stats_tool.scan_folder()
         report_file = stats_tool.generate_html_report(output_path)
 

@@ -207,9 +207,11 @@ marimo/_lsp/
 __marimo__/
 
 # Project specific
-photo_stats_report.html
-*.html
-!tests/**/*.html
+# Ignore HTML reports generated at the root of the repository
+/*.html
+
+# User configuration (use config/template-config.yaml as template)
+config/config.yaml
 
 # IDE
 .DS_Store
