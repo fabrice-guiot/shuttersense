@@ -4,211 +4,46 @@
 
 Photo Administration toolbox - Python utility for analyzing photo collections
 
-## Features
-
-- **Configurable File Types**: Support for customizable photo and metadata file extensions via YAML configuration
-- **File Scanning**: Recursively scans folders for configured photo and XMP files
-- **Statistics Collection**: Counts files by type and calculates storage usage
-- **File Pairing Analysis**: Identifies orphaned images and XMP metadata files
-- **XMP Metadata Extraction**: Parses and analyzes metadata from XMP sidecar files
-- **HTML Reports**: Generates beautiful, interactive HTML reports with charts
-
-## Installation
-
-1. Clone this repository
-2. Install dependencies:
+## Quick Start
 
 ```bash
+# Clone the repository
+git clone https://github.com/fabrice-guiot/photo-admin.git
+cd photo-admin
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Run PhotoStats (first run will prompt for configuration)
+python photo_stats.py /path/to/your/photos
 ```
 
-## Usage
+## Documentation
 
-Basic usage:
+- **[Installation Guide](docs/installation.md)** - Detailed installation instructions
+- **[Configuration Guide](docs/configuration.md)** - How to configure file types and settings
+- **[PhotoStats Tool](docs/photostats.md)** - Complete guide to using the PhotoStats tool
+
+## Tools
+
+### PhotoStats
+
+PhotoStats analyzes photo collections and generates detailed HTML reports with statistics and charts.
+
+**Features:**
+- Configurable file type support for any RAW or image format
+- Recursive folder scanning
+- File pairing analysis (images with/without XMP sidecars)
+- XMP metadata extraction
+- Interactive HTML reports with charts
+
+**Quick Usage:**
 
 ```bash
 python photo_stats.py /path/to/your/photos
 ```
 
-Specify custom output file:
-
-```bash
-python photo_stats.py /path/to/your/photos my_report.html
-```
-
-Specify a custom configuration file:
-
-```bash
-python photo_stats.py /path/to/your/photos my_report.html config/config.yaml
-```
-
-The tool will:
-1. Load configuration (if available) to determine which file types to scan
-2. Scan the specified folder recursively
-3. Collect statistics on all configured photo files and metadata files
-4. Analyze file pairing (images with/without XMP files)
-5. Extract and analyze XMP metadata
-6. Generate an HTML report with interactive charts
-
-## Configuration
-
-**Configuration is required** to run this tool. The tool uses a YAML configuration file to specify which file types should be treated as photos and which should have XMP sidecars.
-
-### First-Time Setup
-
-When you run the tool for the first time without a configuration file, it will:
-
-1. **Automatically detect** that no configuration exists
-2. **Prompt you** to create one from the template
-3. **Create the config file** for you if you accept (just press Enter)
-
-Example:
-```
-$ python photo_stats.py /path/to/photos
-
-No configuration file found.
-Template found at: config/template-config.yaml
-
-Would you like to create a configuration file at: config/config.yaml
-Create config file? [Y/n]:
-
-✓ Configuration file created: config/config.yaml
-
-You can now modify this file to customize file type settings for your needs.
-The tool will use this configuration for all future runs.
-```
-
-### Manual Configuration Setup
-
-You can also manually create your configuration:
-
-```bash
-cp config/template-config.yaml config/config.yaml
-```
-
-Then edit `config/config.yaml` to customize the file extensions for your needs.
-
-**Note:** The `config/config.yaml` file is ignored by git, so your personal configuration won't be committed.
-
-### Configuration File Locations
-
-The tool will automatically look for configuration files in the following locations (in order):
-1. `config/config.yaml` in the current directory
-2. `config.yaml` in the current directory
-3. `~/.photo_stats_config.yaml` in your home directory
-4. `config/config.yaml` in the script directory
-
-You can also explicitly specify a configuration file as the third command-line argument.
-
-### Configuration File Format
-
-The configuration file uses YAML format with three key sections:
-
-1. **photo_extensions**: All file types to scan and count
-2. **require_sidecar**: File types that MUST have XMP sidecars (orphaned if missing)
-3. **metadata_extensions**: Valid sidecar file extensions
-
-See `config/template-config.yaml` for a complete example:
-
-```yaml
-# Photo Statistics Configuration
-
-# File types that should be scanned
-photo_extensions:
-  - .dng      # DNG files (already contain metadata, no sidecar needed)
-  - .tiff     # TIFF files (already contain metadata, no sidecar needed)
-  - .tif      # TIFF files (already contain metadata, no sidecar needed)
-  - .cr3      # Canon CR3 RAW (requires XMP sidecar)
-  - .nef      # Nikon RAW (requires XMP sidecar)
-  # Add more formats as needed
-
-# File types that REQUIRE XMP sidecar files
-# Only these will be flagged as "orphaned" if missing sidecars
-require_sidecar:
-  - .cr3
-  - .nef
-  # Note: DNG and TIFF embed metadata, so they don't need sidecars
-
-# Valid metadata sidecar file extensions
-metadata_extensions:
-  - .xmp
-```
-
-### Understanding File Pairing
-
-**Key Concept**: Not all photo files need XMP sidecars!
-
-- **DNG and TIFF** files embed their metadata internally, so they don't need sidecars
-- **RAW formats** (CR3, NEF, ARW, etc.) typically require external XMP files for metadata
-
-The `require_sidecar` setting lets you specify which formats need sidecars in YOUR workflow. Only files listed there will be flagged as "orphaned" when they lack an XMP file.
-
-### Template Configuration
-
-The template file (`config/template-config.yaml`) provides default settings:
-- **Photo extensions**: `.dng`, `.tiff`, `.tif`, `.cr3`
-- **Require sidecar**: `.cr3` only
-- **Metadata extensions**: `.xmp`
-
-You can uncomment additional format options in the template or add your own custom extensions.
-
-## Output
-
-The tool generates an HTML report containing:
-
-- **Summary Statistics**: Total images (excluding sidecars), total size, orphaned images count, orphaned sidecars count
-- **Image Type Distribution Chart**: Visual breakdown of image file counts (sidecars excluded except orphaned ones)
-- **Storage Distribution Chart**: Storage usage by image type, combining each image with its paired sidecar size
-- **Pairing Status**: Lists of orphaned images and XMP sidecar files
-
-## Example Output
-
-```
-Scanning folder: /Users/you/Photos
-Found 1234 files
-Analyzing file pairing...
-Extracting XMP metadata...
-Scan completed in 2.45 seconds
-Generating HTML report: photo_stats_report.html
-
-==================================================
-SUMMARY
-==================================================
-Total files: 1234
-Total size: 45.67 GB
-Paired files: 580
-Orphaned images: 12
-Orphaned XMP: 3
-
-File counts:
-  .CR3: 600
-  .DNG: 150
-  .TIFF: 432
-  .XMP: 52
-
-==================================================
-
-✓ HTML report saved to: /path/to/photo_stats_report.html
-```
-
-## Supported File Types
-
-The tool is configurable and can support any RAW or image format. By default, it supports:
-
-- **DNG** (Digital Negative)
-- **TIFF** (Tagged Image File Format)
-- **CR3** (Canon Raw 3)
-- **XMP** (Extensible Metadata Platform)
-
-Additional formats can be added via the configuration file, including:
-- **NEF** (Nikon RAW)
-- **ARW** (Sony RAW)
-- **ORF** (Olympus RAW)
-- **RW2** (Panasonic RAW)
-- **PEF** (Pentax RAW)
-- **RAF** (Fujifilm RAW)
-- **CR2** (Canon RAW, older format)
-- **RAW**, **CRW**, and other manufacturer-specific formats
+See the [PhotoStats documentation](docs/photostats.md) for complete usage details.
 
 ## Development
 
@@ -258,6 +93,10 @@ photo-admin/
 ├── config/
 │   ├── template-config.yaml    # Configuration template
 │   └── config.yaml             # User configuration (gitignored)
+├── docs/                       # Documentation
+│   ├── installation.md         # Installation guide
+│   ├── configuration.md        # Configuration guide
+│   └── photostats.md           # PhotoStats tool documentation
 ├── requirements.txt            # Python dependencies
 ├── pytest.ini                 # Pytest configuration
 ├── .coveragerc                # Coverage configuration
