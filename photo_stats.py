@@ -27,7 +27,7 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 import json
 
-from config_manager import PhotoAdminConfig
+from utils.config_manager import PhotoAdminConfig
 
 
 class PhotoStats:

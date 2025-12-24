@@ -3,7 +3,8 @@
 Configuration Manager for Photo Administration Tools
 
 This module provides configuration loading and management for the photo-admin toolbox.
-It handles YAML configuration files with automatic discovery and interactive creation.
+It handles YAML configuration files with automatic discovery, interactive creation,
+and user prompts for missing camera/method mappings.
 
 Copyright (C) 2024 Fabrice Guiot
 
@@ -27,7 +28,7 @@ import yaml
 
 
 class PhotoAdminConfig:
-    """Manages configuration loading for photo-admin tools."""
+    """Manages configuration loading and updates for photo-admin tools."""
 
     def __init__(self, config_path=None):
         """
@@ -37,6 +38,7 @@ class PhotoAdminConfig:
             config_path: Optional explicit path to config file.
                         If None, will search standard locations.
         """
+        self._config_path = None
         self._config = self._load_config(config_path)
 
     def _load_config(self, config_path=None):
@@ -48,6 +50,7 @@ class PhotoAdminConfig:
             try:
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f)
+                    self._config_path = Path(config_path)
                     print(f"Loaded configuration from: {config_path}")
                     return config
             except Exception as e:
@@ -66,7 +69,7 @@ class PhotoAdminConfig:
         """
         # Start with current working directory, then fall back to script location
         cwd = Path.cwd()
-        script_dir = Path(__file__).parent
+        script_dir = Path(__file__).parent.parent  # Go up from utils/ to root
 
         possible_paths = [
             cwd / 'config' / 'config.yaml',
@@ -89,9 +92,10 @@ class PhotoAdminConfig:
         """Handle missing configuration file by offering to create from template."""
         # Look for template file in current working directory first, then script location
         cwd = Path.cwd()
+        script_dir = Path(__file__).parent.parent  # Go up from utils/ to root
         template_paths = [
             cwd / 'config' / 'template-config.yaml',
-            Path(__file__).parent / 'config' / 'template-config.yaml'
+            script_dir / 'config' / 'template-config.yaml'
         ]
 
         template_path = None
@@ -137,6 +141,7 @@ class PhotoAdminConfig:
                 # Load the newly created config
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f)
+                    self._config_path = Path(config_path)
                     return config
 
             except Exception as e:
@@ -147,6 +152,165 @@ class PhotoAdminConfig:
             print("The tool requires a configuration file to run.")
             print(f"You can manually copy the template: cp {template_path} {config_path}")
             sys.exit(1)
+
+    def _save_config(self):
+        """Save current configuration back to file."""
+        if not self._config_path:
+            raise RuntimeError("Cannot save config: config path not set")
+
+        with open(self._config_path, 'w') as f:
+            yaml.safe_dump(self._config, f, default_flow_style=False, sort_keys=False)
+
+    def prompt_camera_info(self, camera_id):
+        """
+        Prompt user for camera information.
+
+        Args:
+            camera_id: 4-character camera ID
+
+        Returns:
+            dict: {'name': str, 'serial_number': str} or None if user cancels
+        """
+        print(f"\nFound new camera ID: {camera_id}")
+        try:
+            name = input(f"  Camera name: ").strip()
+            if not name:
+                name = f"Unknown Camera {camera_id}"
+                print(f"  Using placeholder: {name}")
+
+            serial = input(f"  Serial number (optional, press Enter to skip): ").strip()
+
+            return {'name': name, 'serial_number': serial}
+        except KeyboardInterrupt:
+            print("\n\nInterrupted by user")
+            return None
+
+    def prompt_processing_method(self, method_keyword):
+        """
+        Prompt user for processing method description.
+
+        Args:
+            method_keyword: The processing method keyword from filename
+
+        Returns:
+            str: Description or None if user cancels
+        """
+        print(f"\nFound new processing method: {method_keyword}")
+        try:
+            description = input(f"  Description: ").strip()
+            if not description:
+                description = f"Processing Method {method_keyword}"
+                print(f"  Using placeholder: {description}")
+
+            return description
+        except KeyboardInterrupt:
+            print("\n\nInterrupted by user")
+            return None
+
+    def ensure_camera_mapping(self, camera_id):
+        """
+        Ensure camera mapping exists, prompting user if needed.
+
+        Args:
+            camera_id: 4-character camera ID
+
+        Returns:
+            dict: Camera info {'name': str, 'serial_number': str} or None if cancelled
+        """
+        if camera_id in self.camera_mappings:
+            # Already exists
+            return self.camera_mappings[camera_id][0] if self.camera_mappings[camera_id] else {}
+
+        # Need to prompt user
+        info = self.prompt_camera_info(camera_id)
+        if info is None:
+            return None
+
+        # Save to config
+        if 'camera_mappings' not in self._config:
+            self._config['camera_mappings'] = {}
+
+        # Store as list for future compatibility
+        self._config['camera_mappings'][camera_id] = [{
+            'name': info['name'],
+            'serial_number': info['serial_number']
+        }]
+
+        self._save_config()
+        return info
+
+    def ensure_processing_method(self, method_keyword):
+        """
+        Ensure processing method description exists, prompting user if needed.
+
+        Args:
+            method_keyword: The processing method keyword from filename
+
+        Returns:
+            str: Description or None if cancelled
+        """
+        if method_keyword in self.processing_methods:
+            # Already exists
+            return self.processing_methods[method_keyword]
+
+        # Need to prompt user
+        description = self.prompt_processing_method(method_keyword)
+        if description is None:
+            return None
+
+        # Save to config
+        if 'processing_methods' not in self._config:
+            self._config['processing_methods'] = {}
+
+        self._config['processing_methods'][method_keyword] = description
+
+        self._save_config()
+        return description
+
+    def update_camera_mappings(self, camera_updates):
+        """
+        Update config file with new camera mappings.
+
+        Args:
+            camera_updates: dict of {camera_id: {'name': str, 'serial_number': str}}
+        """
+        if 'camera_mappings' not in self._config:
+            self._config['camera_mappings'] = {}
+
+        for camera_id, info in camera_updates.items():
+            # Store as list for future compatibility
+            self._config['camera_mappings'][camera_id] = [{
+                'name': info['name'],
+                'serial_number': info['serial_number']
+            }]
+
+        self._save_config()
+
+    def update_processing_methods(self, method_updates):
+        """
+        Update config file with new processing method descriptions.
+
+        Args:
+            method_updates: dict of {method_keyword: description}
+        """
+        if 'processing_methods' not in self._config:
+            self._config['processing_methods'] = {}
+
+        for keyword, description in method_updates.items():
+            self._config['processing_methods'][keyword] = description
+
+        self._save_config()
+
+    def reload(self):
+        """Reload configuration from file."""
+        if self._config_path:
+            with open(self._config_path, 'r') as f:
+                self._config = yaml.safe_load(f)
+
+    @property
+    def config_path(self):
+        """Get the path to the config file."""
+        return self._config_path
 
     @property
     def photo_extensions(self):

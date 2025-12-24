@@ -18,9 +18,7 @@ by the Free Software Foundation, either version 3 of the License, or
 """
 
 import argparse
-import re
 import sys
-import yaml
 import signal
 import time
 import json
@@ -28,126 +26,8 @@ import hashlib
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
-from config_manager import PhotoAdminConfig
-
-
-# Filename validation pattern
-# Format: 4 uppercase alphanumeric + 4 digits (0001-9999) + optional properties + extension
-# Properties can contain letters, digits, spaces, and underscores
-# Extensions are case-insensitive (both .DNG and .dng are valid)
-VALID_FILENAME_PATTERN = re.compile(
-    r'^[A-Z0-9]{4}(0[0-9]{3}|[1-9][0-9]{3})(-[A-Za-z0-9 _]+)*\.[a-zA-Z0-9]+$'
-)
-
-
-def validate_filename(filename):
-    """
-    Validate if filename matches the expected pattern.
-
-    Args:
-        filename: The filename to validate (without path)
-
-    Returns:
-        tuple: (is_valid, error_reason)
-            is_valid: Boolean indicating if filename is valid
-            error_reason: String with specific error reason if invalid, None if valid
-    """
-    # Check basic pattern
-    if not VALID_FILENAME_PATTERN.match(filename):
-        # Determine specific reason
-        name_without_ext = filename.rsplit('.', 1)[0] if '.' in filename else filename
-
-        # Check camera ID (first 4 characters)
-        if len(name_without_ext) < 4:
-            return False, "Filename too short - camera ID must be 4 characters"
-
-        camera_id = name_without_ext[:4]
-        if not re.match(r'^[A-Z0-9]{4}$', camera_id):
-            if camera_id.islower() or any(c.islower() for c in camera_id):
-                return False, "Camera ID must be uppercase alphanumeric [A-Z0-9]"
-            else:
-                return False, "Camera ID must be exactly 4 uppercase alphanumeric characters"
-
-        # Check counter (characters 5-8)
-        if len(name_without_ext) < 8:
-            return False, "Counter must be 4 digits"
-
-        counter = name_without_ext[4:8]
-        if not re.match(r'^(0[0-9]{3}|[1-9][0-9]{3})$', counter):
-            if counter == '0000':
-                return False, "Counter cannot be 0000 - must be 0001-9999"
-            elif not counter.isdigit():
-                return False, "Counter must be 4 digits"
-            else:
-                return False, "Counter must be 4 digits between 0001 and 9999"
-
-        # Check for empty properties (double dash or trailing dash)
-        if '--' in name_without_ext or name_without_ext.endswith('-'):
-            return False, "Empty property name detected"
-
-        # Check for invalid characters in properties
-        if len(name_without_ext) > 8:
-            properties_part = name_without_ext[8:]
-            if not re.match(r'^(-[A-Za-z0-9 _]+)*$', properties_part):
-                return False, "Invalid characters in property name"
-
-    return True, None
-
-
-def parse_filename(filename):
-    """
-    Parse a valid filename into its components.
-
-    Args:
-        filename: The filename to parse (without path)
-
-    Returns:
-        dict: {
-            'camera_id': str,      # First 4 characters
-            'counter': str,        # Characters 5-8
-            'properties': list,    # List of dash-prefixed properties (without dashes)
-            'extension': str       # File extension (with dot)
-        }
-        Returns None if filename is invalid
-    """
-    is_valid, _ = validate_filename(filename)
-    if not is_valid:
-        return None
-
-    # Split filename and extension
-    name_without_ext, extension = filename.rsplit('.', 1)
-    extension = '.' + extension
-
-    # Extract camera ID and counter
-    camera_id = name_without_ext[:4]
-    counter = name_without_ext[4:8]
-
-    # Extract properties (everything after position 8)
-    properties = []
-    if len(name_without_ext) > 8:
-        properties_part = name_without_ext[8:]
-        # Split by dash and filter out empty strings
-        properties = [p for p in properties_part.split('-') if p]
-
-    return {
-        'camera_id': camera_id,
-        'counter': counter,
-        'properties': properties,
-        'extension': extension
-    }
-
-
-def detect_property_type(property_str):
-    """
-    Detect if a property is a separate image identifier or processing method.
-
-    Args:
-        property_str: The property string (without leading dash)
-
-    Returns:
-        str: 'separate_image' if all-numeric, 'processing_method' otherwise
-    """
-    return 'separate_image' if property_str.isdigit() else 'processing_method'
+from utils.config_manager import PhotoAdminConfig
+from utils.filename_parser import FilenameParser
 
 
 def scan_folder(folder_path, extensions):
@@ -199,7 +79,7 @@ def build_imagegroups(files, folder_path):
         filename = file_path.name
 
         # Validate filename
-        is_valid, error_reason = validate_filename(filename)
+        is_valid, error_reason = FilenameParser.validate_filename(filename)
 
         if not is_valid:
             invalid_files.append({
@@ -210,7 +90,7 @@ def build_imagegroups(files, folder_path):
             continue
 
         # Parse filename
-        parsed = parse_filename(filename)
+        parsed = FilenameParser.parse_filename(filename)
         group_id = parsed['camera_id'] + parsed['counter']
 
         # Initialize group if first file
@@ -224,7 +104,7 @@ def build_imagegroups(files, folder_path):
         processing_methods = []
 
         for prop in parsed['properties']:
-            prop_type = detect_property_type(prop)
+            prop_type = FilenameParser.detect_property_type(prop)
             if prop_type == 'separate_image':
                 # First numeric property becomes the separate image ID
                 if separate_image_id == '':
@@ -451,98 +331,6 @@ def prompt_cache_action(folder_changed, cache_edited):
         return None
 
 
-def prompt_camera_info(camera_id):
-    """
-    Prompt user for camera information.
-
-    Args:
-        camera_id: 4-character camera ID
-
-    Returns:
-        dict: {'name': str, 'serial_number': str} or None if user cancels
-    """
-    print(f"\nFound new camera ID: {camera_id}")
-    try:
-        name = input(f"  Camera name: ").strip()
-        if not name:
-            name = f"Unknown Camera {camera_id}"
-            print(f"  Using placeholder: {name}")
-
-        serial = input(f"  Serial number (optional, press Enter to skip): ").strip()
-
-        return {'name': name, 'serial_number': serial}
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user")
-        return None
-
-
-def prompt_processing_method(method_keyword):
-    """
-    Prompt user for processing method description.
-
-    Args:
-        method_keyword: The processing method keyword from filename
-
-    Returns:
-        str: Description or None if user cancels
-    """
-    print(f"\nFound new processing method: {method_keyword}")
-    try:
-        description = input(f"  Description: ").strip()
-        if not description:
-            description = f"Processing Method {method_keyword}"
-            print(f"  Using placeholder: {description}")
-
-        return description
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user")
-        return None
-
-
-def update_config_cameras(config_path, camera_updates):
-    """
-    Update config file with new camera mappings.
-
-    Args:
-        config_path: Path to config file
-        camera_updates: dict of {camera_id: {'name': str, 'serial_number': str}}
-    """
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-
-    if 'camera_mappings' not in config:
-        config['camera_mappings'] = {}
-
-    for camera_id, info in camera_updates.items():
-        # Store as list for future compatibility
-        config['camera_mappings'][camera_id] = [{
-            'name': info['name'],
-            'serial_number': info['serial_number']
-        }]
-
-    with open(config_path, 'w') as f:
-        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
-
-
-def update_config_methods(config_path, method_updates):
-    """
-    Update config file with new processing method descriptions.
-
-    Args:
-        config_path: Path to config file
-        method_updates: dict of {method_keyword: description}
-    """
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-
-    if 'processing_methods' not in config:
-        config['processing_methods'] = {}
-
-    for keyword, description in method_updates.items():
-        config['processing_methods'][keyword] = description
-
-    with open(config_path, 'w') as f:
-        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
 
 
 def calculate_analytics(imagegroups, camera_mappings, processing_methods):
@@ -1032,68 +820,32 @@ The tool will:
         for sep_img_data in group['separate_images'].values():
             processing_methods_found.update(sep_img_data['properties'])
 
-    # Check which cameras and methods need prompts
-    existing_cameras = config.camera_mappings
-    existing_methods = config.processing_methods
-
-    new_cameras = {}
-    new_methods = {}
-
-    # Prompt for new cameras (pause timer during user input)
+    # Ensure all cameras and methods have mappings (prompt user if needed)
+    # Pause timer during all user input
     for camera_id in sorted(camera_ids):
-        if camera_id not in existing_cameras:
+        if camera_id not in config.camera_mappings:
             pause_start = time.time()
-            info = prompt_camera_info(camera_id)
+            info = config.ensure_camera_mapping(camera_id)
             total_pause_time += time.time() - pause_start
 
             if info is None:
                 print("\n\nAnalysis cancelled by user.")
                 sys.exit(1)
-            new_cameras[camera_id] = info
             print(f"✓ Camera {camera_id} configured")
 
-    # Prompt for new processing methods (pause timer during user input)
     for method in sorted(processing_methods_found):
-        if method not in existing_methods:
+        if method not in config.processing_methods:
             pause_start = time.time()
-            description = prompt_processing_method(method)
+            description = config.ensure_processing_method(method)
             total_pause_time += time.time() - pause_start
 
             if description is None:
                 print("\n\nAnalysis cancelled by user.")
                 sys.exit(1)
-            new_methods[method] = description
             print(f"✓ Method '{method}' configured")
 
-    # Update config file if there are new cameras or methods
-    if new_cameras or new_methods:
-        # Find config file path (use same logic as PhotoAdminConfig)
-        config_paths = [
-            Path.cwd() / 'config' / 'config.yaml',
-            Path.cwd() / 'config.yaml',
-            Path.home() / '.photo_stats_config.yaml',
-        ]
-
-        config_path = None
-        for path in config_paths:
-            if path.exists():
-                config_path = path
-                break
-
-        if config_path is None:
-            print("\nError: Could not find config file to update.")
-            sys.exit(1)
-
-        if new_cameras:
-            update_config_cameras(config_path, new_cameras)
-            print(f"\n✓ Updated {len(new_cameras)} camera mapping(s) in config")
-
-        if new_methods:
-            update_config_methods(config_path, new_methods)
-            print(f"✓ Updated {len(new_methods)} processing method(s) in config")
-
-        # Reload config
-        config = PhotoAdminConfig()
+    # Reload config to ensure we have the latest mappings
+    config.reload()
 
     # Calculate analytics
     print("\nCalculating analytics...")
