@@ -22,6 +22,7 @@ import re
 import sys
 import yaml
 import signal
+import time
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
@@ -426,7 +427,7 @@ def calculate_analytics(imagegroups, camera_mappings, processing_methods):
     }
 
 
-def generate_html_report(analytics, invalid_files, output_path):
+def generate_html_report(analytics, invalid_files, output_path, folder_path, scan_duration):
     """
     Generate HTML report with analytics and visualizations.
 
@@ -434,6 +435,8 @@ def generate_html_report(analytics, invalid_files, output_path):
         analytics: Dictionary with camera_usage, method_usage, statistics
         invalid_files: List of invalid file dictionaries
         output_path: Path where to save the HTML report
+        folder_path: Path object for the analyzed folder
+        scan_duration: Time taken to scan in seconds (float)
     """
     stats = analytics['statistics']
     camera_usage = analytics['camera_usage']
@@ -529,7 +532,9 @@ def generate_html_report(analytics, invalid_files, output_path):
 </head>
 <body>
     <h1>Photo Pairing Analysis Report</h1>
+    <p><strong>Folder scanned:</strong> {folder_path}</p>
     <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    <p><strong>Scan duration:</strong> {scan_duration:.2f} seconds</p>
 
     <h2>Summary Statistics</h2>
     <div class="summary">
@@ -762,6 +767,9 @@ The tool will:
 
     print(f"Analyzing folder: {folder_path}")
 
+    # Start timing the scan
+    scan_start_time = time.time()
+
     # Load configuration
     config = PhotoAdminConfig()
 
@@ -863,13 +871,16 @@ The tool will:
         config.processing_methods
     )
 
+    # Calculate scan duration
+    scan_duration = time.time() - scan_start_time
+
     # Generate HTML report
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     report_filename = f'photo_pairing_report_{timestamp}.html'
     report_path = Path.cwd() / report_filename
 
     print("Generating HTML report...")
-    generate_html_report(analytics, result['invalid_files'], report_path)
+    generate_html_report(analytics, result['invalid_files'], report_path, folder_path, scan_duration)
 
     print(f"\n✓ Analysis complete")
     print(f"✓ Report saved to: {report_filename}")

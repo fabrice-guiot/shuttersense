@@ -79,6 +79,7 @@ A photographer has a mixed collection with some files that don't follow their na
 - **FR-009**: System MUST persist camera mappings and processing method descriptions to configuration file for future runs
 - **FR-010**: System MUST generate an interactive HTML report with statistics, charts, and breakdowns
 - **FR-010a**: System MUST use camera names and processing method descriptions (not raw IDs/keywords) as labels in report charts for readability
+- **FR-010b**: System MUST include report metadata header showing: folder path analyzed, report generation timestamp, and scan duration in seconds
 - **FR-011**: System MUST respect configured photo extensions and ignore metadata sidecar files (version 1.0)
 - **FR-011a**: System MUST treat file extensions as case-insensitive - files with .DNG, .dng, .Dng, .TIFF, .tiff are all valid and equivalent
 - **FR-012**: System MUST handle duplicate properties in filenames by silently deduplicating and attaching each unique property only once per file (no warnings or errors)
