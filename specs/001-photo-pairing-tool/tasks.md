@@ -25,8 +25,8 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Update config template with camera_mappings and processing_methods schema in config/template-config.yaml
-- [ ] T002 [P] Extend PhotoAdminConfig class with methods to access camera_mappings and processing_methods in config_manager.py
+- [x] T001 Update config template with camera_mappings and processing_methods schema in config/template-config.yaml
+- [x] T002 [P] Extend PhotoAdminConfig class with methods to access camera_mappings and processing_methods in config_manager.py
 
 **Checkpoint**: Configuration infrastructure ready for photo pairing tool
 
@@ -38,13 +38,13 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Create main script file photo_pairing.py with argument parsing for folder path
-- [ ] T004 [P] Implement filename validation regex and validation function in photo_pairing.py
-- [ ] T005 [P] Implement filename parsing logic to extract camera_id, counter, and properties in photo_pairing.py
-- [ ] T006 [P] Implement property type detection (numeric vs alphanumeric) in photo_pairing.py
-- [ ] T007 Implement file scanning function using pathlib.rglob with extension filtering in photo_pairing.py
-- [ ] T008 Implement ImageGroup builder that organizes files by 8-char prefix with separate_images structure in photo_pairing.py
-- [ ] T009 Implement invalid file tracking with validation failure reasons in photo_pairing.py
+- [x] T003 Create main script file photo_pairing.py with argument parsing for folder path
+- [x] T004 [P] Implement filename validation regex and validation function in photo_pairing.py
+- [x] T005 [P] Implement filename parsing logic to extract camera_id, counter, and properties in photo_pairing.py
+- [x] T006 [P] Implement property type detection (numeric vs alphanumeric) in photo_pairing.py
+- [x] T007 Implement file scanning function using pathlib.rglob with extension filtering in photo_pairing.py
+- [x] T008 Implement ImageGroup builder that organizes files by 8-char prefix with separate_images structure in photo_pairing.py
+- [x] T009 Implement invalid file tracking with validation failure reasons in photo_pairing.py
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -58,21 +58,21 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement camera mapping lookup and prompt logic in photo_pairing.py
-- [ ] T011 [US1] Implement processing method lookup and prompt logic in photo_pairing.py
-- [ ] T012 [US1] Implement placeholder generation for empty user input (FR-017) in photo_pairing.py
-- [ ] T013 [US1] Implement config file update function for camera_mappings (as list structure) in photo_pairing.py
-- [ ] T014 [US1] Implement config file update function for processing_methods in photo_pairing.py
-- [ ] T015 [US1] Implement CameraUsage analytics aggregation in photo_pairing.py
-- [ ] T016 [US1] Implement MethodUsage analytics aggregation in photo_pairing.py
-- [ ] T017 [US1] Implement ReportStatistics calculation in photo_pairing.py
-- [ ] T018 [US1] Implement HTML report generation with summary statistics in photo_pairing.py
-- [ ] T019 [US1] Implement HTML tables for camera usage breakdown in photo_pairing.py
-- [ ] T020 [US1] Implement HTML tables for processing method breakdown in photo_pairing.py
-- [ ] T021 [US1] Add Chart.js integration for camera usage visualization in photo_pairing.py
-- [ ] T022 [US1] Add Chart.js integration for processing method visualization in photo_pairing.py
-- [ ] T023 [US1] Implement timestamped HTML report filename generation in photo_pairing.py
-- [ ] T024 [US1] Add progress indicators and status messages for user feedback in photo_pairing.py
+- [x] T010 [US1] Implement camera mapping lookup and prompt logic in photo_pairing.py
+- [x] T011 [US1] Implement processing method lookup and prompt logic in photo_pairing.py
+- [x] T012 [US1] Implement placeholder generation for empty user input (FR-017) in photo_pairing.py
+- [x] T013 [US1] Implement config file update function for camera_mappings (as list structure) in photo_pairing.py
+- [x] T014 [US1] Implement config file update function for processing_methods in photo_pairing.py
+- [x] T015 [US1] Implement CameraUsage analytics aggregation in photo_pairing.py
+- [x] T016 [US1] Implement MethodUsage analytics aggregation in photo_pairing.py
+- [x] T017 [US1] Implement ReportStatistics calculation in photo_pairing.py
+- [x] T018 [US1] Implement HTML report generation with summary statistics in photo_pairing.py
+- [x] T019 [US1] Implement HTML tables for camera usage breakdown in photo_pairing.py
+- [x] T020 [US1] Implement HTML tables for processing method breakdown in photo_pairing.py
+- [x] T021 [US1] Add Chart.js integration for camera usage visualization in photo_pairing.py
+- [x] T022 [US1] Add Chart.js integration for processing method visualization in photo_pairing.py
+- [x] T023 [US1] Implement timestamped HTML report filename generation in photo_pairing.py
+- [x] T024 [US1] Add progress indicators and status messages for user feedback in photo_pairing.py
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently - photographers can analyze folders and get complete reports with prompts.
 
