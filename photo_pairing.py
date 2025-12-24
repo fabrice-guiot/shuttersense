@@ -23,6 +23,8 @@ import sys
 import yaml
 import signal
 import time
+import json
+import hashlib
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
@@ -263,6 +265,190 @@ def build_imagegroups(files, folder_path):
         'imagegroups': imagegroups,
         'invalid_files': invalid_files
     }
+
+
+def calculate_file_list_hash(folder_path, extensions):
+    """
+    Calculate SHA256 hash of sorted relative file paths.
+
+    Args:
+        folder_path: Path object for the folder
+        extensions: Set of file extensions to include
+
+    Returns:
+        str: SHA256 hash (hexdigest)
+    """
+    # Normalize extensions to lowercase
+    normalized_extensions = {ext.lower() for ext in extensions}
+
+    # Collect all file paths
+    files = []
+    for file_path in folder_path.rglob('*'):
+        if file_path.is_file():
+            file_ext = file_path.suffix.lower()
+            if file_ext in normalized_extensions:
+                # Store relative path as string
+                files.append(str(file_path.relative_to(folder_path)))
+
+    # Sort for consistency
+    files.sort()
+
+    # Create hash from sorted list
+    file_list_str = '\n'.join(files)
+    return hashlib.sha256(file_list_str.encode()).hexdigest()
+
+
+def calculate_imagegroups_hash(imagegroups):
+    """
+    Calculate SHA256 hash of ImageGroup structure.
+
+    Args:
+        imagegroups: List of ImageGroup dictionaries
+
+    Returns:
+        str: SHA256 hash (hexdigest)
+    """
+    # Convert to JSON with sorted keys for consistency
+    # Use default=str to handle Path objects
+    data_str = json.dumps(imagegroups, sort_keys=True, default=str)
+    return hashlib.sha256(data_str.encode()).hexdigest()
+
+
+def save_cache(folder_path, imagegroups, invalid_files, file_list_hash):
+    """
+    Save ImageGroup structure to .photo_pairing_imagegroups cache file.
+
+    Args:
+        folder_path: Path object for the analyzed folder
+        imagegroups: List of ImageGroup dictionaries
+        invalid_files: List of invalid file dictionaries
+        file_list_hash: Pre-calculated hash of file list
+    """
+    cache_path = folder_path / '.photo_pairing_imagegroups'
+
+    # Calculate imagegroups hash
+    imagegroups_hash = calculate_imagegroups_hash(imagegroups)
+
+    # Calculate statistics
+    total_files = sum(
+        sum(len(img['files']) for img in group['separate_images'].values())
+        for group in imagegroups
+    )
+    total_images = sum(len(group['separate_images']) for group in imagegroups)
+
+    cache_data = {
+        'version': '1.0',
+        'created_at': datetime.utcnow().isoformat() + 'Z',
+        'folder_path': str(folder_path.absolute()),
+        'tool_version': '1.0.0',
+        'metadata': {
+            'file_list_hash': file_list_hash,
+            'imagegroups_hash': imagegroups_hash,
+            'total_files': total_files,
+            'total_groups': len(imagegroups),
+            'total_images': total_images,
+            'total_invalid_files': len(invalid_files)
+        },
+        'imagegroups': imagegroups,
+        'invalid_files': invalid_files
+    }
+
+    with open(cache_path, 'w') as f:
+        json.dump(cache_data, f, indent=2, default=str)
+
+
+def load_cache(folder_path):
+    """
+    Load cached ImageGroup data from .photo_pairing_imagegroups file.
+
+    Args:
+        folder_path: Path object for the folder to check
+
+    Returns:
+        dict or None: Cache data if exists and valid JSON, None otherwise
+    """
+    cache_path = folder_path / '.photo_pairing_imagegroups'
+
+    if not cache_path.exists():
+        return None
+
+    try:
+        with open(cache_path, 'r') as f:
+            cache_data = json.load(f)
+        return cache_data
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"⚠ Warning: Could not read cache file: {e}")
+        print("  Cache will be ignored and regenerated.")
+        return None
+
+
+def validate_cache(cache_data, current_file_list_hash):
+    """
+    Validate cached data by comparing hashes.
+
+    Args:
+        cache_data: Dictionary loaded from cache file
+        current_file_list_hash: Hash of current folder's file list
+
+    Returns:
+        dict: {
+            'valid': bool,
+            'folder_changed': bool,
+            'cache_edited': bool
+        }
+    """
+    if not cache_data:
+        return {'valid': False, 'folder_changed': True, 'cache_edited': False}
+
+    # Check folder content hash
+    cached_file_list_hash = cache_data.get('metadata', {}).get('file_list_hash', '')
+    folder_changed = cached_file_list_hash != current_file_list_hash
+
+    # Check imagegroups hash (detect manual edits)
+    cached_imagegroups_hash = cache_data.get('metadata', {}).get('imagegroups_hash', '')
+    recalculated_hash = calculate_imagegroups_hash(cache_data.get('imagegroups', []))
+    cache_edited = cached_imagegroups_hash != recalculated_hash
+
+    valid = not folder_changed and not cache_edited
+
+    return {
+        'valid': valid,
+        'folder_changed': folder_changed,
+        'cache_edited': cache_edited
+    }
+
+
+def prompt_cache_action(folder_changed, cache_edited):
+    """
+    Prompt user for action when cache is stale.
+
+    Args:
+        folder_changed: Boolean indicating if folder content changed
+        cache_edited: Boolean indicating if cache file was manually edited
+
+    Returns:
+        str: 'use_cache' or 're_analyze' or None if cancelled
+    """
+    print("\n⚠ Found cached analysis data")
+    print("⚠ Changes detected:")
+    print(f"  - Folder content: {'CHANGED' if folder_changed else 'OK'}")
+    print(f"  - Cache file: {'EDITED' if cache_edited else 'OK'}")
+    print("\nChoose an option:")
+    print("  (a) Use cached data anyway (fast, ignores changes)")
+    print("  (b) Re-analyze folder (slow, reflects current state)")
+
+    try:
+        choice = input("Your choice [a/b]: ").strip().lower()
+        if choice == 'a':
+            return 'use_cache'
+        elif choice == 'b':
+            return 're_analyze'
+        else:
+            print("Invalid choice. Please enter 'a' or 'b'.")
+            return prompt_cache_action(folder_changed, cache_edited)
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user")
+        return None
 
 
 def prompt_camera_info(camera_id):
@@ -773,23 +959,59 @@ The tool will:
     # Load configuration
     config = PhotoAdminConfig()
 
-    # Scan for photo files
-    print("Scanning for photo files...")
-    photo_files = list(scan_folder(folder_path, config.photo_extensions))
-    print(f"Found {len(photo_files)} photo files")
+    # Check for cached data
+    print("Checking for cached analysis...")
+    cache_data = load_cache(folder_path)
 
-    if len(photo_files) == 0:
-        print("\nNo photo files found matching configured extensions.")
-        print(f"Configured extensions: {', '.join(sorted(config.photo_extensions))}")
-        sys.exit(0)
+    # Calculate current file list hash
+    current_file_list_hash = calculate_file_list_hash(folder_path, config.photo_extensions)
 
-    # Build ImageGroups
-    print("Analyzing filenames and grouping...")
-    result = build_imagegroups(photo_files, folder_path)
+    # Validate cache if it exists
+    use_cached_data = False
+    if cache_data:
+        validation = validate_cache(cache_data, current_file_list_hash)
 
-    print(f"\nAnalysis complete:")
-    print(f"  Total groups: {len(result['imagegroups'])}")
-    print(f"  Invalid files: {len(result['invalid_files'])}")
+        if validation['valid']:
+            print("✓ Found valid cache - using cached data")
+            use_cached_data = True
+        else:
+            # Cache is stale - prompt user
+            action = prompt_cache_action(validation['folder_changed'], validation['cache_edited'])
+            if action is None:
+                print("\n\nAnalysis cancelled by user.")
+                sys.exit(1)
+            elif action == 'use_cache':
+                print("Using cached data (ignoring changes)")
+                use_cached_data = True
+            # else: action == 're_analyze', proceed with full analysis
+
+    # Use cached data or perform full analysis
+    if use_cached_data:
+        result = {
+            'imagegroups': cache_data.get('imagegroups', []),
+            'invalid_files': cache_data.get('invalid_files', [])
+        }
+        print(f"Loaded from cache:")
+        print(f"  Total groups: {len(result['imagegroups'])}")
+        print(f"  Invalid files: {len(result['invalid_files'])}")
+    else:
+        # Scan for photo files
+        print("Scanning for photo files...")
+        photo_files = list(scan_folder(folder_path, config.photo_extensions))
+        print(f"Found {len(photo_files)} photo files")
+
+        if len(photo_files) == 0:
+            print("\nNo photo files found matching configured extensions.")
+            print(f"Configured extensions: {', '.join(sorted(config.photo_extensions))}")
+            sys.exit(0)
+
+        # Build ImageGroups
+        print("Analyzing filenames and grouping...")
+        result = build_imagegroups(photo_files, folder_path)
+
+        print(f"\nAnalysis complete:")
+        print(f"  Total groups: {len(result['imagegroups'])}")
+        print(f"  Invalid files: {len(result['invalid_files'])}")
 
     if len(result['imagegroups']) == 0:
         print("\nNo valid image groups found.")
@@ -881,6 +1103,12 @@ The tool will:
 
     print("Generating HTML report...")
     generate_html_report(analytics, result['invalid_files'], report_path, folder_path, scan_duration)
+
+    # Save cache if we performed full analysis (not when using cached data)
+    if not use_cached_data:
+        print("Saving analysis cache...")
+        save_cache(folder_path, result['imagegroups'], result['invalid_files'], current_file_list_hash)
+        print("✓ Cache saved to: .photo_pairing_imagegroups")
 
     print(f"\n✓ Analysis complete")
     print(f"✓ Report saved to: {report_filename}")

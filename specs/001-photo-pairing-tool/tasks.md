@@ -86,16 +86,16 @@
 
 ### Implementation for User Story 2
 
-- [ ] T025 [US2] Implement file list hash calculation (SHA256 of sorted relative paths) in photo_pairing.py
-- [ ] T026 [US2] Implement ImageGroup structure hash calculation in photo_pairing.py
-- [ ] T027 [US2] Implement JSON cache file writer for ImageGroup structure in photo_pairing.py
-- [ ] T028 [US2] Implement cache file metadata generation (timestamps, hashes, statistics) in photo_pairing.py
-- [ ] T029 [US2] Implement cache file loader and JSON parser in photo_pairing.py
-- [ ] T030 [US2] Implement cache validation logic (hash comparison) in photo_pairing.py
-- [ ] T031 [US2] Implement user prompt for stale cache handling (options a/b) in photo_pairing.py
-- [ ] T032 [US2] Integrate cache check at tool startup in photo_pairing.py
-- [ ] T033 [US2] Implement report generation from cached data (skip analysis path) in photo_pairing.py
-- [ ] T034 [US2] Add cache file save after successful analysis completion (not on Ctrl+C) in photo_pairing.py
+- [x] T025 [US2] Implement file list hash calculation (SHA256 of sorted relative paths) in photo_pairing.py
+- [x] T026 [US2] Implement ImageGroup structure hash calculation in photo_pairing.py
+- [x] T027 [US2] Implement JSON cache file writer for ImageGroup structure in photo_pairing.py
+- [x] T028 [US2] Implement cache file metadata generation (timestamps, hashes, statistics) in photo_pairing.py
+- [x] T029 [US2] Implement cache file loader and JSON parser in photo_pairing.py
+- [x] T030 [US2] Implement cache validation logic (hash comparison) in photo_pairing.py
+- [x] T031 [US2] Implement user prompt for stale cache handling (options a/b) in photo_pairing.py
+- [x] T032 [US2] Integrate cache check at tool startup in photo_pairing.py
+- [x] T033 [US2] Implement report generation from cached data (skip analysis path) in photo_pairing.py
+- [x] T034 [US2] Add cache file save after successful analysis completion (not on Ctrl+C) in photo_pairing.py
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently - first run analyzes and caches, subsequent runs use cache when valid.
 
