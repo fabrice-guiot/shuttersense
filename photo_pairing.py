@@ -303,7 +303,7 @@ def prompt_processing_method(method_keyword):
     try:
         description = input(f"  Description: ").strip()
         if not description:
-            description = f"Unknown Method {method_keyword}"
+            description = f"Processing Method {method_keyword}"
             print(f"  Using placeholder: {description}")
 
         return description
@@ -443,8 +443,8 @@ def generate_html_report(analytics, invalid_files, output_path):
     camera_labels = [f"{info['name']} ({cam_id})" for cam_id, info in sorted(camera_usage.items())]
     camera_counts = [info['image_count'] for _, info in sorted(camera_usage.items())]
 
-    method_labels = [keyword for keyword in sorted(method_usage.keys())]
-    method_counts = [method_usage[keyword]['image_count'] for keyword in method_labels]
+    method_labels = [f"{info['description']} ({keyword})" for keyword, info in sorted(method_usage.items())]
+    method_counts = [info['image_count'] for _, info in sorted(method_usage.items())]
 
     html = f"""<!DOCTYPE html>
 <html lang="en">

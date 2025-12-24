@@ -72,12 +72,13 @@ A photographer has a mixed collection with some files that don't follow their na
 - **FR-002**: System MUST identify files not matching the naming convention and track them as "invalid image files"
 - **FR-003**: System MUST group files with identical first 8 characters (camera ID + counter) as representing the same base image
 - **FR-004**: System MUST extract camera identification from the first 4 characters of valid filenames
-- **FR-005**: System MUST prompt users to provide camera names and optional serial numbers for new camera IDs encountered
+- **FR-005**: System MUST prompt users to provide camera names (mandatory) and optional serial numbers for new camera IDs encountered
 - **FR-006**: System MUST extract processing methods from dash-prefixed properties in filenames (excluding all-numeric properties)
-- **FR-007**: System MUST prompt users to provide descriptions for new processing methods encountered
+- **FR-007**: System MUST prompt users to provide descriptions (mandatory) for new processing methods encountered
 - **FR-008**: System MUST distinguish separate images within a group using all-numeric dash-prefixed suffixes (e.g., `-2`, `-123`)
 - **FR-009**: System MUST persist camera mappings and processing method descriptions to configuration file for future runs
 - **FR-010**: System MUST generate an interactive HTML report with statistics, charts, and breakdowns
+- **FR-010a**: System MUST use camera names and processing method descriptions (not raw IDs/keywords) as labels in report charts for readability
 - **FR-011**: System MUST respect configured photo extensions and ignore metadata sidecar files (version 1.0)
 - **FR-011a**: System MUST treat file extensions as case-insensitive - files with .DNG, .dng, .Dng, .TIFF, .tiff are all valid and equivalent
 - **FR-012**: System MUST handle duplicate properties in filenames by silently deduplicating and attaching each unique property only once per file (no warnings or errors)
@@ -85,7 +86,7 @@ A photographer has a mixed collection with some files that don't follow their na
 - **FR-014**: System MUST use the shared PhotoAdminConfig class for configuration management
 - **FR-015**: Users MUST be able to run the tool on any folder containing supported photo file types
 - **FR-016**: System MUST exit immediately when user cancels configuration prompts with keyboard interrupt (Ctrl+C), discarding analysis progress
-- **FR-017**: System MUST generate placeholder values when user provides empty input for required configuration fields (camera names, processing method descriptions), save placeholders to config, and continue analysis
+- **FR-017**: System MUST generate placeholder values when user provides empty input for required configuration fields: "Unknown Camera {camera_id}" for camera names, "Processing Method {keyword}" for processing method descriptions. System saves placeholders to config and continues analysis
 - **FR-018**: System MUST support config file structure where camera mappings can contain multiple camera entries per ID (stored as list), but in version 1.0 use only the first entry when multiple exist
 - **FR-019**: System MUST persist ImageGroup structure to `.photo_pairing_imagegroups` file in analyzed folder after successful completion (not on Ctrl+C interruption)
 - **FR-020**: System MUST include metadata in persisted file: hash of file list, hash of ImageGroup structure, timestamp, and summary statistics

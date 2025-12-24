@@ -144,19 +144,21 @@ processing_methods:
   "BW": "Black and white conversion"
   "PANO": "Panorama stitching"
   "property 2": "Description for property 2"  # Spaces allowed in keywords
+  "high_res": "High resolution output"  # Underscores allowed in keywords
+  "HDR_BW": "Processing Method HDR_BW"  # Placeholder generated when user provides empty input
 ```
 
 **Extraction Rules**:
 - Keywords start with dash (`-`) in filename
 - Terminate at next dash or file extension
-- Can contain: alphanumeric (A-Z, a-z, 0-9) and spaces
-- No special characters except spaces
+- Can contain: alphanumeric (A-Z, a-z, 0-9), spaces, and underscores
+- No other special characters allowed
 - Case-sensitive
 - Empty keywords make filename invalid
 
 **Validation Rules**:
-- `keyword`: Non-empty, alphanumeric + spaces only
-- `description`: Required when prompting user
+- `keyword`: Non-empty, alphanumeric + spaces + underscores only
+- `description`: Mandatory (required field). If user provides empty input, system generates placeholder "Processing Method {keyword}"
 - All-numeric keywords (e.g., `-2`, `-123`) are NOT processing methods - they're separate image identifiers
 
 **Lifecycle**:
@@ -164,8 +166,9 @@ processing_methods:
 2. Checks if keyword is all-numeric (skip if true - it's a separate image ID)
 3. Checks if mapping exists in config
 4. If not, prompts user for description
-5. Saves to config file
-6. Attaches to ImageGroup's properties set
+5. If user provides empty input (presses Enter), generates placeholder "Processing Method {keyword}"
+6. Saves description (user-provided or placeholder) to config file
+7. Attaches keyword to ImageGroup's properties set for that separate image
 
 ### SeparateImage
 
