@@ -122,10 +122,10 @@
 
 **Purpose**: Handle interruptions and edge cases gracefully
 
-- [ ] T039 [P] Implement Ctrl+C handler for graceful exit (FR-016) in photo_pairing.py
-- [ ] T040 [P] Add error handling for corrupted cache files with graceful degradation in photo_pairing.py
-- [ ] T041 [P] Add error handling for folder permission errors in photo_pairing.py
-- [ ] T042 [P] Implement cache file path handling for .photo_pairing_imagegroups in photo_pairing.py
+- [x] T039 [P] Implement Ctrl+C handler for graceful exit (FR-016) in photo_pairing.py
+- [x] T040 [P] Add error handling for corrupted cache files with graceful degradation in photo_pairing.py
+- [x] T041 [P] Add error handling for folder permission errors in photo_pairing.py
+- [x] T042 [P] Implement cache file path handling for .photo_pairing_imagegroups in photo_pairing.py
 
 ---
 
