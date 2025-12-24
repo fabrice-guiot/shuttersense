@@ -44,8 +44,9 @@ class FilenameParser:
     # Format: 4 uppercase alphanumeric + 4 digits (0001-9999) + optional properties + extension
     # Properties can contain letters, digits, spaces, and underscores
     # Extensions are case-insensitive (both .DNG and .dng are valid)
+    # Counter pattern excludes 0000: (000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|[1-9][0-9]{3})
     VALID_FILENAME_PATTERN = re.compile(
-        r'^[A-Z0-9]{4}(0[0-9]{3}|[1-9][0-9]{3})(-[A-Za-z0-9 _]+)*\.[a-zA-Z0-9]+$'
+        r'^[A-Z0-9]{4}(000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|[1-9][0-9]{3})(-[A-Za-z0-9 _]+)*\.[a-zA-Z0-9]+$'
     )
 
     @staticmethod
@@ -82,7 +83,7 @@ class FilenameParser:
                 return False, "Counter must be 4 digits"
 
             counter = name_without_ext[4:8]
-            if not re.match(r'^(0[0-9]{3}|[1-9][0-9]{3})$', counter):
+            if not re.match(r'^(000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|[1-9][0-9]{3})$', counter):
                 if counter == '0000':
                     return False, "Counter cannot be 0000 - must be 0001-9999"
                 elif not counter.isdigit():

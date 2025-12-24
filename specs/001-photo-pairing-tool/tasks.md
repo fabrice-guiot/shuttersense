@@ -133,25 +133,25 @@
 
 **Purpose**: Comprehensive test coverage for reliability
 
-- [ ] T043 [P] Create test fixtures for sample filenames and ImageGroups in tests/test_photo_pairing.py
-- [ ] T044 [P] Write tests for filename validation (valid/invalid patterns) in tests/test_photo_pairing.py
-- [ ] T045 [P] Write tests for filename parsing (camera_id, counter, properties) in tests/test_photo_pairing.py
-- [ ] T046 [P] Write tests for property type detection (numeric vs alphanumeric) in tests/test_photo_pairing.py
-- [ ] T047 [P] Write tests for file grouping by 8-char prefix in tests/test_photo_pairing.py
-- [ ] T048 [P] Write tests for separate_images structure building in tests/test_photo_pairing.py
-- [ ] T049 [P] Write tests for duplicate property deduplication in tests/test_photo_pairing.py
-- [ ] T050 [P] Write tests for empty property detection in tests/test_photo_pairing.py
-- [ ] T051 [P] Write tests for config update functions (camera_mappings) in tests/test_photo_pairing.py
-- [ ] T052 [P] Write tests for config update functions (processing_methods) in tests/test_photo_pairing.py
-- [ ] T053 [P] Write tests for placeholder generation on empty input in tests/test_photo_pairing.py
-- [ ] T054 [P] Write tests for hash calculations (file list and ImageGroup) in tests/test_photo_pairing.py
-- [ ] T055 [P] Write tests for cache validation logic in tests/test_photo_pairing.py
-- [ ] T056 [P] Write tests for cache save/load roundtrip in tests/test_photo_pairing.py
-- [ ] T057 [P] Write tests for analytics calculations (CameraUsage, MethodUsage, ReportStatistics) in tests/test_photo_pairing.py
-- [ ] T058 [P] Write tests for HTML report generation (structure validation) in tests/test_photo_pairing.py
-- [ ] T059 Write integration test for complete first-run workflow in tests/test_photo_pairing.py
-- [ ] T060 Write integration test for cached analysis workflow in tests/test_photo_pairing.py
-- [ ] T061 Write integration test for stale cache handling in tests/test_photo_pairing.py
+- [x] T043 [P] Create test fixtures for sample filenames and ImageGroups in tests/test_photo_pairing.py
+- [x] T044 [P] Write tests for filename validation (valid/invalid patterns) in tests/test_photo_pairing.py
+- [x] T045 [P] Write tests for filename parsing (camera_id, counter, properties) in tests/test_photo_pairing.py
+- [x] T046 [P] Write tests for property type detection (numeric vs alphanumeric) in tests/test_photo_pairing.py
+- [x] T047 [P] Write tests for file grouping by 8-char prefix in tests/test_photo_pairing.py
+- [x] T048 [P] Write tests for separate_images structure building in tests/test_photo_pairing.py
+- [x] T049 [P] Write tests for duplicate property deduplication in tests/test_photo_pairing.py
+- [x] T050 [P] Write tests for empty property detection in tests/test_photo_pairing.py
+- [x] T051 [P] Write tests for config update functions (camera_mappings) in tests/test_photo_pairing.py
+- [x] T052 [P] Write tests for config update functions (processing_methods) in tests/test_photo_pairing.py
+- [x] T053 [P] Write tests for placeholder generation on empty input in tests/test_photo_pairing.py
+- [x] T054 [P] Write tests for hash calculations (file list and ImageGroup) in tests/test_photo_pairing.py
+- [x] T055 [P] Write tests for cache validation logic in tests/test_photo_pairing.py
+- [x] T056 [P] Write tests for cache save/load roundtrip in tests/test_photo_pairing.py
+- [x] T057 [P] Write tests for analytics calculations (CameraUsage, MethodUsage, ReportStatistics) in tests/test_photo_pairing.py
+- [x] T058 [P] Write tests for HTML report generation (structure validation) in tests/test_photo_pairing.py
+- [x] T059 Write integration test for complete first-run workflow in tests/test_photo_pairing.py
+- [x] T060 Write integration test for cached analysis workflow in tests/test_photo_pairing.py
+- [x] T061 Write integration test for stale cache handling in tests/test_photo_pairing.py
 
 ---
 
