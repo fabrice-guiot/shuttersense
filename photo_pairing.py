@@ -607,7 +607,36 @@ def generate_html_report(analytics, invalid_files, output_path, folder_path, sca
         html += """    <p>No processing methods detected in filenames.</p>
 """
 
-    # Validation rules documentation
+    # Invalid files section
+    html += """
+    <h2>Invalid Files</h2>
+"""
+
+    if invalid_files:
+        html += f"""    <p><strong>{len(invalid_files)} files</strong> did not match the expected naming pattern:</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Reason</th>
+            </tr>
+        </thead>
+        <tbody>
+"""
+        for invalid in invalid_files:
+            html += f"""            <tr>
+                <td>{invalid['filename']}</td>
+                <td>{invalid['reason']}</td>
+            </tr>
+"""
+        html += """        </tbody>
+    </table>
+"""
+    else:
+        html += """    <p>All files matched the expected naming pattern.</p>
+"""
+
+    # Validation rules documentation (appears after invalid files to help fix them)
     html += """
     <h2>Filename Format Requirements</h2>
     <div class="chart-container">
@@ -641,32 +670,6 @@ def generate_html_report(analytics, invalid_files, output_path, folder_path, sca
             <li>AB3D0001-Focus Stack.tiff</li>
         </ul>
     </div>
-
-    <h2>Invalid Files</h2>
-"""
-
-    if invalid_files:
-        html += f"""    <p><strong>{len(invalid_files)} files</strong> did not match the expected naming pattern:</p>
-    <table>
-        <thead>
-            <tr>
-                <th>Filename</th>
-                <th>Reason</th>
-            </tr>
-        </thead>
-        <tbody>
-"""
-        for invalid in invalid_files:
-            html += f"""            <tr>
-                <td>{invalid['filename']}</td>
-                <td>{invalid['reason']}</td>
-            </tr>
-"""
-        html += """        </tbody>
-    </table>
-"""
-    else:
-        html += """    <p>All files matched the expected naming pattern.</p>
 """
 
     html += """
