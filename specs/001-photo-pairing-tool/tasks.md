@@ -159,13 +159,13 @@
 
 **Purpose**: Finalize documentation and user experience
 
-- [ ] T062 [P] Add module-level docstring and function docstrings to photo_pairing.py
-- [ ] T063 [P] Add usage examples to photo_pairing.py --help output
-- [ ] T064 [P] Create user documentation in docs/photo-pairing.md
-- [ ] T065 Update README.md with Photo Pairing Tool section and usage example
-- [ ] T066 Run full test suite and ensure >80% coverage
-- [ ] T067 Test tool end-to-end on real photo collection
-- [ ] T068 Verify constitution compliance (all checkboxes in plan.md)
+- [x] T062 [P] Add module-level docstring and function docstrings to photo_pairing.py
+- [x] T063 [P] Add usage examples to photo_pairing.py --help output
+- [x] T064 [P] Create user documentation in docs/photo-pairing.md
+- [x] T065 Update README.md with Photo Pairing Tool section and usage example
+- [x] T066 Run full test suite and ensure >80% coverage
+- [x] T067 Test tool end-to-end on real photo collection
+- [x] T068 Verify constitution compliance (all checkboxes in plan.md)
 
 ---
 

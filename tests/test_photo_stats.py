@@ -571,7 +571,7 @@ metadata_extensions:
         test_dir.mkdir()
 
         # Mock Path(__file__).parent in config_manager to point to test_dir so template isn't found
-        import config_manager
+        from utils import config_manager
 
         # Patch the __file__ attribute in config_manager module
         monkeypatch.setattr(config_manager, '__file__', str(test_dir / "fake_module.py"))
