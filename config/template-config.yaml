@@ -45,3 +45,23 @@ require_sidecar:
 # Valid metadata sidecar file extensions
 metadata_extensions:
   - .xmp
+
+# Camera ID mappings for Photo Pairing Tool
+# Maps 4-character camera IDs to camera information
+# Structure: camera_id -> list of cameras (v1.0 uses first entry only)
+camera_mappings:
+  # Example entries (will be populated automatically on first run):
+  # AB3D:
+  #   - name: "Canon EOS R5"
+  #     serial_number: "12345"
+  # XYZW:
+  #   - name: "Sony A7IV"
+  #     serial_number: ""
+
+# Processing method descriptions for Photo Pairing Tool
+# Maps processing method keywords found in filenames to descriptions
+processing_methods:
+  # Example entries (will be populated automatically on first run):
+  # "HDR": "High Dynamic Range processing"
+  # "BW": "Black and white conversion"
+  # "PANO": "Panorama stitching"

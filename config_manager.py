@@ -164,6 +164,16 @@ class PhotoAdminConfig:
         return set(self._config.get('require_sidecar', []))
 
     @property
+    def camera_mappings(self):
+        """Get the camera ID mappings dictionary."""
+        return self._config.get('camera_mappings', {})
+
+    @property
+    def processing_methods(self):
+        """Get the processing method descriptions dictionary."""
+        return self._config.get('processing_methods', {})
+
+    @property
     def raw_config(self):
         """Get the raw configuration dictionary."""
         return self._config
