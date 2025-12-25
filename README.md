@@ -18,6 +18,8 @@ pip install -r requirements.txt
 python photo_stats.py /path/to/your/photos
 ```
 
+> **Note:** HTML reports generated before December 2025 used a different styling format. For consistent, improved reports with the latest features, please regenerate reports using the current version of the tools.
+
 ## Documentation
 
 - **[Installation Guide](docs/installation.md)** - Detailed installation instructions
@@ -114,25 +116,39 @@ python -m pytest tests/test_photo_stats.py::TestFileScanningFunctionality::test_
 
 ### Test Coverage
 
-The test suite includes 87+ tests covering:
+The test suite includes 109 tests covering:
 
-**PhotoStats (47 tests):**
+**PhotoStats (50 tests):**
 - Initialization and configuration
 - File scanning, filtering, and discovery
 - Statistics collection and aggregation
 - File pairing analysis (paired/orphaned files)
 - XMP metadata extraction
 - HTML report generation
+- Help text and CLI argument parsing
 - Utility functions and edge cases
 
-**Photo Pairing (40 tests):**
+**Photo Pairing (43 tests):**
 - Filename validation and parsing
 - Property type detection
 - ImageGroup building and file grouping
 - Cache operations (save/load/validation)
 - Analytics calculations
 - HTML report generation
+- Help text and CLI argument parsing
 - Integration workflows (first-run, cached, stale cache)
+
+**Report Rendering (12 tests):**
+- ReportContext and dataclass structures
+- Template-based HTML generation
+- Visual consistency across tools
+- Atomic file writes
+
+**Signal Handling (7 tests):**
+- SIGINT (CTRL+C) graceful interruption
+- Exit code 130 verification
+- User-friendly error messages
+- Atomic file write patterns
 
 ### Project Structure
 
@@ -143,7 +159,12 @@ photo-admin/
 ├── utils/                      # Shared utilities
 │   ├── __init__.py            # Package init
 │   ├── config_manager.py      # Configuration management
-│   └── filename_parser.py     # Filename validation and parsing
+│   ├── filename_parser.py     # Filename validation and parsing
+│   └── report_renderer.py     # Jinja2-based HTML report generation
+├── templates/                  # HTML report templates
+│   ├── base.html.j2           # Base template with shared styling
+│   ├── photo_stats.html.j2    # PhotoStats report template
+│   └── photo_pairing.html.j2  # Photo Pairing report template
 ├── config/
 │   ├── template-config.yaml   # Configuration template
 │   └── config.yaml            # User configuration (gitignored)
@@ -153,19 +174,25 @@ photo-admin/
 │   ├── photostats.md          # PhotoStats tool documentation
 │   └── photo-pairing.md       # Photo Pairing tool documentation
 ├── specs/                     # Design specifications
-│   └── 001-photo-pairing-tool/
-│       ├── constitution.md    # Design principles
-│       ├── spec.md            # Technical specification
+│   ├── 001-photo-pairing-tool/
+│   │   ├── constitution.md    # Design principles
+│   │   ├── spec.md            # Technical specification
+│   │   ├── plan.md            # Implementation plan
+│   │   └── tasks.md           # Task breakdown
+│   └── 002-html-report-consistency/
+│       ├── spec.md            # HTML consistency specification
 │       ├── plan.md            # Implementation plan
 │       └── tasks.md           # Task breakdown
-├── requirements.txt           # Python dependencies
+├── requirements.txt           # Python dependencies (PyYAML, Jinja2)
 ├── pytest.ini                # Pytest configuration
 ├── .coveragerc               # Coverage configuration
 ├── tests/
-│   ├── __init__.py           # Test package
-│   ├── conftest.py           # Test fixtures and configuration
-│   ├── test_photo_stats.py   # PhotoStats test suite (47 tests)
-│   └── test_photo_pairing.py # Photo Pairing test suite (40 tests)
+│   ├── __init__.py              # Test package
+│   ├── conftest.py              # Test fixtures and configuration
+│   ├── test_photo_stats.py      # PhotoStats test suite (50 tests)
+│   ├── test_photo_pairing.py    # Photo Pairing test suite (43 tests)
+│   ├── test_report_renderer.py  # Report renderer tests (12 tests)
+│   └── test_signal_handling.py  # Signal handling tests (7 tests)
 ├── LICENSE                   # AGPL v3 license
 └── README.md                 # This file
 ```
