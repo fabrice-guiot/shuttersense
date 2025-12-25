@@ -1,4 +1,4 @@
-# Feature 003: Photo Processing Pipeline Validation Tool
+# Feature Request: Photo Processing Pipeline Validation Tool
 
 **Status:** Draft PRD - Awaiting Review
 **Created:** 2025-12-25
