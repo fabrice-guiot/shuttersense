@@ -1,20 +1,32 @@
 <!--
-SYNC IMPACT REPORT (Constitution v1.0.0 - Initial Ratification)
+SYNC IMPACT REPORT (Constitution v1.1.1 - Cross-Platform Encoding Standard)
 
-Version change: N/A → 1.0.0
-Modified principles: N/A (initial version)
-Added sections:
-  - Core Principles: Independent CLI Tools, Testing & Quality, User-Centric Design
-  - Shared Infrastructure Standards
-  - Development Philosophy
-  - Governance
+Version change: 1.1.0 → 1.1.1 (PATCH)
+Modified principles:
+  - Shared Infrastructure Standards: Added Cross-Platform File Encoding requirement
+
+Added requirements:
+  - All file read/write operations MUST explicitly specify encoding='utf-8' for text files
+  - Never rely on platform default encodings (prevents Windows cp1252 failures)
+
+Rationale:
+  - Recurring Windows CI failures due to missing UTF-8 encoding specification
+  - Windows defaults to cp1252, which fails on UTF-8 content from templates
+  - Explicit encoding ensures consistent behavior across all platforms (Windows, macOS, Linux)
+  - Prevents test failures and runtime errors in production
+
+Impact:
+  - Code reviews MUST check for explicit encoding parameters
+  - All text file operations need encoding='utf-8' parameter
+  - Applies to: open(), Path.read_text(), Path.write_text(), json.load(), etc.
 
 Templates requiring updates:
-  ✅ plan-template.md - Constitution Check section aligned with new principles
-  ✅ spec-template.md - Already compatible (no changes needed)
-  ✅ tasks-template.md - Test-optional approach matches flexible testing principle
+  ✅ No template changes needed - this is a coding standard
 
-Follow-up TODOs: None
+Previous Amendment (v1.1.0 - CLI Standards):
+  - User-Centric Design: Added requirements for --help option and CTRL+C handling
+  - Shared Infrastructure Standards: Added HTML Report Consistency requirement
+  - Issues #13, #14, and #16 identified gaps in professional CLI behavior
 -->
 
 # photo-admin Constitution
@@ -37,7 +49,9 @@ All features MUST have test coverage. Tests SHOULD be written before or alongsid
 
 Analysis tools MUST generate interactive HTML reports with visualizations and clear presentation of results. All tools MUST provide helpful, actionable error messages. Code MUST prioritize simplicity over cleverness (YAGNI principle). Tools MUST include structured logging for observability and debugging.
 
-**Rationale**: Users deserve clear, visual insights into their photo collections. Simplicity reduces maintenance burden and makes the codebase accessible to contributors. Good observability enables users to understand what's happening and troubleshoot issues effectively.
+All tools MUST provide `--help` and `-h` options that display comprehensive usage information without performing operations. All tools MUST handle CTRL+C (SIGINT) gracefully with user-friendly messages and appropriate exit codes (130).
+
+**Rationale**: Users deserve clear, visual insights into their photo collections. Simplicity reduces maintenance burden and makes the codebase accessible to contributors. Good observability enables users to understand what's happening and troubleshoot issues effectively. Standard CLI conventions (help flags, interruption handling) create professional user experiences and meet established user expectations.
 
 ## Shared Infrastructure Standards
 
@@ -47,6 +61,8 @@ Analysis tools MUST generate interactive HTML reports with visualizations and cl
 - **Config Schema**: New tools MAY extend the shared config schema by adding top-level keys; existing keys MUST NOT be redefined
 - **File Type Support**: Tools MUST respect `photo_extensions` and `metadata_extensions` from shared config
 - **Report Output**: HTML reports MUST be timestamped (format: `tool_name_report_YYYY-MM-DD_HH-MM-SS.html`)
+- **HTML Report Consistency**: All tools MUST use a centralized HTML templating approach with consistent styling for common elements (headers, footers, metadata sections, KPI cards, charts, warnings, errors). Tools MAY have tool-specific content sections but MUST maintain consistent visual design and user experience
+- **Cross-Platform File Encoding**: All file read and write operations MUST explicitly specify `encoding='utf-8'` for text files. This includes `open()`, `Path.read_text()`, `Path.write_text()`, and similar operations. Never rely on platform default encodings (Windows defaults to cp1252, which causes failures on UTF-8 content)
 
 ## Development Philosophy
 
@@ -78,4 +94,4 @@ Analysis tools MUST generate interactive HTML reports with visualizations and cl
 - Repeated exceptions to a principle suggest it needs revision
 - Project direction or scope changes significantly
 
-**Version**: 1.0.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2025-12-23
+**Version**: 1.1.1 | **Ratified**: 2025-12-23 | **Last Amended**: 2025-12-25

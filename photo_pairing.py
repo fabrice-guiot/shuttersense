@@ -35,10 +35,10 @@ shutdown_requested = False
 
 
 def signal_handler(signum, frame):
-    """Handle Ctrl+C gracefully."""
+    """Handle SIGINT (Ctrl+C) gracefully."""
     global shutdown_requested
     shutdown_requested = True
-    print("\n\n⚠ Interrupt received (Ctrl+C)")
+    print("\n\nOperation interrupted by user")
     print("Exiting gracefully without saving cache...")
     sys.exit(130)  # Standard exit code for SIGINT
 
@@ -450,7 +450,7 @@ def calculate_analytics(imagegroups, camera_mappings, processing_methods):
 
 def generate_html_report(analytics, invalid_files, output_path, folder_path, scan_duration):
     """
-    Generate HTML report with analytics and visualizations.
+    Generate HTML report with analytics and visualizations using centralized templates.
 
     Args:
         analytics: Dictionary with camera_usage, method_usage, statistics
@@ -459,335 +459,238 @@ def generate_html_report(analytics, invalid_files, output_path, folder_path, sca
         folder_path: Path object for the analyzed folder
         scan_duration: Time taken to scan in seconds (float)
     """
-    stats = analytics['statistics']
-    camera_usage = analytics['camera_usage']
-    method_usage = analytics['method_usage']
+    from utils.report_renderer import (
+        ReportRenderer,
+        ReportContext,
+        KPICard,
+        ReportSection,
+        WarningMessage
+    )
 
-    # Prepare data for charts
-    camera_labels = [f"{info['name']} ({cam_id})" for cam_id, info in sorted(camera_usage.items())]
-    camera_counts = [info['image_count'] for _, info in sorted(camera_usage.items())]
+    try:
+        stats = analytics['statistics']
+        camera_usage = analytics['camera_usage']
+        method_usage = analytics['method_usage']
 
-    method_labels = [f"{info['description']} ({keyword})" for keyword, info in sorted(method_usage.items())]
-    method_counts = [info['image_count'] for _, info in sorted(method_usage.items())]
+        # Build KPI cards from statistics
+        kpis = [
+            KPICard(
+                title="Total Groups",
+                value=str(stats['total_groups']),
+                status="success",
+                unit="groups",
+                tooltip="Number of photo groups detected"
+            ),
+            KPICard(
+                title="Total Images",
+                value=str(stats['total_images']),
+                status="success",
+                unit="images",
+                tooltip="Number of primary image files found"
+            ),
+            KPICard(
+                title="Total Files",
+                value=str(stats['total_files_scanned']),
+                status="info",
+                unit="files",
+                tooltip="All files scanned including sidecars"
+            ),
+            KPICard(
+                title="Avg Files/Group",
+                value=f"{stats['avg_files_per_group']:.1f}",
+                status="info",
+                unit="files/group"
+            ),
+            KPICard(
+                title="Cameras Used",
+                value=str(stats['cameras_used']),
+                status="info",
+                unit="cameras"
+            ),
+            KPICard(
+                title="Processing Methods",
+                value=str(stats['processing_methods_used']),
+                status="info",
+                unit="methods"
+            ),
+            KPICard(
+                title="Invalid Files",
+                value=str(len(invalid_files)),
+                status="danger" if invalid_files else "success",
+                unit="files",
+                tooltip="Files with non-standard filenames"
+            )
+        ]
 
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Pairing Analysis Report</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }}
-        h1 {{
-            color: #333;
-            border-bottom: 3px solid #007bff;
-            padding-bottom: 10px;
-        }}
-        h2 {{
-            color: #555;
-            margin-top: 30px;
-        }}
-        .summary {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }}
-        .stat-card {{
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .stat-value {{
-            font-size: 2em;
-            font-weight: bold;
-            color: #007bff;
-        }}
-        .stat-label {{
-            color: #666;
-            margin-top: 5px;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #007bff;
-            color: white;
-            font-weight: 600;
-        }}
-        tr:hover {{
-            background-color: #f5f5f5;
-        }}
-        .chart-container {{
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .footer {{
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            color: #666;
-            font-size: 0.9em;
-        }}
-    </style>
-</head>
-<body>
-    <h1>Photo Pairing Analysis Report</h1>
-    <p><strong>Folder scanned:</strong> {folder_path}</p>
-    <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    <p><strong>Scan duration:</strong> {scan_duration:.2f} seconds</p>
+        # Build report sections
+        sections = []
 
-    <h2>Summary Statistics</h2>
-    <div class="summary">
-        <div class="stat-card">
-            <div class="stat-value">{stats['total_groups']}</div>
-            <div class="stat-label">Total Groups</div>
+        # Camera Usage Chart
+        if camera_usage:
+            camera_labels = [f"{info['name']} ({cam_id})" for cam_id, info in sorted(camera_usage.items())]
+            camera_counts = [info['image_count'] for _, info in sorted(camera_usage.items())]
+
+            sections.append(ReportSection(
+                title="Camera Usage - Images per Camera",
+                type="chart_bar",
+                data={
+                    "labels": camera_labels,
+                    "values": camera_counts
+                },
+                description="Distribution of images across cameras"
+            ))
+
+        # Camera Usage Table
+        if camera_usage:
+            camera_rows = []
+            for cam_id, info in sorted(camera_usage.items()):
+                camera_rows.append([
+                    cam_id,
+                    info['name'],
+                    info['serial_number'] or 'N/A',
+                    str(info['group_count']),
+                    str(info['image_count'])
+                ])
+
+            sections.append(ReportSection(
+                title="Camera Details",
+                type="table",
+                data={
+                    "headers": ["Camera ID", "Camera Name", "Serial Number", "Groups", "Images"],
+                    "rows": camera_rows
+                }
+            ))
+
+        # Processing Methods Chart
+        if method_usage:
+            method_labels = [f"{info['description']} ({keyword})" for keyword, info in sorted(method_usage.items())]
+            method_counts = [info['image_count'] for _, info in sorted(method_usage.items())]
+
+            sections.append(ReportSection(
+                title="Processing Methods - Images per Method",
+                type="chart_bar",
+                data={
+                    "labels": method_labels,
+                    "values": method_counts
+                },
+                description="Distribution of images by processing method"
+            ))
+
+        # Processing Methods Table
+        if method_usage:
+            method_rows = []
+            for keyword, info in sorted(method_usage.items()):
+                method_rows.append([
+                    keyword,
+                    info['description'],
+                    str(info['image_count'])
+                ])
+
+            sections.append(ReportSection(
+                title="Processing Method Details",
+                type="table",
+                data={
+                    "headers": ["Method", "Description", "Images"],
+                    "rows": method_rows
+                }
+            ))
+
+        # Invalid Files Table
+        if invalid_files:
+            invalid_rows = []
+            for invalid in invalid_files:
+                invalid_rows.append([
+                    invalid['filename'],
+                    invalid['reason']
+                ])
+
+            sections.append(ReportSection(
+                title="Invalid Files",
+                type="table",
+                data={
+                    "headers": ["Filename", "Reason"],
+                    "rows": invalid_rows
+                },
+                description=f"{len(invalid_files)} files did not match the expected naming pattern"
+            ))
+
+        # Filename Format Requirements (static documentation)
+        format_html = """
+        <div class="info-box">
+            <p>Photo files must follow this naming convention:</p>
+            <p style="font-family: monospace; font-size: 1.1em; background: #f5f5f5; padding: 10px; border-left: 4px solid var(--color-primary);">
+                <strong>{CAMERA_ID}{COUNTER}[-{PROPERTY}]*{.extension}</strong>
+            </p>
+            <ul style="line-height: 1.8;">
+                <li><strong>CAMERA_ID</strong>: Exactly 4 uppercase alphanumeric characters [A-Z0-9]
+                    <br><span style="color: #666; font-size: 0.9em;">Examples: AB3D, XYZW, R5M2</span>
+                </li>
+                <li><strong>COUNTER</strong>: Exactly 4 digits from 0001 to 9999 (0000 not allowed)
+                    <br><span style="color: #666; font-size: 0.9em;">Examples: 0001, 0042, 1234, 9999</span>
+                </li>
+                <li><strong>PROPERTY</strong> (optional): One or more dash-prefixed properties
+                    <br><span style="color: #666; font-size: 0.9em;">• Can contain letters, digits, spaces, and underscores</span>
+                    <br><span style="color: #666; font-size: 0.9em;">• Numeric properties indicate separate images (e.g., -2, -3)</span>
+                    <br><span style="color: #666; font-size: 0.9em;">• Alphanumeric properties indicate processing methods (e.g., -HDR, -BW)</span>
+                    <br><span style="color: #666; font-size: 0.9em;">Examples: -HDR, -2, -HDR_BW, -Focus Stack</span>
+                </li>
+                <li><strong>Extension</strong>: Case-insensitive file extension
+                    <br><span style="color: #666; font-size: 0.9em;">Examples: .dng, .DNG, .cr3, .CR3, .tiff</span>
+                </li>
+            </ul>
+            <p><strong>Valid filename examples:</strong></p>
+            <ul style="font-family: monospace; color: #28a745;">
+                <li>AB3D0001.dng</li>
+                <li>XYZW0035-HDR.tiff</li>
+                <li>AB3D0042-2.cr3</li>
+                <li>R5M21234-HDR-BW.dng</li>
+                <li>AB3D0001-Focus Stack.tiff</li>
+            </ul>
         </div>
-        <div class="stat-card">
-            <div class="stat-value">{stats['total_images']}</div>
-            <div class="stat-label">Total Images</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{stats['total_files_scanned']}</div>
-            <div class="stat-label">Total Files</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{stats['avg_files_per_group']:.1f}</div>
-            <div class="stat-label">Avg Files/Group</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{stats['cameras_used']}</div>
-            <div class="stat-label">Cameras Used</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{stats['processing_methods_used']}</div>
-            <div class="stat-label">Processing Methods</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{len(invalid_files)}</div>
-            <div class="stat-label">Invalid Files</div>
-        </div>
-    </div>
+        """
 
-    <h2>Camera Usage</h2>
-    <div class="chart-container">
-        <canvas id="cameraChart"></canvas>
-    </div>
+        sections.append(ReportSection(
+            title="Filename Format Requirements",
+            type="html",
+            html_content=format_html,
+            description="Naming convention rules for photo files"
+        ))
 
-    <table>
-        <thead>
-            <tr>
-                <th>Camera ID</th>
-                <th>Camera Name</th>
-                <th>Serial Number</th>
-                <th>Groups</th>
-                <th>Images</th>
-            </tr>
-        </thead>
-        <tbody>
-"""
+        # Build warnings if invalid files exist
+        warnings = []
+        if invalid_files:
+            warnings.append(WarningMessage(
+                message=f"Found {len(invalid_files)} files with invalid filenames",
+                details=[f"{inv['filename']}: {inv['reason']}" for inv in invalid_files[:5]],
+                severity="high" if len(invalid_files) > 10 else "medium"
+            ))
 
-    for cam_id, info in sorted(camera_usage.items()):
-        html += f"""            <tr>
-                <td>{cam_id}</td>
-                <td>{info['name']}</td>
-                <td>{info['serial_number'] or 'N/A'}</td>
-                <td>{info['group_count']}</td>
-                <td>{info['image_count']}</td>
-            </tr>
-"""
+        # Create report context
+        context = ReportContext(
+            tool_name="Photo Pairing",
+            tool_version="1.0.0",
+            scan_path=str(folder_path),
+            scan_timestamp=datetime.now(),
+            scan_duration=scan_duration,
+            kpis=kpis,
+            sections=sections,
+            warnings=warnings
+        )
 
-    html += """        </tbody>
-    </table>
+        # Render report using centralized template
+        renderer = ReportRenderer()
+        renderer.render_report(
+            context=context,
+            template_name="photo_pairing.html.j2",
+            output_path=output_path
+        )
 
-    <h2>Processing Methods</h2>
-"""
+        return output_path
 
-    if method_usage:
-        html += """    <div class="chart-container">
-        <canvas id="methodChart"></canvas>
-    </div>
-
-    <table>
-        <thead>
-            <tr>
-                <th>Method</th>
-                <th>Description</th>
-                <th>Images</th>
-            </tr>
-        </thead>
-        <tbody>
-"""
-
-        for keyword, info in sorted(method_usage.items()):
-            html += f"""            <tr>
-                <td>{keyword}</td>
-                <td>{info['description']}</td>
-                <td>{info['image_count']}</td>
-            </tr>
-"""
-
-        html += """        </tbody>
-    </table>
-"""
-    else:
-        html += """    <p>No processing methods detected in filenames.</p>
-"""
-
-    # Invalid files section
-    html += """
-    <h2>Invalid Files</h2>
-"""
-
-    if invalid_files:
-        html += f"""    <p><strong>{len(invalid_files)} files</strong> did not match the expected naming pattern:</p>
-    <table>
-        <thead>
-            <tr>
-                <th>Filename</th>
-                <th>Reason</th>
-            </tr>
-        </thead>
-        <tbody>
-"""
-        for invalid in invalid_files:
-            html += f"""            <tr>
-                <td>{invalid['filename']}</td>
-                <td>{invalid['reason']}</td>
-            </tr>
-"""
-        html += """        </tbody>
-    </table>
-"""
-    else:
-        html += """    <p>All files matched the expected naming pattern.</p>
-"""
-
-    # Validation rules documentation (appears after invalid files to help fix them)
-    html += """
-    <h2>Filename Format Requirements</h2>
-    <div class="chart-container">
-        <p>Photo files must follow this naming convention:</p>
-        <p style="font-family: monospace; font-size: 1.1em; background: #f5f5f5; padding: 10px; border-left: 4px solid #007bff;">
-            <strong>{CAMERA_ID}{COUNTER}[-{PROPERTY}]*{.extension}</strong>
-        </p>
-        <ul style="line-height: 1.8;">
-            <li><strong>CAMERA_ID</strong>: Exactly 4 uppercase alphanumeric characters [A-Z0-9]
-                <br><span style="color: #666; font-size: 0.9em;">Examples: AB3D, XYZW, R5M2</span>
-            </li>
-            <li><strong>COUNTER</strong>: Exactly 4 digits from 0001 to 9999 (0000 not allowed)
-                <br><span style="color: #666; font-size: 0.9em;">Examples: 0001, 0042, 1234, 9999</span>
-            </li>
-            <li><strong>PROPERTY</strong> (optional): One or more dash-prefixed properties
-                <br><span style="color: #666; font-size: 0.9em;">• Can contain letters, digits, spaces, and underscores</span>
-                <br><span style="color: #666; font-size: 0.9em;">• Numeric properties indicate separate images (e.g., -2, -3)</span>
-                <br><span style="color: #666; font-size: 0.9em;">• Alphanumeric properties indicate processing methods (e.g., -HDR, -BW)</span>
-                <br><span style="color: #666; font-size: 0.9em;">Examples: -HDR, -2, -HDR_BW, -Focus Stack</span>
-            </li>
-            <li><strong>Extension</strong>: Case-insensitive file extension
-                <br><span style="color: #666; font-size: 0.9em;">Examples: .dng, .DNG, .cr3, .CR3, .tiff</span>
-            </li>
-        </ul>
-        <p><strong>Valid filename examples:</strong></p>
-        <ul style="font-family: monospace; color: #28a745;">
-            <li>AB3D0001.dng</li>
-            <li>XYZW0035-HDR.tiff</li>
-            <li>AB3D0042-2.cr3</li>
-            <li>R5M21234-HDR-BW.dng</li>
-            <li>AB3D0001-Focus Stack.tiff</li>
-        </ul>
-    </div>
-"""
-
-    html += """
-    <div class="footer">
-        <p>Generated by Photo Pairing Tool - photo-admin toolbox</p>
-    </div>
-
-    <script>
-"""
-
-    # Camera chart
-    html += f"""
-        new Chart(document.getElementById('cameraChart'), {{
-            type: 'bar',
-            data: {{
-                labels: {camera_labels},
-                datasets: [{{
-                    label: 'Images per Camera',
-                    data: {camera_counts},
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }}]
-            }},
-            options: {{
-                responsive: true,
-                plugins: {{
-                    legend: {{ display: false }},
-                    title: {{ display: true, text: 'Images by Camera' }}
-                }},
-                scales: {{
-                    y: {{ beginAtZero: true }}
-                }}
-            }}
-        }});
-"""
-
-    # Method chart (if methods exist)
-    if method_usage:
-        html += f"""
-        new Chart(document.getElementById('methodChart'), {{
-            type: 'bar',
-            data: {{
-                labels: {method_labels},
-                datasets: [{{
-                    label: 'Images per Method',
-                    data: {method_counts},
-                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    borderWidth: 1
-                }}]
-            }},
-            options: {{
-                responsive: true,
-                plugins: {{
-                    legend: {{ display: false }},
-                    title: {{ display: true, text: 'Images by Processing Method' }}
-                }},
-                scales: {{
-                    y: {{ beginAtZero: true }}
-                }}
-            }}
-        }});
-"""
-
-    html += """    </script>
-</body>
-</html>"""
-
-    with open(output_path, 'w') as f:
-        f.write(html)
+    except Exception as e:
+        print(f"\nERROR: Failed to generate HTML report: {e}")
+        print("Analysis results are available in console output above.")
+        return None
 
 
 def main():
@@ -796,19 +699,46 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     parser = argparse.ArgumentParser(
-        description='Analyze photo filenames and generate analytics reports',
+        description="""Photo Pairing - Analyze photo filename patterns and group related files.
+
+Validates filenames against naming conventions, tracks camera usage, identifies
+processing methods, and generates interactive HTML reports with comprehensive analytics.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s /path/to/photos              Analyze folder and generate report
-  %(prog)s ~/Photos/2025-01-Shoot       Analyze specific photo shoot folder
+  %(prog)s /path/to/photos
+      Analyze folder and generate timestamped HTML report
 
-The tool will:
-1. Scan the folder for photo files (based on config)
-2. Group related files by 8-character prefix
-3. Prompt for camera and processing method information (first run)
-4. Generate an interactive HTML report with analytics
-        """
+  %(prog)s ~/Photos/2025-01-Shoot
+      Analyze specific photo shoot folder
+
+  %(prog)s /mnt/external/RAW_Files
+      Analyze photos on external drive
+
+How It Works:
+  1. Scan folder for photo files (based on config)
+  2. Validate filenames against naming convention
+  3. Group related files by 8-character prefix (camera ID + counter)
+  4. Prompt for camera and processing method info (first run)
+  5. Cache results for faster subsequent runs
+  6. Generate interactive HTML report with analytics
+
+Configuration:
+  If no config file exists, the tool will search in this order:
+    1. config/config.yaml (current directory)
+    2. config.yaml (current directory)
+    3. ~/.photo_stats_config.yaml (home directory)
+    4. config/config.yaml (script directory)
+
+  To create a configuration file:
+    cp config/template-config.yaml config/config.yaml
+
+  The tool will prompt interactively to create missing config on first run.
+
+Report Output:
+  Default filename: photo_pairing_report_YYYY-MM-DD_HH-MM-SS.html
+  Reports include: filename validation, camera usage, processing methods, charts
+"""
     )
 
     parser.add_argument(
@@ -958,6 +888,11 @@ The tool will:
 
     # Calculate scan duration (excluding user input time)
     scan_duration = time.time() - scan_start_time - total_pause_time
+
+    # Check for shutdown request before generating report
+    if shutdown_requested:
+        print("\nReport generation skipped due to interruption")
+        sys.exit(130)
 
     # Generate HTML report
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

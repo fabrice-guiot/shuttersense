@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ tool_name }} Report - {{ scan_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        /* Color Theme Configuration - Shared across all tools */
+        :root {
+            --color-primary: #667eea;
+            --color-secondary: #764ba2;
+            --color-success: #10b981;
+            --color-info: #3b82f6;
+            --color-warning: #f59e0b;
+            --color-danger: #ef4444;
+
+            /* Gradients */
+            --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-pink: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --gradient-blue: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --gradient-orange: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            --gradient-green: linear-gradient(135deg, #10b981 0%, #059669 100%);
+
+            /* Chart Colors - Consistent across all reports */
+            --chart-color-1: rgba(102, 126, 234, 0.8);
+            --chart-color-2: rgba(118, 75, 162, 0.8);
+            --chart-color-3: rgba(255, 159, 64, 0.8);
+            --chart-color-4: rgba(75, 192, 192, 0.8);
+            --chart-color-5: rgba(153, 102, 255, 0.8);
+            --chart-color-6: rgba(255, 99, 132, 0.8);
+
+            /* Typography */
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background: linear-gradient(to bottom right, #f8fafc 0%, #e2e8f0 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        /* Header Styling */
+        header {
+            background: var(--gradient-purple);
+            color: white;
+            padding: 40px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        header .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+
+        /* Metadata Section */
+        .metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .metadata-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metadata-item .label {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .metadata-item .value {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        /* KPI Cards */
+        .kpi-section {
+            padding: 30px 40px;
+            background: #f8fafc;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .kpi-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+
+        .kpi-card .title {
+            font-size: 0.9rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .kpi-card .value-container {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .kpi-card .value {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .kpi-card .unit {
+            font-size: 1rem;
+            color: #64748b;
+        }
+
+        .kpi-card.success .value { color: var(--color-success); }
+        .kpi-card.info .value { color: var(--color-info); }
+        .kpi-card.warning .value { color: var(--color-warning); }
+        .kpi-card.danger .value { color: var(--color-danger); }
+
+        /* Content Sections */
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #1e293b;
+        }
+
+        .section-description {
+            color: #64748b;
+            margin-bottom: 20px;
+        }
+
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        /* Table Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        thead {
+            background: var(--gradient-purple);
+            color: white;
+        }
+
+        th {
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:hover {
+            background: #f8fafc;
+        }
+
+        /* Warning/Error Sections */
+        .message-box {
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .message-box.warning {
+            background: #fef3c7;
+            border-left: 4px solid var(--color-warning);
+        }
+
+        .message-box.error {
+            background: #fee2e2;
+            border-left: 4px solid var(--color-danger);
+        }
+
+        .message-box .message-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .message-box.warning .message-title {
+            color: #92400e;
+        }
+
+        .message-box.error .message-title {
+            color: #991b1b;
+        }
+
+        .message-box .message-details {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
+
+        .message-box .message-details li {
+            margin: 4px 0;
+            color: #374151;
+        }
+
+        /* Footer */
+        footer {
+            background: #1e293b;
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+        }
+
+        footer .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        footer .attribution {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        footer .timestamp {
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        {% block tool_specific_styles %}
+        {# Tool-specific CSS can be added here #}
+        {% endblock %}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>{{ tool_name }} Report</h1>
+            <p class="subtitle">Photo Collection Analysis</p>
+
+            <div class="metadata">
+                <div class="metadata-item">
+                    <span class="label">Scanned Folder</span>
+                    <span class="value">{{ scan_path }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="label">Scan Time</span>
+                    <span class="value">{{ scan_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="label">Duration</span>
+                    <span class="value">{{ "%.2f"|format(scan_duration) }} seconds</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="label">Tool Version</span>
+                    <span class="value">{{ tool_version }}</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- KPI Cards -->
+        <section class="kpi-section">
+            <div class="kpi-grid">
+                {% for kpi in kpis %}
+                <div class="kpi-card {{ kpi.status }}" {% if kpi.tooltip %}title="{{ kpi.tooltip }}"{% endif %}>
+                    <div class="title">{{ kpi.title }}</div>
+                    <div class="value-container">
+                        <span class="value">{{ kpi.value }}</span>
+                        {% if kpi.unit %}<span class="unit">{{ kpi.unit }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Main Content -->
+        <main class="content">
+            {% for section in sections %}
+            <div class="section">
+                <h2 class="section-title">{{ section.title }}</h2>
+                {% if section.description %}
+                <p class="section-description">{{ section.description }}</p>
+                {% endif %}
+
+                {% if section.type == 'chart_bar' or section.type == 'chart_pie' or section.type == 'chart_line' %}
+                <div class="chart-container">
+                    <canvas id="chart-{{ loop.index }}"></canvas>
+                </div>
+                {% elif section.type == 'table' %}
+                <table>
+                    <thead>
+                        <tr>
+                            {% for header in section.data.headers %}
+                            <th>{{ header }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in section.data.rows %}
+                        <tr>
+                            {% for cell in row %}
+                            <td>{{ cell }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% elif section.type == 'html' %}
+                {{ section.html_content|safe }}
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <!-- Warnings Section -->
+            {% if warnings %}
+            <div class="section">
+                <h2 class="section-title">⚠️ Warnings</h2>
+                {% for warning in warnings %}
+                <div class="message-box warning">
+                    <div class="message-title">{{ warning.message }}</div>
+                    {% if warning.details %}
+                    <ul class="message-details">
+                        {% for detail in warning.details %}
+                        <li>{{ detail }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Errors Section -->
+            {% if errors %}
+            <div class="section">
+                <h2 class="section-title">🚨 Errors</h2>
+                {% for error in errors %}
+                <div class="message-box error">
+                    <div class="message-title">{{ error.message }}</div>
+                    {% if error.details %}
+                    <ul class="message-details">
+                        {% for detail in error.details %}
+                        <li>{{ detail }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% if error.actionable_fix %}
+                    <p style="margin-top: 10px; font-weight: 600; color: #991b1b;">
+                        💡 Suggested fix: {{ error.actionable_fix }}
+                    </p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% block tool_specific_content %}
+            {# Tool-specific content sections can be added here #}
+            {% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <div class="footer-content">
+                <div class="attribution">
+                    Generated by {{ tool_name }} v{{ tool_version }} | photo-admin toolbox
+                    {% if footer_note %}<br>{{ footer_note }}{% endif %}
+                </div>
+                <div class="timestamp">
+                    Report generated: {{ scan_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Chart.js Rendering Scripts -->
+    <script>
+        // Shared Chart.js color configuration
+        const CHART_COLORS = [
+            'rgba(102, 126, 234, 0.8)',
+            'rgba(118, 75, 162, 0.8)',
+            'rgba(255, 159, 64, 0.8)',
+            'rgba(75, 192, 192, 0.8)',
+            'rgba(153, 102, 255, 0.8)',
+            'rgba(255, 99, 132, 0.8)'
+        ];
+
+        const CHART_BORDER_COLORS = [
+            'rgba(102, 126, 234, 1)',
+            'rgba(118, 75, 162, 1)',
+            'rgba(255, 159, 64, 1)',
+            'rgba(75, 192, 192, 1)',
+            'rgba(153, 102, 255, 1)',
+            'rgba(255, 99, 132, 1)'
+        ];
+
+        {% for section in sections %}
+        {% if section.type.startswith('chart_') %}
+        {
+            const ctx = document.getElementById('chart-{{ loop.index }}').getContext('2d');
+            const chartType = '{{ section.type.replace("chart_", "") }}';
+            const colors = {{ section.data.colors|tojson if section.data.colors else 'CHART_COLORS' }};
+            const borderColors = colors.map(c => c.replace('0.8)', '1)'));
+
+            new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: {{ section.data['labels']|tojson }},
+                    datasets: [{
+                        label: '{{ section.title }}',
+                        data: {{ section.data['values']|tojson }},
+                        backgroundColor: colors,
+                        borderColor: borderColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: chartType === 'pie',
+                            position: 'bottom'
+                        }
+                    },
+                    {% if section.type == 'chart_bar' or section.type == 'chart_line' %}
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                    {% endif %}
+                }
+            });
+        }
+        {% endif %}
+        {% endfor %}
+
+        {% block tool_specific_scripts %}
+        {# Tool-specific JavaScript can be added here #}
+        {% endblock %}
+    </script>
+</body>
+</html>

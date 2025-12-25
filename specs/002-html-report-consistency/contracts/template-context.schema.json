@@ -1,0 +1,285 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/fabrice-guiot/photo-admin/schemas/template-context.json",
+  "title": "ReportContext",
+  "description": "Unified data structure for HTML report template rendering in photo-admin tools",
+  "type": "object",
+  "required": ["tool_name", "tool_version", "scan_path", "scan_timestamp", "scan_duration", "kpis", "sections"],
+  "properties": {
+    "tool_name": {
+      "type": "string",
+      "description": "Display name of the tool",
+      "pattern": "^[A-Za-z0-9 ]+$",
+      "minLength": 1,
+      "maxLength": 50,
+      "examples": ["PhotoStats", "Photo Pairing"]
+    },
+    "tool_version": {
+      "type": "string",
+      "description": "Semantic version of the tool",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?$",
+      "examples": ["1.0.0", "2.1"]
+    },
+    "scan_path": {
+      "type": "string",
+      "description": "Absolute path to scanned folder",
+      "minLength": 1,
+      "examples": ["/Users/user/Photos", "/home/user/photos"]
+    },
+    "scan_timestamp": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when scan was initiated",
+      "format": "date-time",
+      "examples": ["2025-12-25T10:30:00Z"]
+    },
+    "scan_duration": {
+      "type": "number",
+      "description": "Scan duration in seconds",
+      "minimum": 0,
+      "maximum": 86400,
+      "examples": [12.5, 120.3]
+    },
+    "kpis": {
+      "type": "array",
+      "description": "Summary metrics displayed as cards",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/KPICard"
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "Content sections (charts, tables, custom HTML)",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/ReportSection"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Non-critical issues found during analysis",
+      "default": [],
+      "items": {
+        "$ref": "#/definitions/WarningMessage"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "Critical issues found during analysis",
+      "default": [],
+      "items": {
+        "$ref": "#/definitions/ErrorMessage"
+      }
+    },
+    "footer_note": {
+      "type": "string",
+      "description": "Optional tool-specific footer text",
+      "maxLength": 500
+    }
+  },
+  "definitions": {
+    "KPICard": {
+      "type": "object",
+      "required": ["title", "value", "status"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Metric name",
+          "minLength": 1,
+          "maxLength": 50,
+          "examples": ["Total Photos", "Orphaned Files"]
+        },
+        "value": {
+          "type": "string",
+          "description": "Formatted metric value",
+          "minLength": 1,
+          "maxLength": 20,
+          "examples": ["1,234", "5", "98.5%"]
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit label",
+          "maxLength": 20,
+          "examples": ["files", "MB", "%", "cameras"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Visual indicator",
+          "enum": ["success", "info", "warning", "danger"]
+        },
+        "icon": {
+          "type": "string",
+          "description": "Optional icon identifier",
+          "examples": ["photo", "camera", "warning", "check"]
+        },
+        "tooltip": {
+          "type": "string",
+          "description": "Hover text explaining the metric",
+          "maxLength": 200
+        }
+      }
+    },
+    "ReportSection": {
+      "type": "object",
+      "required": ["title", "type"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Section heading",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "type": {
+          "type": "string",
+          "description": "Section content type",
+          "enum": ["chart_bar", "chart_pie", "chart_line", "table", "html"]
+        },
+        "data": {
+          "description": "Chart or table data (required for chart/table types)",
+          "oneOf": [
+            { "$ref": "#/definitions/ChartData" },
+            { "$ref": "#/definitions/TableData" }
+          ]
+        },
+        "html_content": {
+          "type": "string",
+          "description": "Raw HTML content (required for html type)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Section explanation",
+          "maxLength": 500
+        },
+        "collapsible": {
+          "type": "boolean",
+          "description": "Whether section can be collapsed",
+          "default": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "pattern": "^chart_" } }
+          },
+          "then": {
+            "required": ["data"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "table" } }
+          },
+          "then": {
+            "required": ["data"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "html" } }
+          },
+          "then": {
+            "required": ["html_content"]
+          }
+        }
+      ]
+    },
+    "ChartData": {
+      "type": "object",
+      "required": ["labels", "values"],
+      "properties": {
+        "labels": {
+          "type": "array",
+          "description": "Chart labels",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "values": {
+          "type": "array",
+          "description": "Chart values",
+          "items": { "type": "number" },
+          "minItems": 1
+        },
+        "colors": {
+          "type": "array",
+          "description": "Optional custom colors",
+          "items": {
+            "type": "string",
+            "pattern": "^(#[0-9A-Fa-f]{6}|rgba?\\(.+\\))$"
+          }
+        }
+      }
+    },
+    "TableData": {
+      "type": "object",
+      "required": ["headers", "rows"],
+      "properties": {
+        "headers": {
+          "type": "array",
+          "description": "Table column headers",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "rows": {
+          "type": "array",
+          "description": "Table data rows",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "minItems": 0
+        }
+      }
+    },
+    "WarningMessage": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Warning summary",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "details": {
+          "type": "array",
+          "description": "Specific examples or affected items",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "severity": {
+          "type": "string",
+          "description": "Warning severity level",
+          "enum": ["low", "medium", "high"],
+          "default": "medium"
+        }
+      }
+    },
+    "ErrorMessage": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Error summary",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "details": {
+          "type": "array",
+          "description": "Specific error details",
+          "items": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "actionable_fix": {
+          "type": "string",
+          "description": "Suggested remediation",
+          "maxLength": 300
+        }
+      }
+    }
+  }
+}

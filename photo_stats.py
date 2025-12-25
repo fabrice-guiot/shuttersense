@@ -26,8 +26,23 @@ from collections import defaultdict
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import json
+import argparse
+import signal
 
 from utils.config_manager import PhotoAdminConfig
+
+
+# Global flag for graceful shutdown
+shutdown_requested = False
+
+
+def signal_handler(signum, frame):
+    """Handle SIGINT (Ctrl+C) gracefully."""
+    global shutdown_requested
+    shutdown_requested = True
+    print("\n\nOperation interrupted by user")
+    print("Exiting gracefully...")
+    sys.exit(130)  # Standard exit code for SIGINT
 
 
 class PhotoStats:
@@ -71,6 +86,11 @@ class PhotoStats:
         # Collect all files
         all_files = {}
         for file_path in self.folder_path.rglob('*'):
+            # Check for shutdown request
+            if shutdown_requested:
+                print("\nScan interrupted by user")
+                sys.exit(130)
+
             if file_path.is_file():
                 ext = file_path.suffix.lower()
                 if ext in self.PHOTO_EXTENSIONS or ext in self.METADATA_EXTENSIONS:
@@ -86,6 +106,11 @@ class PhotoStats:
                     self.stats['total_size'] += file_size
 
         print(f"Found {self.stats['total_files']} files")
+
+        # Check for shutdown request before further processing
+        if shutdown_requested:
+            print("\nScan interrupted by user")
+            sys.exit(130)
 
         # Analyze file pairing
         self._analyze_pairing(all_files)
@@ -180,315 +205,149 @@ class PhotoStats:
         except ET.ParseError:
             return None
 
-    def generate_html_report(self, output_path='photo_stats_report.html'):
-        """Generate an HTML report with statistics and charts."""
+    def generate_html_report(self, output_path=None):
+        """Generate an HTML report with statistics and charts using Jinja2 templates."""
+        # Generate timestamped filename if no output path specified
+        if output_path is None:
+            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            output_path = f'photo_stats_report_{timestamp}.html'
+
         print(f"Generating HTML report: {output_path}")
 
-        html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Statistics Report</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
+        # Import template renderer
+        from utils.report_renderer import (
+            ReportRenderer, ReportContext, KPICard, ReportSection, WarningMessage
+        )
 
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f5f5f5;
-            color: #333;
-            padding: 20px;
-        }}
+        try:
+            # Build KPI cards
+            kpis = [
+                KPICard(
+                    title="Total Images",
+                    value=str(self._get_total_image_count()),
+                    status="success",
+                    unit="files"
+                ),
+                KPICard(
+                    title="Total Size",
+                    value=self._format_size(self.stats['total_size']),
+                    status="info"
+                ),
+                KPICard(
+                    title="Orphaned Images",
+                    value=str(len(self.stats['orphaned_images'])),
+                    status="warning" if self.stats['orphaned_images'] else "success",
+                    unit="files"
+                ),
+                KPICard(
+                    title="Orphaned Sidecars",
+                    value=str(len(self.stats['orphaned_xmp'])),
+                    status="warning" if self.stats['orphaned_xmp'] else "success",
+                    unit="files"
+                )
+            ]
 
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }}
+            # Build chart sections
+            image_type_labels, image_type_counts = self._get_image_type_distribution()
+            storage_labels, storage_sizes = self._get_storage_distribution()
 
-        h1 {{
-            color: #2c3e50;
-            margin-bottom: 10px;
-            font-size: 2.5em;
-        }}
+            sections = [
+                ReportSection(
+                    title="📊 Image Type Distribution",
+                    type="chart_pie",
+                    data={
+                        "labels": image_type_labels,
+                        "values": image_type_counts
+                    },
+                    description="Number of images by file type"
+                ),
+                ReportSection(
+                    title="💾 Storage Distribution",
+                    type="chart_bar",
+                    data={
+                        "labels": storage_labels,
+                        "values": [round(size / 1024 / 1024, 2) for size in storage_sizes]
+                    },
+                    description="Storage usage by image type (including paired sidecars) in MB"
+                )
+            ]
 
-        h2 {{
-            color: #34495e;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #3498db;
-        }}
+            # Add file pairing status table if there are orphaned files
+            orphaned_count = len(self.stats['orphaned_images']) + len(self.stats['orphaned_xmp'])
+            if orphaned_count > 0:
+                # Create table rows for orphaned files
+                rows = []
+                for file_path in self.stats['orphaned_images'][:100]:
+                    rows.append([Path(file_path).name, "Missing XMP sidecar"])
+                for file_path in self.stats['orphaned_xmp'][:100]:
+                    rows.append([Path(file_path).name, "Missing image file"])
 
-        .meta-info {{
-            color: #7f8c8d;
-            margin-bottom: 30px;
-            padding: 15px;
-            background: #ecf0f1;
-            border-radius: 5px;
-        }}
+                sections.append(
+                    ReportSection(
+                        title="🔗 File Pairing Status",
+                        type="table",
+                        data={
+                            "headers": ["File", "Issue"],
+                            "rows": rows
+                        },
+                        description=f"Found {orphaned_count} orphaned files"
+                    )
+                )
+            else:
+                # Add success message as HTML section
+                sections.append(
+                    ReportSection(
+                        title="🔗 File Pairing Status",
+                        type="html",
+                        html_content='<div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;"><strong>✓ All image files have corresponding XMP metadata files!</strong></div>'
+                    )
+                )
 
-        .meta-info p {{
-            margin: 5px 0;
-        }}
+            # Build warnings list
+            warnings = []
+            if orphaned_count > 0:
+                orphaned_details = []
+                if self.stats['orphaned_images']:
+                    orphaned_details.append(f"{len(self.stats['orphaned_images'])} images without XMP files")
+                if self.stats['orphaned_xmp']:
+                    orphaned_details.append(f"{len(self.stats['orphaned_xmp'])} XMP files without images")
 
-        .stats-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }}
+                warnings.append(
+                    WarningMessage(
+                        message=f"Found {orphaned_count} orphaned files",
+                        details=orphaned_details,
+                        severity="medium"
+                    )
+                )
 
-        .stat-card {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }}
+            # Create report context
+            context = ReportContext(
+                tool_name="PhotoStats",
+                tool_version="1.0.0",
+                scan_path=str(self.stats['folder_path']),
+                scan_timestamp=datetime.now(),
+                scan_duration=self.stats['scan_time'],
+                kpis=kpis,
+                sections=sections,
+                warnings=warnings
+            )
 
-        .stat-card.green {{
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        }}
+            # Render report using template
+            renderer = ReportRenderer()
+            renderer.render_report(
+                context=context,
+                template_name="photo_stats.html.j2",
+                output_path=output_path
+            )
 
-        .stat-card.blue {{
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-        }}
+            print(f"Report generated: {Path(output_path).resolve()}")
+            return Path(output_path)
 
-        .stat-card.orange {{
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-        }}
-
-        .stat-card h3 {{
-            font-size: 0.9em;
-            opacity: 0.9;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }}
-
-        .stat-card .value {{
-            font-size: 2.5em;
-            font-weight: bold;
-        }}
-
-        .chart-container {{
-            position: relative;
-            height: 400px;
-            margin: 30px 0;
-        }}
-
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }}
-
-        th, td {{
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ecf0f1;
-        }}
-
-        th {{
-            background: #3498db;
-            color: white;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.85em;
-            letter-spacing: 0.5px;
-        }}
-
-        tr:hover {{
-            background: #f8f9fa;
-        }}
-
-        .warning {{
-            background: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-        }}
-
-        .success {{
-            background: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-        }}
-
-        .file-list {{
-            max-height: 400px;
-            overflow-y: auto;
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-        }}
-
-        .file-list div {{
-            padding: 5px 0;
-            border-bottom: 1px solid #dee2e6;
-        }}
-
-        .file-list div:last-child {{
-            border-bottom: none;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📸 Photo Statistics Report</h1>
-
-        <div class="meta-info">
-            <p><strong>Folder:</strong> {self.stats['folder_path']}</p>
-            <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            <p><strong>Scan Duration:</strong> {self.stats['scan_time']:.2f} seconds</p>
-        </div>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>Total Images</h3>
-                <div class="value">{self._get_total_image_count()}</div>
-            </div>
-            <div class="stat-card green">
-                <h3>Total Size</h3>
-                <div class="value">{self._format_size(self.stats['total_size'])}</div>
-            </div>
-            <div class="stat-card blue">
-                <h3>Orphaned Images</h3>
-                <div class="value">{len(self.stats['orphaned_images'])}</div>
-            </div>
-            <div class="stat-card orange">
-                <h3>Orphaned Sidecars</h3>
-                <div class="value">{len(self.stats['orphaned_xmp'])}</div>
-            </div>
-        </div>
-
-        <h2>📊 Image Type Distribution</h2>
-        <div class="chart-container">
-            <canvas id="fileCountChart"></canvas>
-        </div>
-
-        <h2>💾 Storage Distribution</h2>
-        <div class="chart-container">
-            <canvas id="fileSizeChart"></canvas>
-        </div>
-
-        {self._generate_pairing_section()}
-    </div>
-
-    <script>
-        // Image Type Distribution Chart
-        const imageTypeLabels = {json.dumps(self._get_image_type_distribution()[0])};
-        const imageTypeCounts = {json.dumps(self._get_image_type_distribution()[1])};
-
-        const fileCountCtx = document.getElementById('fileCountChart').getContext('2d');
-        new Chart(fileCountCtx, {{
-            type: 'doughnut',
-            data: {{
-                labels: imageTypeLabels,
-                datasets: [{{
-                    label: 'Image Count',
-                    data: imageTypeCounts,
-                    backgroundColor: [
-                        'rgba(255, 99, 132, 0.8)',
-                        'rgba(54, 162, 235, 0.8)',
-                        'rgba(255, 206, 86, 0.8)',
-                        'rgba(75, 192, 192, 0.8)',
-                        'rgba(153, 102, 255, 0.8)',
-                        'rgba(255, 159, 64, 0.8)',
-                    ],
-                    borderWidth: 2,
-                    borderColor: '#fff'
-                }}]
-            }},
-            options: {{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {{
-                    legend: {{
-                        position: 'bottom',
-                        labels: {{
-                            padding: 20,
-                            font: {{
-                                size: 14
-                            }}
-                        }}
-                    }},
-                    title: {{
-                        display: true,
-                        text: 'Number of Images by Type',
-                        font: {{
-                            size: 16
-                        }}
-                    }}
-                }}
-            }}
-        }});
-
-        // Storage Distribution Chart
-        const storageLabels = {json.dumps(self._get_storage_distribution()[0])};
-        const storageSizes = {json.dumps(self._get_storage_distribution()[1])};
-
-        const fileSizeCtx = document.getElementById('fileSizeChart').getContext('2d');
-        new Chart(fileSizeCtx, {{
-            type: 'bar',
-            data: {{
-                labels: storageLabels,
-                datasets: [{{
-                    label: 'Total Size (MB)',
-                    data: storageSizes.map(v => (v / 1024 / 1024).toFixed(2)),
-                    backgroundColor: 'rgba(52, 152, 219, 0.8)',
-                    borderColor: 'rgba(52, 152, 219, 1)',
-                    borderWidth: 2
-                }}]
-            }},
-            options: {{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {{
-                    legend: {{
-                        display: false
-                    }},
-                    title: {{
-                        display: true,
-                        text: 'Storage Usage by Image Type (including paired sidecars)',
-                        font: {{
-                            size: 16
-                        }}
-                    }}
-                }},
-                scales: {{
-                    y: {{
-                        beginAtZero: true,
-                        title: {{
-                            display: true,
-                            text: 'Size (MB)'
-                        }}
-                    }}
-                }}
-            }}
-        }});
-    </script>
-</body>
-</html>"""
-
-        output_file = Path(output_path)
-        output_file.write_text(html_content, encoding='utf-8')
-        print(f"Report generated: {output_file.resolve()}")
-        return output_file
+        except Exception as e:
+            print(f"ERROR: Failed to generate HTML report: {e}")
+            print("Analysis results are available in console output above.")
+            print("Please ensure Jinja2 is installed: pip install Jinja2>=3.1.0")
+            return None
 
     def _format_size(self, size_bytes):
         """Format bytes to human-readable size."""
@@ -598,25 +457,86 @@ class PhotoStats:
 
 def main():
     """Main entry point for the photo statistics tool."""
-    if len(sys.argv) < 2:
-        print("Usage: python photo_stats.py <folder_path> [output_report.html] [config_file.yaml]")
-        print("\nExample: python photo_stats.py /path/to/photos report.html")
-        print("         python photo_stats.py /path/to/photos report.html config/config.yaml")
-        print("\nIf no config file is specified, the tool will look for:")
-        print("  - config/config.yaml (in current directory)")
-        print("  - config.yaml (in current directory)")
-        print("  - ~/.photo_stats_config.yaml (in home directory)")
-        print("  - config/config.yaml (in script directory)")
-        print("\nTo create a configuration file, copy config/template-config.yaml to config/config.yaml")
-        sys.exit(1)
+    # Register signal handler for graceful Ctrl+C handling
+    signal.signal(signal.SIGINT, signal_handler)
 
-    folder_path = sys.argv[1]
-    output_path = sys.argv[2] if len(sys.argv) > 2 else 'photo_stats_report.html'
-    config_path = sys.argv[3] if len(sys.argv) > 3 else None
+    parser = argparse.ArgumentParser(
+        description="""PhotoStats - Analyze photo collections for orphaned files and sidecar issues.
+
+Scans folders containing DNG, TIFF, CR3, and XMP files, analyzes file pairing,
+and generates comprehensive HTML reports with statistics and visualizations.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s /path/to/photos
+      Analyze folder and generate timestamped HTML report
+
+  %(prog)s ~/Photos/2025-01-Shoot custom_report.html
+      Analyze folder and save report with custom filename
+
+  %(prog)s /path/to/photos report.html config/my_config.yaml
+      Analyze using custom configuration file
+
+Configuration:
+  If no config file is specified, the tool will search in this order:
+    1. config/config.yaml (current directory)
+    2. config.yaml (current directory)
+    3. ~/.photo_stats_config.yaml (home directory)
+    4. config/config.yaml (script directory)
+
+  To create a configuration file:
+    cp config/template-config.yaml config/config.yaml
+
+Report Output:
+  Default filename: photo_stats_report_YYYY-MM-DD_HH-MM-SS.html
+  Reports include: file statistics, pairing analysis, XMP metadata, charts
+"""
+    )
+
+    parser.add_argument(
+        'folder',
+        type=str,
+        help='Path to folder containing photos to analyze'
+    )
+
+    parser.add_argument(
+        'output',
+        nargs='?',
+        type=str,
+        default=None,
+        help='Output HTML report filename (default: auto-generated with timestamp)'
+    )
+
+    parser.add_argument(
+        'config',
+        nargs='?',
+        type=str,
+        default=None,
+        help='Path to configuration file (default: auto-discovered)'
+    )
+
+    args = parser.parse_args()
+
+    folder_path = args.folder
+
+    # Generate timestamped filename if not specified
+    if args.output:
+        output_path = args.output
+    else:
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        output_path = f'photo_stats_report_{timestamp}.html'
+
+    config_path = args.config
 
     try:
         stats_tool = PhotoStats(folder_path, config_path)
         stats_tool.scan_folder()
+
+        # Check for shutdown request before generating report
+        if shutdown_requested:
+            print("\nReport generation skipped due to interruption")
+            sys.exit(130)
+
         report_file = stats_tool.generate_html_report(output_path)
 
         print("\n" + "="*50)

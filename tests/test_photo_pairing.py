@@ -12,6 +12,8 @@ This module tests the photo pairing functionality including:
 import pytest
 import json
 import tempfile
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from utils.filename_parser import FilenameParser
@@ -582,7 +584,7 @@ class TestHTMLReportGeneration:
     """Tests for generate_html_report() function"""
 
     def test_html_report_structure(self, tmp_path, sample_imagegroups):
-        """Test that HTML report has correct structure."""
+        """Test that HTML report has correct structure with template-based rendering."""
         analytics = {
             'camera_usage': {
                 'AB3D': {'name': 'Canon EOS R5', 'serial_number': '12345', 'group_count': 1, 'image_count': 2}
@@ -616,16 +618,21 @@ class TestHTMLReportGeneration:
 
         assert report_path.exists()
 
-        html_content = report_path.read_text()
+        html_content = report_path.read_text(encoding='utf-8')
 
         # Check key sections exist
         assert '<!DOCTYPE html>' in html_content
-        assert 'Photo Pairing Analysis Report' in html_content
-        assert 'Summary Statistics' in html_content
-        assert 'Camera Usage' in html_content
-        assert 'Processing Methods' in html_content
-        assert 'Invalid Files' in html_content
-        assert 'Filename Format Requirements' in html_content
+        assert 'Photo Pairing' in html_content
+
+        # Check template-based styling elements
+        assert 'kpi-card' in html_content
+        assert 'section-title' in html_content
+        assert 'chart-container' in html_content
+
+        # Check CSS color variables from base template
+        assert '--color-primary' in html_content
+        assert '--color-success' in html_content
+        assert '--gradient-purple' in html_content
 
         # Check statistics are included
         assert 'Canon EOS R5' in html_content
@@ -634,9 +641,10 @@ class TestHTMLReportGeneration:
 
         # Check Chart.js is included
         assert 'chart.js' in html_content.lower()
+        assert 'CHART_COLORS' in html_content
 
     def test_html_report_no_invalid_files(self, tmp_path):
-        """Test HTML report when there are no invalid files."""
+        """Test HTML report when there are no invalid files (template-based)."""
         analytics = {
             'camera_usage': {},
             'method_usage': {},
@@ -661,8 +669,14 @@ class TestHTMLReportGeneration:
             1.0
         )
 
-        html_content = report_path.read_text()
-        assert 'All files matched the expected naming pattern' in html_content
+        html_content = report_path.read_text(encoding='utf-8')
+
+        # With no invalid files, the Invalid Files KPI should show 0 with success status
+        assert 'Invalid Files' in html_content
+        assert 'kpi-card success' in html_content  # Success status for 0 invalid files
+
+        # Should not have any warnings section (empty warnings)
+        assert '<div class="warnings-section">' not in html_content or 'Warnings</h2>' not in html_content
 
 
 # =============================================================================
@@ -916,3 +930,70 @@ processing_methods: {}
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+# =============================================================================
+# Help Text Tests (T029-T032)
+# =============================================================================
+
+class TestHelpText:
+    """Tests for command-line help text."""
+
+    def test_help_flag_displays_help_and_exits_zero(self):
+        """Test that --help displays help text and exits with code 0."""
+        result = subprocess.run(
+            [sys.executable, 'photo_pairing.py', '--help'],
+            capture_output=True,
+            text=True
+        )
+        
+        assert result.returncode == 0
+        assert 'Photo Pairing' in result.stdout
+        assert 'usage:' in result.stdout
+
+    def test_h_flag_works_identically(self):
+        """Test that -h flag works identically to --help."""
+        help_result = subprocess.run(
+            [sys.executable, 'photo_pairing.py', '--help'],
+            capture_output=True,
+            text=True
+        )
+        
+        h_result = subprocess.run(
+            [sys.executable, 'photo_pairing.py', '-h'],
+            capture_output=True,
+            text=True
+        )
+        
+        assert h_result.returncode == 0
+        assert h_result.stdout == help_result.stdout
+
+    def test_help_contains_required_elements(self):
+        """Test that help text contains description, usage examples, and config notes."""
+        result = subprocess.run(
+            [sys.executable, 'photo_pairing.py', '--help'],
+            capture_output=True,
+            text=True
+        )
+        
+        help_text = result.stdout
+        
+        # Check for description
+        assert 'Photo Pairing' in help_text
+        assert 'filename patterns' in help_text
+        
+        # Check for usage examples
+        assert 'Examples:' in help_text
+        assert '/path/to/photos' in help_text
+        
+        # Check for configuration notes
+        assert 'Configuration:' in help_text
+        assert 'config/config.yaml' in help_text
+        assert 'template-config.yaml' in help_text
+        
+        # Check for report output information
+        assert 'Report Output:' in help_text
+        assert 'photo_pairing_report' in help_text
+        
+        # Check for "How It Works" section
+        assert 'How It Works:' in help_text
