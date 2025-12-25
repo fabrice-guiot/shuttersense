@@ -35,10 +35,10 @@ shutdown_requested = False
 
 
 def signal_handler(signum, frame):
-    """Handle Ctrl+C gracefully."""
+    """Handle SIGINT (Ctrl+C) gracefully."""
     global shutdown_requested
     shutdown_requested = True
-    print("\n\n⚠ Interrupt received (Ctrl+C)")
+    print("\n\nOperation interrupted by user")
     print("Exiting gracefully without saving cache...")
     sys.exit(130)  # Standard exit code for SIGINT
 
@@ -888,6 +888,11 @@ Report Output:
 
     # Calculate scan duration (excluding user input time)
     scan_duration = time.time() - scan_start_time - total_pause_time
+
+    # Check for shutdown request before generating report
+    if shutdown_requested:
+        print("\nReport generation skipped due to interruption")
+        sys.exit(130)
 
     # Generate HTML report
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

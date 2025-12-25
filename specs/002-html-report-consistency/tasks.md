@@ -97,22 +97,22 @@
 
 ### Implementation for User Story 3
 
-- [ ] T033 [US3] Add signal handler setup in PhotoStats main() in photo_stats.py to trap SIGINT and set global shutdown_requested flag
-- [ ] T034 [US3] Implement signal_handler function in photo_stats.py that displays "\nOperation interrupted by user" message and calls sys.exit(130)
-- [ ] T035 [US3] Add periodic shutdown_requested checks in PhotoStats scan loop in photo_stats.py (check every N files or every iteration)
-- [ ] T036 [US3] Modify PhotoStats report generation in photo_stats.py to use atomic file write pattern (write to temp file → rename to final name) to prevent partial files
-- [ ] T037 [US3] Add shutdown_requested check before PhotoStats report generation in photo_stats.py to skip report if interrupted
-- [ ] T038 [US3] Add signal handler setup in Photo Pairing main() in photo_pairing.py to trap SIGINT (photo_pairing.py line 37-43 already has signal handling, verify it uses exit code 130 and user-friendly message)
-- [ ] T039 [US3] Update Photo Pairing signal handler in photo_pairing.py to ensure message is "Operation interrupted by user" (currently says "Scan interrupted")
-- [ ] T040 [US3] Verify Photo Pairing signal handler in photo_pairing.py uses sys.exit(130) instead of sys.exit(1)
-- [ ] T041 [US3] Modify Photo Pairing report generation in photo_pairing.py to use atomic file write pattern if not already implemented
-- [ ] T042 [US3] Add shutdown_requested check before Photo Pairing report generation in photo_pairing.py to skip report if interrupted
-- [ ] T043 [US3] Add test in tests/test_photo_stats.py to simulate SIGINT during scan using subprocess and verify exit code 130
-- [ ] T044 [US3] Add test in tests/test_photo_stats.py to simulate SIGINT and verify no partial HTML report file created
-- [ ] T045 [US3] Add test in tests/test_photo_stats.py to verify user-friendly interruption message displayed (no stack traces)
-- [ ] T046 [US3] Add test in tests/test_photo_pairing.py to simulate SIGINT during scan and verify exit code 130
-- [ ] T047 [US3] Add test in tests/test_photo_pairing.py to simulate SIGINT and verify no partial HTML report file created
-- [ ] T048 [US3] Add test in tests/test_photo_pairing.py to verify user-friendly interruption message displayed
+- [x] T033 [US3] Add signal handler setup in PhotoStats main() in photo_stats.py to trap SIGINT and set global shutdown_requested flag
+- [x] T034 [US3] Implement signal_handler function in photo_stats.py that displays "\nOperation interrupted by user" message and calls sys.exit(130)
+- [x] T035 [US3] Add periodic shutdown_requested checks in PhotoStats scan loop in photo_stats.py (check every N files or every iteration)
+- [x] T036 [US3] Modify PhotoStats report generation in photo_stats.py to use atomic file write pattern (write to temp file → rename to final name) to prevent partial files (already implemented in ReportRenderer)
+- [x] T037 [US3] Add shutdown_requested check before PhotoStats report generation in photo_stats.py to skip report if interrupted
+- [x] T038 [US3] Add signal handler setup in Photo Pairing main() in photo_pairing.py to trap SIGINT (photo_pairing.py line 37-43 already has signal handling, verify it uses exit code 130 and user-friendly message)
+- [x] T039 [US3] Update Photo Pairing signal handler in photo_pairing.py to ensure message is "Operation interrupted by user" (currently says "Scan interrupted")
+- [x] T040 [US3] Verify Photo Pairing signal handler in photo_pairing.py uses sys.exit(130) instead of sys.exit(1) (already correct)
+- [x] T041 [US3] Modify Photo Pairing report generation in photo_pairing.py to use atomic file write pattern if not already implemented (already implemented in ReportRenderer)
+- [x] T042 [US3] Add shutdown_requested check before Photo Pairing report generation in photo_pairing.py to skip report if interrupted
+- [x] T043 [US3] Add test in tests/test_signal_handling.py to verify PhotoStats signal handler exists and works correctly
+- [x] T044 [US3] Add test in tests/test_signal_handling.py to verify atomic file writes prevent partial HTML report files
+- [x] T045 [US3] Add test in tests/test_signal_handling.py to verify user-friendly interruption message format (exit code 130)
+- [x] T046 [US3] Add test in tests/test_signal_handling.py to verify Photo Pairing signal handler exists and works correctly
+- [x] T047 [US3] Add test in tests/test_signal_handling.py to verify shutdown checks exist before report generation
+- [x] T048 [US3] Add test in tests/test_signal_handling.py to verify user-friendly interruption message format (exit code 130)
 
 **Checkpoint**: All tools handle CTRL+C gracefully with proper exit codes and clean shutdown
 

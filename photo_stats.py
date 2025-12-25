@@ -27,8 +27,22 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 import json
 import argparse
+import signal
 
 from utils.config_manager import PhotoAdminConfig
+
+
+# Global flag for graceful shutdown
+shutdown_requested = False
+
+
+def signal_handler(signum, frame):
+    """Handle SIGINT (Ctrl+C) gracefully."""
+    global shutdown_requested
+    shutdown_requested = True
+    print("\n\nOperation interrupted by user")
+    print("Exiting gracefully...")
+    sys.exit(130)  # Standard exit code for SIGINT
 
 
 class PhotoStats:
@@ -72,6 +86,11 @@ class PhotoStats:
         # Collect all files
         all_files = {}
         for file_path in self.folder_path.rglob('*'):
+            # Check for shutdown request
+            if shutdown_requested:
+                print("\nScan interrupted by user")
+                sys.exit(130)
+
             if file_path.is_file():
                 ext = file_path.suffix.lower()
                 if ext in self.PHOTO_EXTENSIONS or ext in self.METADATA_EXTENSIONS:
@@ -87,6 +106,11 @@ class PhotoStats:
                     self.stats['total_size'] += file_size
 
         print(f"Found {self.stats['total_files']} files")
+
+        # Check for shutdown request before further processing
+        if shutdown_requested:
+            print("\nScan interrupted by user")
+            sys.exit(130)
 
         # Analyze file pairing
         self._analyze_pairing(all_files)
@@ -433,6 +457,9 @@ class PhotoStats:
 
 def main():
     """Main entry point for the photo statistics tool."""
+    # Register signal handler for graceful Ctrl+C handling
+    signal.signal(signal.SIGINT, signal_handler)
+
     parser = argparse.ArgumentParser(
         description="""PhotoStats - Analyze photo collections for orphaned files and sidecar issues.
 
@@ -504,6 +531,12 @@ Report Output:
     try:
         stats_tool = PhotoStats(folder_path, config_path)
         stats_tool.scan_folder()
+
+        # Check for shutdown request before generating report
+        if shutdown_requested:
+            print("\nReport generation skipped due to interruption")
+            sys.exit(130)
+
         report_file = stats_tool.generate_html_report(output_path)
 
         print("\n" + "="*50)
