@@ -1,55 +1,122 @@
-# Flowchart to Configuration Mapping
+# Flowchart to Node-Based Configuration Mapping
 
-⚠️ **DEPRECATED - NEEDS UPDATE**
+This document explains how the Photo Processing Pipeline flowchart translates into the node-based pipeline configuration system used in `pipeline-config-example.yaml`.
 
-This document is based on the deprecated stage-based configuration model and contains **incorrect JPG terminology**.
-
-**Current Issues:**
-1. Uses "lossless JPG" and "lossy JPG" - **JPG is inherently lossy by design**
-2. Correct terminology: "lowres JPG" (low-resolution) and "hires JPG" (high-resolution)
-3. Based on linear stage model, not current node-based architecture
-
-**Correct Information:**
-- **TIF is the only lossless version** of the final processed image
-- **lowres JPG**: Lower resolution for web browsing (smaller file, may use more aggressive compression)
-- **hires JPG**: Higher resolution for sharing (larger file, less aggressive compression)
-- Both JPG versions can be rebuilt from the TIF file
-
-**Action Required:** This document will be rewritten to reflect the node-based pipeline architecture from `pipeline-config-example.yaml` and `node-architecture-analysis.md`.
-
----
-
-## Legacy Content (Deprecated)
-
-This document explains how the Photo Processing Pipeline flowchart translates into the `processing_pipelines` configuration.
+**Key Concept:** The pipeline is modeled as a **directed graph** where nodes represent different stages and decisions, and File nodes accumulate to define the expected files for a complete Specific Image.
 
 ---
 
 ## Flowchart Overview
 
 The flowchart shows a photographer's workflow from camera capture through archival, with two archival endpoints:
-- **Black Box Archive** - Long-term preservation storage (infrequent access)
-- **Browsable Archive** - Web-accessible storage (frequent browsing)
+
+- **Black Box Archive** - Long-term preservation storage (infrequent access, master files)
+- **Browsable Archive** - Web-accessible storage (frequent browsing, includes web-optimized JPG files)
+
+**Important Terminology:**
+- **TIF** is the only lossless version of the final processed image
+- **lowres JPG**: Lower resolution for web browsing (inherently lossy, smaller file)
+- **hires JPG**: Higher resolution for sharing (inherently lossy, larger file)
+- Both JPG versions can be rebuilt from the TIF file
 
 ---
 
-## Stage Mapping
+## Node-Based Architecture
 
-### Flowchart → Configuration Stages
+The pipeline uses **6 node types** to model complex workflows:
 
-| Flowchart Element | Config Stage ID | File Types | Metadata Required |
-|-------------------|-----------------|------------|-------------------|
-| "Camera captures" → "Raw File (CR3)" | `capture` | .cr3 | No (not yet created) |
-| "Import into Lightroom" → "Sanction Process" | `import` | .cr3 + .xmp | **Yes** (XMP created here) |
-| "Digital Photo Developing" → "DNG File" | `dng_conversion` | .dng + .xmp | Yes (shared or new XMP) |
-| "Export from Lightroom" → "Targeted Tone Mapping in Adobe Lightroom" | `tone_mapping` | .tif/.tiff | No (metadata embedded) |
-| "Individual Image Processing in Photoshop" | `individual_processing` | .tif with properties (HDR, BW) | No |
-| "JPG File (lossless)" | `web_export_lossless` | .jpg with LOSSLESS property | No |
-| "JPG File (lossy)" | `web_export_lossy` | .jpg with WEB property | No |
+### 1. Capture Node
+- **Purpose:** Starting point of the pipeline
+- **Flowchart Equivalent:** "Camera captures" → "Raw File (CR3)"
+- **Example:** `camera_capture_1`
+
+### 2. File Node
+- **Purpose:** Represents an actual file in the Specific Image
+- **Critical:** File nodes encountered from Capture to Termination define the expected files
+- **Flowchart Equivalent:** Any file type box (CR3, XMP, DNG, TIF, JPG)
+- **Examples:** `raw_image_1` (.CR3), `xmp_metadata_1` (.XMP), `dng_image_1` (.DNG)
+
+### 3. Pairing Node
+- **Purpose:** Enforces that two files exist together (e.g., CR3+XMP)
+- **Flowchart Equivalent:** Implicit relationship between "Raw File" and "Metadata File"
+- **Example:** `cr3_xmp_pairing`
+
+### 4. Process Node
+- **Purpose:** Represents a transformation/processing step
+- **Flowchart Equivalent:** Processing boxes (Import, Develop, Tone Mapping, Individual Processing)
+- **Example:** `selection_process` (Import/Sanction), `individual_processing` (Photoshop editing)
+
+### 5. Branching Node
+- **Purpose:** Conditional path selection
+- **Flowchart Equivalent:** Decision diamonds or path splits
+- **Example:** `processing_choice` (decide whether to apply HDR, BW, etc.)
+
+### 6. Termination Node
+- **Purpose:** Valid endpoint, accumulates File nodes to define expected Specific Image
+- **Archival Types:** `black_box` or `browsable`
+- **Flowchart Equivalent:** Archive endpoints
+- **Examples:** `raw_archive`, `dng_archive`, `browsable_archive`
 
 ---
 
-## Path Mapping
+## Critical Concept: File Node Accumulation
+
+**How Validation Works:**
+
+1. **Enumerate all paths** from Capture node to each Termination node
+2. **Collect File nodes** encountered along each path
+3. **Generate expected filenames** using base filename (e.g., `AB3D0001` or `AB3D0001-2`)
+4. **Compare with actual files** in the Specific Image
+
+**Example Path:**
+```
+Capture → File(CR3) → Process(Import) → File(XMP) → Pairing → Termination(raw_archive)
+```
+
+**File Nodes Encountered:** `raw_image_1` (.CR3), `xmp_metadata_1` (.XMP)
+
+**Expected Files for `AB3D0001`:**
+- `AB3D0001.CR3`
+- `AB3D0001.XMP`
+
+**Expected Files for `AB3D0001-2` (counter looped):**
+- `AB3D0001-2.CR3`
+- `AB3D0001-2.XMP`
+
+---
+
+## Validation Unit: Specific Images
+
+**Critical Distinction:**
+
+- **ImageGroup** (from Photo Pairing Tool): Container grouping files by camera_id + counter
+- **Specific Image**: **THE UNIT FOR VALIDATION** - represents ONE captured image
+
+**ImageGroup Structure:**
+```python
+{
+    'group_id': 'AB3D0001',
+    'camera_id': 'AB3D',
+    'counter': '0001',
+    'separate_images': {
+        '': {  # First capture (Specific Image 1)
+            'files': ['AB3D0001.CR3', 'AB3D0001.XMP', 'AB3D0001.DNG']
+        },
+        '2': {  # Second capture (Specific Image 2, counter looped)
+            'files': ['AB3D0001-2.CR3', 'AB3D0001-2.XMP']
+        }
+    }
+}
+```
+
+**Validation Process:**
+1. Flatten ImageGroup into individual Specific Images
+2. Validate EACH Specific Image independently against all pipeline paths
+3. Each Specific Image gets its own CONSISTENT/PARTIAL/INCONSISTENT classification
+
+---
+
+## Path Mapping: Flowchart → Node Sequences
 
 ### Path 1: Raw Archive (Black Box)
 
@@ -58,26 +125,59 @@ The flowchart shows a photographer's workflow from camera capture through archiv
 Camera → Raw File (CR3) → Import → Sanction → [Black Box Archive]
 ```
 
-**Configuration:**
-```yaml
-- id: raw_archive_path
-  name: "Raw Archive - Black Box"
-  archival_type: black_box
-  stages:
-    - capture      # CR3 file
-    - import       # XMP sidecar added
-  validation:
-    terminal: true  # Valid archival endpoint
+**Node Sequence:**
+```
+camera_capture_1 (Capture)
+  → raw_image_1 (File: .CR3)
+  → selection_process (Process: Import/Sanction)
+  → xmp_metadata_1 (File: .XMP)
+  → cr3_xmp_pairing (Pairing)
+  → raw_archive (Termination: black_box)
 ```
 
-**Expected Files:**
-- `AB3D0001.cr3`
-- `AB3D0001.xmp`
+**File Nodes Accumulated:**
+- `raw_image_1` → `.CR3`
+- `xmp_metadata_1` → `.XMP`
 
-**Validation Logic:**
-- Group is **CONSISTENT** if both files exist
-- Group is **INCONSISTENT** if XMP missing
-- Archival ready: **YES** (terminal path)
+**Expected Files for Specific Image `AB3D0001`:**
+- `AB3D0001.CR3`
+- `AB3D0001.XMP`
+
+**Validation:**
+- Status: **CONSISTENT** if both files exist
+- Archival ready: **YES** (black_box)
+
+**Configuration Reference:**
+```yaml
+nodes:
+  - id: "camera_capture_1"
+    type: "Capture"
+    output: ["raw_image_1"]
+
+  - id: "raw_image_1"
+    type: "File"
+    extension: ".CR3"
+    output: ["selection_process"]
+
+  - id: "selection_process"
+    type: "Process"
+    method_ids: [""]
+    output: ["raw_image_2", "xmp_metadata_1"]
+
+  - id: "xmp_metadata_1"
+    type: "File"
+    extension: ".XMP"
+    output: ["cr3_xmp_pairing"]
+
+  - id: "cr3_xmp_pairing"
+    type: "Pairing"
+    required_files: ["raw_image_2", "xmp_metadata_1"]
+    output: ["dng_conversion", "raw_archive"]
+
+  - id: "raw_archive"
+    type: "Termination"
+    archival_type: "black_box"
+```
 
 ---
 
@@ -85,37 +185,36 @@ Camera → Raw File (CR3) → Import → Sanction → [Black Box Archive]
 
 **Flowchart Path:**
 ```
-Camera → Raw File (CR3) → Import → Digital Photo Developing → DNG File → [Black Box Archive]
+... → Raw Archive → Digital Photo Developing → DNG File → [Black Box Archive]
 ```
 
-**Configuration:**
-```yaml
-- id: dng_archive_path
-  name: "DNG Archive - Black Box"
-  archival_type: black_box
-  stages:
-    - capture         # CR3 (optional, may be deleted)
-    - import          # XMP created
-    - dng_conversion  # DNG file
-  validation:
-    terminal: true
-    optional_stages:
-      - capture  # CR3 can be deleted after conversion
+**Node Sequence:**
+```
+camera_capture_1 (Capture)
+  → raw_image_1 (File: .CR3)
+  → selection_process (Process)
+  → xmp_metadata_1 (File: .XMP)
+  → cr3_xmp_pairing (Pairing)
+  → dng_conversion (Process: DNG Conversion)
+  → dng_image_1 (File: .DNG)
+  → dng_archive (Termination: black_box)
 ```
 
-**Expected Files (Minimum):**
-- `AB3D0001.dng`
-- `AB3D0001.xmp`
+**File Nodes Accumulated:**
+- `raw_image_1` → `.CR3`
+- `xmp_metadata_1` → `.XMP`
+- `dng_image_1` → `.DNG`
 
-**Expected Files (Complete):**
-- `AB3D0001.cr3` (original, may be deleted)
-- `AB3D0001.dng`
-- `AB3D0001.xmp`
+**Expected Files for Specific Image `AB3D0001`:**
+- `AB3D0001.CR3`
+- `AB3D0001.XMP`
+- `AB3D0001.DNG`
 
-**Validation Logic:**
-- Group is **CONSISTENT** if DNG + XMP exist (CR3 optional)
-- CR3 presence is optional (photographer may delete after conversion)
-- Archival ready: **YES**
+**Note:** CR3 may be deleted after DNG conversion to save space (photographer's choice). The validation should support this as an optional file in future iterations.
+
+**Validation:**
+- Status: **CONSISTENT** if all files exist
+- Archival ready: **YES** (black_box)
 
 ---
 
@@ -126,349 +225,313 @@ Camera → Raw File (CR3) → Import → Digital Photo Developing → DNG File �
 ... → DNG → Export from Lightroom → Tone Mapping → TIF → [Black Box Archive]
 ```
 
-**Configuration:**
-```yaml
-- id: developed_archive_path
-  name: "Developed Master Archive - Black Box"
-  archival_type: black_box
-  stages:
-    - capture        # CR3 (optional)
-    - import         # XMP
-    - dng_conversion # DNG
-    - tone_mapping   # TIF
-  validation:
-    terminal: true
-    optional_stages:
-      - capture
+**Node Sequence:**
+```
+... (all previous nodes from DNG path)
+  → dng_image_1 (File: .DNG)
+  → tone_mapping_export (Process: Tone Mapping)
+  → tiff_image_1 (File: .TIF)
+  → developed_archive (Termination: black_box)
 ```
 
-**Expected Files (Minimum):**
-- `AB3D0001.dng`
-- `AB3D0001.xmp`
-- `AB3D0001.tif`
+**File Nodes Accumulated:**
+- `raw_image_1` → `.CR3`
+- `xmp_metadata_1` → `.XMP`
+- `dng_image_1` → `.DNG`
+- `tiff_image_1` → `.TIF`
 
-**Expected Files (Complete):**
-- `AB3D0001.cr3` (original, may be deleted)
-- `AB3D0001.dng`
-- `AB3D0001.xmp`
-- `AB3D0001.tif`
+**Expected Files for Specific Image `AB3D0001`:**
+- `AB3D0001.CR3`
+- `AB3D0001.XMP`
+- `AB3D0001.DNG`
+- `AB3D0001.TIF`
 
-**Validation Logic:**
-- Group is **CONSISTENT** if DNG + XMP + TIF exist
-- CR3 optional (may be deleted to save space)
-- Archival ready: **YES**
+**Validation:**
+- Status: **CONSISTENT** if all files exist
+- Archival ready: **YES** (black_box, master preservation)
 
 ---
 
-### Path 4: Browsable Archive (Complete Workflow)
+### Path 4: Browsable Archive with Individual Processing
 
 **Flowchart Path:**
 ```
-... → TIF → Individual Processing → TIF (processed) → JPG (lossless) → JPG (lossy/paring) → [Browsable Archive]
+... → TIF → Individual Processing (HDR/BW) → TIF (processed) → lowres JPG → hires JPG → [Browsable Archive]
 ```
 
-**Configuration:**
-```yaml
-- id: browsable_archive_path
-  name: "Browsable Archive - Complete Workflow"
-  archival_type: browsable
-  stages:
-    - capture
-    - import
-    - dng_conversion
-    - tone_mapping
-    - individual_processing  # HDR, BW, etc.
-    - web_export_lossy      # WEB property
-  validation:
-    terminal: true
-    optional_stages:
-      - capture
-      - individual_processing  # Not all images need advanced processing
+**Node Sequence (HDR processing example):**
+```
+... (all previous nodes from Developed path)
+  → tiff_image_1 (File: .TIF, base tone mapping)
+  → processing_choice (Branching: Apply HDR?)
+  → individual_processing (Process: method_id="HDR")
+  → tiff_image_2 (File: .TIF, with HDR property)
+  → lowres_jpeg_export (Process)
+  → lowres_jpeg (File: .JPG, lowres property)
+  → highres_jpeg_export (Process)
+  → highres_jpeg (File: .JPG, hires property)
+  → browsable_archive (Termination: browsable)
 ```
 
-**Expected Files (Minimum - Simple Workflow):**
-- `AB3D0001.dng`
-- `AB3D0001.xmp`
-- `AB3D0001.tif`
-- `AB3D0001-WEB.jpg`
+**File Nodes Accumulated:**
+- `raw_image_1` → `.CR3`
+- `xmp_metadata_1` → `.XMP`
+- `dng_image_1` → `.DNG`
+- `tiff_image_1` → `.TIF` (base)
+- `tiff_image_2` → `.TIF` (with HDR property)
+- `lowres_jpeg` → `.JPG` (lowres property)
+- `highres_jpeg` → `.JPG` (hires property)
 
-**Expected Files (Complete - Advanced Processing):**
-- `AB3D0001.cr3` (original, optional)
-- `AB3D0001.dng`
-- `AB3D0001.xmp`
-- `AB3D0001.tif` (base tone mapping)
-- `AB3D0001-HDR.tif` (individual processing)
-- `AB3D0001-HDR-WEB.jpg` (web export)
-
-**Validation Logic:**
-- Group is **CONSISTENT** if has web-ready JPG
-- Individual processing stage is optional
-- Properties (HDR, BW) indicate advanced processing
-- Archival ready: **YES** (browsable)
-
----
-
-## Metadata Linking Rules
-
-### CR3 → XMP Linking
-
-**Flowchart:**
-```
-Raw File (CR3) → Import/Sanction → Metadata File (.XMP)
-```
-
-**Configuration Rule:**
-```yaml
-stages:
-  - id: import
-    file_types:
-      - extension: .cr3
-        metadata_sidecar: .xmp
-        metadata_required: true  # MUST have XMP after import
-```
+**Expected Files for Specific Image `AB3D0001` with HDR processing:**
+- `AB3D0001.CR3`
+- `AB3D0001.XMP`
+- `AB3D0001.DNG`
+- `AB3D0001.TIF` (base tone mapping)
+- `AB3D0001-HDR.TIF` (individual processing)
+- `AB3D0001-HDR-lowres.JPG` (web browsing)
+- `AB3D0001-HDR-hires.JPG` (sharing/download)
 
 **Validation:**
-- `AB3D0001.cr3` **requires** `AB3D0001.xmp` after import stage
-- Files are "linked" by base filename matching
-- Uses PhotoStats' pairing logic
+- Status: **CONSISTENT** if all files exist
+- Archival ready: **YES** (browsable, web-ready)
 
----
-
-### DNG Metadata Handling
-
-**Flowchart:**
-```
-DNG File ← can use CR3's XMP OR have separate XMP
-```
-
-**Configuration Rule:**
+**Configuration Reference:**
 ```yaml
-validation_rules:
-  allow_shared_xmp:
-    - source: .cr3
-      target: .dng
-      # CR3 and DNG can share same XMP
-```
+nodes:
+  - id: "processing_choice"
+    type: "Branching"
+    description: "Photographer decides which processing to apply"
+    output: ["individual_processing", "no_processing_needed"]
 
-**Validation:**
-- **Option 1:** `AB3D0001.dng` uses `AB3D0001.xmp` (shared with CR3)
-- **Option 2:** `AB3D0001-DNG.xmp` (separate XMP for DNG)
-- Both are valid, tool checks for either
+  - id: "individual_processing"
+    type: "Process"
+    method_ids: ["HDR", "BW", "topaz", "focus_stacking"]
+    output: ["tiff_image_2"]
+
+  - id: "tiff_image_2"
+    type: "File"
+    extension: ".TIF"
+    output: ["lowres_jpeg_export"]
+
+  - id: "lowres_jpeg"
+    type: "File"
+    extension: ".JPG"
+    property: "lowres"
+    output: ["highres_jpeg_export"]
+
+  - id: "highres_jpeg"
+    type: "File"
+    extension: ".JPG"
+    property: "hires"
+    output: ["browsable_archive"]
+```
 
 ---
 
-### TIF Metadata Handling
+## Processing Properties and Filename Generation
 
-**Flowchart:**
-```
-TIF file → typically embeds metadata (XMP optional)
-```
+### Property Accumulation Rules
 
-**Configuration Rule:**
+**Processing Properties** (HDR, BW, topaz, etc.) are added by Process nodes with `method_ids`:
+
 ```yaml
-stages:
-  - id: tone_mapping
-    file_types:
-      - extension: .tif
-        metadata_sidecar: .xmp
-        metadata_required: false  # Optional, metadata often embedded
+- id: "individual_processing"
+  type: "Process"
+  method_ids: ["HDR", "BW", "topaz", "focus_stacking"]
 ```
 
-**Validation:**
-- `AB3D0001.tif` does NOT require XMP
-- XMP can exist (`AB3D0001.xmp`) but not mandatory
-- TIF files typically embed XMP metadata internally
+**When a path goes through this node:**
+- If `method_id = "HDR"`, add `-HDR` to filename
+- If `method_id = "BW"`, add `-BW` to filename
+- If `method_id = ""` (empty), add nothing (no processing)
 
----
+**File-Level Properties** (lowres, hires) are specified on File nodes:
 
-## Processing Properties
-
-### Individual Processing Stage
-
-**Flowchart:**
-```
-Individual Image Processing → HDR, BW, PANO, etc.
-```
-
-**Configuration:**
 ```yaml
-stages:
-  - id: individual_processing
-    file_types:
-      - extension: .tif
-        properties:
-          - HDR   # High Dynamic Range
-          - BW    # Black and White
-          - PANO  # Panorama
+- id: "lowres_jpeg"
+  type: "File"
+  extension: ".JPG"
+  property: "lowres"
 ```
 
-**File Naming:**
-- Base file: `AB3D0001.tif` (from tone_mapping stage)
-- HDR processed: `AB3D0001-HDR.tif` (individual_processing stage)
-- Multiple properties: `AB3D0001-HDR-BW.tif`
-
-**Validation:**
-- Properties indicate which processing was applied
-- Must be defined in `processing_methods` config
-- Tool prompts for unknown properties
-
----
-
-### Web Export Properties
-
-**Flowchart:**
+**Filename construction:**
 ```
-JPG (lossless) → LOSSLESS property
-JPG (lossy) → WEB property
-```
+base_filename + processing_properties + file_property + extension
 
-**Configuration:**
-```yaml
-stages:
-  - id: web_export_lossless
-    file_types:
-      - extension: .jpg
-        properties: [LOSSLESS]
-
-  - id: web_export_lossy
-    file_types:
-      - extension: .jpg
-        properties: [WEB]
-```
-
-**File Naming:**
-- Lossless: `AB3D0001-LOSSLESS.jpg`
-- Web-optimized: `AB3D0001-WEB.jpg`
-- With processing: `AB3D0001-HDR-WEB.jpg`
-
----
-
-## Inconsistent Group Detection
-
-### Example 1: Missing XMP at Import
-
-**Files Found:**
-- `AB3D0001.cr3`
-
-**Expected:**
-- `AB3D0001.cr3`
-- `AB3D0001.xmp` ← **MISSING**
-
-**Classification:**
-- Status: **INCONSISTENT**
-- Matched paths: None (import stage requires XMP)
-- Missing files:
-  ```
-  - stage: import
-    expected_extension: .xmp
-    reason: "Required for all archival paths"
-  ```
-- Archival ready: **NO**
-
-**Recommendation:**
-```
-⚠ Import this file into Lightroom to create XMP sidecar
-  Command: Import AB3D0001.cr3 into Lightroom
-  Expected result: AB3D0001.xmp will be created
+Examples:
+  AB3D0001 + "" + "" + .CR3 = AB3D0001.CR3
+  AB3D0001 + "-HDR" + "" + .TIF = AB3D0001-HDR.TIF
+  AB3D0001 + "-HDR" + "-lowres" + .JPG = AB3D0001-HDR-lowres.JPG
+  AB3D0001-2 + "-BW" + "-hires" + .JPG = AB3D0001-2-BW-hires.JPG
 ```
 
 ---
 
-### Example 2: Partial DNG Conversion
+## Specific Image Validation Examples
 
-**Files Found:**
-- `AB3D0001.cr3`
-- `AB3D0001.xmp`
+### Example 1: Simple Raw Archive (Specific Image)
 
-**Expected (for DNG Archive):**
-- `AB3D0001.cr3` (optional)
-- `AB3D0001.xmp`
-- `AB3D0001.dng` ← **MISSING**
-
-**Classification:**
-- Status: **PARTIAL** (matches `raw_archive_path` but not `dng_archive_path`)
-- Matched paths:
-  - `raw_archive_path` (100% complete) ✓
-- Archival ready: **YES** (for raw archive) / **NO** (for DNG archive)
-
-**Recommendation:**
+**Specific Image Data:**
+```python
+{
+    'camera_id': 'AB3D',
+    'counter': '0001',
+    'suffix': '',  # First capture
+    'unique_id': 'AB3D0001',
+    'base_filename': 'AB3D0001',
+    'files': ['AB3D0001.CR3', 'AB3D0001.XMP']
+}
 ```
-✓ Ready for Raw Archive (Black Box)
-⚠ To create DNG Archive, convert CR3 to DNG:
-  Command: Use Lightroom "Export as DNG" feature
-  Expected result: AB3D0001.dng will be created
+
+**Validation Against `raw_archive` path:**
+- Expected files: `AB3D0001.CR3`, `AB3D0001.XMP`
+- Actual files: `AB3D0001.CR3`, `AB3D0001.XMP`
+- **Result: CONSISTENT** ✓
+- Archival ready: YES (black_box)
+
+---
+
+### Example 2: Counter Looped Specific Image
+
+**Specific Image Data:**
+```python
+{
+    'camera_id': 'AB3D',
+    'counter': '0001',
+    'suffix': '2',  # Second capture (counter looped)
+    'unique_id': 'AB3D0001-2',
+    'base_filename': 'AB3D0001-2',
+    'files': ['AB3D0001-2.CR3', 'AB3D0001-2.XMP', 'AB3D0001-2.DNG']
+}
+```
+
+**Validation Against `dng_archive` path:**
+- Expected files: `AB3D0001-2.CR3`, `AB3D0001-2.XMP`, `AB3D0001-2.DNG`
+- Actual files: `AB3D0001-2.CR3`, `AB3D0001-2.XMP`, `AB3D0001-2.DNG`
+- **Result: CONSISTENT** ✓
+- Archival ready: YES (black_box)
+
+**Important:** This Specific Image is validated completely independently from `AB3D0001` (first capture).
+
+---
+
+### Example 3: Partial Browsable Archive (Missing hires JPG)
+
+**Specific Image Data:**
+```python
+{
+    'camera_id': 'AB3D',
+    'counter': '0001',
+    'suffix': '',
+    'unique_id': 'AB3D0001',
+    'base_filename': 'AB3D0001',
+    'files': [
+        'AB3D0001.CR3',
+        'AB3D0001.XMP',
+        'AB3D0001.DNG',
+        'AB3D0001.TIF',
+        'AB3D0001-HDR.TIF',
+        'AB3D0001-HDR-lowres.JPG'
+        # Missing: AB3D0001-HDR-hires.JPG
+    ]
+}
+```
+
+**Validation Against `browsable_archive` path:**
+- Expected files: All above + `AB3D0001-HDR-hires.JPG`
+- Actual files: Missing `AB3D0001-HDR-hires.JPG`
+- **Result: PARTIAL** ⚠
+- Matched paths: `developed_archive` (100%) ✓
+- Archival ready: YES (black_box) / NO (browsable)
+
+**Report:**
+```
+⚠ Specific Image AB3D0001: PARTIAL
+  Ready for: Developed Archive (Black Box) ✓
+  Not ready for: Browsable Archive
+
+  Missing for Browsable Archive:
+    • AB3D0001-HDR-hires.JPG
+    Action: Export HDR TIF as high-resolution JPG
 ```
 
 ---
 
-### Example 3: Missing Web Export
+### Example 4: Inconsistent (Missing XMP)
 
-**Files Found:**
-- `AB3D0001.cr3`
-- `AB3D0001.dng`
-- `AB3D0001.xmp`
-- `AB3D0001.tif`
-
-**Expected (for Browsable Archive):**
-- All above files ✓
-- `AB3D0001-WEB.jpg` ← **MISSING**
-
-**Classification:**
-- Status: **PARTIAL** (matches `developed_archive_path` but not `browsable_archive_path`)
-- Matched paths:
-  - `raw_archive_path` (100%)
-  - `dng_archive_path` (100%)
-  - `developed_archive_path` (100%) ✓
-- Archival ready: **YES** (for black box) / **NO** (for browsable)
-
-**Recommendation:**
+**Specific Image Data:**
+```python
+{
+    'camera_id': 'AB3D',
+    'counter': '0001',
+    'suffix': '',
+    'unique_id': 'AB3D0001',
+    'base_filename': 'AB3D0001',
+    'files': ['AB3D0001.CR3']  # Missing XMP
+}
 ```
-✓ Ready for Developed Master Archive (Black Box)
-⚠ To create Browsable Archive, export web JPG:
-  Command: Export TIF as JPG with WEB property
-  Expected result: AB3D0001-WEB.jpg will be created
+
+**Validation Against ALL paths:**
+- All paths require XMP after import/selection process
+- XMP is missing
+- **Result: INCONSISTENT** ✗
+- Archival ready: NO
+
+**Report:**
+```
+✗ Specific Image AB3D0001: INCONSISTENT
+  Ready for archival: NO
+  Matched paths: None
+
+  Missing required files:
+    • AB3D0001.XMP (needed for all archival paths)
+    Action: Import CR3 file into Lightroom to create XMP sidecar
 ```
 
 ---
 
-## Archival Type Classification
+## Multiple Specific Images in One ImageGroup
 
-### Black Box Archive
+**ImageGroup with 3 Specific Images:**
+```python
+{
+    'group_id': 'AB3D0001',
+    'separate_images': {
+        '': {
+            'files': ['AB3D0001.CR3', 'AB3D0001.XMP', 'AB3D0001.DNG']
+        },
+        '2': {
+            'files': ['AB3D0001-2.CR3', 'AB3D0001-2.XMP']
+        },
+        '3': {
+            'files': ['AB3D0001-3.CR3']  # Missing XMP
+        }
+    }
+}
+```
 
-**Characteristics:**
-- Long-term preservation
-- Master files (RAW, DNG, TIF)
-- Infrequent access
-- High quality, large file sizes
+**Validation Results (per Specific Image):**
 
-**Paths:**
-- `raw_archive_path` - Original CR3 + XMP
-- `dng_archive_path` - Open format DNG + XMP
-- `developed_archive_path` - Fully developed TIF
+| Specific Image | Status | Matched Paths | Archival Ready |
+|----------------|--------|---------------|----------------|
+| AB3D0001 | CONSISTENT | `dng_archive` | YES (black_box) |
+| AB3D0001-2 | CONSISTENT | `raw_archive` | YES (black_box) |
+| AB3D0001-3 | INCONSISTENT | None | NO |
 
-**Use Cases:**
-- Professional photographer's master archive
-- Museum/library digital preservation
-- Legal/compliance archival requirements
+**Report Summary:**
+```
+ImageGroup AB3D0001: MIXED RESULTS
 
----
+✓ AB3D0001: CONSISTENT
+  • Ready for DNG Archive (Black Box)
 
-### Browsable Archive
+✓ AB3D0001-2: CONSISTENT
+  • Ready for Raw Archive (Black Box)
 
-**Characteristics:**
-- Web-accessible
-- Includes web-optimized JPG files
-- Frequent browsing and sharing
-- Smaller file sizes
-
-**Paths:**
-- `browsable_archive_path` - Complete workflow with JPG export
-
-**Use Cases:**
-- Online portfolio websites
-- Client galleries
-- Social media ready files
-- Family photo sharing
+✗ AB3D0001-3: INCONSISTENT
+  • Missing: AB3D0001-3.XMP
+  • Action: Import into Lightroom to create XMP sidecar
+```
 
 ---
 
@@ -477,28 +540,26 @@ stages:
 ### Photo Pairing Tool Integration
 
 **What Photo Pairing Does:**
-- Groups files by camera_id + counter
-- Example: `AB3D0001.cr3`, `AB3D0001.dng`, `AB3D0001.tif` → one group
+1. Groups files by `camera_id + counter`
+2. Detects separate captures using numerical suffixes (2, 3, etc.)
+3. Creates `separate_images` structure within ImageGroup
 
 **What Pipeline Validation Adds:**
-- Validates group against pipeline paths
-- Checks if group is complete
-- Identifies missing files
-- Determines archival readiness
+1. **Flattens** ImageGroup into individual Specific Images
+2. **Validates** each Specific Image against all pipeline paths
+3. **Identifies** which archival endpoints each Specific Image is ready for
+4. **Reports** missing files with actionable recommendations
 
-**Combined Result:**
+**Combined Workflow:**
 ```
-Group: AB3D0001
-├─ Photo Pairing: 3 files in group
-│  ├─ AB3D0001.cr3
-│  ├─ AB3D0001.dng
-│  └─ AB3D0001.xmp
-│
-└─ Pipeline Validation:
-   ├─ Status: CONSISTENT
-   ├─ Matched path: dng_archive_path
-   ├─ Archival ready: YES (Black Box)
-   └─ Missing files: None
+Photo Pairing Tool
+  ↓ Produces ImageGroup with separate_images
+Pipeline Validation
+  ↓ Flattens to Specific Images
+  ↓ Validates each independently
+  ↓ Generates per-Specific-Image reports
+User
+  ↓ Sees exactly what's missing for each captured image
 ```
 
 ---
@@ -506,248 +567,115 @@ Group: AB3D0001
 ### PhotoStats Integration
 
 **What PhotoStats Does:**
-- Identifies CR3 files
-- Checks for matching XMP sidecars
-- Reports orphaned files (CR3 without XMP)
+- Identifies CR3 files requiring XMP sidecars
+- Reports orphaned CR3 files (no XMP)
 
 **What Pipeline Validation Adds:**
-- Stage-aware metadata validation
-- Allows shared XMP (CR3 and DNG use same XMP)
-- Validates metadata requirements per stage
+- **Node-aware pairing:** Pairing nodes enforce CR3+XMP requirement
+- **Path-based validation:** XMP requirement depends on which archival path
+- **Shared metadata:** Future support for CR3 and DNG sharing same XMP
 
 **Combined Result:**
 ```
-File: AB3D0001.cr3
-├─ PhotoStats: Has sidecar AB3D0001.xmp ✓
-│
-└─ Pipeline Validation:
-   ├─ Stage: import
-   ├─ Metadata required: YES
-   ├─ Metadata found: AB3D0001.xmp ✓
-   └─ Status: VALID
-
-File: AB3D0001.dng
-├─ PhotoStats: No dedicated sidecar (uses AB3D0001.xmp)
-│
-└─ Pipeline Validation:
-   ├─ Stage: dng_conversion
-   ├─ Metadata required: YES
-   ├─ Shared metadata: AB3D0001.xmp ✓
-   └─ Status: VALID (shared XMP allowed)
+PhotoStats: "AB3D0001.CR3 is missing XMP sidecar"
+  ↓
+Pipeline Validation: "AB3D0001 cannot match any archival path without XMP"
+  ↓
+User Action: "Import AB3D0001.CR3 into Lightroom to create XMP"
 ```
 
 ---
 
-## Configuration Best Practices
+## Graph Traversal Algorithm
 
-### 1. Define Your Workflow First
+**Pseudocode for validation:**
 
-Before configuring pipeline paths, document your actual workflow:
+```python
+def validate_specific_image(specific_image, pipeline_config):
+    """
+    Validate ONE Specific Image against pipeline configuration.
+    """
+    actual_files = set(specific_image['files'])
+    base_filename = specific_image['base_filename']  # e.g., "AB3D0001-2"
 
-```
-1. Camera → CR3 files on memory card
-2. Import → Lightroom creates XMP sidecars
-3. Convert → Some files converted to DNG
-4. Develop → Export tone-mapped TIF files
-5. Process → Photoshop editing (HDR, BW)
-6. Export → Web-ready JPG files
-```
+    # Find all paths from Capture to Terminations
+    capture_node = find_node_by_type(pipeline_config, 'Capture')
+    termination_nodes = find_nodes_by_type(pipeline_config, 'Termination')
 
-Then map each step to a stage in config.
+    matching_terminations = []
 
----
+    for termination in termination_nodes:
+        # Enumerate all paths using DFS
+        paths = enumerate_all_paths(capture_node, termination, pipeline_config)
 
-### 2. Start with Terminal Paths
+        for path in paths:
+            # Collect File nodes encountered on this path
+            file_nodes = [node for node in path if node.type == 'File']
 
-Define archival endpoints first:
+            # Collect processing properties from Process nodes
+            processing_properties = collect_processing_properties(path)
 
-```yaml
-paths:
-  # 1. Define terminal paths (valid archival endpoints)
-  - id: raw_archive_path
-    terminal: true
-    archival_type: black_box
+            # Generate expected filenames
+            expected_files = generate_expected_filenames(
+                base=base_filename,
+                file_nodes=file_nodes,
+                properties=processing_properties
+            )
 
-  - id: browsable_archive_path
-    terminal: true
-    archival_type: browsable
+            # Check if actual files match expected
+            if expected_files == actual_files:
+                matching_terminations.append({
+                    'termination': termination,
+                    'path': path,
+                    'completion': 100
+                })
 
-  # 2. Then add partial paths for detection
-  - id: partial_import
-    terminal: false
-    archival_type: null
-```
-
----
-
-### 3. Use Optional Stages Wisely
-
-Mark stages as optional when files may be deleted:
-
-```yaml
-stages:
-  - capture  # CR3 may be deleted after DNG conversion
-  - import
-  - dng_conversion
-
-optional_stages:
-  - capture  # Allow archival even if CR3 deleted
-```
-
-**Why:** Photographers often delete large CR3 files after DNG conversion to save space.
-
----
-
-### 4. Allow Shared Metadata
-
-Enable XMP sharing between related file types:
-
-```yaml
-allow_shared_xmp:
-  - source: .cr3
-    target: .dng
-```
-
-**Why:** One XMP file can contain metadata for both CR3 and DNG, avoiding duplication.
-
----
-
-### 5. Define Processing Properties
-
-Document all processing methods used:
-
-```yaml
-processing_methods:
-  HDR: "High Dynamic Range processing"
-  BW: "Black and White conversion"
-  PANO: "Panorama stitching"
-  FOCUS: "Focus stacking"
-  LOSSLESS: "Lossless JPG export"
-  WEB: "Web-optimized JPG export"
-```
-
-**Why:** Tool will prompt for unknown properties, slowing down analysis.
-
----
-
-## Validation Examples
-
-### Example 1: Consistent Group (DNG Archive)
-
-**Files:**
-```
-AB3D0001.cr3
-AB3D0001.dng
-AB3D0001.xmp
-```
-
-**Validation Result:**
-```yaml
-group_id: AB3D0001
-status: CONSISTENT
-archival_ready: true
-matched_paths:
-  - path_id: raw_archive_path
-    completion: 100%
-    archival_type: black_box
-  - path_id: dng_archive_path
-    completion: 100%
-    archival_type: black_box
-missing_files: []
-```
-
-**Report:**
-```
-✓ Group AB3D0001: CONSISTENT
-  Ready for archival: YES (Black Box Archive)
-  Matched paths:
-    • Raw Archive Path (100%)
-    • DNG Archive Path (100%)
-```
-
----
-
-### Example 2: Partial Group (Missing Web Export)
-
-**Files:**
-```
-AB3D0001.cr3
-AB3D0001.dng
-AB3D0001.xmp
-AB3D0001.tif
-```
-
-**Validation Result:**
-```yaml
-group_id: AB3D0001
-status: PARTIAL
-archival_ready: true  # For black_box, not for browsable
-matched_paths:
-  - path_id: developed_archive_path
-    completion: 100%
-    archival_type: black_box
-missing_files:
-  - stage: web_export_lossy
-    expected_extension: .jpg
-    expected_property: WEB
-    reason: "Required for browsable_archive_path"
-```
-
-**Report:**
-```
-⚠ Group AB3D0001: PARTIAL
-  Ready for archival: YES (Black Box Archive only)
-  Matched paths:
-    • Developed Archive Path (100%) ✓
-
-  To create Browsable Archive:
-    Missing: AB3D0001-WEB.jpg
-    Action: Export TIF as web-optimized JPG
-```
-
----
-
-### Example 3: Inconsistent Group (Missing XMP)
-
-**Files:**
-```
-AB3D0001.cr3
-```
-
-**Validation Result:**
-```yaml
-group_id: AB3D0001
-status: INCONSISTENT
-archival_ready: false
-matched_paths: []
-missing_files:
-  - stage: import
-    expected_extension: .xmp
-    reason: "Required for all archival paths"
-```
-
-**Report:**
-```
-✗ Group AB3D0001: INCONSISTENT
-  Ready for archival: NO
-  Matched paths: None
-
-  Missing required files:
-    • AB3D0001.xmp (needed at import stage)
-    Action: Import file into Lightroom to create XMP sidecar
+    # Classify result
+    if matching_terminations:
+        return {
+            'unique_id': specific_image['unique_id'],
+            'status': 'CONSISTENT',
+            'matched_terminations': matching_terminations,
+            'archival_ready': True
+        }
+    else:
+        return {
+            'unique_id': specific_image['unique_id'],
+            'status': 'INCONSISTENT',
+            'matched_terminations': [],
+            'archival_ready': False,
+            'missing_files': identify_missing_files(actual_files, pipeline_config)
+        }
 ```
 
 ---
 
 ## Summary
 
-This mapping demonstrates how the flowchart translates into a comprehensive configuration system:
+The node-based architecture provides a powerful and flexible way to model complex photo processing workflows:
 
-1. **Stages** define each step in the workflow with file type requirements
-2. **Paths** define valid sequences through stages for specific archival goals
-3. **Metadata rules** handle CR3→XMP linking and shared metadata
-4. **Properties** identify processing methods (HDR, BW, WEB)
-5. **Validation** classifies groups as CONSISTENT, PARTIAL, or INCONSISTENT
-6. **Integration** combines Photo Pairing grouping with PhotoStats metadata logic
+1. **6 Node Types** model different workflow elements (Capture, File, Process, Pairing, Branching, Termination)
 
-The result is a powerful tool that can validate whether photo collections are ready for archival and identify exactly what's missing from incomplete workflows.
+2. **File Nodes** are critical - they define what files should exist in a complete Specific Image
+
+3. **Graph Traversal** enumerates all valid paths from Capture to Termination, collecting File nodes
+
+4. **Specific Images** are validated independently, not ImageGroups
+
+5. **Property Accumulation** builds filenames by collecting processing properties along paths
+
+6. **Termination Nodes** define archival endpoints (black_box or browsable)
+
+7. **Validation** compares actual files against expected files for all paths
+
+8. **Classification** reports CONSISTENT, PARTIAL, or INCONSISTENT per Specific Image
+
+This approach supports:
+- Branching workflows (different processing methods)
+- Parallel execution (multiple JPG exports)
+- Optional files (CR3 deletion after DNG conversion)
+- Shared metadata (CR3 and DNG using same XMP)
+- Counter looping (multiple captures with same camera_id + counter)
+- Flexible archival strategies (black_box vs browsable)
+
+The result is a comprehensive validation tool that tells photographers exactly what files are missing to achieve their archival goals.
