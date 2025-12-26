@@ -295,6 +295,22 @@ Specific Image = {
 
 ## Integration with Photo Pairing Tool
 
+### CRITICAL: Specific Images vs ImageGroups
+
+**ImageGroup** (from Photo Pairing Tool):
+- Container grouping files by `camera_id + counter`
+- Contains multiple **Specific Images** when counter loops
+
+**Specific Image** (within ImageGroup):
+- **THE UNIT FOR PIPELINE VALIDATION**
+- Represents ONE captured image and all its processed derivatives
+- Has unique identifier: `camera_id + counter + suffix`
+- Suffix differentiates separate captures when counter loops
+
+**Important Distinction:**
+- Numerical suffixes (2, 3, etc.) = Different captured images (counter looped)
+- Processing properties (HDR, BW, etc.) = Processing stages within SAME capture
+
 ### ImageGroup Structure (Existing)
 
 ```python
@@ -302,64 +318,156 @@ Specific Image = {
     'group_id': 'AB3D0001',
     'camera_id': 'AB3D',
     'counter': '0001',
-    'separate_images': {
-        '': {  # Base image (no properties)
-            'files': ['AB3D0001.CR3', 'AB3D0001.DNG', 'AB3D0001.TIF'],
+    'separate_images': {  # Each entry = ONE captured image (Specific Image)
+        '': {  # First capture (no suffix, blank key)
+            'files': [
+                'AB3D0001.CR3',
+                'AB3D0001.XMP',
+                'AB3D0001.DNG',
+                'AB3D0001.TIF',
+                'AB3D0001-HDR.TIF'  # HDR is processing property, same capture
+            ],
+            'properties': []  # No properties at group level
+        },
+        '2': {  # Second capture (counter looped, suffix=2)
+            'files': [
+                'AB3D0001-2.CR3',
+                'AB3D0001-2.XMP',
+                'AB3D0001-2.DNG'
+            ],
             'properties': []
         },
-        'HDR': {  # HDR-processed variant
-            'files': ['AB3D0001-HDR.TIF', 'AB3D0001-HDR.JPG'],
-            'properties': ['HDR']
+        '3': {  # Third capture (counter looped again, suffix=3)
+            'files': [
+                'AB3D0001-3.CR3',
+                'AB3D0001-3.XMP'
+            ],
+            'properties': []
         }
     }
 }
 ```
 
+**This ImageGroup contains 3 Specific Images:**
+1. `AB3D0001` (suffix='') - First captured image
+2. `AB3D0001-2` (suffix='2') - Second captured image (counter looped)
+3. `AB3D0001-3` (suffix='3') - Third captured image (counter looped)
+
+**Each Specific Image is validated independently against the pipeline.**
+
 ### How Pipeline Validation Uses This
 
-**Step 1: Photo Pairing Tool groups files**
-```
-AB3D0001.CR3
-AB3D0001.XMP
-AB3D0001-DxO_DeepPRIME_XD2s.DNG
-AB3D0001-DxO_DeepPRIME_XD2s.TIF
-
-→ ImageGroup AB3D0001
-```
-
-**Step 2: Pipeline Validation traverses configured pipeline**
-```
-For each Termination node:
-  1. Traverse from Capture to Termination
-  2. Collect all File nodes encountered
-  3. Generate expected filenames based on processing methods
-  4. Compare with actual files in ImageGroup
-```
-
-**Step 3: Classification**
+**Step 0: Flatten ImageGroups to Specific Images**
 ```python
-expected_files = traverse_to_termination('termination_blackbox')
+# Input: ImageGroup with 3 separate_images
+ImageGroup AB3D0001
+
+# Flatten to Specific Images:
+SpecificImage 1: AB3D0001 (suffix='')
+  Files: [AB3D0001.CR3, AB3D0001.XMP, AB3D0001.DNG, AB3D0001.TIF, AB3D0001-HDR.TIF]
+
+SpecificImage 2: AB3D0001-2 (suffix='2')
+  Files: [AB3D0001-2.CR3, AB3D0001-2.XMP, AB3D0001-2.DNG]
+
+SpecificImage 3: AB3D0001-3 (suffix='3')
+  Files: [AB3D0001-3.CR3, AB3D0001-3.XMP]
+```
+
+**Step 1: Validate Each Specific Image Independently**
+
+For SpecificImage 1 (AB3D0001):
+```
+Files in this Specific Image:
+  AB3D0001.CR3
+  AB3D0001.XMP
+  AB3D0001.DNG
+  AB3D0001.TIF
+  AB3D0001-HDR.TIF  # HDR is processing property from individual_photoshop_process
+
+→ Validate against pipeline using base_filename = "AB3D0001"
+```
+
+For SpecificImage 2 (AB3D0001-2):
+```
+Files in this Specific Image:
+  AB3D0001-2.CR3
+  AB3D0001-2.XMP
+  AB3D0001-2.DNG
+
+→ Validate against pipeline using base_filename = "AB3D0001-2"
+```
+
+**Step 2: Pipeline Traversal (per Specific Image)**
+```
+For each Specific Image:
+  For each Termination node:
+    1. Traverse from Capture to Termination
+    2. Collect all File nodes encountered
+    3. Generate expected filenames:
+       - Use Specific Image's base_filename (e.g., "AB3D0001-2")
+       - Append processing methods from Process nodes
+       - Add extensions from File nodes
+    4. Compare with actual files in this Specific Image only
+```
+
+**Step 3: Classification (per Specific Image)**
+```python
+# For SpecificImage 1 (AB3D0001):
+expected_files = traverse_to_termination('termination_blackbox', base='AB3D0001')
 # Returns: {
 #   'AB3D0001.CR3',
 #   'AB3D0001.XMP',
 #   'AB3D0001-DxO_DeepPRIME_XD2s.DNG',
-#   'AB3D0001-DxO_DeepPRIME_XD2s.TIF'
+#   'AB3D0001-DxO_DeepPRIME_XD2s.TIF',
+#   'AB3D0001-DxO_DeepPRIME_XD2s-HDR.TIF'  # If individual_photoshop_process
 # }
 
-actual_files = imagegroup.get_all_files()
+actual_files_for_this_specific_image = {
+    'AB3D0001.CR3',
+    'AB3D0001.XMP',
+    'AB3D0001.DNG',
+    'AB3D0001.TIF',
+    'AB3D0001-HDR.TIF'
+}
+
+if expected_files == actual_files_for_this_specific_image:
+    result = {
+        'unique_id': 'AB3D0001',
+        'status': 'CONSISTENT',
+        'archival_ready': True
+    }
+
+# For SpecificImage 2 (AB3D0001-2):
+expected_files = traverse_to_termination('termination_blackbox', base='AB3D0001-2')
 # Returns: {
-#   'AB3D0001.CR3',
-#   'AB3D0001.XMP',
-#   'AB3D0001-DxO_DeepPRIME_XD2s.DNG',
-#   'AB3D0001-DxO_DeepPRIME_XD2s.TIF'
+#   'AB3D0001-2.CR3',
+#   'AB3D0001-2.XMP',
+#   'AB3D0001-2-DxO_DeepPRIME_XD2s.DNG',
+#   'AB3D0001-2-DxO_DeepPRIME_XD2s.TIF'
 # }
 
-if expected_files == actual_files:
-    status = 'CONSISTENT'
-    archival_ready = True
-else:
-    status = 'INCONSISTENT'
-    missing = expected_files - actual_files
+actual_files_for_this_specific_image = {
+    'AB3D0001-2.CR3',
+    'AB3D0001-2.XMP',
+    'AB3D0001-2.DNG'
+}
+
+if expected_files != actual_files_for_this_specific_image:
+    result = {
+        'unique_id': 'AB3D0001-2',
+        'status': 'INCONSISTENT',
+        'missing_files': ['AB3D0001-2-DxO_DeepPRIME_XD2s.TIF'],
+        'archival_ready': False
+    }
+```
+
+**Output: 3 independent validation results (one per Specific Image)**
+```python
+[
+    {'unique_id': 'AB3D0001', 'status': 'CONSISTENT', 'archival_ready': True},
+    {'unique_id': 'AB3D0001-2', 'status': 'INCONSISTENT', 'archival_ready': False},
+    {'unique_id': 'AB3D0001-3', 'status': 'INCONSISTENT', 'archival_ready': False}
+]
 ```
 
 ---

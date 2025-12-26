@@ -325,23 +325,137 @@ Expected Specific Image = {
 
 ---
 
-### FR-2: Image Group Analysis (Node-Based Traversal)
+### FR-2: Specific Image Validation (Node-Based Traversal)
 
-**Description:** Validate ImageGroups by traversing the node-based pipeline and comparing actual files against File nodes collected from Capture to Termination
+**Description:** Validate **Specific Images** (not ImageGroups) by traversing the node-based pipeline and comparing actual files against File nodes collected from Capture to Termination
+
+**Critical Distinction:**
+- **ImageGroup** (from Photo Pairing Tool): Container grouping files by `camera_id + counter`
+- **Specific Image** (within ImageGroup): The actual unit for pipeline validation
+  - Represents a **single captured image** and all its processed derivatives
+  - Has unique identifier: `camera_id + counter + suffix`
+  - Suffix differentiates separate captures with same camera_id + counter (due to counter looping)
+
+**Why Specific Images, Not ImageGroups?**
+
+When a camera's counter loops (resets to 0001), multiple captures can share the same camera ID and counter:
+```
+First capture:  AB3D0001.CR3 (counter first time at 0001)
+Second capture: AB3D0001.CR3 (counter looped, back to 0001)
+```
+
+When exported to the same folder, collision prevention adds a numerical suffix:
+```
+First capture:  AB3D0001.CR3      (suffix = "" or blank)
+Second capture: AB3D0001-2.CR3    (suffix = "2")
+Third capture:  AB3D0001-3.CR3    (suffix = "3")
+```
+
+**Important:** The suffix indicates **different captured images**, NOT different processing methods (HDR, BW, etc.). Processing properties are part of the filename but represent processing stages within the SAME capture's pipeline.
+
+**ImageGroup Data Structure (from Photo Pairing Tool):**
+```python
+{
+    'group_id': 'AB3D0001',
+    'camera_id': 'AB3D',
+    'counter': '0001',
+    'separate_images': {  # Each entry = one Specific Image (one captured image)
+        '': {  # First capture (no suffix, blank key)
+            'files': [
+                'AB3D0001.CR3',
+                'AB3D0001.XMP',
+                'AB3D0001.DNG',
+                'AB3D0001.TIF'
+            ],
+            'properties': []  # No processing properties at image group level
+        },
+        '2': {  # Second capture (counter looped, suffix=2)
+            'files': [
+                'AB3D0001-2.CR3',
+                'AB3D0001-2.XMP',
+                'AB3D0001-2.DNG',
+                'AB3D0001-2-HDR.TIF'  # HDR is processing property, not a separate image
+            ],
+            'properties': []
+        }
+    }
+}
+```
+
+**Flattening ImageGroups to Specific Images:**
+
+Before pipeline validation, flatten ImageGroups into individual Specific Images:
+
+```python
+def flatten_imagegroup_to_specific_images(image_group):
+    """
+    Convert ImageGroup with multiple separate_images into individual
+    Specific Images for validation.
+
+    Args:
+        image_group: ImageGroup from Photo Pairing Tool
+
+    Returns:
+        List of SpecificImage objects, each validated independently
+    """
+    specific_images = []
+
+    for suffix, image_data in image_group['separate_images'].items():
+        specific_image = {
+            'camera_id': image_group['camera_id'],
+            'counter': image_group['counter'],
+            'suffix': suffix,  # '' (blank) for first capture, '2', '3', etc. for looped
+            'unique_id': f"{image_group['camera_id']}{image_group['counter']}" +
+                        (f"-{suffix}" if suffix else ""),  # e.g., "AB3D0001" or "AB3D0001-2"
+            'files': image_data['files'],  # All files for this specific captured image
+            'base_filename': f"{image_group['camera_id']}{image_group['counter']}" +
+                           (f"-{suffix}" if suffix else "")  # e.g., "AB3D0001-2"
+        }
+        specific_images.append(specific_image)
+
+    return specific_images
+
+# Example output:
+# [
+#   {
+#     'camera_id': 'AB3D',
+#     'counter': '0001',
+#     'suffix': '',
+#     'unique_id': 'AB3D0001',
+#     'base_filename': 'AB3D0001',
+#     'files': ['AB3D0001.CR3', 'AB3D0001.XMP', 'AB3D0001.DNG', 'AB3D0001.TIF']
+#   },
+#   {
+#     'camera_id': 'AB3D',
+#     'counter': '0001',
+#     'suffix': '2',
+#     'unique_id': 'AB3D0001-2',
+#     'base_filename': 'AB3D0001-2',
+#     'files': ['AB3D0001-2.CR3', 'AB3D0001-2.XMP', 'AB3D0001-2.DNG', 'AB3D0001-2-HDR.TIF']
+#   }
+# ]
+```
 
 **Input:**
-- Image groups from Photo Pairing Tool (files with same camera_id + counter)
+- ImageGroups from Photo Pairing Tool (flattened to Specific Images)
 - Node-based pipeline configuration from `processing_pipelines`
 
 **Processing Logic:**
 ```python
-def validate_imagegroup(image_group, pipeline_config):
+def validate_specific_image(specific_image, pipeline_config):
     """
     Traverse pipeline graph from Capture to each Termination,
-    collecting File nodes to define expected Specific Images.
+    collecting File nodes to define expected files for this Specific Image.
+
+    Args:
+        specific_image: Single Specific Image (one captured image)
+        pipeline_config: Node-based pipeline configuration
+
+    Returns:
+        Validation result for this Specific Image
     """
-    # 1. Get actual files in ImageGroup
-    actual_files = set(image_group.get_all_filenames())
+    # 1. Get actual files for this Specific Image only
+    actual_files = set(specific_image['files'])
 
     # 2. Find Capture and Termination nodes
     capture_node = find_node_by_type(pipeline_config, 'Capture')
@@ -359,11 +473,11 @@ def validate_imagegroup(image_group, pipeline_config):
             file_nodes = [node for node in path if node.type == 'File']
 
             # Generate expected filenames based on:
-            # - Base filename (camera_id + counter from ImageGroup)
-            # - Processing methods from Process nodes on path
+            # - Base filename from Specific Image (e.g., "AB3D0001" or "AB3D0001-2")
+            # - Processing methods from Process nodes on path (e.g., "HDR", "topaz")
             # - File extensions from File nodes
             expected_files = generate_expected_filenames(
-                base=image_group.group_id,  # e.g., "AB3D0001"
+                base=specific_image['base_filename'],  # "AB3D0001-2" if suffix=2
                 file_nodes=file_nodes,
                 path=path
             )
@@ -386,17 +500,19 @@ def validate_imagegroup(image_group, pipeline_config):
                     'extra_files': actual_files - expected_files
                 })
 
-    # 4. Classify ImageGroup based on matching terminations
+    # 4. Classify Specific Image based on matching terminations
     if matching_terminations:
         perfect_matches = [m for m in matching_terminations if m['completion'] == 100]
         if perfect_matches:
             return {
+                'unique_id': specific_image['unique_id'],
                 'status': 'CONSISTENT',
                 'matched_terminations': perfect_matches,
                 'archival_ready': True
             }
         else:
             return {
+                'unique_id': specific_image['unique_id'],
                 'status': 'PARTIAL',
                 'matched_terminations': matching_terminations,
                 'archival_ready': False
@@ -405,12 +521,40 @@ def validate_imagegroup(image_group, pipeline_config):
         # No matches: find closest match for helpful error message
         closest = find_closest_termination(actual_files, termination_nodes, pipeline_config)
         return {
+            'unique_id': specific_image['unique_id'],
             'status': 'INCONSISTENT',
             'closest_match': closest,
             'missing_files': closest['expected_files'] - actual_files,
             'extra_files': actual_files - closest['expected_files'],
             'archival_ready': False
         }
+
+
+def validate_all_imagegroups(imagegroups, pipeline_config):
+    """
+    Main validation function: flatten ImageGroups to Specific Images,
+    then validate each independently.
+
+    Args:
+        imagegroups: List of ImageGroups from Photo Pairing Tool
+        pipeline_config: Pipeline configuration
+
+    Returns:
+        Validation results for all Specific Images
+    """
+    results = []
+
+    for image_group in imagegroups:
+        # Flatten ImageGroup to individual Specific Images
+        specific_images = flatten_imagegroup_to_specific_images(image_group)
+
+        # Validate each Specific Image independently
+        for specific_image in specific_images:
+            validation_result = validate_specific_image(specific_image, pipeline_config)
+            results.append(validation_result)
+
+    return results
+```
 
 
 def enumerate_all_paths(start_node, end_node, pipeline_config):
@@ -493,44 +637,101 @@ def generate_expected_filenames(base, file_nodes, path):
     return expected
 ```
 
-**Output Structure:**
+**Output Structure (Per Specific Image):**
 ```python
 {
-    'group_id': 'AB3D0001',
+    'unique_id': 'AB3D0001-2',  # camera_id + counter + suffix
     'camera_id': 'AB3D',
     'counter': '0001',
+    'suffix': '2',  # '' (blank) for first capture, '2', '3', etc. for looped counter
+    'base_filename': 'AB3D0001-2',  # Used for filename generation
     'status': 'CONSISTENT' | 'PARTIAL' | 'INCONSISTENT',
-    'matched_paths': [
+    'matched_terminations': [
         {
-            'path_id': 'dng_archive_path',
-            'path_name': 'DNG Archive - Black Box',
+            'termination_id': 'termination_blackbox',
+            'termination_name': 'Blackbox Termination',
             'archival_type': 'black_box',
+            'path_traversed': [...],  # List of node IDs from Capture to Termination
+            'file_nodes_collected': [...],  # File nodes encountered on path
             'completion': 100  # percentage
         }
     ],
     'files': [
         {
-            'filename': 'AB3D0001.cr3',
-            'stage': 'capture',
-            'metadata_sidecar': 'AB3D0001.xmp',
+            'filename': 'AB3D0001-2.CR3',
+            'file_node_id': 'raw_image_1',
+            'metadata_sidecar': 'AB3D0001-2.XMP',
             'metadata_status': 'LINKED'
         },
         {
-            'filename': 'AB3D0001.dng',
-            'stage': 'dng_conversion',
-            'metadata_sidecar': 'AB3D0001.xmp',
+            'filename': 'AB3D0001-2.DNG',
+            'file_node_id': 'openformat_raw_image',
+            'metadata_sidecar': 'AB3D0001-2.XMP',
             'metadata_status': 'SHARED'
+        },
+        {
+            'filename': 'AB3D0001-2-HDR.TIF',  # HDR is processing property
+            'file_node_id': 'tiff_image',
+            'metadata_sidecar': None,
+            'metadata_status': 'EMBEDDED'
         }
     ],
     'missing_files': [
         {
-            'stage': 'tone_mapping',
-            'expected_extension': '.tif',
-            'reason': 'Required for complete developed_archive_path'
+            'expected_filename': 'AB3D0001-2-hires.JPG',
+            'file_node_id': 'highres_jpeg',
+            'reason': 'Required for complete browsable_termination path'
         }
     ],
     'archival_ready': true | false
 }
+```
+
+**Aggregated Output (All Specific Images):**
+```python
+{
+    'total_specific_images': 125,
+    'summary': {
+        'consistent': 85,  # 68%
+        'partial': 28,     # 22%
+        'inconsistent': 12 # 10%
+    },
+    'archival_ready_by_type': {
+        'black_box': 65,
+        'browsable': 20,
+        'not_ready': 40
+    },
+    'specific_images': [
+        # List of validation results (structure above) for each Specific Image
+        {...},  # AB3D0001 (suffix='')
+        {...},  # AB3D0001-2 (suffix='2')
+        {...},  # AB3D0002 (suffix='')
+        # etc.
+    ]
+}
+```
+
+**Example: Multiple Specific Images from Same ImageGroup:**
+
+```python
+# Input ImageGroup with 2 Specific Images (counter looped):
+ImageGroup AB3D0001 → 2 Specific Images
+
+# Output: 2 independent validation results
+[
+    {
+        'unique_id': 'AB3D0001',  # First capture
+        'suffix': '',
+        'status': 'CONSISTENT',
+        'archival_ready': True
+    },
+    {
+        'unique_id': 'AB3D0001-2',  # Second capture (counter looped)
+        'suffix': '2',
+        'status': 'PARTIAL',
+        'archival_ready': False
+    }
+]
 ```
 
 ---
