@@ -1,0 +1,444 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pipeline Validation Result",
+  "description": "Schema for validation results output by the pipeline validation tool",
+  "version": "1.0.0",
+  "type": "object",
+  "required": [
+    "version",
+    "tool_version",
+    "created_at",
+    "folder_path",
+    "metadata",
+    "validation_results"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Cache format version",
+      "const": "1.0"
+    },
+    "tool_version": {
+      "type": "string",
+      "description": "Tool version that created this cache (semantic versioning)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0", "1.1.0", "2.0.0"]
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp of cache creation",
+      "format": "date-time",
+      "examples": ["2025-12-27T14:30:45Z"]
+    },
+    "folder_path": {
+      "type": "string",
+      "description": "Absolute path to analyzed folder",
+      "minLength": 1,
+      "examples": ["/Users/photographer/Photos/2025-01-15"]
+    },
+    "metadata": {
+      "$ref": "#/definitions/CacheMetadata"
+    },
+    "validation_results": {
+      "type": "array",
+      "description": "List of validation results for each Specific Image",
+      "items": {
+        "$ref": "#/definitions/ValidationResult"
+      }
+    }
+  },
+
+  "definitions": {
+    "CacheMetadata": {
+      "type": "object",
+      "description": "Metadata for cache invalidation and quick statistics",
+      "required": [
+        "version",
+        "tool_version",
+        "created_at",
+        "folder_path",
+        "pipeline_config_hash",
+        "folder_content_hash",
+        "photo_pairing_cache_hash",
+        "validation_results_hash",
+        "total_groups",
+        "total_specific_images",
+        "consistent_count",
+        "warning_count",
+        "partial_count",
+        "inconsistent_count"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "1.0"
+        },
+        "tool_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "folder_path": {
+          "type": "string"
+        },
+        "pipeline_config_hash": {
+          "type": "string",
+          "description": "SHA256 hash of processing_pipelines section",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "folder_content_hash": {
+          "type": "string",
+          "description": "SHA256 hash from Photo Pairing cache (file_list_hash)",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "photo_pairing_cache_hash": {
+          "type": "string",
+          "description": "SHA256 hash of Photo Pairing imagegroups structure",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "validation_results_hash": {
+          "type": "string",
+          "description": "SHA256 hash of validation_results array (for manual edit detection)",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "total_groups": {
+          "type": "integer",
+          "description": "Total ImageGroups analyzed",
+          "minimum": 0
+        },
+        "total_specific_images": {
+          "type": "integer",
+          "description": "Total Specific Images validated",
+          "minimum": 0
+        },
+        "consistent_count": {
+          "type": "integer",
+          "description": "Count of CONSISTENT images",
+          "minimum": 0
+        },
+        "warning_count": {
+          "type": "integer",
+          "description": "Count of CONSISTENT-WITH-WARNING images",
+          "minimum": 0
+        },
+        "partial_count": {
+          "type": "integer",
+          "description": "Count of PARTIAL images",
+          "minimum": 0
+        },
+        "inconsistent_count": {
+          "type": "integer",
+          "description": "Count of INCONSISTENT images",
+          "minimum": 0
+        }
+      }
+    },
+
+    "ValidationResult": {
+      "type": "object",
+      "description": "Validation result for one Specific Image",
+      "required": [
+        "unique_id",
+        "group_id",
+        "camera_id",
+        "counter",
+        "suffix",
+        "actual_files",
+        "termination_matches",
+        "overall_status",
+        "archival_ready_for"
+      ],
+      "properties": {
+        "unique_id": {
+          "type": "string",
+          "description": "Unique identifier (base_filename)",
+          "minLength": 1,
+          "examples": ["AB3D0001", "AB3D0001-2", "AB3D0001-HDR"]
+        },
+        "group_id": {
+          "type": "string",
+          "description": "Parent ImageGroup ID",
+          "pattern": "^[A-Z0-9]{4}\\d{4}$",
+          "examples": ["AB3D0001", "XY4Z0042"]
+        },
+        "camera_id": {
+          "type": "string",
+          "description": "Camera identifier",
+          "pattern": "^[A-Z0-9]{4}$",
+          "examples": ["AB3D", "XY4Z"]
+        },
+        "counter": {
+          "type": "string",
+          "description": "Counter string (4 digits)",
+          "pattern": "^\\d{4}$",
+          "examples": ["0001", "0042", "9999"]
+        },
+        "suffix": {
+          "type": "string",
+          "description": "Separate image suffix (empty for primary image)",
+          "examples": ["", "2", "HDR", "BW"]
+        },
+        "actual_files": {
+          "type": "array",
+          "description": "Actual files found for this Specific Image (sorted)",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "examples": [
+            ["AB3D0001.CR3", "AB3D0001.XMP"],
+            ["AB3D0001-2.CR3", "AB3D0001-2-DxO_DeepPRIME_XD2s.DNG"]
+          ]
+        },
+        "termination_matches": {
+          "type": "array",
+          "description": "Validation results per termination node",
+          "items": {
+            "$ref": "#/definitions/TerminationMatchResult"
+          },
+          "minItems": 1
+        },
+        "overall_status": {
+          "$ref": "#/definitions/ValidationStatus",
+          "description": "Worst status across all termination matches"
+        },
+        "archival_ready_for": {
+          "type": "array",
+          "description": "List of termination types that are archival ready",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "examples": [
+            ["Black Box Archive"],
+            ["Black Box Archive", "Browsable Archive"],
+            []
+          ]
+        }
+      }
+    },
+
+    "TerminationMatchResult": {
+      "type": "object",
+      "description": "Validation result for one Termination node",
+      "required": [
+        "termination_id",
+        "termination_type",
+        "status",
+        "completion_percentage",
+        "missing_files",
+        "extra_files",
+        "truncated"
+      ],
+      "properties": {
+        "termination_id": {
+          "type": "string",
+          "description": "Termination node ID",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "examples": ["termination_blackbox", "termination_browsable"]
+        },
+        "termination_type": {
+          "type": "string",
+          "description": "Human-readable termination type",
+          "examples": ["Black Box Archive", "Browsable Archive", "Web Export Ready"]
+        },
+        "status": {
+          "$ref": "#/definitions/ValidationStatus"
+        },
+        "completion_percentage": {
+          "type": "number",
+          "description": "Percentage of expected files present (0-100)",
+          "minimum": 0,
+          "maximum": 100,
+          "examples": [100.0, 75.5, 0.0]
+        },
+        "missing_files": {
+          "type": "array",
+          "description": "List of missing expected files",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "examples": [
+            [],
+            ["AB3D0001.DNG", "AB3D0001-Edit.TIF"]
+          ]
+        },
+        "extra_files": {
+          "type": "array",
+          "description": "List of extra files not in pipeline",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "examples": [
+            [],
+            ["AB3D0001-backup.CR3", "AB3D0001.JPG"]
+          ]
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "Whether the matched path was truncated due to loop limit"
+        },
+        "truncation_note": {
+          "type": ["string", "null"],
+          "description": "Human-readable explanation of truncation (null if not truncated)",
+          "examples": [
+            null,
+            "Path truncated after 5 iterations of individual_photoshop_process"
+          ]
+        }
+      }
+    },
+
+    "ValidationStatus": {
+      "type": "string",
+      "description": "Validation status classification",
+      "enum": [
+        "CONSISTENT",
+        "CONSISTENT-WITH-WARNING",
+        "PARTIAL",
+        "INCONSISTENT"
+      ],
+      "examples": ["CONSISTENT"]
+    }
+  },
+
+  "examples": [
+    {
+      "version": "1.0",
+      "tool_version": "1.0.0",
+      "created_at": "2025-12-27T14:30:45Z",
+      "folder_path": "/Users/photographer/Photos/2025-01-15",
+      "metadata": {
+        "version": "1.0",
+        "tool_version": "1.0.0",
+        "created_at": "2025-12-27T14:30:45Z",
+        "folder_path": "/Users/photographer/Photos/2025-01-15",
+        "pipeline_config_hash": "abc123def456789012345678901234567890123456789012345678901234",
+        "folder_content_hash": "789ghi012jkl345mno678pqr901stu234vwx567yza890bcd123efg456hij",
+        "photo_pairing_cache_hash": "mno345pqr678stu901vwx234yza567bcd890efg123hij456klm789nop012",
+        "validation_results_hash": "stu901vwx234yza567bcd890efg123hij456klm789nop012qrs345tuv678",
+        "total_groups": 892,
+        "total_specific_images": 1124,
+        "consistent_count": 654,
+        "warning_count": 45,
+        "partial_count": 203,
+        "inconsistent_count": 222
+      },
+      "validation_results": [
+        {
+          "unique_id": "AB3D0001",
+          "group_id": "AB3D0001",
+          "camera_id": "AB3D",
+          "counter": "0001",
+          "suffix": "",
+          "actual_files": [
+            "AB3D0001.CR3",
+            "AB3D0001.XMP",
+            "AB3D0001-DxO_DeepPRIME_XD2s.DNG",
+            "AB3D0001-DxO_DeepPRIME_XD2s-Edit.TIF"
+          ],
+          "termination_matches": [
+            {
+              "termination_id": "termination_blackbox",
+              "termination_type": "Black Box Archive",
+              "status": "CONSISTENT",
+              "completion_percentage": 100.0,
+              "missing_files": [],
+              "extra_files": [],
+              "truncated": false,
+              "truncation_note": null
+            }
+          ],
+          "overall_status": "CONSISTENT",
+          "archival_ready_for": ["Black Box Archive"]
+        },
+        {
+          "unique_id": "AB3D0002",
+          "group_id": "AB3D0002",
+          "camera_id": "AB3D",
+          "counter": "0002",
+          "suffix": "",
+          "actual_files": [
+            "AB3D0002.CR3",
+            "AB3D0002.XMP",
+            "AB3D0002-DxO_DeepPRIME_XD2s.DNG"
+          ],
+          "termination_matches": [
+            {
+              "termination_id": "termination_blackbox",
+              "termination_type": "Black Box Archive",
+              "status": "PARTIAL",
+              "completion_percentage": 75.0,
+              "missing_files": ["AB3D0002-DxO_DeepPRIME_XD2s-Edit.TIF"],
+              "extra_files": [],
+              "truncated": false,
+              "truncation_note": null
+            }
+          ],
+          "overall_status": "PARTIAL",
+          "archival_ready_for": []
+        },
+        {
+          "unique_id": "AB3D0003",
+          "group_id": "AB3D0003",
+          "camera_id": "AB3D",
+          "counter": "0003",
+          "suffix": "",
+          "actual_files": [
+            "AB3D0003.CR3",
+            "AB3D0003.XMP",
+            "AB3D0003-DxO_DeepPRIME_XD2s.DNG",
+            "AB3D0003-DxO_DeepPRIME_XD2s-Edit.TIF",
+            "AB3D0003-backup.CR3"
+          ],
+          "termination_matches": [
+            {
+              "termination_id": "termination_blackbox",
+              "termination_type": "Black Box Archive",
+              "status": "CONSISTENT-WITH-WARNING",
+              "completion_percentage": 100.0,
+              "missing_files": [],
+              "extra_files": ["AB3D0003-backup.CR3"],
+              "truncated": false,
+              "truncation_note": null
+            }
+          ],
+          "overall_status": "CONSISTENT-WITH-WARNING",
+          "archival_ready_for": ["Black Box Archive"]
+        },
+        {
+          "unique_id": "AB3D0004",
+          "group_id": "AB3D0004",
+          "camera_id": "AB3D",
+          "counter": "0004",
+          "suffix": "",
+          "actual_files": [
+            "AB3D0004.CR3",
+            "AB3D0004.XMP",
+            "AB3D0004-DxO_DeepPRIME_XD2s.DNG",
+            "AB3D0004-DxO_DeepPRIME_XD2s-Edit-Edit-Edit-Edit-Edit.TIF"
+          ],
+          "termination_matches": [
+            {
+              "termination_id": "termination_blackbox",
+              "termination_type": "Black Box Archive",
+              "status": "CONSISTENT",
+              "completion_percentage": 100.0,
+              "missing_files": [],
+              "extra_files": [],
+              "truncated": true,
+              "truncation_note": "Path truncated after 5 iterations of individual_photoshop_process"
+            }
+          ],
+          "overall_status": "CONSISTENT",
+          "archival_ready_for": ["Black Box Archive"]
+        }
+      ]
+    }
+  ]
+}

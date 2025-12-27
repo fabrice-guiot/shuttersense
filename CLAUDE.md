@@ -12,6 +12,7 @@ Photo Administration toolbox - Python utilities for analyzing photo collections.
 2. **Photo Pairing Tool** - Analyze filename patterns, group files, track camera usage
 
 ## Active Technologies
+- Python 3.10+ (required for match/case syntax and modern type hinting) (003-pipeline-validation)
 
 - **Python 3.10+**
 - **PyYAML** (>=6.0) - Configuration file handling
@@ -195,6 +196,7 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 003-pipeline-validation: Added Python 3.10+ (required for match/case syntax and modern type hinting)
 
 ### HTML Report Consistency & Tool Improvements (2025-12-25)
 - ✅ Feature 002: Complete implementation (56 tasks across 6 phases)
@@ -202,35 +204,22 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
   - Created templates/base.html.j2 with shared styling and Chart.js theme
   - Tool-specific templates extend base for PhotoStats and Photo Pairing
   - Removed 640+ lines of duplicate HTML generation code
-- ✅ **Comprehensive --help text** for both tools
   - Migrated PhotoStats from manual argv parsing to argparse
   - Enhanced Photo Pairing help with examples and workflow
   - Both tools support --help and -h flags
-- ✅ **Graceful CTRL+C handling** (SIGINT)
   - User-friendly "Operation interrupted by user" message
   - Exit code 130 (standard for SIGINT)
   - Atomic file writes prevent partial reports
   - Shutdown checks in scan loops and before report generation
-- ✅ **Timestamped report filenames** for consistency
   - PhotoStats: photo_stats_report_YYYY-MM-DD_HH-MM-SS.html
   - Photo Pairing: photo_pairing_report_YYYY-MM-DD_HH-MM-SS.html
-- ✅ **109 tests passing** (22 new tests added)
   - Report renderer tests (12): template rendering, visual consistency
   - Help text tests (6): --help/-h flag validation
   - Signal handling tests (7): CTRL+C graceful interruption
-- ✅ **Dependencies updated**: Added Jinja2>=3.1.0 to requirements.txt
-- ✅ **Constitution updated**: v1.0.0 → v1.1.0 with CLI standards
-- Resolves issues #16 (HTML Consistency), #13 (--help), #14 (CTRL+C)
 
 ### Photo Pairing Tool (2025-12-25)
-- ✅ Complete implementation with 8 phases (68 tasks)
-- ✅ 43 comprehensive tests, all passing
-- ✅ Filename validation, camera tracking, processing methods
-- ✅ Smart caching, interactive HTML reports
 
 ### Code Refactoring (2025-12-24)
-- Moved config_manager.py to utils/ for reusability
-- Created FilenameParser utility for shared validation
 
 ## Testing Guidelines
 

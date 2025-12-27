@@ -1,0 +1,444 @@
+# Pipeline Configuration YAML Schema
+# Defines the structure for processing_pipelines section in config.yaml
+
+$schema: "http://json-schema.org/draft-07/schema#"
+title: "Photo Processing Pipeline Configuration"
+description: "Schema for defining photo processing workflows as directed graphs"
+version: "1.0.0"
+
+type: object
+required:
+  - nodes
+
+properties:
+  nodes:
+    type: array
+    description: "List of nodes defining the pipeline graph"
+    minItems: 3  # At minimum: 1 Capture, 1 File, 1 Termination
+    maxItems: 100  # Per C-006 constraint
+    items:
+      oneOf:
+        - $ref: "#/definitions/CaptureNode"
+        - $ref: "#/definitions/FileNode"
+        - $ref: "#/definitions/ProcessNode"
+        - $ref: "#/definitions/PairingNode"
+        - $ref: "#/definitions/BranchingNode"
+        - $ref: "#/definitions/TerminationNode"
+
+definitions:
+  # Base node properties shared by all node types
+  NodeBase:
+    type: object
+    required:
+      - id
+      - type
+      - name
+      - output
+    properties:
+      id:
+        type: string
+        description: "Unique node identifier (snake_case recommended)"
+        pattern: "^[a-z][a-z0-9_]*$"
+        minLength: 1
+        maxLength: 50
+        examples:
+          - "capture"
+          - "raw_image_1"
+          - "individual_photoshop_process"
+          - "termination_blackbox"
+
+      type:
+        type: string
+        description: "Node type"
+        enum:
+          - "Capture"
+          - "File"
+          - "Process"
+          - "Pairing"
+          - "Branching"
+          - "Termination"
+
+      name:
+        type: string
+        description: "Human-readable name for reports and UI"
+        minLength: 1
+        maxLength: 100
+        examples:
+          - "Camera Capture"
+          - "Canon Raw File"
+          - "Photoshop Editing"
+
+      output:
+        type: array
+        description: "List of output node IDs (references to other nodes)"
+        items:
+          type: string
+          pattern: "^[a-z][a-z0-9_]*$"
+        uniqueItems: true
+        examples:
+          - ["raw_image_1"]
+          - ["selection_process", "xmp_metadata_1"]
+          - []  # Empty for Termination nodes
+
+  # Capture Node - Starting point of pipeline
+  CaptureNode:
+    allOf:
+      - $ref: "#/definitions/NodeBase"
+      - type: object
+        properties:
+          type:
+            const: "Capture"
+          output:
+            type: array
+            minItems: 1  # Capture must have at least one output
+            maxItems: 5
+            description: "Initial file nodes (typically raw files)"
+
+    examples:
+      - id: "capture"
+        type: "Capture"
+        name: "Camera Capture"
+        output: ["raw_image_1"]
+
+  # File Node - Represents expected file
+  FileNode:
+    allOf:
+      - $ref: "#/definitions/NodeBase"
+      - type: object
+        required:
+          - extension
+        properties:
+          type:
+            const: "File"
+
+          extension:
+            type: string
+            description: "File extension including leading dot"
+            pattern: "^\\.[a-zA-Z0-9]+$"
+            minLength: 2  # e.g., ".X" is minimum
+            maxLength: 10
+            examples:
+              - ".CR3"
+              - ".DNG"
+              - ".XMP"
+              - ".TIF"
+              - ".TIFF"
+              - ".JPG"
+              - ".JPEG"
+
+          output:
+            type: array
+            maxItems: 10
+            description: "Subsequent processing nodes or empty for terminal files"
+
+    examples:
+      - id: "raw_image_1"
+        type: "File"
+        extension: ".CR3"
+        name: "Canon Raw File"
+        output: ["selection_process"]
+
+      - id: "xmp_metadata_1"
+        type: "File"
+        extension: ".XMP"
+        name: "Metadata Sidecar"
+        output: []  # Terminal file node
+
+  # Process Node - Editing/conversion step
+  ProcessNode:
+    allOf:
+      - $ref: "#/definitions/NodeBase"
+      - type: object
+        required:
+          - method_ids
+        properties:
+          type:
+            const: "Process"
+
+          method_ids:
+            type: array
+            description: "Processing method IDs from processing_methods config section. Empty string means no suffix."
+            items:
+              type: string
+              # Empty string allowed (no suffix), otherwise must match method ID
+            minItems: 1
+            maxItems: 10
+            examples:
+              - [""]  # No suffix (selection only)
+              - ["DxO_DeepPRIME_XD2s"]
+              - ["Edit"]
+              - ["DxO_DeepPRIME_XD2s", "Edit"]
+
+          output:
+            type: array
+            minItems: 1  # Process must have at least one output
+            maxItems: 10
+
+    examples:
+      - id: "selection_process"
+        type: "Process"
+        method_ids: [""]
+        name: "Image Selection"
+        output: ["dng_conversion"]
+
+      - id: "individual_photoshop_process"
+        type: "Process"
+        method_ids: ["Edit"]
+        name: "Photoshop Editing"
+        output: ["tiff_generation_branching"]
+
+  # Pairing Node - Multi-image merge operation
+  PairingNode:
+    allOf:
+      - $ref: "#/definitions/NodeBase"
+      - type: object
+        required:
+          - pairing_type
+          - input_count
+        properties:
+          type:
+            const: "Pairing"
+
+          pairing_type:
+            type: string
+            description: "Type of pairing operation"
+            minLength: 1
+            maxLength: 50
+            examples:
+              - "HDR"
+              - "Panorama"
+              - "Focus Stack"
+
+          input_count:
+            type: integer
+            description: "Expected number of input images for pairing"
+            minimum: 2
+            maximum: 20
+            examples:
+              - 3  # HDR typically uses 3 exposures
+              - 5  # Panorama might use 5 images
+
+          output:
+            type: array
+            minItems: 1  # Pairing must produce output
+            maxItems: 10
+
+    examples:
+      - id: "hdr_pairing"
+        type: "Pairing"
+        pairing_type: "HDR"
+        input_count: 3
+        name: "HDR Merge"
+        output: ["openformat_raw_image", "xmp_metadata_2"]
+
+  # Branching Node - Conditional path selection
+  BranchingNode:
+    allOf:
+      - $ref: "#/definitions/NodeBase"
+      - type: object
+        required:
+          - condition_description
+        properties:
+          type:
+            const: "Branching"
+
+          condition_description:
+            type: string
+            description: "Human-readable explanation of branching condition"
+            minLength: 10
+            maxLength: 200
+            examples:
+              - "User decides: Create TIFF or continue editing"
+              - "User decides: Export for web or skip web export"
+
+          output:
+            type: array
+            minItems: 2  # Branching requires at least 2 options
+            maxItems: 5  # Reasonable upper limit for branches
+            description: "All possible branch outputs (validation explores ALL)"
+
+    examples:
+      - id: "tiff_generation_branching"
+        type: "Branching"
+        condition_description: "User decides: Create TIFF or continue editing"
+        name: "TIFF Generation Decision"
+        output: ["generate_tiff_process", "individual_photoshop_process"]
+
+  # Termination Node - End of pipeline (archival ready)
+  TerminationNode:
+    allOf:
+      - $ref: "#/definitions/NodeBase"
+      - type: object
+        required:
+          - termination_type
+        properties:
+          type:
+            const: "Termination"
+
+          termination_type:
+            type: string
+            description: "Type of archival state this termination represents"
+            minLength: 1
+            maxLength: 100
+            examples:
+              - "Black Box Archive"
+              - "Browsable Archive"
+              - "Web Export Ready"
+
+          output:
+            type: array
+            maxItems: 0
+            description: "Termination nodes have no outputs (must be empty array)"
+
+    examples:
+      - id: "termination_blackbox"
+        type: "Termination"
+        termination_type: "Black Box Archive"
+        name: "Black Box Archive Ready"
+        output: []
+
+      - id: "termination_browsable"
+        type: "Termination"
+        termination_type: "Browsable Archive"
+        name: "Browsable Archive Ready"
+        output: []
+
+# Validation Rules (implemented in pipeline_validation.py)
+#
+# 1. Exactly one Capture node must exist
+# 2. At least one Termination node must exist
+# 3. All output references must point to existing nodes
+# 4. No orphaned nodes (unreachable from Capture)
+# 5. No duplicate node IDs
+# 6. File extensions must match photo_extensions or metadata_extensions from config
+# 7. Processing method_ids must exist in processing_methods config section
+# 8. No infinite loops without Termination reachable (warning, not error)
+# 9. Maximum 100 nodes per pipeline (C-006 constraint)
+
+# Example Minimal Pipeline
+examples:
+  - nodes:
+      - id: "capture"
+        type: "Capture"
+        name: "Camera Capture"
+        output: ["raw_image"]
+
+      - id: "raw_image"
+        type: "File"
+        extension: ".CR3"
+        name: "Canon Raw File"
+        output: ["termination_simple"]
+
+      - id: "termination_simple"
+        type: "Termination"
+        termination_type: "Raw Archive"
+        name: "Raw Archive Ready"
+        output: []
+
+  # Example Complex Pipeline (excerpt)
+  - nodes:
+      - id: "capture"
+        type: "Capture"
+        name: "Camera Capture"
+        output: ["raw_image_1", "raw_image_2"]
+
+      - id: "raw_image_1"
+        type: "File"
+        extension: ".CR3"
+        name: "Primary Raw File"
+        output: ["selection_process"]
+
+      - id: "raw_image_2"
+        type: "File"
+        extension: ".CR3"
+        name: "Secondary Raw File (HDR)"
+        output: ["hdr_pairing"]
+
+      - id: "hdr_pairing"
+        type: "Pairing"
+        pairing_type: "HDR"
+        input_count: 3
+        name: "HDR Merge"
+        output: ["openformat_raw_image"]
+
+      - id: "selection_process"
+        type: "Process"
+        method_ids: [""]
+        name: "Image Selection"
+        output: ["dng_conversion"]
+
+      - id: "dng_conversion"
+        type: "Process"
+        method_ids: ["DxO_DeepPRIME_XD2s"]
+        name: "DNG Conversion with DeepPRIME"
+        output: ["openformat_raw_image", "xmp_metadata_1"]
+
+      - id: "openformat_raw_image"
+        type: "File"
+        extension: ".DNG"
+        name: "Open Format Raw"
+        output: ["individual_photoshop_process"]
+
+      - id: "individual_photoshop_process"
+        type: "Process"
+        method_ids: ["Edit"]
+        name: "Photoshop Editing"
+        output: ["tiff_generation_branching"]
+
+      - id: "tiff_generation_branching"
+        type: "Branching"
+        condition_description: "User decides: Create TIFF or continue editing"
+        name: "TIFF Generation Decision"
+        output: ["generate_tiff_process", "individual_photoshop_process"]  # Loop back
+
+      - id: "generate_tiff_process"
+        type: "Process"
+        method_ids: [""]
+        name: "Generate TIFF"
+        output: ["tiff_image"]
+
+      - id: "tiff_image"
+        type: "File"
+        extension: ".TIF"
+        name: "TIFF File"
+        output: ["termination_blackbox"]
+
+      - id: "xmp_metadata_1"
+        type: "File"
+        extension: ".XMP"
+        name: "XMP Metadata"
+        output: []
+
+      - id: "termination_blackbox"
+        type: "Termination"
+        termination_type: "Black Box Archive"
+        name: "Black Box Archive Ready"
+        output: []
+
+# Integration with config.yaml
+#
+# The processing_pipelines section should be added to the existing config.yaml:
+#
+# photo_extensions:
+#   - .cr3
+#   - .dng
+#   - .tiff
+#
+# metadata_extensions:
+#   - .xmp
+#
+# camera_mappings:
+#   AB3D:
+#     - name: Canon EOS R5
+#       serial_number: "12345"
+#
+# processing_methods:
+#   DxO_DeepPRIME_XD2s: "DNG Conversion with DxO DeepPRIME XD2s"
+#   Edit: "Photoshop Editing"
+#   HDR: "High Dynamic Range Merge"
+#
+# processing_pipelines:
+#   nodes:
+#     - id: "capture"
+#       type: "Capture"
+#       # ... (pipeline definition)
