@@ -1,0 +1,229 @@
+{% extends "base.html.j2" %}
+
+{% block tool_specific_styles %}
+/* Pipeline Validation-specific styles */
+
+/* Status Badge Styling */
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.consistent {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #10b981;
+}
+
+.status-badge.consistent-with-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #f59e0b;
+}
+
+.status-badge.partial {
+    background: #fecaca;
+    color: #991b1b;
+    border: 1px solid #ef4444;
+}
+
+.status-badge.inconsistent {
+    background: #fee2e2;
+    color: #7f1d1d;
+    border: 1px solid #dc2626;
+}
+
+/* Pipeline Path Visualization */
+.pipeline-path {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border-left: 3px solid #667eea;
+    margin: 8px 0;
+}
+
+/* File List Styling */
+.file-list {
+    list-style: none;
+    padding-left: 20px;
+}
+
+.file-list li {
+    padding: 4px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+}
+
+.file-list li.missing {
+    color: #dc2626;
+    text-decoration: line-through;
+}
+
+.file-list li.extra {
+    color: #f59e0b;
+    font-style: italic;
+}
+
+.file-list li.expected {
+    color: #059669;
+}
+
+/* Termination Type Badge */
+.termination-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: #e0e7ff;
+    color: #3730a3;
+    margin: 2px;
+}
+
+/* Completion Percentage Bar */
+.completion-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.completion-bar .fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.completion-bar .fill.complete {
+    background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.completion-bar .fill.partial {
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.completion-bar .fill.empty {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+/* Archival Ready Indicator */
+.archival-ready {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 0.85rem;
+}
+
+.archival-ready .icon {
+    font-size: 1.2rem;
+}
+
+.archival-ready.ready {
+    color: #059669;
+}
+
+.archival-ready.not-ready {
+    color: #94a3b8;
+}
+
+/* Truncation Warning */
+.truncation-warning {
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-top: 8px;
+    font-size: 0.85rem;
+}
+
+.truncation-warning::before {
+    content: "⚠️ ";
+    font-weight: bold;
+}
+
+/* Cache Status Section */
+.cache-status {
+    background: #f0f9ff;
+    border: 1px solid #0ea5e9;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+}
+
+.cache-status .status-header {
+    font-weight: 600;
+    color: #0c4a6e;
+    margin-bottom: 8px;
+}
+
+.cache-status .status-detail {
+    font-size: 0.85rem;
+    color: #475569;
+    margin: 4px 0;
+}
+
+/* Image Group Card */
+.image-group-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 12px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.image-group-card:hover {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    border-color: #cbd5e1;
+}
+
+.image-group-card .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.image-group-card .group-id {
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+/* Validation Details Table Enhancement */
+table.validation-details td.status-cell {
+    padding: 8px 16px;
+}
+
+table.validation-details td.files-cell {
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+}
+
+table.validation-details td.percentage-cell {
+    text-align: center;
+}
+{% endblock %}
+
+{% block tool_specific_content %}
+{# Pipeline Validation-specific content sections can be added here if needed #}
+{# The main content (KPIs, sections, warnings, errors) is already handled by base template #}
+{# Additional custom sections for pipeline validation can be added in future phases #}
+{% endblock %}
+
+{% block tool_specific_scripts %}
+{# Pipeline Validation-specific JavaScript can be added here if needed #}
+{# For example: interactive pipeline graph visualization, filtering controls, etc. #}
+{% endblock %}
