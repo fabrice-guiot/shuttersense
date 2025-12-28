@@ -262,8 +262,32 @@ def temp_photo_folder(tmp_path):
 
 
 @pytest.fixture
-def mock_config():
-    """Mock PhotoAdminConfig for testing."""
+def mock_config(tmp_path, sample_pipeline_config):
+    """Create actual config file for cache hash testing."""
+    config_path = tmp_path / "config.yaml"
+    config_content = {
+        'photo_extensions': ['.cr3', '.dng', '.tiff', '.tif'],
+        'metadata_extensions': ['.xmp'],
+        'require_sidecar': ['.cr3'],
+        'camera_mappings': {
+            'AB3D': [{'name': 'Canon EOS R5', 'serial_number': '12345'}]
+        },
+        'processing_methods': {
+            'DxO_DeepPRIME_XD2s': 'DNG Conversion with DeepPRIME',
+            'Edit': 'Photoshop Editing'
+        },
+        'processing_pipelines': sample_pipeline_config
+    }
+
+    with open(config_path, 'w', encoding='utf-8') as f:
+        yaml.dump(config_content, f)
+
+    return config_path
+
+
+@pytest.fixture
+def mock_photo_admin_config():
+    """Mock PhotoAdminConfig object for validation tests."""
     config = MagicMock()
     config.photo_extensions = ['.cr3', '.dng', '.tiff', '.tif']
     config.metadata_extensions = ['.xmp']
@@ -410,7 +434,7 @@ class TestPipelineConfigLoading:
         assert isinstance(pipeline.nodes_by_id['selection_process'], pipeline_validation.ProcessNode)
         assert isinstance(pipeline.nodes_by_id['termination_blackbox'], pipeline_validation.TerminationNode)
 
-    def test_validate_pipeline_structure(self, tmp_path, sample_pipeline_config, mock_config):
+    def test_validate_pipeline_structure(self, tmp_path, sample_pipeline_config, mock_photo_admin_config):
         """Test validation of pipeline node structure."""
         # Create test config file
         config_file = tmp_path / "test_config.yaml"
@@ -428,12 +452,12 @@ class TestPipelineConfigLoading:
         pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Validate structure
-        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_config)
+        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_photo_admin_config)
 
         # Should have no errors
         assert len(errors) == 0
 
-    def test_detect_invalid_node_references(self, tmp_path, mock_config):
+    def test_detect_invalid_node_references(self, tmp_path, mock_photo_admin_config):
         """Test detection of invalid output node references."""
         # Create pipeline with invalid reference
         invalid_pipeline_config = {
@@ -471,7 +495,7 @@ class TestPipelineConfigLoading:
         pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Validate structure - should detect invalid reference
-        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_config)
+        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_photo_admin_config)
 
         assert len(errors) > 0
         assert any('non_existent_node' in err for err in errors)
@@ -527,7 +551,7 @@ class TestPhotoPairingIntegration:
 class TestPathEnumeration:
     """Tests for pipeline path enumeration (Phase 3 - User Story 1)."""
 
-    def test_enumerate_simple_path(self, tmp_path, sample_pipeline_config, mock_config):
+    def test_enumerate_simple_path(self, tmp_path, sample_pipeline_config, mock_photo_admin_config):
         """Test enumeration of simple linear pipeline path."""
         # Create config file
         config_file = tmp_path / "test_config.yaml"
@@ -553,7 +577,7 @@ class TestPathEnumeration:
             assert path[0]['node_id'] == 'capture'
             assert path[-1]['node_id'] == 'termination_blackbox'
 
-    def test_enumerate_branching_paths(self, tmp_path, sample_pipeline_with_loop, mock_config):
+    def test_enumerate_branching_paths(self, tmp_path, sample_pipeline_with_loop, mock_photo_admin_config):
         """Test enumeration with Branching nodes."""
         # Create config file with branching
         config_file = tmp_path / "test_config.yaml"
@@ -693,7 +717,7 @@ class TestFileValidation:
 class TestCustomPipelines:
     """Tests for custom pipeline configurations (Phase 4 - User Story 2)."""
 
-    def test_custom_processing_methods(self, tmp_path, mock_config):
+    def test_custom_processing_methods(self, tmp_path, mock_photo_admin_config):
         """Test integration with custom processing methods."""
         # Create pipeline with custom processing methods
         custom_pipeline = {
@@ -764,7 +788,7 @@ class TestCustomPipelines:
         pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Validate structure
-        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_config)
+        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_photo_admin_config)
         assert len(errors) == 0
 
         # Enumerate paths
@@ -780,7 +804,7 @@ class TestCustomPipelines:
         assert 'AB3D0001-DxO_DeepPRIME_XD2s.DNG' in expected_files
         assert 'AB3D0001-DxO_DeepPRIME_XD2s-Edit.TIF' in expected_files
 
-    def test_pairing_node_in_pipeline(self, tmp_path, mock_config):
+    def test_pairing_node_in_pipeline(self, tmp_path, mock_photo_admin_config):
         """Test that Pairing nodes are handled correctly in pipeline."""
         # Create pipeline with Pairing node (HDR)
         pairing_pipeline = {
@@ -859,7 +883,7 @@ class TestCustomPipelines:
         assert pairing_node.input_count == 3
 
         # Validate structure should pass
-        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_config)
+        errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_photo_admin_config)
         assert len(errors) == 0
 
         # Enumerate paths - should handle Pairing node
@@ -952,7 +976,7 @@ class TestCounterLooping:
         assert 'AB3D0001-3.CR3' in expected_third
         assert 'AB3D0001-3-DxO_DeepPRIME_XD2s.DNG' in expected_third
 
-    def test_multiple_specific_images_different_statuses(self, tmp_path, mock_config):
+    def test_multiple_specific_images_different_statuses(self, tmp_path, mock_photo_admin_config):
         """Test T037: ImageGroup with 2 SpecificImages, different validation statuses."""
         # Create simple pipeline
         pipeline_config = {
@@ -1042,21 +1066,316 @@ class TestCounterLooping:
 
 
 # =============================================================================
-# Phase 4+: Advanced Feature Tests (To be implemented)
+# Phase 6: Smart Caching Tests (User Story 4)
 # =============================================================================
 
 class TestCaching:
-    """Tests for cache operations (Phase 6 - TODO)."""
+    """Tests for cache operations (Phase 6 - User Story 4)."""
 
-    def test_cache_invalidation_on_config_change(self):
-        """Test cache invalidation when pipeline config changes."""
-        # TODO: Implement in Phase 6
-        pass
+    def test_calculate_pipeline_config_hash(self, tmp_path):
+        """Test T042: calculate_pipeline_config_hash() with SHA256."""
+        # Create test config file
+        config_content = """
+processing_pipelines:
+  default:
+    nodes:
+      - id: capture
+        type: Capture
+        name: Camera Capture
+        output: [raw_file]
+      - id: raw_file
+        type: File
+        extension: .CR3
+        name: Raw File
+        output: [termination]
+      - id: termination
+        type: Termination
+        termination_type: Archive
+        name: Archive Ready
+        output: []
+"""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(config_content, encoding='utf-8')
 
-    def test_cache_invalidation_on_folder_change(self):
-        """Test cache invalidation when folder contents change."""
-        # TODO: Implement in Phase 6
-        pass
+        # Calculate hash
+        hash1 = pipeline_validation.calculate_pipeline_config_hash(config_path)
+
+        # Verify it's a valid SHA256 hash (64 hex characters)
+        assert len(hash1) == 64
+        assert all(c in '0123456789abcdef' for c in hash1)
+
+        # Verify hash is deterministic
+        hash2 = pipeline_validation.calculate_pipeline_config_hash(config_path)
+        assert hash1 == hash2
+
+        # Modify pipeline config and verify hash changes
+        modified_content = config_content.replace('Camera Capture', 'Modified Capture')
+        config_path.write_text(modified_content, encoding='utf-8')
+        hash3 = pipeline_validation.calculate_pipeline_config_hash(config_path)
+        assert hash3 != hash1
+
+        # Verify hash is insensitive to whitespace/formatting (same structure = same hash)
+        reformatted_content = config_content.replace('  ', '    ')  # Different indentation
+        config_path.write_text(config_content, encoding='utf-8')
+        hash4 = pipeline_validation.calculate_pipeline_config_hash(config_path)
+        assert hash4 == hash1  # Structure unchanged, hash should match
+
+    def test_get_folder_content_hash(self, tmp_path):
+        """Test T042: get_folder_content_hash() reads from Photo Pairing cache."""
+        # Create mock Photo Pairing cache
+        cache_data = {
+            'version': '1.0',
+            'metadata': {
+                'file_list_hash': 'abc123def456' + '0' * 52  # 64-char hash
+            },
+            'imagegroups': []
+        }
+        cache_path = tmp_path / '.photo_pairing_imagegroups'
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f)
+
+        # Get folder content hash
+        folder_hash = pipeline_validation.get_folder_content_hash(tmp_path)
+        assert folder_hash == 'abc123def456' + '0' * 52
+
+        # Test error when cache doesn't exist
+        (tmp_path / 'empty_folder').mkdir()
+        with pytest.raises(FileNotFoundError, match="Photo Pairing cache not found"):
+            pipeline_validation.get_folder_content_hash(tmp_path / 'empty_folder')
+
+    def test_calculate_validation_results_hash(self):
+        """Test T042: calculate_validation_results_hash() with SHA256."""
+        # Create test validation results
+        validation_results = [
+            {
+                'unique_id': 'AB3D0001',
+                'status': 'CONSISTENT',
+                'matched_paths': ['path1']
+            },
+            {
+                'unique_id': 'AB3D0002',
+                'status': 'PARTIAL',
+                'matched_paths': []
+            }
+        ]
+
+        # Calculate hash
+        hash1 = pipeline_validation.calculate_validation_results_hash(validation_results)
+
+        # Verify it's a valid SHA256 hash
+        assert len(hash1) == 64
+        assert all(c in '0123456789abcdef' for c in hash1)
+
+        # Verify hash is deterministic
+        hash2 = pipeline_validation.calculate_validation_results_hash(validation_results)
+        assert hash1 == hash2
+
+        # Modify results and verify hash changes
+        modified_results = validation_results.copy()
+        modified_results[0] = modified_results[0].copy()
+        modified_results[0]['status'] = 'PARTIAL'
+        hash3 = pipeline_validation.calculate_validation_results_hash(modified_results)
+        assert hash3 != hash1
+
+    def test_cache_invalidation_detection(self, tmp_path, mock_config):
+        """Test T043: Cache invalidation detection (pipeline changed, folder changed, manual edits)."""
+        # Setup Photo Pairing cache
+        photo_cache_data = {
+            'version': '1.0',
+            'metadata': {
+                'file_list_hash': 'folder_hash_v1' + '0' * 51
+            },
+            'imagegroups': []
+        }
+        photo_cache_path = tmp_path / '.photo_pairing_imagegroups'
+        with open(photo_cache_path, 'w', encoding='utf-8') as f:
+            json.dump(photo_cache_data, f)
+
+        # Create initial pipeline validation cache
+        validation_results = [{'unique_id': 'AB3D0001', 'status': 'CONSISTENT'}]
+        validation_hash = pipeline_validation.calculate_validation_results_hash(validation_results)
+        pipeline_hash = pipeline_validation.calculate_pipeline_config_hash(mock_config)
+        folder_hash = 'folder_hash_v1' + '0' * 51
+
+        cache_data = {
+            'version': '1.0',
+            'tool_version': '1.0.0',
+            'metadata': {
+                'pipeline_config_hash': pipeline_hash,
+                'folder_content_hash': folder_hash,
+                'validation_results_hash': validation_hash
+            },
+            'validation_results': validation_results
+        }
+
+        # Test 1: Valid cache (no changes)
+        validation = pipeline_validation.validate_pipeline_cache(
+            cache_data, mock_config, tmp_path
+        )
+        assert validation['valid'] is True
+        assert validation['pipeline_changed'] is False
+        assert validation['folder_changed'] is False
+        assert validation['cache_edited'] is False
+
+        # Test 2: Pipeline config changed
+        modified_pipeline = tmp_path / "modified_config.yaml"
+        mock_config_content = mock_config.read_text(encoding='utf-8')
+        modified_content = mock_config_content.replace('Camera Capture', 'Modified Capture')
+        modified_pipeline.write_text(modified_content, encoding='utf-8')
+
+        validation = pipeline_validation.validate_pipeline_cache(
+            cache_data, modified_pipeline, tmp_path
+        )
+        assert validation['valid'] is False
+        assert validation['pipeline_changed'] is True
+        assert validation['folder_changed'] is False
+        assert validation['cache_edited'] is False
+
+        # Test 3: Folder content changed (different file_list_hash in Photo Pairing cache)
+        photo_cache_data['metadata']['file_list_hash'] = 'folder_hash_v2' + '0' * 51
+        with open(photo_cache_path, 'w', encoding='utf-8') as f:
+            json.dump(photo_cache_data, f)
+
+        validation = pipeline_validation.validate_pipeline_cache(
+            cache_data, mock_config, tmp_path
+        )
+        assert validation['valid'] is False
+        assert validation['pipeline_changed'] is False
+        assert validation['folder_changed'] is True
+        assert validation['cache_edited'] is False
+
+        # Reset folder hash for next test
+        photo_cache_data['metadata']['file_list_hash'] = 'folder_hash_v1' + '0' * 51
+        with open(photo_cache_path, 'w', encoding='utf-8') as f:
+            json.dump(photo_cache_data, f)
+
+        # Test 4: Cache manually edited (validation_results modified)
+        manually_edited_cache = cache_data.copy()
+        manually_edited_cache['validation_results'] = [
+            {'unique_id': 'AB3D0001', 'status': 'PARTIAL'}  # Changed status
+        ]
+
+        validation = pipeline_validation.validate_pipeline_cache(
+            manually_edited_cache, mock_config, tmp_path
+        )
+        assert validation['valid'] is False
+        assert validation['pipeline_changed'] is False
+        assert validation['folder_changed'] is False
+        assert validation['cache_edited'] is True
+
+    def test_cache_reuse_when_unchanged(self, tmp_path, mock_config):
+        """Test T044: Integration test for cache reuse when folder/pipeline unchanged."""
+        # Setup Photo Pairing cache
+        imagegroups = [
+            {
+                'group_id': 'AB3D0001',
+                'camera_id': 'AB3D',
+                'counter': '0001',
+                'separate_images': {
+                    '': {'files': ['AB3D0001.CR3', 'AB3D0001.XMP']}
+                }
+            }
+        ]
+        photo_cache_data = {
+            'version': '1.0',
+            'metadata': {
+                'file_list_hash': 'stable_hash' + '0' * 53
+            },
+            'imagegroups': imagegroups
+        }
+        photo_cache_path = tmp_path / '.photo_pairing_imagegroups'
+        with open(photo_cache_path, 'w', encoding='utf-8') as f:
+            json.dump(photo_cache_data, f)
+
+        # Create test files
+        (tmp_path / 'AB3D0001.CR3').touch()
+        (tmp_path / 'AB3D0001.XMP').touch()
+
+        # Get hashes for cache
+        pipeline_hash = pipeline_validation.calculate_pipeline_config_hash(mock_config)
+        folder_hash = pipeline_validation.get_folder_content_hash(tmp_path)
+
+        # Create and save cache with validation results
+        validation_results = [
+            {
+                'unique_id': 'AB3D0001',
+                'group_id': 'AB3D0001',
+                'status': 'CONSISTENT',
+                'matched_paths_count': 1
+            }
+        ]
+
+        success = pipeline_validation.save_pipeline_cache(
+            tmp_path,
+            validation_results,
+            pipeline_hash,
+            folder_hash
+        )
+        assert success is True
+
+        # Verify cache file was created
+        cache_path = tmp_path / '.pipeline_validation_cache.json'
+        assert cache_path.exists()
+
+        # Load cache and verify it's valid
+        loaded_cache = pipeline_validation.load_pipeline_cache(tmp_path)
+        assert loaded_cache is not None
+        assert loaded_cache['validation_results'] == validation_results
+
+        # Validate cache (should be valid since nothing changed)
+        validation = pipeline_validation.validate_pipeline_cache(
+            loaded_cache, mock_config, tmp_path
+        )
+        assert validation['valid'] is True
+        assert loaded_cache['metadata']['pipeline_config_hash'] == pipeline_hash
+        assert loaded_cache['metadata']['folder_content_hash'] == folder_hash
+
+    def test_cache_invalidation_on_config_change(self, tmp_path, mock_config):
+        """Test T045: Integration test for cache invalidation when pipeline config modified."""
+        # Setup Photo Pairing cache
+        photo_cache_data = {
+            'version': '1.0',
+            'metadata': {
+                'file_list_hash': 'stable_hash' + '0' * 53
+            },
+            'imagegroups': []
+        }
+        with open(tmp_path / '.photo_pairing_imagegroups', 'w', encoding='utf-8') as f:
+            json.dump(photo_cache_data, f)
+
+        # Get initial pipeline hash
+        initial_hash = pipeline_validation.calculate_pipeline_config_hash(mock_config)
+        folder_hash = pipeline_validation.get_folder_content_hash(tmp_path)
+
+        # Save cache with initial hash
+        validation_results = [{'unique_id': 'AB3D0001', 'status': 'CONSISTENT'}]
+        pipeline_validation.save_pipeline_cache(
+            tmp_path, validation_results, initial_hash, folder_hash
+        )
+
+        # Modify pipeline config
+        config_content = mock_config.read_text(encoding='utf-8')
+        modified_content = config_content.replace(
+            'Camera Capture',
+            'Modified Camera Capture'
+        )
+        mock_config.write_text(modified_content, encoding='utf-8')
+
+        # Get new pipeline hash
+        new_hash = pipeline_validation.calculate_pipeline_config_hash(mock_config)
+        assert new_hash != initial_hash  # Hash should change
+
+        # Load cache and validate
+        cache = pipeline_validation.load_pipeline_cache(tmp_path)
+        validation = pipeline_validation.validate_pipeline_cache(
+            cache, mock_config, tmp_path
+        )
+
+        # Cache should be invalid due to pipeline change
+        assert validation['valid'] is False
+        assert validation['pipeline_changed'] is True
+        assert validation['folder_changed'] is False
+        assert validation['cache_edited'] is False
 
 
 class TestHTMLReportGeneration:

@@ -27,6 +27,7 @@ import sys
 import signal
 import yaml
 import json
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -1129,6 +1130,341 @@ def validate_prerequisites(args):
             return False
 
     return True
+
+
+# =============================================================================
+# Cache Management Functions (Phase 6 - User Story 4)
+# =============================================================================
+
+def calculate_pipeline_config_hash(config_path: Path) -> str:
+    """
+    Calculate SHA256 hash of pipeline configuration structure.
+
+    Uses JSON serialization with sorted keys to ensure hash is deterministic
+    and insensitive to YAML formatting changes (whitespace, comments).
+
+    Args:
+        config_path: Path to config.yaml file
+
+    Returns:
+        str: SHA256 hash (64-character hexdigest)
+    """
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+
+    # Extract only the processing_pipelines section for hashing
+    # This ensures that changes to other config sections (photo_extensions,
+    # camera_mappings, etc.) don't invalidate pipeline validation cache
+    pipeline_section = config.get('processing_pipelines', {})
+
+    # Serialize to JSON with sorted keys for deterministic hashing
+    config_str = json.dumps(pipeline_section, sort_keys=True, default=str)
+
+    return hashlib.sha256(config_str.encode()).hexdigest()
+
+
+def get_folder_content_hash(folder_path: Path) -> str:
+    """
+    Get folder content hash from Photo Pairing cache.
+
+    Reuses the file_list_hash calculated by Photo Pairing Tool to avoid
+    redundant folder scanning. This hash changes when files are added,
+    removed, or modified in the folder.
+
+    Args:
+        folder_path: Path to analyzed folder
+
+    Returns:
+        str: SHA256 hash of file list from Photo Pairing cache
+
+    Raises:
+        FileNotFoundError: If Photo Pairing cache doesn't exist
+        KeyError: If cache is malformed (missing expected fields)
+    """
+    cache_path = folder_path / '.photo_pairing_imagegroups'
+
+    if not cache_path.exists():
+        raise FileNotFoundError(
+            f"Photo Pairing cache not found. Run Photo Pairing Tool first.\n"
+            f"Expected cache file: {cache_path}"
+        )
+
+    with open(cache_path, 'r', encoding='utf-8') as f:
+        cache_data = json.load(f)
+
+    try:
+        return cache_data['metadata']['file_list_hash']
+    except KeyError as e:
+        raise KeyError(
+            f"Photo Pairing cache is malformed (missing {e}). "
+            "Re-run Photo Pairing Tool to regenerate cache."
+        ) from e
+
+
+def calculate_validation_results_hash(validation_results: list) -> str:
+    """
+    Calculate SHA256 hash of validation results structure.
+
+    Used to detect manual edits to pipeline validation cache file.
+    If user manually modifies validation_results in the JSON cache,
+    the hash mismatch will trigger cache invalidation.
+
+    Args:
+        validation_results: List of ValidationResult dictionaries
+
+    Returns:
+        str: SHA256 hash (64-character hexdigest)
+    """
+    # Serialize to JSON with sorted keys for deterministic hashing
+    data_str = json.dumps(validation_results, sort_keys=True, default=str)
+    return hashlib.sha256(data_str.encode()).hexdigest()
+
+
+def save_pipeline_cache(
+    folder_path: Path,
+    validation_results: list,
+    pipeline_config_hash: str,
+    folder_content_hash: str
+) -> bool:
+    """
+    Save pipeline validation results to .pipeline_validation_cache.json file.
+
+    Cache structure follows Photo Pairing Tool's pattern with metadata
+    including all hashes for invalidation detection.
+
+    Args:
+        folder_path: Path to analyzed folder
+        validation_results: List of ValidationResult dictionaries
+        pipeline_config_hash: Hash of pipeline configuration
+        folder_content_hash: Hash of folder file list (from Photo Pairing)
+
+    Returns:
+        bool: True if cache was saved successfully, False otherwise
+    """
+    try:
+        cache_path = folder_path / '.pipeline_validation_cache.json'
+
+        # Calculate validation results hash for manual edit detection
+        validation_results_hash = calculate_validation_results_hash(validation_results)
+
+        # Calculate statistics
+        total_groups = len(validation_results)
+        consistent_groups = sum(
+            1 for r in validation_results
+            if r.get('status') == 'CONSISTENT'
+        )
+        partial_groups = sum(
+            1 for r in validation_results
+            if r.get('status') == 'PARTIAL'
+        )
+        inconsistent_groups = sum(
+            1 for r in validation_results
+            if r.get('status') == 'INCONSISTENT'
+        )
+        warning_groups = sum(
+            1 for r in validation_results
+            if r.get('status') == 'CONSISTENT_WITH_WARNING'
+        )
+
+        cache_data = {
+            'version': '1.0',
+            'created_at': datetime.utcnow().isoformat() + 'Z',
+            'folder_path': str(folder_path.absolute()),
+            'tool_version': TOOL_VERSION,
+            'metadata': {
+                'pipeline_config_hash': pipeline_config_hash,
+                'folder_content_hash': folder_content_hash,
+                'validation_results_hash': validation_results_hash,
+                'total_groups': total_groups,
+                'consistent_groups': consistent_groups,
+                'partial_groups': partial_groups,
+                'inconsistent_groups': inconsistent_groups,
+                'warning_groups': warning_groups
+            },
+            'validation_results': validation_results
+        }
+
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, indent=2, default=str)
+
+        return True
+    except (IOError, OSError, PermissionError) as e:
+        print(f"⚠ Warning: Could not save cache file: {e}")
+        print("  Cache will not be available for next run.")
+        return False
+
+
+def load_pipeline_cache(folder_path: Path) -> Optional[dict]:
+    """
+    Load cached pipeline validation data from .pipeline_validation_cache.json file.
+
+    Performs basic validation (file exists, valid JSON, version compatibility).
+    Does NOT validate hashes - use validate_pipeline_cache() for that.
+
+    Args:
+        folder_path: Path to folder to check for cache
+
+    Returns:
+        dict or None: Cache data if exists and valid, None otherwise
+    """
+    cache_path = folder_path / '.pipeline_validation_cache.json'
+
+    if not cache_path.exists():
+        return None
+
+    try:
+        with open(cache_path, 'r', encoding='utf-8') as f:
+            cache_data = json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"⚠ Warning: Could not read cache file: {e}")
+        print("  Cache will be ignored and regenerated.")
+        return None
+
+    # Auto-invalidate on version mismatch (no user prompt)
+    if not is_cache_version_compatible(cache_data):
+        cached_version = cache_data.get('tool_version', '0.0.0')
+        print(f"ℹ Cache version {cached_version} incompatible with {TOOL_VERSION}")
+        print("  Regenerating cache with current version...")
+        return None
+
+    return cache_data
+
+
+def is_cache_version_compatible(cache_data: dict) -> bool:
+    """
+    Check if cache version is compatible with current tool version.
+
+    Uses semantic versioning: major version mismatch = incompatible.
+    Minor/patch version differences are backward compatible.
+
+    Args:
+        cache_data: Loaded cache dictionary
+
+    Returns:
+        bool: True if compatible, False if invalidation required
+    """
+    cached_version = cache_data.get('tool_version', '0.0.0')
+
+    try:
+        # Semantic versioning: Major version mismatch = incompatible
+        cached_major = int(cached_version.split('.')[0])
+        current_major = int(TOOL_VERSION.split('.')[0])
+
+        if cached_major != current_major:
+            return False  # Major version change = breaking change
+
+        # Minor/patch version differences are compatible
+        return True
+    except (ValueError, IndexError):
+        # Invalid version format - treat as incompatible
+        return False
+
+
+def validate_pipeline_cache(
+    cache_data: dict,
+    config_path: Path,
+    folder_path: Path
+) -> dict:
+    """
+    Validate pipeline validation cache by comparing hashes.
+
+    Checks three invalidation triggers:
+    1. Pipeline config changed (pipeline_config_hash mismatch)
+    2. Folder content changed (folder_content_hash mismatch)
+    3. Cache manually edited (validation_results_hash mismatch)
+
+    Args:
+        cache_data: Dictionary loaded from cache file
+        config_path: Path to current config.yaml
+        folder_path: Path to analyzed folder
+
+    Returns:
+        dict: {
+            'valid': bool,
+            'pipeline_changed': bool,
+            'folder_changed': bool,
+            'cache_edited': bool
+        }
+    """
+    if not cache_data:
+        return {
+            'valid': False,
+            'pipeline_changed': True,
+            'folder_changed': True,
+            'cache_edited': False
+        }
+
+    try:
+        # Check pipeline config hash
+        current_pipeline_hash = calculate_pipeline_config_hash(config_path)
+        cached_pipeline_hash = cache_data.get('metadata', {}).get('pipeline_config_hash', '')
+        pipeline_changed = current_pipeline_hash != cached_pipeline_hash
+
+        # Check folder content hash (from Photo Pairing cache)
+        current_folder_hash = get_folder_content_hash(folder_path)
+        cached_folder_hash = cache_data.get('metadata', {}).get('folder_content_hash', '')
+        folder_changed = current_folder_hash != cached_folder_hash
+
+        # Check validation results hash (detect manual edits)
+        cached_validation_hash = cache_data.get('metadata', {}).get('validation_results_hash', '')
+        recalculated_hash = calculate_validation_results_hash(
+            cache_data.get('validation_results', [])
+        )
+        cache_edited = cached_validation_hash != recalculated_hash
+
+        valid = not (pipeline_changed or folder_changed or cache_edited)
+
+        return {
+            'valid': valid,
+            'pipeline_changed': pipeline_changed,
+            'folder_changed': folder_changed,
+            'cache_edited': cache_edited
+        }
+    except Exception as e:
+        # Cache data is corrupted or malformed
+        print(f"⚠ Warning: Cache validation failed: {e}")
+        print("  Cache will be ignored and regenerated.")
+        return {
+            'valid': False,
+            'pipeline_changed': True,
+            'folder_changed': True,
+            'cache_edited': True
+        }
+
+
+def prompt_cache_action(pipeline_changed: bool, folder_changed: bool, cache_edited: bool) -> Optional[str]:
+    """
+    Prompt user for action when pipeline validation cache is stale.
+
+    Args:
+        pipeline_changed: Boolean indicating if pipeline config changed
+        folder_changed: Boolean indicating if folder content changed
+        cache_edited: Boolean indicating if cache file was manually edited
+
+    Returns:
+        str: 'use_cache', 'regenerate', or None if cancelled
+    """
+    print("\n⚠ Found cached pipeline validation data")
+    print("⚠ Changes detected:")
+    print(f"  - Pipeline config: {'CHANGED' if pipeline_changed else 'OK'}")
+    print(f"  - Folder content: {'CHANGED' if folder_changed else 'OK'}")
+    print(f"  - Cache file: {'EDITED' if cache_edited else 'OK'}")
+    print("\nChoose an option:")
+    print("  (a) Use cached data anyway (fast, may be outdated)")
+    print("  (b) Regenerate validation (slow, reflects current state)")
+
+    try:
+        choice = input("Your choice [a/b]: ").strip().lower()
+        if choice == 'a':
+            return 'use_cache'
+        elif choice == 'b':
+            return 'regenerate'
+        else:
+            print("Invalid choice. Please enter 'a' or 'b'.")
+            return prompt_cache_action(pipeline_changed, folder_changed, cache_edited)
+    except (KeyboardInterrupt, EOFError):
+        print("\n\nInterrupted by user")
+        return None
 
 
 def main():
