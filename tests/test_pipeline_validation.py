@@ -2322,3 +2322,92 @@ class TestPairingNodes:
 
             print(f"\nEarly termination paths: {len(early_term_paths)}")
             print(f"Late termination paths: {len(late_term_paths)}")
+
+    def test_process_node_with_multiple_methods_creates_branching(self, tmp_path):
+        """Test that Process nodes with multiple method_ids create parallel paths (like branching)."""
+        # Create pipeline with Process node having 2 methods
+        pipeline_config = {
+            'default': {
+                'nodes': [
+                    {
+                        'id': 'capture',
+                        'type': 'Capture',
+                        'name': 'Capture',
+                        'output': ['raw_file']
+                    },
+                    {
+                        'id': 'raw_file',
+                        'type': 'File',
+                        'extension': '.CR3',
+                        'name': 'Raw File',
+                        'output': ['process_with_multiple_methods']
+                    },
+                    {
+                        'id': 'process_with_multiple_methods',
+                        'type': 'Process',
+                        'method_ids': ['MethodA', 'MethodB'],  # Two methods = two branches
+                        'name': 'Multi-Method Process',
+                        'output': ['dng_file']
+                    },
+                    {
+                        'id': 'dng_file',
+                        'type': 'File',
+                        'extension': '.DNG',
+                        'name': 'DNG File',
+                        'output': ['termination']
+                    },
+                    {
+                        'id': 'termination',
+                        'type': 'Termination',
+                        'termination_type': 'Archive',
+                        'name': 'Archive',
+                        'output': []
+                    }
+                ]
+            }
+        }
+
+        # Create config
+        config_file = tmp_path / "config.yaml"
+        config_data = {'processing_pipelines': pipeline_config}
+        with open(config_file, 'w') as f:
+            yaml.dump(config_data, f)
+
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
+
+        # Enumerate paths
+        paths = pipeline_validation.enumerate_all_paths(pipeline)
+
+        # Should have 2 paths (one per method)
+        assert len(paths) == 2, f"Expected 2 paths (one per method), got {len(paths)}"
+
+        # Collect methods from each path
+        methods_in_paths = []
+        for path in paths:
+            for node in path:
+                if node.get('node_id') == 'process_with_multiple_methods':
+                    method_ids = node.get('method_ids', [])
+                    assert len(method_ids) == 1, f"Each path should have exactly 1 method, got {len(method_ids)}"
+                    methods_in_paths.append(method_ids[0])
+                    break
+
+        # Should have both methods, one per path
+        assert sorted(methods_in_paths) == ['MethodA', 'MethodB']
+
+        # Test expected file generation
+        files_path1 = pipeline_validation.generate_expected_files(paths[0], 'TEST0001')
+        files_path2 = pipeline_validation.generate_expected_files(paths[1], 'TEST0001')
+
+        # Each path should generate different files based on its method
+        assert 'TEST0001.CR3' in files_path1
+        assert 'TEST0001.CR3' in files_path2
+
+        # One path should have MethodA suffix, other should have MethodB
+        dng_files = []
+        for files in [files_path1, files_path2]:
+            dng = [f for f in files if f.endswith('.DNG')][0]
+            dng_files.append(dng)
+
+        assert 'TEST0001-MethodA.DNG' in dng_files
+        assert 'TEST0001-MethodB.DNG' in dng_files

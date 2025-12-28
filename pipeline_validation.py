@@ -682,6 +682,7 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
         if isinstance(node, FileNode):
             node_info['extension'] = node.extension
         elif isinstance(node, ProcessNode):
+            # Store method_ids temporarily (will be replaced with single method per path)
             node_info['method_ids'] = node.method_ids
         elif isinstance(node, TerminationNode):
             node_info['termination_type'] = node.termination_type
@@ -734,12 +735,31 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
         else:
             new_state = state
 
-        # Explore all output nodes
-        for output_id in node.output:
-            dfs(output_id, current_path, new_state)
+        # PROCESS NODE WITH MULTIPLE METHOD_IDS: Create parallel paths (like branching)
+        if isinstance(node, ProcessNode) and len(node.method_ids) > 1:
+            # Remove the node we just added (we'll add it again with single method per iteration)
+            current_path.pop()
 
-        # Backtrack
-        current_path.pop()
+            # Each method_id creates a separate path (user chooses one at runtime)
+            for method_id in node.method_ids:
+                # Create a new node_info with only this single method_id
+                method_node_info = node_info.copy()
+                method_node_info['method_ids'] = [method_id]
+                current_path.append(method_node_info)
+
+                # Explore all output nodes with this method choice
+                for output_id in node.output:
+                    dfs(output_id, current_path, new_state)
+
+                # Backtrack this method's node
+                current_path.pop()
+        else:
+            # Single method_id (or no method_ids) - explore outputs normally
+            for output_id in node.output:
+                dfs(output_id, current_path, new_state)
+
+            # Backtrack
+            current_path.pop()
 
     # Start DFS from Capture node
     initial_state = PathState()
@@ -1142,12 +1162,31 @@ def dfs_to_target_node(
         else:
             new_state = current_state
 
-        # Explore all output nodes
-        for output_id in node.output:
-            dfs(output_id, path, new_state, node_id)
+        # PROCESS NODE WITH MULTIPLE METHOD_IDS: Create parallel paths (like branching)
+        if isinstance(node, ProcessNode) and len(node.method_ids) > 1:
+            # Remove the node we just added (we'll add it again with single method per iteration)
+            path.pop()
 
-        # Backtrack
-        path.pop()
+            # Each method_id creates a separate path (user chooses one at runtime)
+            for method_id in node.method_ids:
+                # Create a new node_info with only this single method_id
+                method_node_info = node_info.copy()
+                method_node_info['method_ids'] = [method_id]
+                path.append(method_node_info)
+
+                # Explore all output nodes with this method choice
+                for output_id in node.output:
+                    dfs(output_id, path, new_state, node_id)
+
+                # Backtrack this method's node
+                path.pop()
+        else:
+            # Single method_id (or no method_ids) - explore outputs normally
+            for output_id in node.output:
+                dfs(output_id, path, new_state, node_id)
+
+            # Backtrack
+            path.pop()
 
     # Start DFS from start_node
     dfs(start_node_id, current_path, state, start_node_id)
@@ -1245,12 +1284,31 @@ def dfs_to_termination_nodes(
         else:
             new_state = current_state
 
-        # Explore all output nodes
-        for output_id in node.output:
-            dfs(output_id, path, new_state)
+        # PROCESS NODE WITH MULTIPLE METHOD_IDS: Create parallel paths (like branching)
+        if isinstance(node, ProcessNode) and len(node.method_ids) > 1:
+            # Remove the node we just added (we'll add it again with single method per iteration)
+            path.pop()
 
-        # Backtrack
-        path.pop()
+            # Each method_id creates a separate path (user chooses one at runtime)
+            for method_id in node.method_ids:
+                # Create a new node_info with only this single method_id
+                method_node_info = node_info.copy()
+                method_node_info['method_ids'] = [method_id]
+                path.append(method_node_info)
+
+                # Explore all output nodes with this method choice
+                for output_id in node.output:
+                    dfs(output_id, path, new_state)
+
+                # Backtrack this method's node
+                path.pop()
+        else:
+            # Single method_id (or no method_ids) - explore outputs normally
+            for output_id in node.output:
+                dfs(output_id, path, new_state)
+
+            # Backtrack
+            path.pop()
 
     # Start DFS from start_node
     dfs(start_node_id, current_path, state)
