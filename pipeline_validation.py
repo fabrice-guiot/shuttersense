@@ -40,7 +40,8 @@ from utils.config_manager import PhotoAdminConfig
 # Tool version (semantic versioning)
 TOOL_VERSION = "1.0.0"
 
-# Maximum loop iterations for Process nodes to prevent infinite path enumeration
+# Maximum loop iterations per node to prevent infinite path enumeration
+# Applied to all node types except Capture and Termination nodes
 MAX_ITERATIONS = 5
 
 
@@ -618,10 +619,10 @@ class PathState:
     """
     State tracking for DFS traversal through pipeline graph.
 
-    Used to track iteration counts per Process node to prevent infinite loops.
+    Used to track iteration counts per node (except Capture/Termination) to prevent infinite loops.
 
     Attributes:
-        node_iterations: Dictionary mapping Process node IDs to iteration count
+        node_iterations: Dictionary mapping node IDs to iteration count (all nodes except Capture/Termination)
         current_suffix: Accumulated suffix from all Process nodes traversed
     """
     node_iterations: Dict[str, int] = field(default_factory=dict)
@@ -633,7 +634,8 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
     Enumerate all possible paths from Capture to Termination nodes using DFS.
 
     This function traverses the pipeline graph depth-first, exploring all branches
-    and handling loops with truncation after MAX_ITERATIONS per Process node.
+    and handling loops with truncation after MAX_ITERATIONS per node (except Capture
+    and Termination nodes, which appear exactly once per path by design).
 
     Args:
         pipeline: PipelineConfig object with all nodes
@@ -645,7 +647,7 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
         - extension: File extension (for File nodes)
         - method_ids: Processing methods (for Process nodes)
         - truncated: Whether this path was truncated due to loop limit
-        - iteration_count: Number of times Process node was visited
+        - iteration_count: Number of times node was visited (all nodes except Capture/Termination)
 
     Example path:
         [
@@ -681,12 +683,19 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
             node_info['extension'] = node.extension
         elif isinstance(node, ProcessNode):
             node_info['method_ids'] = node.method_ids
-            # Track iteration count for this Process node
-            iteration_count = state.node_iterations.get(node.id, 0) + 1
-            node_info['iteration_count'] = iteration_count
         elif isinstance(node, TerminationNode):
             node_info['termination_type'] = node.termination_type
             node_info['truncated'] = False
+        elif isinstance(node, BranchingNode):
+            node_info['condition_description'] = node.condition_description
+        elif isinstance(node, PairingNode):
+            node_info['pairing_type'] = node.pairing_type
+            node_info['input_count'] = node.input_count
+
+        # Track iteration count for all nodes except Capture and Termination
+        if not isinstance(node, (CaptureNode, TerminationNode)):
+            iteration_count = state.node_iterations.get(node.id, 0) + 1
+            node_info['iteration_count'] = iteration_count
 
         # Add node to current path
         current_path.append(node_info)
@@ -697,8 +706,8 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
             current_path.pop()
             return
 
-        # Handle Process nodes - check loop limit
-        if isinstance(node, ProcessNode):
+        # Check loop limit for all nodes except Capture and Termination
+        if not isinstance(node, (CaptureNode, TerminationNode)):
             iteration_count = state.node_iterations.get(node.id, 0) + 1
 
             if iteration_count > MAX_ITERATIONS:
@@ -713,10 +722,10 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
                 current_path.append(truncated_termination)
                 all_paths.append(current_path.copy())
                 current_path.pop()  # Remove truncation marker
-                current_path.pop()  # Remove process node
+                current_path.pop()  # Remove current node
                 return
 
-            # Update iteration count
+            # Update iteration count for this node
             new_state = PathState(
                 node_iterations=state.node_iterations.copy(),
                 current_suffix=state.current_suffix
@@ -788,6 +797,40 @@ def generate_expected_files(path: List[Dict[str, Any]], base_filename: str) -> L
                     current_suffix += f"-{method_id}"
 
     return expected_files
+
+
+def generate_sample_base_filename(config: PhotoAdminConfig) -> str:
+    """
+    Generate a sample base filename for graph visualization debugging.
+
+    Uses the first camera ID from camera_mappings in config and a random
+    counter between 0001 and 9999.
+
+    Args:
+        config: PhotoAdminConfig object
+
+    Returns:
+        Sample base filename (e.g., "AB3D0742")
+
+    Example:
+        If config has camera_mappings = {'AB3D': [...], 'XY12': [...]},
+        returns something like "AB3D0742"
+    """
+    import random
+
+    # Get first camera ID from config
+    camera_mappings = config.camera_mappings
+    if camera_mappings:
+        first_camera_id = list(camera_mappings.keys())[0]
+    else:
+        # Fallback to a default camera ID if none configured
+        first_camera_id = "XXXX"
+
+    # Generate random counter between 1 and 9999
+    counter = random.randint(1, 9999)
+    counter_str = f"{counter:04d}"  # Pad to 4 digits
+
+    return f"{first_camera_id}{counter_str}"
 
 
 def classify_validation_status(actual_files: set, expected_files: set) -> ValidationStatus:
@@ -1085,6 +1128,13 @@ For more information, see docs/pipeline-validation.md
     )
 
     parser.add_argument(
+        '--display-graph',
+        action='store_true',
+        help='Display pipeline graph visualization with sample filenames in HTML report. ' \
+             'When used with --validate-config, generates report without requiring a folder argument.'
+    )
+
+    parser.add_argument(
         '--verbose',
         action='store_true',
         help='Print detailed information about configuration loading and validation'
@@ -1099,8 +1149,10 @@ For more information, see docs/pipeline-validation.md
     args = parser.parse_args()
 
     # Validate arguments
-    if not args.cache_status and not args.validate_config and args.folder_path is None:
-        parser.error('folder_path is required unless using --cache-status or --validate-config')
+    # folder_path is optional when using --cache-status, --validate-config, or --display-graph with --validate-config
+    standalone_modes = args.cache_status or args.validate_config or (args.display_graph and args.validate_config)
+    if not standalone_modes and args.folder_path is None:
+        parser.error('folder_path is required unless using --cache-status, --validate-config, or --display-graph with --validate-config')
 
     if args.folder_path and not args.folder_path.exists():
         parser.error(f"Folder does not exist: {args.folder_path}")
@@ -1477,6 +1529,74 @@ def prompt_cache_action(pipeline_changed: bool, folder_changed: bool, cache_edit
 # HTML Report Generation Functions (Phase 7 - User Story 5)
 # =============================================================================
 
+def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdminConfig):
+    """
+    Build graph visualization table for debugging pipeline traversal.
+
+    Generates a sample base filename and shows all paths through the pipeline
+    with expected files for each termination.
+
+    Args:
+        pipeline: PipelineConfig object
+        config: PhotoAdminConfig object
+
+    Returns:
+        ReportSection with table showing termination types and expected files
+
+    Example table:
+        | Path # | Termination Type | Expected Files                                    |
+        |--------|------------------|---------------------------------------------------|
+        | 1      | Black Box        | AB3D0742.CR3, AB3D0742.XMP, AB3D0742-Edit.DNG ... |
+        | 2      | TRUNCATED        | AB3D0742.CR3, AB3D0742.XMP, ...                   |
+    """
+    from utils.report_renderer import ReportSection
+
+    # Generate sample base filename
+    sample_base_filename = generate_sample_base_filename(config)
+
+    # Enumerate all paths
+    all_paths = enumerate_all_paths(pipeline)
+
+    # Build table rows
+    headers = ["Path #", "Termination Type", "Expected Files", "Truncated"]
+    rows = []
+
+    for i, path in enumerate(all_paths, 1):
+        # Get termination info
+        termination_node = path[-1] if path else None
+        if termination_node:
+            termination_type = termination_node.get('termination_type', 'Unknown')
+            truncated = termination_node.get('truncated', False)
+            truncated_str = "Yes" if truncated else "No"
+
+            # Generate expected files for this path
+            expected_files = generate_expected_files(path, sample_base_filename)
+            files_str = ", ".join(expected_files) if expected_files else "(no files)"
+
+            row = [
+                str(i),
+                termination_type,
+                files_str,
+                truncated_str
+            ]
+            rows.append(row)
+
+    # Build section
+    section = ReportSection(
+        title=f"Pipeline Graph Visualization (Sample: {sample_base_filename})",
+        type="table",
+        data={
+            'headers': headers,
+            'rows': rows
+        },
+        description=f"This table shows all {len(all_paths)} paths enumerated through the pipeline graph using "
+                   f"sample base filename '{sample_base_filename}'. Each path represents a possible workflow "
+                   f"from Capture to Termination. Use this to debug graph traversal and verify expected files."
+    )
+
+    return section
+
+
 def build_kpi_cards(validation_results: list) -> List:
     """
     Build KPI cards for executive summary statistics.
@@ -1712,7 +1832,10 @@ def build_report_context(
     validation_results: list,
     scan_path: str,
     scan_start: datetime,
-    scan_end: datetime
+    scan_end: datetime,
+    pipeline: Optional[PipelineConfig] = None,
+    config: Optional[PhotoAdminConfig] = None,
+    display_graph: bool = False
 ) -> 'ReportContext':
     """
     Build complete ReportContext from validation results.
@@ -1722,6 +1845,9 @@ def build_report_context(
         scan_path: Path to scanned folder
         scan_start: Scan start timestamp
         scan_end: Scan end timestamp
+        pipeline: Optional PipelineConfig for graph visualization
+        config: Optional PhotoAdminConfig for graph visualization
+        display_graph: Whether to include graph visualization section
 
     Returns:
         ReportContext ready for template rendering
@@ -1735,6 +1861,12 @@ def build_report_context(
 
     # Build sections
     sections = []
+
+    # Add graph visualization section if requested
+    if display_graph and pipeline and config:
+        graph_section = build_graph_visualization_table(pipeline, config)
+        sections.append(graph_section)
+
     sections.extend(build_chart_sections(validation_results))
     sections.extend(build_table_sections(validation_results))
 
@@ -1756,7 +1888,10 @@ def generate_html_report(
     output_dir: Path,
     scan_path: str,
     scan_start: datetime,
-    scan_end: datetime
+    scan_end: datetime,
+    pipeline: Optional[PipelineConfig] = None,
+    config: Optional[PhotoAdminConfig] = None,
+    display_graph: bool = False
 ) -> Path:
     """
     Generate HTML report with timestamped filename.
@@ -1767,6 +1902,9 @@ def generate_html_report(
         scan_path: Path to scanned folder
         scan_start: Scan start timestamp
         scan_end: Scan end timestamp
+        pipeline: Optional PipelineConfig for graph visualization
+        config: Optional PhotoAdminConfig for graph visualization
+        display_graph: Whether to include graph visualization section
 
     Returns:
         Path to generated HTML report
@@ -1778,7 +1916,10 @@ def generate_html_report(
         validation_results=validation_results,
         scan_path=scan_path,
         scan_start=scan_start,
-        scan_end=scan_end
+        scan_end=scan_end,
+        pipeline=pipeline,
+        config=config,
+        display_graph=display_graph
     )
 
     # Generate timestamped filename
@@ -1863,6 +2004,33 @@ def main():
             print(f"  Branching nodes: {len([n for n in pipeline.nodes if isinstance(n, BranchingNode)])}")
             print(f"  Termination nodes: {len([n for n in pipeline.nodes if isinstance(n, TerminationNode)])}")
             print()
+
+            # If --display-graph is also specified, generate HTML report with graph visualization
+            if args.display_graph:
+                print("Generating graph visualization report...")
+                scan_start = datetime.now()
+                scan_end = datetime.now()
+
+                # Generate empty validation results (graph visualization only)
+                validation_results_dict = []
+
+                try:
+                    report_path = generate_html_report(
+                        validation_results=validation_results_dict,
+                        output_dir=Path.cwd(),
+                        scan_path="(config validation mode - no folder scanned)",
+                        scan_start=scan_start,
+                        scan_end=scan_end,
+                        pipeline=pipeline,
+                        config=config,
+                        display_graph=True
+                    )
+                    print(f"  ✓ HTML report generated: {report_path}")
+                    print()
+                except Exception as e:
+                    print(f"  ⚠ Warning: HTML report generation failed: {e}")
+                    print()
+
             return 0
 
         except ValueError as e:
@@ -1980,7 +2148,10 @@ def main():
             output_dir=Path.cwd(),
             scan_path=str(args.folder_path),
             scan_start=scan_start,
-            scan_end=scan_end
+            scan_end=scan_end,
+            pipeline=pipeline,
+            config=config,
+            display_graph=args.display_graph
         )
         print(f"  ✓ HTML report generated: {report_path}")
         print()

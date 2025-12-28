@@ -1558,3 +1558,197 @@ class TestHTMLReportGeneration:
         assert '<!DOCTYPE html>' in html_content
         assert '<html' in html_content
         assert '</html>' in html_content
+
+
+# =============================================================================
+# Graph Visualization and MAX_ITERATIONS Tests
+# =============================================================================
+
+class TestGraphVisualization:
+    """Tests for --display-graph functionality and graph traversal fixes."""
+
+    def test_generate_sample_base_filename(self):
+        """Test sample filename generation uses first camera ID + random counter."""
+        # Create mock config with camera mappings
+        mock_config = MagicMock()
+        mock_config.camera_mappings = {
+            'AB3D': [{'name': 'Canon EOS R5', 'serial_number': '12345'}],
+            'XY12': [{'name': 'Sony A7IV', 'serial_number': '67890'}]
+        }
+
+        # Generate sample filename
+        sample = pipeline_validation.generate_sample_base_filename(mock_config)
+
+        # Should use first camera ID (AB3D)
+        assert sample.startswith('AB3D')
+        assert len(sample) == 8  # AB3D + 4 digits
+
+        # Counter should be 4 digits
+        counter = sample[4:]
+        assert counter.isdigit()
+        assert 1 <= int(counter) <= 9999
+
+    def test_generate_sample_base_filename_no_cameras(self):
+        """Test sample filename generation fallback when no cameras configured."""
+        # Create mock config with no camera mappings
+        mock_config = MagicMock()
+        mock_config.camera_mappings = {}
+
+        # Generate sample filename
+        sample = pipeline_validation.generate_sample_base_filename(mock_config)
+
+        # Should use fallback "XXXX"
+        assert sample.startswith('XXXX')
+        assert len(sample) == 8
+
+    def test_build_graph_visualization_table(self, sample_pipeline_config):
+        """Test graph visualization table generation."""
+        from utils.config_manager import PhotoAdminConfig
+
+        # Create pipeline from sample config
+        config_data = {
+            'processing_pipelines': sample_pipeline_config,
+            'camera_mappings': {'AB3D': [{'name': 'Test Camera'}]}
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+
+            pipeline = pipeline_validation.load_pipeline_config(config, 'default')
+
+            # Build graph visualization table
+            section = pipeline_validation.build_graph_visualization_table(pipeline, config)
+
+            # Verify section structure
+            assert section.title.startswith('Pipeline Graph Visualization')
+            assert section.type == 'table'
+            assert 'headers' in section.data
+            assert 'rows' in section.data
+
+            # Verify table headers
+            headers = section.data['headers']
+            assert 'Path #' in headers
+            assert 'Termination Type' in headers
+            assert 'Expected Files' in headers
+            assert 'Truncated' in headers
+
+            # Verify at least one path was enumerated
+            rows = section.data['rows']
+            assert len(rows) > 0
+
+            # Verify row structure
+            first_row = rows[0]
+            assert len(first_row) == 4  # Path #, Termination Type, Expected Files, Truncated
+
+    def test_max_iterations_applied_to_file_nodes(self):
+        """Test MAX_ITERATIONS is applied to File nodes (not just Process nodes)."""
+        # Create a pipeline with a File node loop
+        from utils.config_manager import PhotoAdminConfig
+
+        config_data = {
+            'processing_pipelines': {
+                'loop_test': {
+                    'nodes': [
+                        {
+                            'id': 'capture',
+                            'type': 'Capture',
+                            'name': 'Capture',
+                            'output': ['file1']
+                        },
+                        {
+                            'id': 'file1',
+                            'type': 'File',
+                            'extension': '.CR3',
+                            'name': 'File 1',
+                            'output': ['file1']  # Loop to itself
+                        },
+                        {
+                            'id': 'termination',
+                            'type': 'Termination',
+                            'name': 'End',
+                            'termination_type': 'Archive',
+                            'output': []
+                        }
+                    ]
+                }
+            }
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'loop_test')
+
+            # Enumerate paths - should truncate after MAX_ITERATIONS
+            paths = pipeline_validation.enumerate_all_paths(pipeline)
+
+            # Should have one truncated path
+            assert len(paths) == 1
+            assert paths[0][-1]['node_type'] == 'Termination'
+            assert paths[0][-1]['termination_type'] == 'TRUNCATED'
+            assert paths[0][-1]['truncated'] is True
+
+    def test_max_iterations_applied_to_branching_nodes(self):
+        """Test MAX_ITERATIONS is applied to Branching nodes."""
+        from utils.config_manager import PhotoAdminConfig
+
+        config_data = {
+            'processing_pipelines': {
+                'branch_loop_test': {
+                    'nodes': [
+                        {
+                            'id': 'capture',
+                            'type': 'Capture',
+                            'name': 'Capture',
+                            'output': ['branch1']
+                        },
+                        {
+                            'id': 'branch1',
+                            'type': 'Branching',
+                            'name': 'Branch',
+                            'condition_description': 'Test branch',
+                            'output': ['branch1', 'termination']  # Loop to itself
+                        },
+                        {
+                            'id': 'termination',
+                            'type': 'Termination',
+                            'name': 'End',
+                            'termination_type': 'Archive',
+                            'output': []
+                        }
+                    ]
+                }
+            }
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'branch_loop_test')
+
+            # Enumerate paths - should truncate after MAX_ITERATIONS
+            paths = pipeline_validation.enumerate_all_paths(pipeline)
+
+            # Should have paths (some truncated, some reaching termination)
+            assert len(paths) > 0
+
+            # At least one path should be truncated due to branching loop
+            truncated_paths = [p for p in paths if p[-1].get('truncated', False)]
+            assert len(truncated_paths) > 0
+
+    def test_display_graph_cli_argument(self):
+        """Test --display-graph CLI argument parsing."""
+        # Test that --display-graph is accepted
+        with patch('sys.argv', ['pipeline_validation.py', '--validate-config', '--display-graph']):
+            args = pipeline_validation.parse_arguments()
+            assert args.display_graph is True
+            assert args.validate_config is True
+            assert args.folder_path is None  # Should be allowed without folder
+
+    def test_display_graph_with_folder(self, tmp_path):
+        """Test --display-graph works with folder argument."""
+        test_folder = tmp_path / "test_photos"
+        test_folder.mkdir()
+
+        with patch('sys.argv', ['pipeline_validation.py', str(test_folder), '--display-graph']):
+            args = pipeline_validation.parse_arguments()
+            assert args.display_graph is True
+            assert args.folder_path == test_folder
