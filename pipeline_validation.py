@@ -211,6 +211,8 @@ class TerminationMatchResult:
         termination_type: Human-readable termination type
         status: Validation status for this termination
         completion_percentage: Percentage of expected files present (0-100)
+        expected_files: List of all expected files for this termination
+        actual_files: List of actual files present
         missing_files: List of missing expected files
         extra_files: List of extra files not in pipeline
         truncated: Whether path was truncated due to loop limit
@@ -220,6 +222,8 @@ class TerminationMatchResult:
     termination_type: str
     status: ValidationStatus
     completion_percentage: float
+    expected_files: List[str]
+    actual_files: List[str]
     missing_files: List[str]
     extra_files: List[str]
     truncated: bool
@@ -904,6 +908,8 @@ def validate_specific_image(
             termination_type=termination_type,
             status=status,
             completion_percentage=completion_percentage,
+            expected_files=sorted(list(all_expected_files)),
+            actual_files=specific_image.actual_files,
             missing_files=missing_files,
             extra_files=extra_files,
             truncated=truncated,
