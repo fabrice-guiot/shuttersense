@@ -868,6 +868,180 @@ class TestCustomPipelines:
 
 
 # =============================================================================
+# Phase 5: Counter Looping and Multiple Captures Tests
+# =============================================================================
+
+class TestCounterLooping:
+    """Tests for counter looping and multiple captures (Phase 5 - User Story 3)."""
+
+    def test_flatten_imagegroup_with_suffixes(self):
+        """Test T035: SpecificImage flattening from ImageGroup with suffixes '', '2', '3'."""
+        # Create ImageGroup with multiple separate_images (counter looping scenario)
+        imagegroups = [
+            {
+                'group_id': 'AB3D0001',
+                'camera_id': 'AB3D',
+                'counter': '0001',
+                'separate_images': {
+                    '': {  # Primary image
+                        'files': ['AB3D0001.CR3', 'AB3D0001.XMP']
+                    },
+                    '2': {  # Second capture
+                        'files': ['AB3D0001-2.CR3', 'AB3D0001-2.XMP']
+                    },
+                    '3': {  # Third capture
+                        'files': ['AB3D0001-3.CR3']
+                    }
+                }
+            }
+        ]
+
+        # Flatten to SpecificImages
+        specific_images = pipeline_validation.flatten_imagegroups_to_specific_images(imagegroups)
+
+        # Should have 3 separate SpecificImages
+        assert len(specific_images) == 3
+
+        # Check primary image (no suffix)
+        primary = [img for img in specific_images if img.suffix == ''][0]
+        assert primary.unique_id == 'AB3D0001'
+        assert primary.group_id == 'AB3D0001'
+        assert primary.camera_id == 'AB3D'
+        assert primary.counter == '0001'
+        assert primary.suffix == ''
+        assert 'AB3D0001.CR3' in primary.actual_files
+        assert 'AB3D0001.XMP' in primary.actual_files
+
+        # Check second capture (suffix '2')
+        second = [img for img in specific_images if img.suffix == '2'][0]
+        assert second.unique_id == 'AB3D0001-2'
+        assert second.group_id == 'AB3D0001'
+        assert second.suffix == '2'
+        assert 'AB3D0001-2.CR3' in second.actual_files
+        assert 'AB3D0001-2.XMP' in second.actual_files
+
+        # Check third capture (suffix '3')
+        third = [img for img in specific_images if img.suffix == '3'][0]
+        assert third.unique_id == 'AB3D0001-3'
+        assert third.suffix == '3'
+        assert 'AB3D0001-3.CR3' in third.actual_files
+
+    def test_base_filename_generation_with_suffix(self):
+        """Test T036: base_filename generation with suffix (e.g., AB3D0001-2)."""
+        # Test with primary image (no suffix)
+        path = [
+            {'node_type': 'Capture'},
+            {'node_type': 'File', 'extension': '.CR3'},
+            {'node_type': 'Process', 'method_ids': ['DxO_DeepPRIME_XD2s']},
+            {'node_type': 'File', 'extension': '.DNG'},
+            {'node_type': 'Termination'}
+        ]
+
+        # Primary image - base_filename without suffix
+        expected_primary = pipeline_validation.generate_expected_files(path, 'AB3D0001')
+        assert 'AB3D0001.CR3' in expected_primary
+        assert 'AB3D0001-DxO_DeepPRIME_XD2s.DNG' in expected_primary
+
+        # Second capture - base_filename WITH suffix
+        expected_second = pipeline_validation.generate_expected_files(path, 'AB3D0001-2')
+        assert 'AB3D0001-2.CR3' in expected_second
+        assert 'AB3D0001-2-DxO_DeepPRIME_XD2s.DNG' in expected_second
+
+        # Third capture - base_filename WITH suffix
+        expected_third = pipeline_validation.generate_expected_files(path, 'AB3D0001-3')
+        assert 'AB3D0001-3.CR3' in expected_third
+        assert 'AB3D0001-3-DxO_DeepPRIME_XD2s.DNG' in expected_third
+
+    def test_multiple_specific_images_different_statuses(self, tmp_path, mock_config):
+        """Test T037: ImageGroup with 2 SpecificImages, different validation statuses."""
+        # Create simple pipeline
+        pipeline_config = {
+            'default': {
+                'nodes': [
+                    {
+                        'id': 'capture',
+                        'type': 'Capture',
+                        'name': 'Camera Capture',
+                        'output': ['raw_file', 'xmp_file']
+                    },
+                    {
+                        'id': 'raw_file',
+                        'type': 'File',
+                        'extension': '.CR3',
+                        'name': 'Raw File',
+                        'output': ['termination']  # Both files lead to termination
+                    },
+                    {
+                        'id': 'xmp_file',
+                        'type': 'File',
+                        'extension': '.XMP',
+                        'name': 'XMP Metadata',
+                        'output': ['termination']  # Both files lead to termination
+                    },
+                    {
+                        'id': 'termination',
+                        'type': 'Termination',
+                        'termination_type': 'Archive',
+                        'name': 'Archive Ready',
+                        'output': []
+                    }
+                ]
+            }
+        }
+
+        # Create config file
+        config_file = tmp_path / "config.yaml"
+        config_data = {'processing_pipelines': pipeline_config}
+        with open(config_file, 'w') as f:
+            yaml.dump(config_data, f)
+
+        # Load configuration
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
+        # Load pipeline
+        pipeline = pipeline_validation.load_pipeline_config(config)
+
+        # Create ImageGroup with 2 SpecificImages
+        # - Primary image: CONSISTENT (has all expected files)
+        # - Second capture: PARTIAL (missing XMP file)
+        imagegroups = [
+            {
+                'group_id': 'AB3D0001',
+                'camera_id': 'AB3D',
+                'counter': '0001',
+                'separate_images': {
+                    '': {  # Primary - CONSISTENT
+                        'files': ['AB3D0001.CR3', 'AB3D0001.XMP']
+                    },
+                    '2': {  # Second capture - PARTIAL (missing XMP)
+                        'files': ['AB3D0001-2.CR3']
+                    }
+                }
+            }
+        ]
+
+        # Flatten to SpecificImages
+        specific_images = pipeline_validation.flatten_imagegroups_to_specific_images(imagegroups)
+        assert len(specific_images) == 2
+
+        # Validate each SpecificImage
+        results = pipeline_validation.validate_all_images(specific_images, pipeline, show_progress=False)
+        assert len(results) == 2
+
+        # Find results by unique_id
+        primary_result = [r for r in results if r.unique_id == 'AB3D0001'][0]
+        second_result = [r for r in results if r.unique_id == 'AB3D0001-2'][0]
+
+        # Primary image should be CONSISTENT
+        primary_status = primary_result.termination_matches[0].status
+        assert primary_status == pipeline_validation.ValidationStatus.CONSISTENT
+
+        # Second capture should be PARTIAL (missing XMP)
+        second_status = second_result.termination_matches[0].status
+        assert second_status == pipeline_validation.ValidationStatus.PARTIAL
+
+
+# =============================================================================
 # Phase 4+: Advanced Feature Tests (To be implemented)
 # =============================================================================
 

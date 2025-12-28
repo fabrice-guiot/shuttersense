@@ -110,7 +110,7 @@ Following photo-admin architecture (single standalone Python script):
 
 ---
 
-## Phase 5: User Story 3 - Handle Counter Looping and Multiple Captures (Priority: P2)
+## Phase 5: User Story 3 - Handle Counter Looping and Multiple Captures (Priority: P2) ✅ COMPLETE
 
 **Goal**: Independent validation of each SpecificImage within ImageGroup, correctly handling suffix-based filename patterns
 
@@ -118,18 +118,18 @@ Following photo-admin architecture (single standalone Python script):
 
 ### Tests for User Story 3
 
-- [ ] T035 [P] [US3] Unit test for SpecificImage flattening from ImageGroup with suffixes '', '2', '3' in tests/test_pipeline_validation.py
-- [ ] T036 [P] [US3] Unit test for base_filename generation with suffix (e.g., AB3D0001-2) in tests/test_pipeline_validation.py
-- [ ] T037 [P] [US3] Integration test: ImageGroup with 2 SpecificImages, different statuses per image in tests/test_pipeline_validation.py
+- [x] T035 [P] [US3] Unit test for SpecificImage flattening from ImageGroup with suffixes '', '2', '3' in tests/test_pipeline_validation.py
+- [x] T036 [P] [US3] Unit test for base_filename generation with suffix (e.g., AB3D0001-2) in tests/test_pipeline_validation.py
+- [x] T037 [P] [US3] Integration test: ImageGroup with 2 SpecificImages, different statuses per image in tests/test_pipeline_validation.py
 
 ### Implementation for User Story 3
 
-- [ ] T038 [P] [US3] Enhance flatten_imagegroups_to_specific_images() to correctly handle suffix in base_filename in pipeline_validation.py
-- [ ] T039 [US3] Update generate_expected_files() to use base_filename with suffix throughout in pipeline_validation.py
-- [ ] T040 [US3] Add validation per SpecificImage loop in main validation flow in pipeline_validation.py
-- [ ] T041 [US3] Implement separate ValidationResult per SpecificImage (not per ImageGroup) in pipeline_validation.py
+- [x] T038 [P] [US3] Enhance flatten_imagegroups_to_specific_images() to correctly handle suffix in base_filename in pipeline_validation.py (already implemented in Phase 2)
+- [x] T039 [US3] Update generate_expected_files() to use base_filename with suffix throughout in pipeline_validation.py (already implemented in Phase 3)
+- [x] T040 [US3] Add validation per SpecificImage loop in main validation flow in pipeline_validation.py (already implemented in validate_all_images())
+- [x] T041 [US3] Implement separate ValidationResult per SpecificImage (not per ImageGroup) in pipeline_validation.py (already implemented in Phase 3)
 
-**Checkpoint**: All user stories 1-3 should now work independently - handles counter looping scenarios
+**Checkpoint**: ✅ All user stories 1-3 fully functional - handles counter looping scenarios with independent validation per SpecificImage
 
 ---
 
