@@ -1668,18 +1668,17 @@ def build_table_sections(validation_results: list) -> List:
 
             group_id = group.get('unique_id', group.get('group_id', 'Unknown'))
 
-            # Build file list string
-            files_display = '<br>'.join([
-                f'<span style="color: #059669;">{f}</span>' for f in actual_files
-            ])
-            if missing_files:
-                files_display += '<br>' + '<br>'.join([
-                    f'<span style="color: #dc2626; text-decoration: line-through;">{f}</span>' for f in missing_files
-                ])
-            if extra_files:
-                files_display += '<br>' + '<br>'.join([
-                    f'<span style="color: #f59e0b; font-style: italic;">{f}</span>' for f in extra_files
-                ])
+            # Build file list with symbols (plain text, no HTML)
+            files_list = []
+            for f in actual_files:
+                files_list.append(f'✓ {f}')
+            for f in missing_files:
+                files_list.append(f'✗ {f}')
+            for f in extra_files:
+                files_list.append(f'⚠ {f}')
+
+            # Join with newlines for display
+            files_display = '\n'.join(files_list) if files_list else '(no files)'
 
             row = [
                 group_id,
@@ -1974,11 +1973,11 @@ def main():
             'termination_matches': termination_matches_dict
         })
 
-    # Generate HTML report
+    # Generate HTML report (in current working directory, like other tools)
     try:
         report_path = generate_html_report(
             validation_results=validation_results_dict,
-            output_dir=args.folder_path,
+            output_dir=Path.cwd(),
             scan_path=str(args.folder_path),
             scan_start=scan_start,
             scan_end=scan_end
