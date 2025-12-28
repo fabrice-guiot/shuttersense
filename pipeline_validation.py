@@ -524,12 +524,17 @@ def load_or_generate_imagegroups(folder_path: Path, force_regenerate: bool = Fal
         # Use photo_pairing module directly
         # Note: This assumes photo_pairing can be imported as a module
         try:
-            # Get all files in folder
-            all_files = list(folder_path.iterdir())
-            file_names = [f.name for f in all_files if f.is_file()]
+            # Get all files in folder (photo_pairing.build_imagegroups expects Path objects)
+            all_files = [f for f in folder_path.iterdir() if f.is_file()]
 
             # Build ImageGroups using photo_pairing module
-            imagegroups, invalid_files = photo_pairing.build_imagegroups(file_names, folder_path)
+            # Returns: {'imagegroups': [...], 'invalid_files': [...]}
+            result = photo_pairing.build_imagegroups(all_files, folder_path)
+            imagegroups = result['imagegroups']
+            invalid_files = result['invalid_files']
+
+            if invalid_files:
+                print(f"  Warning: {len(invalid_files)} invalid files skipped")
 
             return imagegroups
         except Exception as e:
@@ -608,6 +613,53 @@ def flatten_imagegroups_to_specific_images(imagegroups: List[Dict[str, Any]]) ->
             specific_images.append(specific_image)
 
     return specific_images
+
+
+def add_metadata_files_to_specific_images(
+    specific_images: List[SpecificImage],
+    folder_path: Path,
+    config: PhotoAdminConfig
+) -> None:
+    """
+    Add metadata files (e.g., .xmp) to SpecificImage actual_files.
+
+    Metadata files are not processed by Photo Pairing Tool (which focuses on
+    image files only). This function scans for metadata files separately and
+    adds them to matching SpecificImages based on base filename.
+
+    Args:
+        specific_images: List of SpecificImage objects to augment
+        folder_path: Path to folder containing files
+        config: PhotoAdminConfig with metadata_extensions
+
+    Side effects:
+        Modifies specific_images in-place by adding metadata files to actual_files
+    """
+    # Get metadata extensions from config (e.g., ['.xmp'])
+    metadata_extensions = [ext.lower() for ext in config.metadata_extensions]
+
+    # Scan folder for metadata files
+    metadata_files = {}
+    for file_path in folder_path.iterdir():
+        if file_path.is_file():
+            ext_lower = file_path.suffix.lower()
+            if ext_lower in metadata_extensions:
+                # Store relative path by base filename (for matching)
+                base_name = file_path.stem  # e.g., "AO3A0003" from "AO3A0003.xmp"
+                relative_path = str(file_path.relative_to(folder_path))
+                if base_name not in metadata_files:
+                    metadata_files[base_name] = []
+                metadata_files[base_name].append(relative_path)
+
+    # Add metadata files to matching SpecificImages
+    for specific_image in specific_images:
+        # Match by unique_id (which is the base filename)
+        if specific_image.unique_id in metadata_files:
+            for metadata_file in metadata_files[specific_image.unique_id]:
+                if metadata_file not in specific_image.actual_files:
+                    specific_image.actual_files.append(metadata_file)
+            # Re-sort actual_files after adding metadata
+            specific_image.actual_files.sort()
 
 
 # =============================================================================
@@ -2732,6 +2784,10 @@ def main():
     # Phase 2: Flatten to SpecificImages
     specific_images = flatten_imagegroups_to_specific_images(imagegroups)
     print(f"  Flattened to {len(specific_images)} specific images")
+
+    # Add metadata files (e.g., .xmp) to SpecificImages
+    # Metadata files are not included by Photo Pairing Tool (which focuses on image files)
+    add_metadata_files_to_specific_images(specific_images, args.folder_path, config)
     print()
 
     # Phase 3 & 4: Validate images against pipeline
