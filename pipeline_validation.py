@@ -1890,6 +1890,9 @@ def main():
         return 1
     print()
 
+    # Track scan timestamps for report
+    scan_start = datetime.now()
+
     # Phase 2: Load Photo Pairing results
     print("Loading Photo Pairing results...")
     imagegroups = load_or_generate_imagegroups(args.folder_path, force_regenerate=args.force_regenerate)
@@ -1904,6 +1907,9 @@ def main():
     print("Validating images against pipeline...")
     print(f"  Pipeline supports all 6 node types (Phases 3 & 4 complete)")
     validation_results = validate_all_images(specific_images, pipeline, show_progress=True)
+
+    scan_end = datetime.now()
+
     print()
     print(f"  Validated {len(validation_results)} images")
     print()
@@ -1931,18 +1937,54 @@ def main():
     print(f"  ✗ Inconsistent: {status_counts[ValidationStatus.INCONSISTENT]}")
     print()
 
-    # TODO: Phase 5 (US3) - Handle counter looping with suffixes (currently basic support exists)
+    # Phase 7 (US5): Generate HTML report
+    print("Generating HTML report...")
 
-    # TODO: Phase 6 (US4) - Implement caching with SHA256 hashing
-    # TODO: Phase 6 (US4) - Cache invalidation logic
+    # Convert ValidationResult objects to dictionaries for report functions
+    validation_results_dict = []
+    for result in validation_results:
+        # Determine worst status across all terminations
+        worst_status = ValidationStatus.CONSISTENT
+        for term_match in result.termination_matches:
+            if term_match.status.value > worst_status.value:
+                worst_status = term_match.status
 
-    # TODO: Phase 7 (US5) - Generate HTML report
-    # TODO: Phase 7 (US5) - Chart.js visualizations
+        # Convert termination matches to dictionaries
+        termination_matches_dict = []
+        for term_match in result.termination_matches:
+            termination_matches_dict.append({
+                'termination_type': term_match.termination_type,
+                'status': term_match.status.name,
+                'expected_files': term_match.expected_files,
+                'actual_files': term_match.actual_files,
+                'missing_files': term_match.missing_files,
+                'extra_files': term_match.extra_files
+            })
+
+        validation_results_dict.append({
+            'unique_id': result.unique_id,
+            'group_id': result.group_id,
+            'status': worst_status.name,
+            'termination_matches': termination_matches_dict
+        })
+
+    # Generate HTML report
+    try:
+        report_path = generate_html_report(
+            validation_results=validation_results_dict,
+            output_dir=args.folder_path,
+            scan_path=str(args.folder_path),
+            scan_start=scan_start,
+            scan_end=scan_end
+        )
+        print(f"  ✓ HTML report generated: {report_path}")
+        print()
+    except Exception as e:
+        print(f"  ⚠ Warning: HTML report generation failed: {e}")
+        print()
 
     print("✓ Pipeline validation complete")
     print()
-    print(f"Note: HTML report generation pending (Phase 7)")
-    print(f"      Validation results available in memory")
 
     return 0
 
