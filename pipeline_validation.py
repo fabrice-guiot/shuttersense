@@ -26,6 +26,7 @@ import argparse
 import sys
 import signal
 import yaml
+import json
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -507,7 +508,6 @@ def load_or_generate_imagegroups(folder_path: Path, force_regenerate: bool = Fal
         ValueError: If cache is invalid or corrupted
     """
     import photo_pairing
-    import json
 
     cache_file = folder_path / '.photo_pairing_imagegroups'
 
@@ -1231,7 +1231,7 @@ def main():
 
     # Phase 2: Load Photo Pairing results
     print("Loading Photo Pairing results...")
-    imagegroups = load_imagegroups_from_cache(args.folder_path)
+    imagegroups = load_or_generate_imagegroups(args.folder_path, force_regenerate=args.force_regenerate)
     print(f"  Loaded {len(imagegroups)} image groups")
 
     # Phase 2: Flatten to SpecificImages
