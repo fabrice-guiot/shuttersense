@@ -135,8 +135,8 @@ A photographer wants to review validation results in a visual, interactive HTML 
 - **How does the tool handle shared XMP files between CR3 and DNG?**
   Example: `AB3D0001.xmp` used by both `AB3D0001.cr3` and `AB3D0001.dng`. The validator should allow XMP sharing by default and mark metadata_status as "SHARED" for the DNG file node.
 
-- **What happens when a Pairing node's inputs are missing?**
-  Example: `metadata_pairing` expects both `raw_image_2 (.CR3)` and `xmp_metadata_1 (.XMP)`, but only CR3 exists. Validation should terminate this path as incomplete and report the missing XMP file.
+- **How does the tool handle Pairing nodes with multiple upstream paths?**
+  Example: `metadata_pairing` has 3 paths arriving from branch 1 (raw_image) and 2 paths from branch 2 (xmp_metadata). The validator generates all 6 combinations (3×2=6) by merging each pair. Merged paths have max depth from either branch, union of files (deduplicated), and max iteration counts per node. Pairing nodes are processed in topological order (upstream first) to handle nested pairing correctly.
 
 - **How does the system handle invalid pipeline configurations?**
   Example: Orphaned nodes (not reachable from Capture), missing node references in outputs, or multiple Capture nodes. The tool should detect these issues during configuration validation and display specific error messages before attempting validation.
@@ -170,7 +170,7 @@ A photographer wants to review validation results in a visual, interactive HTML 
 
 - **FR-008**: System MUST validate metadata sidecar files (XMP) using PhotoStats' linking logic, supporting shared XMP between CR3 and DNG, separate XMP per file type, and embedded metadata (XMP optional) for TIF files
 
-- **FR-009**: System MUST support Pairing nodes that validate multiple File nodes exist with the same base filename before allowing path traversal to continue
+- **FR-009**: System MUST support Pairing nodes that combine paths from exactly 2 upstream branches using Cartesian product logic (if branch 1 has 3 paths and branch 2 has 5 paths, generate 15 combined paths). Pairing nodes MUST be processed in topological order (upstream first) using longest-path algorithm. When merging paths: (a) merged depth = max(depth1, depth2), (b) merged files = union of both paths (deduplicated), (c) merged iterations = max per node across both paths. Pairing nodes CANNOT be in loops (MAX_ITERATIONS=1, truncate if encountered again during DFS). System uses hybrid iterative approach: DFS to pairing node → merge all combinations → continue DFS downstream
 
 - **FR-010**: System MUST support Branching nodes where validation explores ALL possible branch outputs to enumerate complete set of valid paths
 
@@ -202,7 +202,7 @@ A photographer wants to review validation results in a visual, interactive HTML 
 
 - **Pipeline Configuration**: Represents the complete processing workflow as a directed graph with nodes (6 types), processing methods mapping, and version metadata. Loaded from YAML config.
 
-- **Node**: Abstract entity with types Capture (start), File (actual files), Process (transformations), Pairing (multi-file validation), Branching (conditional paths), Termination (endpoints). Each has id, name, output references.
+- **Node**: Abstract entity with types Capture (start), File (actual files), Process (transformations), Pairing (multi-branch merge with Cartesian product), Branching (conditional paths), Termination (endpoints). Each has id, name, output references. Pairing nodes must have exactly 2 inputs and cannot be in loops.
 
 - **File Node**: Critical entity representing actual filesystem files. Attributes: file_type (Image/Metadata), extension (must match photo_extensions or metadata_extensions), generates expected filenames for validation.
 

@@ -134,31 +134,65 @@ class ProcessNode(NodeBase):
 
 ### 1.5 Pairing Node
 
-Represents multi-image pairing operations (e.g., HDR, panorama stacking).
+Represents multi-branch path merging using Cartesian product logic. Pairing nodes combine all path combinations from exactly 2 upstream branches.
 
 ```python
 @dataclass
 class PairingNode(NodeBase):
-    """Pairing node - multi-image merge operation."""
+    """Pairing node - multi-branch merge with Cartesian product."""
     type: str = "Pairing"
-    pairing_type: str    # Type of pairing (e.g., "HDR", "Panorama")
-    input_count: int     # Expected number of input images (e.g., 3 for HDR)
+    pairing_type: str    # Type of pairing (e.g., "Metadata", "ImageGroup", "HDR")
+    input_count: int     # MUST be 2 (validated at runtime)
     output: list[str]    # ALL outputs execute in parallel
 
-    # NOTE: In v1.0, pairing validation is simplified:
-    # We validate that files from pairing exist, but don't verify
-    # input_count matches actual separate images (future enhancement)
+    # CRITICAL RESTRICTIONS (enforced at runtime):
+    # 1. Must have exactly 2 nodes outputting to this pairing node
+    # 2. Cannot be in loops (MAX_ITERATIONS=1, truncate if encountered again)
+    # 3. Processed in topological order (upstream pairing nodes first)
+
+    # PATH MERGING LOGIC:
+    # If branch 1 has N paths and branch 2 has M paths → N×M merged paths
+    # Merged path properties:
+    #   - depth = max(depth1, depth2)
+    #   - files = union(files1, files2) [deduplicated]
+    #   - node_iterations = max per node_id across both paths
 ```
 
 **Example YAML:**
 ```yaml
-- id: "hdr_pairing"
+- id: "metadata_pairing"
   type: "Pairing"
-  pairing_type: "HDR"
-  input_count: 3
-  name: "HDR Merge"
-  output: ["openformat_raw_image", "xmp_metadata_2"]
+  pairing_type: "Metadata"
+  input_count: 2
+  name: "Raw + XMP Pairing"
+  output: ["denoise_branching"]
+
+- id: "image_group_pairing"
+  type: "Pairing"
+  pairing_type: "ImageGroup"
+  input_count: 2
+  name: "Image Group Pairing"
+  output: ["termination_browsable"]
 ```
+
+**Implementation Details:**
+
+1. **Topological Ordering**: Pairing nodes are processed in topological order using longest-path algorithm to ensure upstream dependencies are resolved first.
+
+2. **Path Enumeration Strategy**: Hybrid iterative approach treats pairing nodes as phase boundaries:
+   - DFS from current frontier to pairing node
+   - Group paths by which input they arrived on (input1 vs input2)
+   - Generate Cartesian product: all combinations from branch1 × branch2
+   - Continue DFS from pairing node's outputs to next pairing or termination
+
+3. **Path Merging**: When merging two paths at a pairing node:
+   ```python
+   merged_path = path1 + unique_nodes_from_path2  # Deduplicate shared ancestors
+   merged_depth = max(depth1, depth2)
+   merged_iterations[node_id] = max(iterations1[node_id], iterations2[node_id])
+   ```
+
+4. **Loop Prevention**: If a pairing node is encountered during DFS (not as phase boundary), the path is marked as TRUNCATED to prevent infinite loops.
 
 ### 1.6 Branching Node
 
@@ -353,6 +387,71 @@ class EnumeratedPath:
 
         return expected_files
 ```
+
+### 2.3 Pairing-Specific Path Enumeration Functions
+
+The pipeline validation tool includes specialized functions for handling pairing nodes with Cartesian product logic.
+
+#### `find_pairing_nodes_in_topological_order(pipeline: PipelineConfig) -> List[PairingNode]`
+
+Finds all pairing nodes and returns them in topological order (upstream first) using longest-path algorithm.
+
+**Algorithm**: Dynamic programming (Bellman-Ford variant) to compute longest path from Capture to each node, ensuring correct dependency ordering when nodes can be reached via multiple paths.
+
+**Returns**: List of pairing nodes sorted by depth (earliest/upstream first)
+
+#### `validate_pairing_node_inputs(pairing_node: PairingNode, pipeline: PipelineConfig) -> tuple[str, str]`
+
+Validates that a pairing node has exactly 2 input nodes.
+
+**Returns**: (input1_id, input2_id) tuple
+
+**Raises**: ValueError if not exactly 2 inputs
+
+#### `dfs_to_target_node(start_node_id, target_node_id, seed_path, seed_state, pipeline) -> List[tuple]`
+
+DFS that treats target node as temporary termination. Used to enumerate all paths from frontier to pairing node.
+
+**Returns**: List of (path, state, arrived_from_node_id) tuples
+
+**Truncation**: If another pairing node is encountered (not the target), path is truncated
+
+#### `merge_two_paths(path1, path2, pairing_node, state1, state2) -> tuple`
+
+Merges two paths that meet at a pairing node.
+
+**Logic**:
+- Start with path1 as base
+- Add unique nodes from path2 (deduplicate shared ancestors)
+- Merged depth = max(depth1, depth2)
+- Merged iterations[node_id] = max(iterations1[node_id], iterations2[node_id])
+
+**Returns**: (merged_path, merged_state) tuple
+
+#### `enumerate_paths_with_pairing(pipeline: PipelineConfig) -> List[List[Dict]]`
+
+Main path enumeration function that handles pairing nodes correctly.
+
+**Algorithm**:
+1. Find pairing nodes in topological order
+2. For each pairing node:
+   - DFS from current frontier to pairing node
+   - Group paths by input edge (branch 1 vs branch 2)
+   - Generate Cartesian product (branch1 × branch2)
+   - Update frontier with merged paths starting from pairing outputs
+3. Final DFS from last frontier to termination nodes
+
+**Complexity**: O(nodes × paths × pairing_nodes), where paths can grow exponentially with branching but is bounded by MAX_ITERATIONS=5 per node
+
+**Example**: If metadata_pairing has 3 paths from branch1 and 2 paths from branch2, it generates 6 merged paths (3×2=6)
+
+#### `dfs_to_termination_nodes(start_node_id, seed_path, seed_state, pipeline) -> List[List[Dict]]`
+
+DFS from arbitrary start node to termination nodes. Used after last pairing node.
+
+**Truncation**: If pairing node encountered during DFS, path is truncated (prevents loops)
+
+**Returns**: List of complete paths reaching termination nodes
 
 ---
 

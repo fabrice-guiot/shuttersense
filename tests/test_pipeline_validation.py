@@ -1821,3 +1821,372 @@ class TestGraphVisualization:
             else:
                 # Single row case - just verify depth is a valid non-negative integer
                 assert depths[0] >= 0
+
+
+# =============================================================================
+# Pairing Node Tests
+# =============================================================================
+
+class TestPairingNodes:
+    """Tests for pairing node handling in path enumeration."""
+
+    def test_find_pairing_nodes_in_topological_order(self):
+        """Test finding pairing nodes in topological order."""
+        from utils.config_manager import PhotoAdminConfig
+
+        config_data = {
+            'processing_pipelines': {
+                'pairing_test': {
+                    'nodes': [
+                        {
+                            'id': 'capture',
+                            'type': 'Capture',
+                            'name': 'Capture',
+                            'output': ['file1', 'file2']
+                        },
+                        {
+                            'id': 'file1',
+                            'type': 'File',
+                            'extension': '.CR3',
+                            'name': 'File 1',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'file2',
+                            'type': 'File',
+                            'extension': '.XMP',
+                            'name': 'File 2',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'pairing1',
+                            'type': 'Pairing',
+                            'name': 'Pairing 1',
+                            'pairing_type': 'Metadata',
+                            'input_count': 2,
+                            'output': ['termination']
+                        },
+                        {
+                            'id': 'termination',
+                            'type': 'Termination',
+                            'name': 'End',
+                            'termination_type': 'Archive',
+                            'output': []
+                        }
+                    ]
+                }
+            }
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'pairing_test')
+
+            pairing_nodes = pipeline_validation.find_pairing_nodes_in_topological_order(pipeline)
+
+            assert len(pairing_nodes) == 1
+            assert pairing_nodes[0].id == 'pairing1'
+
+    def test_validate_pairing_node_inputs(self):
+        """Test validation of pairing node inputs."""
+        from utils.config_manager import PhotoAdminConfig
+
+        config_data = {
+            'processing_pipelines': {
+                'pairing_test': {
+                    'nodes': [
+                        {
+                            'id': 'capture',
+                            'type': 'Capture',
+                            'name': 'Capture',
+                            'output': ['file1', 'file2']
+                        },
+                        {
+                            'id': 'file1',
+                            'type': 'File',
+                            'extension': '.CR3',
+                            'name': 'File 1',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'file2',
+                            'type': 'File',
+                            'extension': '.XMP',
+                            'name': 'File 2',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'pairing1',
+                            'type': 'Pairing',
+                            'name': 'Pairing 1',
+                            'pairing_type': 'Metadata',
+                            'input_count': 2,
+                            'output': ['termination']
+                        },
+                        {
+                            'id': 'termination',
+                            'type': 'Termination',
+                            'name': 'End',
+                            'termination_type': 'Archive',
+                            'output': []
+                        }
+                    ]
+                }
+            }
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'pairing_test')
+
+            pairing_node = [n for n in pipeline.nodes if isinstance(n, pipeline_validation.PairingNode)][0]
+            input1, input2 = pipeline_validation.validate_pairing_node_inputs(pairing_node, pipeline)
+
+            # Should have exactly 2 inputs
+            assert input1 in ['file1', 'file2']
+            assert input2 in ['file1', 'file2']
+            assert input1 != input2
+
+    def test_enumerate_paths_with_simple_pairing(self):
+        """Test path enumeration with simple pairing (2 branches merging)."""
+        from utils.config_manager import PhotoAdminConfig
+
+        config_data = {
+            'processing_pipelines': {
+                'pairing_test': {
+                    'nodes': [
+                        {
+                            'id': 'capture',
+                            'type': 'Capture',
+                            'name': 'Capture',
+                            'output': ['file1', 'file2']
+                        },
+                        {
+                            'id': 'file1',
+                            'type': 'File',
+                            'extension': '.CR3',
+                            'name': 'File 1',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'file2',
+                            'type': 'File',
+                            'extension': '.XMP',
+                            'name': 'File 2',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'pairing1',
+                            'type': 'Pairing',
+                            'name': 'Pairing 1',
+                            'pairing_type': 'Metadata',
+                            'input_count': 2,
+                            'output': ['termination']
+                        },
+                        {
+                            'id': 'termination',
+                            'type': 'Termination',
+                            'name': 'End',
+                            'termination_type': 'Archive',
+                            'output': []
+                        }
+                    ]
+                }
+            }
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'pairing_test')
+
+            paths = pipeline_validation.enumerate_paths_with_pairing(pipeline)
+
+            # Should have 1 path: capture -> file1 -> file2 -> pairing1 -> termination
+            assert len(paths) == 1
+
+            # Check path structure
+            path = paths[0]
+            node_ids = [n['node_id'] for n in path]
+
+            assert 'capture' in node_ids
+            assert 'file1' in node_ids
+            assert 'file2' in node_ids
+            assert 'pairing1' in node_ids
+            assert 'termination' in node_ids
+
+    def test_enumerate_paths_with_branching_before_pairing(self):
+        """Test path enumeration with branching before pairing (creates combinations)."""
+        from utils.config_manager import PhotoAdminConfig
+
+        config_data = {
+            'processing_pipelines': {
+                'branch_pairing_test': {
+                    'nodes': [
+                        {
+                            'id': 'capture',
+                            'type': 'Capture',
+                            'name': 'Capture',
+                            'output': ['file1']
+                        },
+                        {
+                            'id': 'file1',
+                            'type': 'File',
+                            'extension': '.CR3',
+                            'name': 'File 1',
+                            'output': ['branch1']
+                        },
+                        {
+                            'id': 'branch1',
+                            'type': 'Branching',
+                            'name': 'Branch 1',
+                            'condition_description': 'Process or skip',
+                            'output': ['file2a', 'file2b']  # 2 branches
+                        },
+                        {
+                            'id': 'file2a',
+                            'type': 'File',
+                            'extension': '.DNG',
+                            'name': 'File 2a',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'file2b',
+                            'type': 'File',
+                            'extension': '.XMP',
+                            'name': 'File 2b',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'pairing1',
+                            'type': 'Pairing',
+                            'name': 'Pairing 1',
+                            'pairing_type': 'Metadata',
+                            'input_count': 2,
+                            'output': ['termination']
+                        },
+                        {
+                            'id': 'termination',
+                            'type': 'Termination',
+                            'name': 'End',
+                            'termination_type': 'Archive',
+                            'output': []
+                        }
+                    ]
+                }
+            }
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'branch_pairing_test')
+
+            paths = pipeline_validation.enumerate_paths_with_pairing(pipeline)
+
+            # Should have 1 path (both branches merge at pairing)
+            assert len(paths) == 1
+
+            path = paths[0]
+            node_ids = [n['node_id'] for n in path]
+
+            # Path should include all nodes
+            assert 'capture' in node_ids
+            assert 'file1' in node_ids
+            assert 'pairing1' in node_ids
+            assert 'termination' in node_ids
+
+    def test_nested_pairing_nodes(self):
+        """Test that multiple pairing nodes in sequence are processed correctly in topological order."""
+        from utils.config_manager import PhotoAdminConfig
+
+        # Create a pipeline with two pairing nodes in sequence
+        # All paths flow through pairing1, then pairing2
+        config_data = {
+            'processing_pipelines': {
+                'nested_pairing_test': {
+                    'nodes': [
+                        {
+                            'id': 'capture',
+                            'type': 'Capture',
+                            'name': 'Capture',
+                            'output': ['file1', 'file2']
+                        },
+                        # First pairing inputs
+                        {
+                            'id': 'file1',
+                            'type': 'File',
+                            'extension': '.CR3',
+                            'name': 'File 1',
+                            'output': ['pairing1']
+                        },
+                        {
+                            'id': 'file2',
+                            'type': 'File',
+                            'extension': '.XMP',
+                            'name': 'File 2',
+                            'output': ['pairing1']
+                        },
+                        # First pairing node outputs two files
+                        {
+                            'id': 'pairing1',
+                            'type': 'Pairing',
+                            'name': 'Pairing 1',
+                            'pairing_type': 'Metadata',
+                            'input_count': 2,
+                            'output': ['file3', 'file4']
+                        },
+                        # Second pairing inputs (both from pairing1)
+                        {
+                            'id': 'file3',
+                            'type': 'File',
+                            'extension': '.DNG',
+                            'name': 'File 3',
+                            'output': ['pairing2']
+                        },
+                        {
+                            'id': 'file4',
+                            'type': 'File',
+                            'extension': '.JPG',
+                            'name': 'File 4',
+                            'output': ['pairing2']
+                        },
+                        # Second pairing node
+                        {
+                            'id': 'pairing2',
+                            'type': 'Pairing',
+                            'name': 'Pairing 2',
+                            'pairing_type': 'ImageGroup',
+                            'input_count': 2,
+                            'output': ['termination']
+                        },
+                        {
+                            'id': 'termination',
+                            'type': 'Termination',
+                            'name': 'End',
+                            'termination_type': 'Archive',
+                            'output': []
+                        }
+                    ]
+                }
+            }
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'nested_pairing_test')
+
+            paths = pipeline_validation.enumerate_paths_with_pairing(pipeline)
+
+            # Should have at least one path
+            assert len(paths) > 0, f"Should enumerate at least one path (found {len(paths)})"
+
+            # Verify all paths go through both pairing nodes and reach termination
+            for path in paths:
+                node_ids = [n['node_id'] for n in path]
+                assert 'pairing1' in node_ids, "Path should include pairing1"
+                assert 'pairing2' in node_ids, "Path should include pairing2"
+                assert 'termination' in node_ids, "Path should reach termination"
+
+                # Verify topological order: pairing1 before pairing2
+                idx_p1 = node_ids.index('pairing1')
+                idx_p2 = node_ids.index('pairing2')
+                assert idx_p1 < idx_p2, "pairing1 should be processed before pairing2"

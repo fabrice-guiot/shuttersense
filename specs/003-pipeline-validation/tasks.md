@@ -104,6 +104,7 @@ Following photo-admin architecture (single standalone Python script):
 - [x] T031 [US2] Implement validate_file_extensions() checking extensions match photo_extensions or metadata_extensions in pipeline_validation.py (completed in Phase 2)
 - [x] T032 [US2] Add Branching node support to enumerate_all_paths() exploring ALL branch outputs in pipeline_validation.py (completed in Phase 3)
 - [x] T033 [US2] Add Pairing node validation logic checking multiple input files exist in pipeline_validation.py
+  - **NOTE**: Initial implementation (Phase 4) was simplified. Full Cartesian product logic added in Phase 8 (see below).
 - [x] T034 [US2] Implement detailed error messages for pipeline configuration issues in pipeline_validation.py (completed in Phase 2)
 
 **Checkpoint**: ✅ User Stories 1 AND 2 both fully functional - can validate with custom pipelines including all 6 node types
@@ -235,6 +236,40 @@ Following photo-admin architecture (single standalone Python script):
 
 ---
 
+## Phase 11: Pairing Node Enhancement ✅ COMPLETE (Added 2025-12-28)
+
+**Purpose**: Implement full Cartesian product logic for pairing nodes discovered during production testing
+
+**Background**: Initial pairing node implementation (T033) was simplified - it only validated that files exist. Production pipeline revealed that pairing nodes must combine paths from 2 upstream branches using Cartesian product logic.
+
+**Independent Test**: Create pipeline with 2 pairing nodes (nested), verify all path combinations generated correctly (3×2=6 paths)
+
+- [x] T091 [P] Research pairing node topological ordering and path merging algorithms
+- [x] T092 Implement find_pairing_nodes_in_topological_order() using longest-path DP algorithm in pipeline_validation.py
+- [x] T093 Implement validate_pairing_node_inputs() checking exactly 2 inputs in pipeline_validation.py
+- [x] T094 Implement dfs_to_target_node() helper for DFS to pairing node in pipeline_validation.py
+- [x] T095 Implement merge_two_paths() combining paths with max depth, union files in pipeline_validation.py
+- [x] T096 Implement enumerate_paths_with_pairing() main function using hybrid iterative approach in pipeline_validation.py
+- [x] T097 Update call sites (validate_specific_image, build_graph_visualization_table) to use enumerate_paths_with_pairing()
+- [x] T098 [P] Unit test for topological ordering of pairing nodes in tests/test_pipeline_validation.py
+- [x] T099 [P] Unit test for pairing node input validation in tests/test_pipeline_validation.py
+- [x] T100 [P] Unit test for simple pairing (2 branches merge) in tests/test_pipeline_validation.py
+- [x] T101 [P] Unit test for branching before pairing (creates combinations) in tests/test_pipeline_validation.py
+- [x] T102 [P] Unit test for nested pairing nodes (sequential processing) in tests/test_pipeline_validation.py
+- [x] T103 Update spec.md, data-model.md, research.md with pairing node implementation details
+- [x] T104 Update config.yaml and template-config.yaml comments with pairing node restrictions
+- [x] T105 Validate production pipeline (3,844 paths enumerated correctly with 2 pairing nodes)
+
+**Checkpoint**: ✅ Pairing node Cartesian product logic fully implemented - production pipeline validates correctly
+
+**Key Results**:
+- 5 comprehensive tests (all passing)
+- Production pipeline: 3,844 paths enumerated through 2 pairing nodes
+- Topological ordering working correctly (longest-path algorithm)
+- Performance: <1 second for complex graph traversal
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -353,8 +388,9 @@ With multiple developers:
 - **Phase 8 (Advanced)**: 8 tasks
 - **Phase 9 (CLI UX)**: 7 tasks
 - **Phase 10 (Polish)**: 9 tasks
+- **Phase 11 (Pairing Enhancement)**: 15 tasks (5 tests + 7 implementation + 3 documentation) ✅ COMPLETE
 
-**Total**: 90 tasks
+**Total**: 105 tasks (90 original + 15 pairing enhancement)
 
 **Parallel Opportunities**: 35+ tasks can run in parallel across phases
 **MVP Scope**: Phases 1-3 + Phase 9 = 31 tasks for fully functional validation tool

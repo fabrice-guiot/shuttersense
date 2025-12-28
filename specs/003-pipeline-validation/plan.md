@@ -173,6 +173,11 @@ docs/
    - **Decision needed**: Single-pass vs multi-pass validation for multi-termination statistics
    - **Context**: Specific Image can match multiple terminations (count in both Black Box and Browsable)
 
+8. **Pairing Node Path Enumeration** *(Added 2025-12-28)*
+   - **Decision needed**: How to combine paths from 2 upstream branches at pairing nodes
+   - **Context**: Pairing nodes must generate Cartesian product (branch1_paths × branch2_paths), handle topological ordering for nested pairing, merge path state (depth, files, iterations), prevent infinite loops
+   - **Resolution**: Hybrid iterative approach with phase boundaries - DFS to pairing node → merge all combinations → continue DFS downstream. Longest-path algorithm for topological ordering. MAX_ITERATIONS=1 for pairing nodes (no loops allowed).
+
 ### Research Execution
 
 I'll now dispatch research agents to resolve these unknowns and consolidate findings in research.md.

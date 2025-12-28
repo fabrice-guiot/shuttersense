@@ -748,6 +748,493 @@ def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
     return all_paths
 
 
+# =============================================================================
+# Pairing-Aware Path Enumeration (Handles Pairing Nodes)
+# =============================================================================
+
+def find_pairing_nodes_in_topological_order(pipeline: PipelineConfig) -> List[PairingNode]:
+    """
+    Find all pairing nodes and return them in topological order (upstream first).
+
+    Uses depth-first traversal from Capture node to determine order.
+
+    Args:
+        pipeline: PipelineConfig object
+
+    Returns:
+        List of PairingNode objects in topological order
+
+    Raises:
+        ValueError: If pairing nodes form a cycle (not supported)
+    """
+    pairing_nodes = [n for n in pipeline.nodes if isinstance(n, PairingNode)]
+
+    if not pairing_nodes:
+        return []
+
+    # Build depth map via BFS from capture node
+    from collections import deque
+
+    capture_nodes = [n for n in pipeline.nodes if isinstance(n, CaptureNode)]
+    if not capture_nodes:
+        return pairing_nodes  # Shouldn't happen in valid pipeline
+
+    # Use dynamic programming to find longest path to each node
+    # This ensures correct topological ordering when nodes can be reached via multiple paths
+    node_depth = {capture_nodes[0].id: 0}
+
+    # Build reverse adjacency list (which nodes point to each node)
+    predecessors = {}
+    for node in pipeline.nodes:
+        for output_id in node.output:
+            if output_id not in predecessors:
+                predecessors[output_id] = []
+            predecessors[output_id].append(node.id)
+
+    # Repeatedly relax edges until no changes (Bellman-Ford for longest path)
+    changed = True
+    iterations = 0
+    max_iterations = len(pipeline.nodes) * 2  # Prevent infinite loops
+
+    while changed and iterations < max_iterations:
+        changed = False
+        iterations += 1
+
+        for node in pipeline.nodes:
+            # Skip if this node has no predecessors (except capture)
+            if node.id not in predecessors and not isinstance(node, CaptureNode):
+                continue
+
+            # Calculate longest path to this node
+            if isinstance(node, CaptureNode):
+                max_pred_depth = -1
+            else:
+                max_pred_depth = -1
+                for pred_id in predecessors.get(node.id, []):
+                    if pred_id in node_depth:
+                        max_pred_depth = max(max_pred_depth, node_depth[pred_id])
+
+            new_depth = max_pred_depth + 1
+
+            # Update if we found a longer path
+            if node.id not in node_depth or node_depth[node.id] < new_depth:
+                node_depth[node.id] = new_depth
+                changed = True
+
+    # Sort pairing nodes by depth (topological order)
+    pairing_with_depth = [(n, node_depth.get(n.id, float('inf'))) for n in pairing_nodes]
+    pairing_with_depth.sort(key=lambda x: x[1])
+
+    return [n for n, _ in pairing_with_depth]
+
+
+def validate_pairing_node_inputs(pairing_node: PairingNode, pipeline: PipelineConfig) -> tuple:
+    """
+    Validate that a pairing node has exactly 2 input nodes.
+
+    Args:
+        pairing_node: The pairing node to validate
+        pipeline: PipelineConfig object
+
+    Returns:
+        Tuple of (input1_id, input2_id) - the two nodes that output to this pairing node
+
+    Raises:
+        ValueError: If pairing node doesn't have exactly 2 inputs
+    """
+    # Find all nodes that output to this pairing node
+    input_nodes = []
+    for node in pipeline.nodes:
+        if pairing_node.id in node.output:
+            input_nodes.append(node.id)
+
+    if len(input_nodes) != 2:
+        raise ValueError(
+            f"Pairing node '{pairing_node.id}' must have exactly 2 input nodes, "
+            f"but has {len(input_nodes)}: {input_nodes}"
+        )
+
+    return (input_nodes[0], input_nodes[1])
+
+
+def merge_two_paths(
+    path1: List[Dict[str, Any]],
+    path2: List[Dict[str, Any]],
+    pairing_node: PairingNode,
+    state1: PathState,
+    state2: PathState
+) -> tuple:
+    """
+    Merge two paths that meet at a pairing node.
+
+    Creates a merged path by combining nodes from both branches.
+    Since both paths start from capture and may share common ancestors,
+    we keep path1 as the base and only append the unique branch nodes from path2.
+
+    Args:
+        path1: First path (list of node dicts)
+        path2: Second path (list of node dicts)
+        pairing_node: The pairing node where paths merge
+        state1: PathState from first path
+        state2: PathState from second path
+
+    Returns:
+        Tuple of (merged_path, merged_state) ready to continue DFS
+    """
+    # Start with path1 as base
+    merged_path = path1.copy()
+
+    # Find unique nodes in path2 (nodes not already in path1)
+    path1_node_ids = {n['node_id'] for n in path1}
+    for node in path2:
+        if node['node_id'] not in path1_node_ids:
+            merged_path.append(node)
+
+    # Add pairing node info
+    pairing_info = {
+        'node_id': pairing_node.id,
+        'node_type': 'Pairing',
+        'pairing_type': pairing_node.pairing_type,
+        'input_count': pairing_node.input_count,
+        'iteration_count': 1  # First time visiting this pairing node
+    }
+    merged_path.append(pairing_info)
+
+    # Merge iteration counts - take maximum per node
+    merged_iterations = state1.node_iterations.copy()
+    for node_id, count in state2.node_iterations.items():
+        if node_id in merged_iterations:
+            merged_iterations[node_id] = max(merged_iterations[node_id], count)
+        else:
+            merged_iterations[node_id] = count
+
+    # Mark pairing node as visited once
+    merged_iterations[pairing_node.id] = 1
+
+    # Merged state
+    merged_state = PathState(
+        node_iterations=merged_iterations,
+        current_suffix=state1.current_suffix  # Use first path's suffix (arbitrary choice)
+    )
+
+    return (merged_path, merged_state)
+
+
+def enumerate_paths_with_pairing(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
+    """
+    Enumerate all paths through pipeline, handling Pairing nodes correctly.
+
+    Pairing nodes combine paths from two upstream branches. This function:
+    1. Identifies pairing nodes in topological order
+    2. For each pairing node:
+       - Enumerates paths from current frontier to the pairing node
+       - Groups paths by which input edge they arrived on (2 groups)
+       - Creates all combinations (Cartesian product)
+       - Merges each pair: depth=max, files=union, iterations=max
+    3. Continues from merged paths to next pairing node or terminations
+
+    Restrictions:
+    - Pairing nodes must have exactly 2 inputs (validated)
+    - Pairing nodes cannot be in loops (MAX_ITERATIONS=1 enforced)
+    - If same pairing node encountered again, path is TRUNCATED
+
+    Args:
+        pipeline: PipelineConfig object with all nodes
+
+    Returns:
+        List of paths (same format as enumerate_all_paths)
+
+    Raises:
+        ValueError: If pairing node doesn't have exactly 2 inputs
+    """
+    # Find all pairing nodes in topological order
+    pairing_nodes = find_pairing_nodes_in_topological_order(pipeline)
+
+    # If no pairing nodes, use simpler algorithm
+    if not pairing_nodes:
+        return enumerate_all_paths(pipeline)
+
+    # Validate all pairing nodes have exactly 2 inputs
+    pairing_inputs = {}
+    for pairing_node in pairing_nodes:
+        input1, input2 = validate_pairing_node_inputs(pairing_node, pipeline)
+        pairing_inputs[pairing_node.id] = (input1, input2)
+
+    # Find Capture node
+    capture_nodes = [n for n in pipeline.nodes if isinstance(n, CaptureNode)]
+    if not capture_nodes:
+        return []
+
+    capture_node = capture_nodes[0]
+
+    # Initialize frontier with capture node
+    initial_path = []
+    initial_state = PathState()
+    current_frontier = [(initial_path, initial_state, capture_node.id)]
+
+    # Process each pairing node in topological order
+    for pairing_node in pairing_nodes:
+        input1_id, input2_id = pairing_inputs[pairing_node.id]
+
+        # Enumerate paths from frontier to this pairing node
+        paths_to_pairing = []
+
+        for seed_path, seed_state, start_node_id in current_frontier:
+            # DFS from start_node to pairing_node (treating pairing as termination)
+            paths = dfs_to_target_node(
+                start_node_id=start_node_id,
+                target_node_id=pairing_node.id,
+                current_path=seed_path.copy(),
+                state=seed_state,
+                pipeline=pipeline
+            )
+            paths_to_pairing.extend(paths)
+
+        # Group paths by which input they arrived on
+        branch1_paths = []
+        branch2_paths = []
+
+        for path, state, arrived_from in paths_to_pairing:
+            if arrived_from == input1_id:
+                branch1_paths.append((path, state))
+            elif arrived_from == input2_id:
+                branch2_paths.append((path, state))
+            # Ignore paths that didn't arrive via expected inputs
+
+        # Create all combinations (Cartesian product)
+        merged_paths = []
+        for path1, state1 in branch1_paths:
+            for path2, state2 in branch2_paths:
+                merged_path, merged_state = merge_two_paths(
+                    path1, path2, pairing_node, state1, state2
+                )
+                # Continue from pairing node's OUTPUTS, not the pairing node itself
+                for output_id in pairing_node.output:
+                    merged_paths.append((merged_path, merged_state, output_id))
+
+        # Update frontier for next pairing node (or final terminations)
+        current_frontier = merged_paths
+
+    # Final enumeration: frontier to terminations
+    final_paths = []
+    for seed_path, seed_state, start_node_id in current_frontier:
+        # Continue DFS to termination nodes
+        paths = dfs_to_termination_nodes(
+            start_node_id=start_node_id,
+            current_path=seed_path.copy(),
+            state=seed_state,
+            pipeline=pipeline
+        )
+        final_paths.extend(paths)
+
+    return final_paths
+
+
+def dfs_to_target_node(
+    start_node_id: str,
+    target_node_id: str,
+    current_path: List[Dict[str, Any]],
+    state: PathState,
+    pipeline: PipelineConfig
+) -> List[tuple]:
+    """
+    DFS from start node to target node (treating target as temporary termination).
+
+    Returns list of (path, state, arrived_from_node_id) tuples.
+    """
+    all_paths = []
+
+    def dfs(node_id: str, path: List[Dict[str, Any]], current_state: PathState, came_from: str):
+        if node_id not in pipeline.nodes_by_id:
+            return
+
+        node = pipeline.nodes_by_id[node_id]
+
+        # If we reached target, save path
+        if node_id == target_node_id:
+            all_paths.append((path.copy(), current_state, came_from))
+            return
+
+        # Build node info
+        node_info = {
+            'node_id': node.id,
+            'node_type': node.type
+        }
+
+        # Add type-specific fields
+        if isinstance(node, FileNode):
+            node_info['extension'] = node.extension
+        elif isinstance(node, ProcessNode):
+            node_info['method_ids'] = node.method_ids
+        elif isinstance(node, BranchingNode):
+            node_info['condition_description'] = node.condition_description
+        elif isinstance(node, PairingNode):
+            # If we encounter a pairing node that's NOT our target, truncate
+            # (pairing nodes can only be visited once - no loops allowed)
+            if node_id != target_node_id:
+                truncated_termination = {
+                    'node_id': f'truncated_at_pairing_{node_id}',
+                    'node_type': 'Termination',
+                    'termination_type': 'TRUNCATED',
+                    'truncated': True,
+                    'truncation_note': f'Pairing node {node_id} encountered multiple times (loops not allowed)'
+                }
+                path.append(truncated_termination)
+                all_paths.append((path.copy(), current_state, came_from))
+                path.pop()
+                return
+
+        # Track iteration count for non-Capture/Termination nodes
+        if not isinstance(node, (CaptureNode, TerminationNode)):
+            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
+            node_info['iteration_count'] = iteration_count
+
+        # Add node to path
+        path.append(node_info)
+
+        # Check loop limit for non-Capture/Termination nodes
+        if not isinstance(node, (CaptureNode, TerminationNode)):
+            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
+
+            if iteration_count > MAX_ITERATIONS:
+                truncated_termination = {
+                    'node_id': f'truncated_from_{node.id}',
+                    'node_type': 'Termination',
+                    'termination_type': 'TRUNCATED',
+                    'truncated': True,
+                    'truncation_note': f'Path truncated after {MAX_ITERATIONS} iterations of {node.id}'
+                }
+                path.append(truncated_termination)
+                all_paths.append((path.copy(), current_state, came_from))
+                path.pop()
+                path.pop()
+                return
+
+            # Update state
+            new_state = PathState(
+                node_iterations=current_state.node_iterations.copy(),
+                current_suffix=current_state.current_suffix
+            )
+            new_state.node_iterations[node.id] = iteration_count
+        else:
+            new_state = current_state
+
+        # Explore all output nodes
+        for output_id in node.output:
+            dfs(output_id, path, new_state, node_id)
+
+        # Backtrack
+        path.pop()
+
+    # Start DFS from start_node
+    dfs(start_node_id, current_path, state, start_node_id)
+
+    return all_paths
+
+
+def dfs_to_termination_nodes(
+    start_node_id: str,
+    current_path: List[Dict[str, Any]],
+    state: PathState,
+    pipeline: PipelineConfig
+) -> List[List[Dict[str, Any]]]:
+    """
+    DFS from start node to any termination node.
+
+    Similar to enumerate_all_paths but starts from arbitrary node (not Capture).
+    """
+    all_paths = []
+
+    def dfs(node_id: str, path: List[Dict[str, Any]], current_state: PathState):
+        if node_id not in pipeline.nodes_by_id:
+            return
+
+        node = pipeline.nodes_by_id[node_id]
+
+        # Build node info
+        node_info = {
+            'node_id': node.id,
+            'node_type': node.type
+        }
+
+        # Add type-specific fields
+        if isinstance(node, FileNode):
+            node_info['extension'] = node.extension
+        elif isinstance(node, ProcessNode):
+            node_info['method_ids'] = node.method_ids
+        elif isinstance(node, TerminationNode):
+            node_info['termination_type'] = node.termination_type
+            node_info['truncated'] = False
+        elif isinstance(node, BranchingNode):
+            node_info['condition_description'] = node.condition_description
+        elif isinstance(node, PairingNode):
+            # Pairing node encountered again - truncate (no loops)
+            truncated_termination = {
+                'node_id': f'truncated_at_pairing_{node_id}',
+                'node_type': 'Termination',
+                'termination_type': 'TRUNCATED',
+                'truncated': True,
+                'truncation_note': f'Pairing node {node_id} encountered multiple times (loops not allowed)'
+            }
+            path.append(truncated_termination)
+            all_paths.append(path.copy())
+            path.pop()
+            return
+
+        # Track iteration count for non-Capture/Termination nodes
+        if not isinstance(node, (CaptureNode, TerminationNode)):
+            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
+            node_info['iteration_count'] = iteration_count
+
+        # Add node to path
+        path.append(node_info)
+
+        # If termination, save path
+        if isinstance(node, TerminationNode):
+            all_paths.append(path.copy())
+            path.pop()
+            return
+
+        # Check loop limit
+        if not isinstance(node, (CaptureNode, TerminationNode)):
+            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
+
+            if iteration_count > MAX_ITERATIONS:
+                truncated_termination = {
+                    'node_id': f'truncated_from_{node.id}',
+                    'node_type': 'Termination',
+                    'termination_type': 'TRUNCATED',
+                    'truncated': True,
+                    'truncation_note': f'Path truncated after {MAX_ITERATIONS} iterations of {node.id}'
+                }
+                path.append(truncated_termination)
+                all_paths.append(path.copy())
+                path.pop()
+                path.pop()
+                return
+
+            # Update state
+            new_state = PathState(
+                node_iterations=current_state.node_iterations.copy(),
+                current_suffix=current_state.current_suffix
+            )
+            new_state.node_iterations[node.id] = iteration_count
+        else:
+            new_state = current_state
+
+        # Explore all output nodes
+        for output_id in node.output:
+            dfs(output_id, path, new_state)
+
+        # Backtrack
+        path.pop()
+
+    # Start DFS from start_node
+    dfs(start_node_id, current_path, state)
+
+    return all_paths
+
+
 def generate_expected_files(path: List[Dict[str, Any]], base_filename: str) -> List[str]:
     """
     Generate list of expected files for a specific image following a pipeline path.
@@ -900,8 +1387,8 @@ def validate_specific_image(
     Returns:
         ValidationResult with termination_matches and overall_status
     """
-    # Enumerate all paths through pipeline
-    all_paths = enumerate_all_paths(pipeline)
+    # Enumerate all paths through pipeline (pairing-aware)
+    all_paths = enumerate_paths_with_pairing(pipeline)
 
     # Group paths by termination node
     paths_by_termination = {}
@@ -1566,8 +2053,8 @@ def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdmin
     # Generate sample base filename
     sample_base_filename = generate_sample_base_filename(config)
 
-    # Enumerate all paths
-    all_paths = enumerate_all_paths(pipeline)
+    # Enumerate all paths (pairing-aware)
+    all_paths = enumerate_paths_with_pairing(pipeline)
 
     # Build table rows
     headers = ["Path #", "Node Path", "Depth", "Termination Type", "Expected Files", "Truncated"]

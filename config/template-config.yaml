@@ -186,15 +186,26 @@ processing_pipelines:
 #
 #    Note: method_ids can be empty string [""] for no suffix (e.g., selection step)
 #
-# 4. PAIRING NODE (Combines multiple files, e.g., HDR, Panorama)
+# 4. PAIRING NODE (Combines paths from 2 upstream branches using Cartesian product)
 #    Required: id, type, name, output, pairing_type, input_count
 #    Example:
-#      - id: hdr_merge
+#      - id: metadata_pairing
 #        type: Pairing
-#        name: HDR Merge
-#        pairing_type: HDR           # Type of pairing (HDR, Panorama, Focus Stack, etc.)
-#        input_count: 3              # Number of input files expected
-#        output: [merged_file]
+#        name: Raw + XMP Pairing
+#        pairing_type: Metadata      # Type of pairing (Metadata, ImageGroup, HDR, etc.)
+#        input_count: 2              # MUST be 2 (exactly 2 inputs required)
+#        output: [next_step]
+#
+#    CRITICAL RESTRICTIONS:
+#    - Must have exactly 2 nodes outputting to this pairing node (validated at runtime)
+#    - Cannot be in loops (MAX_ITERATIONS=1, path truncated if revisited)
+#    - Processed in topological order (upstream pairing nodes first)
+#
+#    PATH MERGING LOGIC:
+#    - If branch 1 has N paths and branch 2 has M paths → N×M merged paths generated
+#    - Merged depth = max(depth1, depth2)
+#    - Merged files = union(files1, files2) [automatically deduplicated]
+#    - Merged iterations = max per node_id across both paths
 #
 # 5. BRANCHING NODE (Conditional paths - explores ALL branches)
 #    Required: id, type, name, output, condition_description
@@ -222,6 +233,9 @@ processing_pipelines:
 #
 # - Validation enumerates ALL paths from Capture to Termination nodes
 # - Branching nodes explore ALL branches (not just one)
+# - Pairing nodes combine paths using Cartesian product (branch1 × branch2)
+#   * Processed in topological order (upstream pairing first)
+#   * Cannot be in loops (MAX_ITERATIONS=1 for pairing nodes)
 # - Loops are limited to 5 iterations per Process node (prevents infinite paths)
 # - Files are classified as:
 #   * CONSISTENT: All expected files present, no extra files
