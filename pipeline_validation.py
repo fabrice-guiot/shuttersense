@@ -1471,12 +1471,21 @@ def validate_specific_image(
     # Enumerate all paths through pipeline (pairing-aware)
     all_paths = enumerate_paths_with_pairing(pipeline)
 
-    # Group paths by termination node
+    # Group paths by termination node (EXCLUDE truncated paths for validation)
     paths_by_termination = {}
     for path in all_paths:
         if path:
             # Last node should be termination
             term_node = path[-1]
+
+            # SKIP truncated paths - they should not be used for actual validation
+            if term_node.get('truncated', False):
+                continue
+
+            # SKIP paths with TRUNCATED termination type
+            if term_node.get('termination_type') == 'TRUNCATED':
+                continue
+
             term_id = term_node.get('node_id')
             if term_id not in paths_by_termination:
                 paths_by_termination[term_id] = []
@@ -1493,6 +1502,10 @@ def validate_specific_image(
         path_evaluations = []
 
         for path in paths:
+            # Double-check: skip any truncated paths (should already be filtered)
+            if any(node.get('truncated', False) for node in path):
+                continue
+
             expected_files = generate_expected_files(path, specific_image.unique_id)
             expected_files_set = set(expected_files)
 
@@ -1509,15 +1522,6 @@ def validate_specific_image(
             else:
                 completion = 0.0
 
-            # Check if this path was truncated
-            path_truncated = any(node.get('truncated', False) for node in path)
-            truncation_note = None
-            if path_truncated:
-                for node in path:
-                    if node.get('truncation_note'):
-                        truncation_note = node['truncation_note']
-                        break
-
             path_evaluations.append({
                 'path': path,
                 'status': path_status,
@@ -1525,10 +1529,14 @@ def validate_specific_image(
                 'missing_files': missing,
                 'extra_files': extra,
                 'completion_percentage': completion,
-                'truncated': path_truncated,
-                'truncation_note': truncation_note,
+                'truncated': False,  # All truncated paths already filtered
+                'truncation_note': None,
                 'path_depth': len([n for n in path if n.get('node_type') not in ('Capture', 'Termination')])
             })
+
+        # Skip if no valid (non-truncated) paths to this termination
+        if not path_evaluations:
+            continue
 
         # Find the BEST status (CONSISTENT > CONSISTENT_WITH_WARNING > PARTIAL > INCONSISTENT)
         status_priority = {
@@ -1549,8 +1557,6 @@ def validate_specific_image(
         completion_percentage = best_eval['completion_percentage']
         missing_files = sorted(list(best_eval['missing_files']))
         extra_files = sorted(list(best_eval['extra_files']))
-        truncated = best_eval['truncated']
-        truncation_note = best_eval['truncation_note']
         all_expected_files = best_eval['expected_files']
 
         # Get termination type
@@ -1558,6 +1564,7 @@ def validate_specific_image(
         termination_type = term_node.get('termination_type', term_id)
 
         # Create TerminationMatchResult
+        # Note: truncated is always False for actual validation (truncated paths are excluded)
         term_match = TerminationMatchResult(
             termination_id=term_id,
             termination_type=termination_type,
@@ -1567,8 +1574,8 @@ def validate_specific_image(
             actual_files=specific_image.actual_files,
             missing_files=missing_files,
             extra_files=extra_files,
-            truncated=truncated,
-            truncation_note=truncation_note
+            truncated=False,
+            truncation_note=None
         )
         termination_matches.append(term_match)
 
