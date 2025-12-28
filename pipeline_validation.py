@@ -753,14 +753,15 @@ def generate_expected_files(path: List[Dict[str, Any]], base_filename: str) -> L
     Generate list of expected files for a specific image following a pipeline path.
 
     This function walks through a pipeline path and builds filenames with appropriate
-    suffixes from Process nodes.
+    suffixes from Process nodes. Duplicate filenames are removed, keeping only the
+    last occurrence of each unique filename.
 
     Args:
         path: List of node dictionaries from enumerate_all_paths()
         base_filename: Base filename (e.g., "AB3D0001" or "AB3D0001-2")
 
     Returns:
-        List of expected filenames
+        List of expected filenames (deduplicated, preserving order of last occurrence)
 
     Example:
         path = [
@@ -774,8 +775,11 @@ def generate_expected_files(path: List[Dict[str, Any]], base_filename: str) -> L
 
         Returns: ['AB3D0001.CR3', 'AB3D0001-DxO_DeepPRIME_XD2s.DNG']
     """
-    expected_files = []
+    # Track filenames with their last position in path
+    # Key: filename, Value: (position, filename)
+    file_positions = {}
     current_suffix = ""
+    position = 0
 
     for node in path:
         node_type = node.get('node_type')
@@ -787,7 +791,10 @@ def generate_expected_files(path: List[Dict[str, Any]], base_filename: str) -> L
                 filename = f"{base_filename}{current_suffix}{extension}"
             else:
                 filename = f"{base_filename}{extension}"
-            expected_files.append(filename)
+
+            # Track position of this filename (overwrites if duplicate)
+            file_positions[filename] = (position, filename)
+            position += 1
 
         elif node_type == 'Process':
             # Add processing method suffixes
@@ -795,6 +802,9 @@ def generate_expected_files(path: List[Dict[str, Any]], base_filename: str) -> L
             for method_id in method_ids:
                 if method_id:  # Empty string means no suffix
                     current_suffix += f"-{method_id}"
+
+    # Sort by position to maintain order, extract filenames
+    expected_files = [filename for (pos, filename) in sorted(file_positions.values())]
 
     return expected_files
 
@@ -1563,7 +1573,7 @@ def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdmin
     headers = ["Path #", "Node Path", "Depth", "Termination Type", "Expected Files", "Truncated"]
     rows = []
 
-    for i, path in enumerate(all_paths, 1):
+    for path in all_paths:
         # Get termination info
         termination_node = path[-1] if path else None
         if termination_node:
@@ -1595,14 +1605,22 @@ def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdmin
                 files_str = "(no files)"
 
             row = [
-                str(i),
+                None,  # Path # - will be assigned after sorting
                 node_path_str,
-                str(depth),
+                depth,  # Keep as int for sorting
                 termination_type,
                 files_str,
                 truncated_str
             ]
             rows.append(row)
+
+    # Sort rows by depth (index 2) - lower depth first for easier debugging
+    rows.sort(key=lambda row: row[2])
+
+    # Assign path numbers after sorting
+    for i, row in enumerate(rows, 1):
+        row[0] = str(i)
+        row[2] = str(row[2])  # Convert depth back to string for display
 
     # Build section
     section = ReportSection(
@@ -1613,8 +1631,9 @@ def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdmin
             'rows': rows
         },
         description=f"This table shows all {len(all_paths)} paths enumerated through the pipeline graph using "
-                   f"sample base filename '{sample_base_filename}'. Each path shows the node traversal sequence, "
-                   f"depth (nodes excluding Capture/Termination), expected files, and whether the path was truncated "
+                   f"sample base filename '{sample_base_filename}'. Paths are sorted by depth (low to high) for easier debugging. "
+                   f"Each path shows the node traversal sequence, depth (nodes excluding Capture/Termination), "
+                   f"expected files (deduplicated - only final version of each file shown), and whether the path was truncated "
                    f"due to loop limits. Use this to debug graph traversal and verify expected files."
     )
 

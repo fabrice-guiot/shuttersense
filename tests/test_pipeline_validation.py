@@ -1769,3 +1769,55 @@ class TestGraphVisualization:
             args = pipeline_validation.parse_arguments()
             assert args.display_graph is True
             assert args.folder_path == test_folder
+
+    def test_generate_expected_files_deduplication(self):
+        """Test that duplicate filenames are removed, keeping only the last occurrence."""
+        # Create a path with duplicate File nodes (same extension)
+        path = [
+            {'node_type': 'Capture'},
+            {'node_type': 'File', 'extension': '.CR3'},  # First CR3
+            {'node_type': 'Process', 'method_ids': ['']},  # No suffix
+            {'node_type': 'File', 'extension': '.CR3'},  # Second CR3 (same filename!)
+            {'node_type': 'Process', 'method_ids': ['DxO']},
+            {'node_type': 'File', 'extension': '.DNG'},
+            {'node_type': 'Termination'}
+        ]
+
+        expected_files = pipeline_validation.generate_expected_files(path, 'AB3D0001')
+
+        # Should only have 2 files, not 3 (CR3 should appear only once)
+        assert len(expected_files) == 2
+        assert 'AB3D0001.CR3' in expected_files
+        assert 'AB3D0001-DxO.DNG' in expected_files
+
+        # Verify no duplicates
+        assert len(expected_files) == len(set(expected_files))
+
+    def test_graph_visualization_table_sorted_by_depth(self, sample_pipeline_config):
+        """Test that graph visualization table is sorted by depth (low to high)."""
+        from utils.config_manager import PhotoAdminConfig
+
+        config_data = {
+            'processing_pipelines': sample_pipeline_config,
+            'camera_mappings': {'AB3D': [{'name': 'Test Camera'}]}
+        }
+
+        with patch.object(PhotoAdminConfig, '_load_config', return_value=config_data):
+            config = PhotoAdminConfig()
+            pipeline = pipeline_validation.load_pipeline_config(config, 'default')
+
+            # Build graph visualization table
+            section = pipeline_validation.build_graph_visualization_table(pipeline, config)
+
+            rows = section.data['rows']
+            assert len(rows) >= 1  # Should have at least one row
+
+            # Extract depths (column index 2)
+            depths = [int(row[2]) for row in rows]
+
+            # Verify depths are in ascending order (only meaningful if multiple rows)
+            if len(depths) > 1:
+                assert depths == sorted(depths), f"Depths not sorted: {depths}"
+            else:
+                # Single row case - just verify depth is a valid non-negative integer
+                assert depths[0] >= 0
