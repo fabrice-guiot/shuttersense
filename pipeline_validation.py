@@ -1258,9 +1258,9 @@ def main():
     for result in validation_results:
         # Count the most severe status across all terminations
         worst_status = ValidationStatus.CONSISTENT
-        for term_result in result.termination_results:
-            if term_result.status.value > worst_status.value:
-                worst_status = term_result.status
+        for term_match in result.termination_matches:
+            if term_match.status.value > worst_status.value:
+                worst_status = term_match.status
         status_counts[worst_status] += 1
 
     print("Validation Summary:")
