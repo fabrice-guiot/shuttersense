@@ -1379,14 +1379,182 @@ processing_pipelines:
 
 
 class TestHTMLReportGeneration:
-    """Tests for HTML report generation (Phase 7 - TODO)."""
+    """Tests for HTML report generation (Phase 7 - User Story 5)."""
 
-    def test_generate_html_report(self):
-        """Test HTML report generation."""
-        # TODO: Implement in Phase 7
-        pass
+    def test_build_report_context(self):
+        """Test T056: build_report_context() creates ReportContext with KPIs and sections."""
+        # Create sample validation results
+        validation_results = [
+            {
+                'unique_id': 'AB3D0001',
+                'group_id': 'AB3D0001',
+                'status': 'CONSISTENT',
+                'termination_matches': [
+                    {
+                        'termination_type': 'Black Box Archive',
+                        'status': 'CONSISTENT',
+                        'expected_files': ['AB3D0001.CR3', 'AB3D0001.XMP', 'AB3D0001-DxO.DNG'],
+                        'actual_files': ['AB3D0001.CR3', 'AB3D0001.XMP', 'AB3D0001-DxO.DNG'],
+                        'missing_files': [],
+                        'extra_files': []
+                    }
+                ]
+            },
+            {
+                'unique_id': 'AB3D0002',
+                'group_id': 'AB3D0002',
+                'status': 'PARTIAL',
+                'termination_matches': [
+                    {
+                        'termination_type': 'Black Box Archive',
+                        'status': 'PARTIAL',
+                        'expected_files': ['AB3D0002.CR3', 'AB3D0002.XMP', 'AB3D0002-DxO.DNG'],
+                        'actual_files': ['AB3D0002.CR3', 'AB3D0002.XMP'],
+                        'missing_files': ['AB3D0002-DxO.DNG'],
+                        'extra_files': []
+                    }
+                ]
+            },
+            {
+                'unique_id': 'AB3D0003',
+                'group_id': 'AB3D0003',
+                'status': 'CONSISTENT_WITH_WARNING',
+                'termination_matches': [
+                    {
+                        'termination_type': 'Black Box Archive',
+                        'status': 'CONSISTENT_WITH_WARNING',
+                        'expected_files': ['AB3D0003.CR3', 'AB3D0003.XMP'],
+                        'actual_files': ['AB3D0003.CR3', 'AB3D0003.XMP', 'AB3D0003-backup.CR3'],
+                        'missing_files': [],
+                        'extra_files': ['AB3D0003-backup.CR3']
+                    }
+                ]
+            }
+        ]
 
-    def test_report_contains_validation_summary(self):
-        """Test report contains validation statistics."""
-        # TODO: Implement in Phase 7
-        pass
+        # Build report context
+        scan_start = datetime.now()
+        scan_end = datetime.now()
+        context = pipeline_validation.build_report_context(
+            validation_results=validation_results,
+            scan_path='/test/photos',
+            scan_start=scan_start,
+            scan_end=scan_end
+        )
+
+        # Verify ReportContext structure
+        assert context.tool_name == 'Pipeline Validation Tool'
+        assert context.tool_version == pipeline_validation.TOOL_VERSION
+        assert context.scan_path == '/test/photos'
+        assert context.scan_timestamp == scan_start
+        assert context.scan_duration >= 0
+
+        # Verify KPIs exist
+        assert len(context.kpis) >= 4  # Total, Consistent, Partial, Warning
+        total_kpi = next(kpi for kpi in context.kpis if 'Total' in kpi.title)
+        assert total_kpi.value == '3'
+
+        consistent_kpi = next(kpi for kpi in context.kpis if 'Consistent' in kpi.title)
+        assert consistent_kpi.value == '1'
+        assert consistent_kpi.status == 'success'
+
+        # Verify sections exist
+        assert len(context.sections) >= 2  # At least pie chart and table
+
+    def test_chart_data_generation(self):
+        """Test T057: Chart data generation for pie and bar charts."""
+        # Create sample validation results
+        validation_results = [
+            {
+                'unique_id': 'AB3D0001',
+                'status': 'CONSISTENT',
+                'termination_matches': [{'status': 'CONSISTENT'}]
+            },
+            {
+                'unique_id': 'AB3D0002',
+                'status': 'CONSISTENT',
+                'termination_matches': [{'status': 'CONSISTENT'}]
+            },
+            {
+                'unique_id': 'AB3D0003',
+                'status': 'PARTIAL',
+                'termination_matches': [{'status': 'PARTIAL'}]
+            },
+            {
+                'unique_id': 'AB3D0004',
+                'status': 'CONSISTENT_WITH_WARNING',
+                'termination_matches': [{'status': 'CONSISTENT_WITH_WARNING'}]
+            }
+        ]
+
+        # Test pie chart data
+        pie_section = pipeline_validation.build_status_distribution_chart(validation_results)
+        assert pie_section.type == 'chart_pie'
+        assert pie_section.title == 'Status Distribution'
+        assert 'labels' in pie_section.data
+        assert 'values' in pie_section.data
+
+        # Verify data structure
+        labels = pie_section.data['labels']
+        assert 'CONSISTENT' in labels
+        assert 'PARTIAL' in labels
+        assert 'CONSISTENT-WITH-WARNING' in labels
+
+        values = pie_section.data['values']
+        assert values[labels.index('CONSISTENT')] == 2
+        assert values[labels.index('PARTIAL')] == 1
+        assert values[labels.index('CONSISTENT-WITH-WARNING')] == 1
+
+    def test_html_report_generation_integration(self, tmp_path):
+        """Test T058: Integration test for HTML report with timestamped filename."""
+        # Create sample validation results
+        validation_results = [
+            {
+                'unique_id': 'AB3D0001',
+                'group_id': 'AB3D0001',
+                'status': 'CONSISTENT',
+                'termination_matches': [
+                    {
+                        'termination_type': 'Black Box Archive',
+                        'status': 'CONSISTENT',
+                        'expected_files': ['AB3D0001.CR3'],
+                        'actual_files': ['AB3D0001.CR3'],
+                        'missing_files': [],
+                        'extra_files': []
+                    }
+                ]
+            }
+        ]
+
+        # Generate HTML report
+        scan_start = datetime.now()
+        scan_end = datetime.now()
+        report_path = pipeline_validation.generate_html_report(
+            validation_results=validation_results,
+            output_dir=tmp_path,
+            scan_path='/test/photos',
+            scan_start=scan_start,
+            scan_end=scan_end
+        )
+
+        # Verify report was created
+        assert report_path.exists()
+        assert report_path.suffix == '.html'
+
+        # Verify timestamped filename format
+        assert 'pipeline_validation_report_' in report_path.name
+        # Format: pipeline_validation_report_YYYY-MM-DD_HH-MM-SS.html
+
+        # Read and verify report content
+        html_content = report_path.read_text(encoding='utf-8')
+        assert 'Pipeline Validation Tool' in html_content
+        assert 'AB3D0001' in html_content
+        assert 'CONSISTENT' in html_content
+
+        # Verify Chart.js is included
+        assert 'Chart.js' in html_content or 'chart' in html_content.lower()
+
+        # Verify base template structure
+        assert '<!DOCTYPE html>' in html_content
+        assert '<html' in html_content
+        assert '</html>' in html_content

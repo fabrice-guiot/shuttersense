@@ -1467,6 +1467,331 @@ def prompt_cache_action(pipeline_changed: bool, folder_changed: bool, cache_edit
         return None
 
 
+# =============================================================================
+# HTML Report Generation Functions (Phase 7 - User Story 5)
+# =============================================================================
+
+def build_kpi_cards(validation_results: list) -> List:
+    """
+    Build KPI cards for executive summary statistics.
+
+    Args:
+        validation_results: List of ValidationResult dictionaries
+
+    Returns:
+        List of KPICard objects for report context
+    """
+    from utils.report_renderer import KPICard
+
+    total_groups = len(validation_results)
+
+    # Count by status
+    consistent = sum(1 for r in validation_results if r.get('status') == 'CONSISTENT')
+    partial = sum(1 for r in validation_results if r.get('status') == 'PARTIAL')
+    inconsistent = sum(1 for r in validation_results if r.get('status') == 'INCONSISTENT')
+    warning = sum(1 for r in validation_results if r.get('status') == 'CONSISTENT_WITH_WARNING')
+
+    # Calculate archival readiness (count of groups reaching termination)
+    archival_ready = consistent + warning
+
+    kpis = [
+        KPICard(
+            title="Total Image Groups",
+            value=str(total_groups),
+            status="info",
+            icon="📊"
+        ),
+        KPICard(
+            title="Consistent",
+            value=str(consistent),
+            status="success",
+            unit=f"{(consistent/total_groups*100):.1f}%" if total_groups > 0 else "0%",
+            icon="✓",
+            tooltip="All expected files present, pipeline complete"
+        ),
+        KPICard(
+            title="Partial",
+            value=str(partial),
+            status="danger",
+            unit=f"{(partial/total_groups*100):.1f}%" if total_groups > 0 else "0%",
+            icon="⚠",
+            tooltip="Missing expected files, pipeline incomplete"
+        ),
+        KPICard(
+            title="With Warnings",
+            value=str(warning),
+            status="warning",
+            unit=f"{(warning/total_groups*100):.1f}%" if total_groups > 0 else "0%",
+            icon="!",
+            tooltip="All expected files present, but extra files detected"
+        ),
+        KPICard(
+            title="Archival Ready",
+            value=str(archival_ready),
+            status="success" if archival_ready == total_groups else "warning",
+            unit=f"{(archival_ready/total_groups*100):.1f}%" if total_groups > 0 else "0%",
+            icon="📦",
+            tooltip="Groups that reached at least one termination node"
+        )
+    ]
+
+    return kpis
+
+
+def build_status_distribution_chart(validation_results: list):
+    """
+    Build pie chart showing status distribution.
+
+    Args:
+        validation_results: List of ValidationResult dictionaries
+
+    Returns:
+        ReportSection with pie chart data
+    """
+    from utils.report_renderer import ReportSection
+
+    # Count by status
+    status_counts = {
+        'CONSISTENT': sum(1 for r in validation_results if r.get('status') == 'CONSISTENT'),
+        'PARTIAL': sum(1 for r in validation_results if r.get('status') == 'PARTIAL'),
+        'INCONSISTENT': sum(1 for r in validation_results if r.get('status') == 'INCONSISTENT'),
+        'CONSISTENT-WITH-WARNING': sum(1 for r in validation_results if r.get('status') == 'CONSISTENT_WITH_WARNING')
+    }
+
+    # Filter out zero counts
+    filtered_counts = {k: v for k, v in status_counts.items() if v > 0}
+
+    # Chart data with 'values' key (required by base template)
+    chart_data = {
+        'labels': list(filtered_counts.keys()),
+        'values': list(filtered_counts.values()),
+        'colors': [
+            'rgba(16, 185, 129, 0.8)',   # Green for CONSISTENT
+            'rgba(239, 68, 68, 0.8)',    # Red for PARTIAL
+            'rgba(220, 38, 38, 0.8)',    # Dark red for INCONSISTENT
+            'rgba(245, 158, 11, 0.8)'    # Amber for CONSISTENT-WITH-WARNING
+        ][:len(filtered_counts)]
+    }
+
+    return ReportSection(
+        title="Status Distribution",
+        type="chart_pie",
+        data=chart_data,
+        description="Distribution of validation statuses across all image groups"
+    )
+
+
+def build_chart_sections(validation_results: list) -> List:
+    """
+    Build chart sections for visualizations.
+
+    Args:
+        validation_results: List of ValidationResult dictionaries
+
+    Returns:
+        List of ReportSection objects with chart data
+    """
+    sections = []
+
+    # Add pie chart for status distribution
+    sections.append(build_status_distribution_chart(validation_results))
+
+    # TODO: Add bar chart for groups per path (future enhancement)
+
+    return sections
+
+
+def build_table_sections(validation_results: list) -> List:
+    """
+    Build table sections for detailed group information.
+
+    Args:
+        validation_results: List of ValidationResult dictionaries
+
+    Returns:
+        List of ReportSection objects with table data
+    """
+    from utils.report_renderer import ReportSection
+
+    sections = []
+
+    # Group results by status
+    by_status = {
+        'CONSISTENT': [],
+        'CONSISTENT_WITH_WARNING': [],
+        'PARTIAL': [],
+        'INCONSISTENT': []
+    }
+
+    for result in validation_results:
+        status = result.get('status', 'INCONSISTENT')
+        by_status[status].append(result)
+
+    # Create table for each status with groups
+    status_order = ['CONSISTENT', 'CONSISTENT_WITH_WARNING', 'PARTIAL', 'INCONSISTENT']
+    status_labels = {
+        'CONSISTENT': 'Consistent Groups',
+        'CONSISTENT_WITH_WARNING': 'Groups with Warnings',
+        'PARTIAL': 'Partial Groups (Missing Files)',
+        'INCONSISTENT': 'Inconsistent Groups'
+    }
+
+    for status in status_order:
+        groups = by_status[status]
+        if not groups:
+            continue
+
+        # Build table rows (list of lists for base template)
+        rows = []
+        for group in groups:
+            # Get first termination match for display
+            termination_matches = group.get('termination_matches', [])
+            if termination_matches:
+                match = termination_matches[0]
+                termination_type = match.get('termination_type', 'Unknown')
+                expected_files = match.get('expected_files', [])
+                actual_files = match.get('actual_files', [])
+                missing_files = match.get('missing_files', [])
+                extra_files = match.get('extra_files', [])
+            else:
+                termination_type = 'None'
+                expected_files = []
+                actual_files = []
+                missing_files = []
+                extra_files = []
+
+            group_id = group.get('unique_id', group.get('group_id', 'Unknown'))
+
+            # Build file list string
+            files_display = '<br>'.join([
+                f'<span style="color: #059669;">{f}</span>' for f in actual_files
+            ])
+            if missing_files:
+                files_display += '<br>' + '<br>'.join([
+                    f'<span style="color: #dc2626; text-decoration: line-through;">{f}</span>' for f in missing_files
+                ])
+            if extra_files:
+                files_display += '<br>' + '<br>'.join([
+                    f'<span style="color: #f59e0b; font-style: italic;">{f}</span>' for f in extra_files
+                ])
+
+            row = [
+                group_id,
+                status,
+                termination_type,
+                len(expected_files),
+                len(actual_files),
+                len(missing_files),
+                len(extra_files),
+                files_display
+            ]
+            rows.append(row)
+
+        table_data = {
+            'headers': ['Group ID', 'Status', 'Termination', 'Expected', 'Actual', 'Missing', 'Extra', 'Files'],
+            'rows': rows
+        }
+
+        sections.append(ReportSection(
+            title=status_labels[status],
+            type="table",
+            data=table_data,
+            description=f"{len(groups)} group(s) with {status} status",
+            collapsible=True
+        ))
+
+    return sections
+
+
+def build_report_context(
+    validation_results: list,
+    scan_path: str,
+    scan_start: datetime,
+    scan_end: datetime
+) -> 'ReportContext':
+    """
+    Build complete ReportContext from validation results.
+
+    Args:
+        validation_results: List of ValidationResult dictionaries
+        scan_path: Path to scanned folder
+        scan_start: Scan start timestamp
+        scan_end: Scan end timestamp
+
+    Returns:
+        ReportContext ready for template rendering
+    """
+    from utils.report_renderer import ReportContext
+
+    scan_duration = (scan_end - scan_start).total_seconds()
+
+    # Build KPIs
+    kpis = build_kpi_cards(validation_results)
+
+    # Build sections
+    sections = []
+    sections.extend(build_chart_sections(validation_results))
+    sections.extend(build_table_sections(validation_results))
+
+    return ReportContext(
+        tool_name="Pipeline Validation Tool",
+        tool_version=TOOL_VERSION,
+        scan_path=scan_path,
+        scan_timestamp=scan_start,
+        scan_duration=scan_duration,
+        kpis=kpis,
+        sections=sections,
+        warnings=[],
+        errors=[]
+    )
+
+
+def generate_html_report(
+    validation_results: list,
+    output_dir: Path,
+    scan_path: str,
+    scan_start: datetime,
+    scan_end: datetime
+) -> Path:
+    """
+    Generate HTML report with timestamped filename.
+
+    Args:
+        validation_results: List of ValidationResult dictionaries
+        output_dir: Directory where report should be saved
+        scan_path: Path to scanned folder
+        scan_start: Scan start timestamp
+        scan_end: Scan end timestamp
+
+    Returns:
+        Path to generated HTML report
+    """
+    from utils.report_renderer import ReportRenderer
+
+    # Build report context
+    context = build_report_context(
+        validation_results=validation_results,
+        scan_path=scan_path,
+        scan_start=scan_start,
+        scan_end=scan_end
+    )
+
+    # Generate timestamped filename
+    timestamp_str = scan_start.strftime("%Y-%m-%d_%H-%M-%S")
+    report_filename = f"pipeline_validation_report_{timestamp_str}.html"
+    report_path = Path(output_dir) / report_filename
+
+    # Render report using ReportRenderer
+    renderer = ReportRenderer()
+    renderer.render_report(
+        context=context,
+        template_name="pipeline_validation.html.j2",
+        output_path=str(report_path)
+    )
+
+    return report_path
+
+
 def main():
     """Main entry point for pipeline validation tool."""
     # Setup signal handlers for graceful CTRL+C
