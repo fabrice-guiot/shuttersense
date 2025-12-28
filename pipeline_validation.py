@@ -339,67 +339,45 @@ def parse_node_from_yaml(node_dict: Dict[str, Any]) -> PipelineNode:
         raise ValueError(f"Unknown node type: {node_type} (node: {node_id})")
 
 
-def load_pipeline_config(config_path: Path, pipeline_name: str = 'default') -> PipelineConfig:
+def load_pipeline_config(config: PhotoAdminConfig, pipeline_name: str = 'default', verbose: bool = False) -> PipelineConfig:
     """
-    Load pipeline configuration from YAML config file.
+    Load pipeline configuration using PhotoAdminConfig.
+
+    Per project constitution: All config interaction must go through PhotoAdminConfig.
 
     Args:
-        config_path: Path to configuration file (config.yaml)
+        config: PhotoAdminConfig instance
         pipeline_name: Name of the pipeline to load (default: 'default')
                       Supports versioned pipelines (e.g., 'default', 'v2', 'experimental')
+        verbose: If True, print detailed loading information
 
     Returns:
         PipelineConfig object with all parsed nodes
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValueError: If YAML is invalid or pipeline structure is malformed
+        ValueError: If pipeline structure is invalid or nodes cannot be parsed
     """
-    if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
-    # Load YAML file
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config_data = yaml.safe_load(f)
-    except yaml.YAMLError as e:
-        raise ValueError(f"Invalid YAML in config file: {e}")
-
-    if not config_data:
-        raise ValueError("Configuration file is empty")
-
-    # Extract processing_pipelines section
-    processing_pipelines = config_data.get('processing_pipelines')
-    if not processing_pipelines:
-        raise ValueError("Missing 'processing_pipelines' section in configuration file")
-
-    # Extract specific pipeline (versioned structure)
-    pipeline_config = processing_pipelines.get(pipeline_name)
-    if not pipeline_config:
-        available = list(processing_pipelines.keys())
-        raise ValueError(
-            f"Pipeline '{pipeline_name}' not found in configuration. "
-            f"Available pipelines: {', '.join(available)}"
-        )
+    # Get pipeline configuration from PhotoAdminConfig (handles all YAML access)
+    pipeline_config = config.get_pipeline_config(pipeline_name, verbose=verbose)
 
     # Extract nodes list from the pipeline
-    nodes_list = pipeline_config.get('nodes')
-    if not nodes_list:
-        raise ValueError(f"Missing 'nodes' list in pipeline '{pipeline_name}'")
+    nodes_list = pipeline_config.get('nodes', [])
 
-    if not isinstance(nodes_list, list):
-        raise ValueError(f"'nodes' must be a list in pipeline '{pipeline_name}'")
-
-    # Parse each node
+    # Parse each node into typed node objects
     nodes = []
     for i, node_dict in enumerate(nodes_list):
         try:
             node = parse_node_from_yaml(node_dict)
             nodes.append(node)
+            if verbose:
+                print(f"    Parsed node {i}: {node.id} ({node.type})")
         except ValueError as e:
             raise ValueError(f"Error parsing node at index {i} in pipeline '{pipeline_name}': {e}")
 
     # Create and return PipelineConfig
+    if verbose:
+        print(f"  Successfully loaded pipeline with {len(nodes)} nodes")
+
     return PipelineConfig(nodes=nodes)
 
 
@@ -1092,6 +1070,18 @@ For more information, see docs/pipeline-validation.md
     )
 
     parser.add_argument(
+        '--validate-config',
+        action='store_true',
+        help='Validate pipeline configuration syntax and structure without running validation'
+    )
+
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Print detailed information about configuration loading and validation'
+    )
+
+    parser.add_argument(
         '--version',
         action='version',
         version=f'%(prog)s {TOOL_VERSION}'
@@ -1100,8 +1090,8 @@ For more information, see docs/pipeline-validation.md
     args = parser.parse_args()
 
     # Validate arguments
-    if not args.cache_status and args.folder_path is None:
-        parser.error('folder_path is required unless using --cache-status')
+    if not args.cache_status and not args.validate_config and args.folder_path is None:
+        parser.error('folder_path is required unless using --cache-status or --validate-config')
 
     if args.folder_path and not args.folder_path.exists():
         parser.error(f"Folder does not exist: {args.folder_path}")
@@ -1147,11 +1137,76 @@ def main():
     # Parse command-line arguments
     args = parse_arguments()
 
-    # Validate prerequisites
+    print(f"Pipeline Validation Tool v{TOOL_VERSION}")
+
+    # Handle --validate-config mode (config validation only, no photo validation)
+    if args.validate_config:
+        print("Configuration Validation Mode")
+        print("=" * 60)
+        print()
+
+        # Load configuration
+        if args.verbose:
+            print("Loading configuration file...")
+        config = PhotoAdminConfig(config_path=args.config)
+        print(f"Configuration file: {config.config_path}")
+        print()
+
+        # Validate pipeline configuration structure (YAML structure only)
+        is_valid, errors = config.validate_pipeline_config_structure(
+            pipeline_name='default',
+            verbose=args.verbose
+        )
+
+        if not is_valid:
+            print("\n✗ Configuration validation FAILED\n")
+            print("Errors found:")
+            for error in errors:
+                print(f"  • {error}")
+            print()
+            return 1
+
+        # If structure is valid, try loading the pipeline (tests node parsing)
+        try:
+            if args.verbose:
+                print("\nLoading and parsing pipeline nodes...")
+            pipeline = load_pipeline_config(config, pipeline_name='default', verbose=args.verbose)
+
+            # Validate pipeline logic (graph structure, references, etc.)
+            if args.verbose:
+                print("\nValidating pipeline logic (node references, graph structure)...")
+            validation_errors = validate_pipeline_structure(pipeline, config)
+
+            if validation_errors:
+                print("\n✗ Pipeline logic validation FAILED\n")
+                print("Errors found:")
+                for error in validation_errors:
+                    print(f"  • {error}")
+                print()
+                return 1
+
+            print("\n✓ Configuration validation PASSED\n")
+            print(f"  Pipeline: default")
+            print(f"  Nodes: {len(pipeline.nodes)}")
+            print(f"  Capture nodes: {len([n for n in pipeline.nodes if isinstance(n, CaptureNode)])}")
+            print(f"  File nodes: {len([n for n in pipeline.nodes if isinstance(n, FileNode)])}")
+            print(f"  Process nodes: {len([n for n in pipeline.nodes if isinstance(n, ProcessNode)])}")
+            print(f"  Pairing nodes: {len([n for n in pipeline.nodes if isinstance(n, PairingNode)])}")
+            print(f"  Branching nodes: {len([n for n in pipeline.nodes if isinstance(n, BranchingNode)])}")
+            print(f"  Termination nodes: {len([n for n in pipeline.nodes if isinstance(n, TerminationNode)])}")
+            print()
+            return 0
+
+        except ValueError as e:
+            print(f"\n✗ Configuration validation FAILED\n")
+            print(f"Error: {e}")
+            print()
+            return 1
+
+    # Normal validation mode - validate prerequisites
     if not validate_prerequisites(args):
         sys.exit(1)
 
-    print(f"Pipeline Validation Tool v{TOOL_VERSION}")
     print(f"Analyzing: {args.folder_path}")
     print()
 
@@ -1159,40 +1214,15 @@ def main():
     print("Loading configuration...")
     config = PhotoAdminConfig(config_path=args.config)
 
-    # Determine config file path to use
-    config_file_path = args.config if args.config else config.config_path
-
-    # Load pipeline configuration from config.yaml
+    # Load pipeline configuration using PhotoAdminConfig (per constitution)
     try:
-        pipeline = load_pipeline_config(config_file_path, pipeline_name='default')
-        print(f"  Loaded {len(pipeline.nodes)} pipeline nodes from {config_file_path}")
+        pipeline = load_pipeline_config(config, pipeline_name='default', verbose=args.verbose)
+        print(f"  Loaded {len(pipeline.nodes)} pipeline nodes")
         print(f"  Using pipeline: default")
     except ValueError as e:
-        print(f"⚠ Error loading pipeline configuration: {e}")
-        print()
-        print("Please ensure your config.yaml has a processing_pipelines section with versioned pipelines:")
-        print()
-        print("  processing_pipelines:")
-        print("    default:")
-        print("      nodes:")
-        print("        - id: capture")
-        print("          type: Capture")
-        print("          name: Camera Capture")
-        print("          output: [raw_file, xmp_file]")
-        print()
-        print("        - id: raw_file")
-        print("          type: File")
-        print("          name: Canon Raw File")
-        print("          extension: .CR3")
-        print("          output: [processing_step]")
-        print()
-        print("        - id: termination")
-        print("          type: Termination")
-        print("          name: Archive Ready")
-        print("          termination_type: Black Box Archive")
-        print("          output: []")
-        print()
-        print(f"See config/template-config.yaml for a complete example.")
+        # Error message is generated by PhotoAdminConfig (per constitution)
+        print(f"⚠ Error loading pipeline configuration:\n")
+        print(e)
         print()
         return 1
     print()

@@ -354,3 +354,232 @@ class PhotoAdminConfig:
             Configuration value or default
         """
         return self._config.get(key, default)
+
+    # =============================================================================
+    # Pipeline Validation Tool - Pipeline Configuration Methods
+    # =============================================================================
+
+    def get_processing_pipelines(self):
+        """
+        Get the processing_pipelines section from configuration.
+
+        Returns:
+            dict: Processing pipelines configuration, or empty dict if not present
+        """
+        return self._config.get('processing_pipelines', {})
+
+    def list_available_pipelines(self):
+        """
+        List all available pipeline names in the configuration.
+
+        Returns:
+            list: List of pipeline names (e.g., ['default', 'v2', 'experimental'])
+        """
+        pipelines = self.get_processing_pipelines()
+        return list(pipelines.keys()) if pipelines else []
+
+    def get_pipeline_config(self, pipeline_name='default', verbose=False):
+        """
+        Get a specific pipeline configuration by name.
+
+        Args:
+            pipeline_name: Name of the pipeline to retrieve (default: 'default')
+            verbose: If True, print detailed loading information
+
+        Returns:
+            dict: Pipeline configuration with 'nodes' list
+
+        Raises:
+            ValueError: If processing_pipelines section missing or pipeline not found
+        """
+        if verbose:
+            print(f"  Loading pipeline configuration: {pipeline_name}")
+
+        # Check if processing_pipelines section exists
+        pipelines = self.get_processing_pipelines()
+        if not pipelines:
+            error_msg = self._get_missing_pipelines_error_message()
+            raise ValueError(error_msg)
+
+        # Check if specific pipeline exists
+        if pipeline_name not in pipelines:
+            available = self.list_available_pipelines()
+            raise ValueError(
+                f"Pipeline '{pipeline_name}' not found in configuration.\n"
+                f"Available pipelines: {', '.join(available)}\n\n"
+                f"Add a '{pipeline_name}' pipeline to your config.yaml:\n"
+                f"{self._get_pipeline_example()}"
+            )
+
+        pipeline_config = pipelines[pipeline_name]
+
+        if verbose:
+            nodes_count = len(pipeline_config.get('nodes', []))
+            print(f"  Found {nodes_count} nodes in pipeline '{pipeline_name}'")
+
+        return pipeline_config
+
+    def validate_pipeline_config_structure(self, pipeline_name='default', verbose=False):
+        """
+        Validate that a pipeline configuration has the correct basic structure.
+
+        This validates the YAML structure only (not the pipeline logic).
+        Returns errors for missing sections, invalid types, etc.
+
+        Args:
+            pipeline_name: Name of the pipeline to validate
+            verbose: If True, print detailed validation information
+
+        Returns:
+            tuple: (is_valid: bool, errors: List[str])
+        """
+        errors = []
+
+        if verbose:
+            print(f"\nValidating pipeline configuration structure: {pipeline_name}")
+
+        # Check processing_pipelines section exists
+        pipelines = self.get_processing_pipelines()
+        if not pipelines:
+            errors.append("Missing 'processing_pipelines' section in configuration file")
+            if verbose:
+                print("  ✗ Missing 'processing_pipelines' section")
+            return (False, errors)
+
+        if verbose:
+            print(f"  ✓ Found 'processing_pipelines' section")
+            available = self.list_available_pipelines()
+            print(f"  ✓ Available pipelines: {', '.join(available)}")
+
+        # Check specific pipeline exists
+        if pipeline_name not in pipelines:
+            available = self.list_available_pipelines()
+            errors.append(
+                f"Pipeline '{pipeline_name}' not found. "
+                f"Available: {', '.join(available)}"
+            )
+            if verbose:
+                print(f"  ✗ Pipeline '{pipeline_name}' not found")
+            return (False, errors)
+
+        if verbose:
+            print(f"  ✓ Pipeline '{pipeline_name}' exists")
+
+        # Check pipeline has 'nodes' key
+        pipeline_config = pipelines[pipeline_name]
+        if 'nodes' not in pipeline_config:
+            errors.append(f"Pipeline '{pipeline_name}' missing 'nodes' list")
+            if verbose:
+                print(f"  ✗ Missing 'nodes' list in pipeline")
+            return (False, errors)
+
+        if verbose:
+            print(f"  ✓ Pipeline has 'nodes' list")
+
+        # Check nodes is a list
+        nodes = pipeline_config['nodes']
+        if not isinstance(nodes, list):
+            errors.append(f"Pipeline '{pipeline_name}' 'nodes' must be a list, got {type(nodes).__name__}")
+            if verbose:
+                print(f"  ✗ 'nodes' is not a list")
+            return (False, errors)
+
+        if verbose:
+            print(f"  ✓ 'nodes' is a list with {len(nodes)} items")
+
+        # Check nodes list is not empty
+        if len(nodes) == 0:
+            errors.append(f"Pipeline '{pipeline_name}' has empty 'nodes' list")
+            if verbose:
+                print(f"  ✗ 'nodes' list is empty")
+            return (False, errors)
+
+        if verbose:
+            print(f"  ✓ 'nodes' list is not empty")
+
+        # Basic validation of node structure
+        for i, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                errors.append(f"Node at index {i} is not a dictionary")
+                if verbose:
+                    print(f"  ✗ Node {i}: not a dictionary")
+                continue
+
+            # Check required fields
+            required_fields = ['id', 'type', 'name']
+            missing_fields = [f for f in required_fields if f not in node]
+            if missing_fields:
+                errors.append(
+                    f"Node at index {i} missing required fields: {', '.join(missing_fields)}"
+                )
+                if verbose:
+                    print(f"  ✗ Node {i}: missing fields {missing_fields}")
+            elif verbose:
+                print(f"  ✓ Node {i} ({node['id']}): valid structure")
+
+        if errors:
+            return (False, errors)
+
+        if verbose:
+            print(f"\n✓ Pipeline '{pipeline_name}' configuration structure is valid")
+
+        return (True, [])
+
+    def _get_missing_pipelines_error_message(self):
+        """
+        Get a helpful error message when processing_pipelines section is missing.
+
+        Returns:
+            str: Formatted error message with example
+        """
+        return (
+            "Missing 'processing_pipelines' section in configuration file.\n\n"
+            f"Please add a processing_pipelines section to {self.config_path}:\n\n"
+            f"{self._get_pipeline_example()}\n"
+            f"See config/template-config.yaml for a complete example."
+        )
+
+    def _get_pipeline_example(self):
+        """
+        Get an example pipeline configuration snippet.
+
+        Returns:
+            str: Example YAML configuration
+        """
+        return """processing_pipelines:
+  default:
+    nodes:
+      - id: capture
+        type: Capture
+        name: Camera Capture
+        output: [raw_file, xmp_file]
+
+      - id: raw_file
+        type: File
+        name: Canon Raw File
+        extension: .CR3
+        output: [processing_step]
+
+      - id: xmp_file
+        type: File
+        name: XMP Metadata
+        extension: .XMP
+        output: []
+
+      - id: processing_step
+        type: Process
+        name: DNG Conversion
+        method_ids: [DxO_DeepPRIME_XD2s]
+        output: [dng_file]
+
+      - id: dng_file
+        type: File
+        name: DNG File
+        extension: .DNG
+        output: [termination]
+
+      - id: termination
+        type: Termination
+        name: Archive Ready
+        termination_type: Black Box Archive
+        output: []"""

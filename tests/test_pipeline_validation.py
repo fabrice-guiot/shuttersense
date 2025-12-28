@@ -394,8 +394,11 @@ class TestPipelineConfigLoading:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Verify pipeline loaded correctly
         assert len(pipeline.nodes) == 7
@@ -418,8 +421,11 @@ class TestPipelineConfigLoading:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Validate structure
         errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_config)
@@ -458,8 +464,11 @@ class TestPipelineConfigLoading:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Validate structure - should detect invalid reference
         errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_config)
@@ -526,8 +535,11 @@ class TestPathEnumeration:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Enumerate all paths from Capture to Termination
         paths = pipeline_validation.enumerate_all_paths(pipeline)
@@ -549,8 +561,11 @@ class TestPathEnumeration:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Enumerate all paths
         paths = pipeline_validation.enumerate_all_paths(pipeline)
@@ -566,8 +581,11 @@ class TestPathEnumeration:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Enumerate paths
         paths = pipeline_validation.enumerate_all_paths(pipeline)
@@ -739,8 +757,11 @@ class TestCustomPipelines:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Validate structure
         errors = pipeline_validation.validate_pipeline_structure(pipeline, mock_config)
@@ -824,8 +845,11 @@ class TestCustomPipelines:
         with open(config_file, 'w') as f:
             yaml.dump(config_data, f)
 
+        # Load configuration via PhotoAdminConfig (per constitution)
+        config = pipeline_validation.PhotoAdminConfig(config_path=config_file)
+
         # Load pipeline
-        pipeline = pipeline_validation.load_pipeline_config(config_file)
+        pipeline = pipeline_validation.load_pipeline_config(config)
 
         # Verify Pairing node was parsed correctly
         pairing_node = pipeline.nodes_by_id.get('hdr_pairing')
