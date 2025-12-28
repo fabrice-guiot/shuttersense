@@ -1072,7 +1072,7 @@ For more information, see docs/pipeline-validation.md
     parser.add_argument(
         '--validate-config',
         action='store_true',
-        help='Validate pipeline configuration syntax and structure without running validation'
+        help='Validate pipeline configuration syntax and structure without analyzing the images in the folder'
     )
 
     parser.add_argument(

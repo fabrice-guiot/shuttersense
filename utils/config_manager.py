@@ -497,7 +497,7 @@ class PhotoAdminConfig:
         if verbose:
             print(f"  ✓ 'nodes' list is not empty")
 
-        # Basic validation of node structure
+        # Detailed validation of node structure with type-specific requirements
         for i, node in enumerate(nodes):
             if not isinstance(node, dict):
                 errors.append(f"Node at index {i} is not a dictionary")
@@ -505,17 +505,59 @@ class PhotoAdminConfig:
                     print(f"  ✗ Node {i}: not a dictionary")
                 continue
 
-            # Check required fields
-            required_fields = ['id', 'type', 'name']
-            missing_fields = [f for f in required_fields if f not in node]
+            # Check base required fields (all nodes need these)
+            base_required_fields = ['id', 'type', 'name']
+            missing_fields = [f for f in base_required_fields if f not in node]
             if missing_fields:
                 errors.append(
                     f"Node at index {i} missing required fields: {', '.join(missing_fields)}"
                 )
                 if verbose:
                     print(f"  ✗ Node {i}: missing fields {missing_fields}")
+                continue  # Can't check type-specific fields without 'type'
+
+            node_type = node.get('type')
+            node_id = node.get('id')
+
+            # Check type-specific required fields
+            type_specific_errors = []
+
+            if node_type == 'File':
+                if 'extension' not in node:
+                    type_specific_errors.append("missing 'extension' (required for File nodes)")
+
+            elif node_type == 'Process':
+                if 'method_ids' not in node:
+                    type_specific_errors.append("missing 'method_ids' (required for Process nodes)")
+
+            elif node_type == 'Pairing':
+                if 'pairing_type' not in node:
+                    type_specific_errors.append("missing 'pairing_type' (required for Pairing nodes, e.g., HDR, Panorama)")
+                if 'input_count' not in node:
+                    type_specific_errors.append("missing 'input_count' (required for Pairing nodes, number of input files)")
+
+            elif node_type == 'Branching':
+                if 'condition_description' not in node:
+                    type_specific_errors.append("missing 'condition_description' (required for Branching nodes)")
+
+            elif node_type == 'Termination':
+                if 'termination_type' not in node:
+                    type_specific_errors.append("missing 'termination_type' (required for Termination nodes)")
+
+            elif node_type == 'Capture':
+                # Capture nodes only need base fields
+                pass
+
+            else:
+                type_specific_errors.append(f"unknown node type '{node_type}' (must be: Capture, File, Process, Pairing, Branching, or Termination)")
+
+            if type_specific_errors:
+                for error in type_specific_errors:
+                    errors.append(f"Node {i} ({node_id}): {error}")
+                if verbose:
+                    print(f"  ✗ Node {i} ({node_id}): {', '.join(type_specific_errors)}")
             elif verbose:
-                print(f"  ✓ Node {i} ({node['id']}): valid structure")
+                print(f"  ✓ Node {i} ({node_id}, {node_type}): valid structure")
 
         if errors:
             return (False, errors)

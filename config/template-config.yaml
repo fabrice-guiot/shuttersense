@@ -152,13 +152,81 @@ processing_pipelines:
         name: "Black Box Archive Ready"
         output: []  # Termination nodes have no outputs
 
-# Notes on Pipeline Validation:
-# 1. Validation enumerates ALL paths from Capture to Termination nodes
-# 2. Branching nodes explore ALL branches (not just one)
-# 3. Loops are limited to 5 iterations per Process node (prevents infinite paths)
-# 4. Files are classified as:
-#    - CONSISTENT: All expected files present, no extra files
-#    - CONSISTENT-WITH-WARNING: All expected files present, but extra files exist
-#    - PARTIAL: Some expected files missing
-#    - INCONSISTENT: No matching paths (completely wrong files)
-# 5. For complex workflows, see docs/pipeline-validation.md
+# =============================================================================
+# Node Types Reference
+# =============================================================================
+#
+# All 6 node types with required properties:
+#
+# 1. CAPTURE NODE (Starting point - exactly one required per pipeline)
+#    Required: id, type, name, output
+#    Example:
+#      - id: capture
+#        type: Capture
+#        name: Camera Capture
+#        output: [raw_file, xmp_file]
+#
+# 2. FILE NODE (Represents expected files in the workflow)
+#    Required: id, type, name, output, extension
+#    Example:
+#      - id: raw_file
+#        type: File
+#        name: Canon Raw File
+#        extension: .CR3
+#        output: [next_step]
+#
+# 3. PROCESS NODE (Editing/conversion steps that add filename suffixes)
+#    Required: id, type, name, output, method_ids
+#    Example:
+#      - id: dng_conversion
+#        type: Process
+#        name: DNG Conversion
+#        method_ids: [DxO_DeepPRIME_XD2s]  # Adds "-DxO_DeepPRIME_XD2s" suffix
+#        output: [dng_file]
+#
+#    Note: method_ids can be empty string [""] for no suffix (e.g., selection step)
+#
+# 4. PAIRING NODE (Combines multiple files, e.g., HDR, Panorama)
+#    Required: id, type, name, output, pairing_type, input_count
+#    Example:
+#      - id: hdr_merge
+#        type: Pairing
+#        name: HDR Merge
+#        pairing_type: HDR           # Type of pairing (HDR, Panorama, Focus Stack, etc.)
+#        input_count: 3              # Number of input files expected
+#        output: [merged_file]
+#
+# 5. BRANCHING NODE (Conditional paths - explores ALL branches)
+#    Required: id, type, name, output, condition_description
+#    Example:
+#      - id: tiff_decision
+#        type: Branching
+#        name: TIFF Generation Decision
+#        condition_description: "User decides: Create TIFF or continue editing"
+#        output: [generate_tiff, continue_editing]  # All branches explored
+#
+#    Note: One output can loop back to create iterative workflows (limited to 5 iterations)
+#
+# 6. TERMINATION NODE (End point - at least one required per pipeline)
+#    Required: id, type, name, output, termination_type
+#    Example:
+#      - id: termination_blackbox
+#        type: Termination
+#        name: Black Box Archive Ready
+#        termination_type: Black Box Archive
+#        output: []  # Termination nodes must have empty output
+#
+# =============================================================================
+# Pipeline Validation Behavior
+# =============================================================================
+#
+# - Validation enumerates ALL paths from Capture to Termination nodes
+# - Branching nodes explore ALL branches (not just one)
+# - Loops are limited to 5 iterations per Process node (prevents infinite paths)
+# - Files are classified as:
+#   * CONSISTENT: All expected files present, no extra files
+#   * CONSISTENT-WITH-WARNING: All expected files present, but extra files exist
+#   * PARTIAL: Some expected files missing
+#   * INCONSISTENT: No matching paths (completely wrong files)
+#
+# For complex workflows and troubleshooting, see docs/pipeline-validation.md
