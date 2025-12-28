@@ -1148,34 +1148,40 @@ def main():
     print("Loading configuration...")
     config = PhotoAdminConfig(config_path=args.config)
 
+    # Determine config file path to use
+    config_file_path = args.config if args.config else config.config_path
+
     # Load pipeline configuration from config.yaml
-    if not hasattr(config, 'processing_pipelines') or not config.processing_pipelines:
-        print("⚠ Error: No processing_pipelines defined in configuration")
-        print("  Please add a processing_pipelines section to your config.yaml")
+    try:
+        pipeline = load_pipeline_config(config_file_path)
+        print(f"  Loaded {len(pipeline.nodes)} pipeline nodes from {config_file_path}")
+    except ValueError as e:
+        print(f"⚠ Error loading pipeline configuration: {e}")
         print()
-        print("Example:")
+        print("Please ensure your config.yaml has a processing_pipelines section:")
+        print()
         print("  processing_pipelines:")
-        print("    default:")
-        print("      nodes:")
-        print("        - node_id: capture")
-        print("          node_type: Capture")
-        print("        - node_id: raw_file")
-        print("          node_type: File")
-        print("          extension: .CR3")
-        print("        ...")
+        print("    nodes:")
+        print("      - id: capture")
+        print("        type: Capture")
+        print("        name: Camera Capture")
+        print("        output: [raw_file, xmp_file]")
+        print()
+        print("      - id: raw_file")
+        print("        type: File")
+        print("        name: Canon Raw File")
+        print("        extension: .CR3")
+        print("        output: [processing_step]")
+        print()
+        print("      - id: termination")
+        print("        type: Termination")
+        print("        name: Archive Ready")
+        print("        termination_type: Black Box Archive")
+        print("        output: []")
+        print()
+        print(f"See config/template-config.yaml for a complete example.")
         print()
         return 1
-
-    # Get the default pipeline (or first available)
-    pipeline_name = 'default'
-    if pipeline_name not in config.processing_pipelines:
-        pipeline_name = list(config.processing_pipelines.keys())[0]
-
-    print(f"  Using pipeline: {pipeline_name}")
-
-    # Parse pipeline configuration
-    pipeline = load_pipeline_config(config, pipeline_name)
-    print(f"  Loaded {len(pipeline.nodes)} pipeline nodes")
     print()
 
     # Phase 2: Load Photo Pairing results
