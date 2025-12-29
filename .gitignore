@@ -217,3 +217,21 @@ config/config.yaml
 .DS_Store
 .idea/
 .vscode/
+
+# Backend-specific
+backend/.env
+backend/alembic.ini
+
+# Frontend-specific
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/package-lock.json
+frontend/yarn.lock
+frontend/pnpm-lock.yaml

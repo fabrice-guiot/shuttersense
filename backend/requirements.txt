@@ -1,0 +1,33 @@
+# FastAPI and Web Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12  # For file uploads
+
+# Database and ORM
+SQLAlchemy>=2.0.0
+alembic>=1.13.0
+psycopg2-binary>=2.9.9  # PostgreSQL adapter
+
+# Remote Storage Adapters
+boto3>=1.35.0  # AWS S3
+google-cloud-storage>=2.18.0  # Google Cloud Storage
+smbprotocol>=1.14.0  # SMB/CIFS network shares
+
+# Data Validation
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+
+# Encryption
+cryptography>=44.0.0
+
+# Configuration and Templates
+PyYAML>=6.0.0
+Jinja2>=3.1.0
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-cov>=6.0.0
+
+# Development
+ruff>=0.8.0  # Linter and formatter

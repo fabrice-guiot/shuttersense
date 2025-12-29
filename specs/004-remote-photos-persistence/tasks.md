@@ -20,12 +20,12 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 [P] Create backend directory structure: backend/src/{models,services,api,db,schemas,utils}, backend/tests/{unit,integration,e2e}
-- [ ] T002 [P] Create frontend directory structure: frontend/src/{components,pages,services,hooks,utils}, frontend/tests/components
-- [ ] T003 [P] Initialize backend/requirements.txt with dependencies: FastAPI, SQLAlchemy, Alembic, boto3, google-cloud-storage, smbprotocol, pydantic, cryptography, uvicorn, psycopg2-binary, pytest
-- [ ] T004 [P] Initialize frontend/package.json with dependencies: React, React Router, Axios, Recharts, Material-UI or Ant Design, WebSocket client
-- [ ] T005 [P] Add backend/.env.example with PHOTO_ADMIN_DB_URL, PHOTO_ADMIN_MASTER_KEY placeholders
-- [ ] T006 [P] Update root .gitignore to exclude backend/.env, frontend/node_modules, __pycache__, *.pyc
+- [X] T001 [P] Create backend directory structure: backend/src/{models,services,api,db,schemas,utils}, backend/tests/{unit,integration,e2e}
+- [X] T002 [P] Create frontend directory structure: frontend/src/{components,pages,services,hooks,utils}, frontend/tests/components
+- [X] T003 [P] Initialize backend/requirements.txt with dependencies: FastAPI, SQLAlchemy, Alembic, boto3, google-cloud-storage, smbprotocol, pydantic, cryptography, uvicorn, psycopg2-binary, pytest
+- [X] T004 [P] Initialize frontend/package.json with dependencies: React, React Router, Axios, Recharts, Material-UI or Ant Design, WebSocket client
+- [X] T005 [P] Add backend/.env.example with PHOTO_ADMIN_DB_URL, PHOTO_ADMIN_MASTER_KEY placeholders
+- [X] T006 [P] Update root .gitignore to exclude backend/.env, frontend/node_modules, __pycache__, *.pyc
 
 ---
 
@@ -37,9 +37,9 @@
 
 ### Database Setup
 
-- [ ] T007 Create backend/src/db/database.py with SQLAlchemy engine configuration (PostgreSQL, connection pooling)
-- [ ] T008 Setup Alembic in backend/ with alembic.ini configuration pointing to backend/src/db/migrations/
-- [ ] T009 Create backend/src/models/__init__.py with Base declarative base class
+- [X] T007 Create backend/src/db/database.py with SQLAlchemy engine configuration (PostgreSQL, connection pooling)
+- [X] T008 Setup Alembic in backend/ with alembic.ini configuration pointing to backend/src/db/migrations/
+- [X] T009 Create backend/src/models/__init__.py with Base declarative base class
 
 ### Master Key Management (NEW from research.md)
 
