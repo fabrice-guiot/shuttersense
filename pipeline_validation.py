@@ -838,7 +838,7 @@ def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdmin
                 # First node ID without arrow, then newline before each subsequent arrow
                 node_path_parts = [node_ids[0]]
                 for node_id in node_ids[1:]:
-                    node_path_parts.append(f"\n->{node_id}")
+                    node_path_parts.append(f"\n-> {node_id}")
                 node_path_str = "".join(node_path_parts)
             else:
                 node_path_str = "(empty path)"
@@ -1431,6 +1431,10 @@ def main():
             if args.display_graph:
                 print("Generating graph visualization report...")
                 scan_start = datetime.now()
+
+                # Enumerate paths to measure performance (will be called again in report generation)
+                _ = enumerate_paths_with_pairing(pipeline)
+
                 scan_end = datetime.now()
 
                 # Generate empty validation results (graph visualization only)
