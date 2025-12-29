@@ -25,470 +25,73 @@ Version: 1.0.0
 import argparse
 import sys
 import signal
-import yaml
 import json
+import yaml
 import hashlib
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any, Union
-from enum import Enum
+from typing import List, Dict, Optional, Any
 
-# Import shared configuration manager
+# Import shared utilities
 from utils.config_manager import PhotoAdminConfig
+from utils.report_renderer import ReportRenderer
+
+# Import pipeline processing logic
+from utils.pipeline_processor import (
+    # Data structures
+    NodeBase,
+    CaptureNode,
+    FileNode,
+    ProcessNode,
+    PairingNode,
+    BranchingNode,
+    TerminationNode,
+    PipelineConfig,
+    ValidationStatus,
+    SpecificImage,
+    ValidationResult,
+    TerminationMatchResult,
+
+    # Configuration
+    load_pipeline_config,
+    validate_pipeline_structure,
+
+    # Validation
+    validate_all_images,
+    validate_specific_image,
+    classify_validation_status,
+    generate_sample_base_filename,
+
+    # Path enumeration
+    enumerate_all_paths,
+    enumerate_paths_with_pairing,
+    generate_expected_files,
+    find_pairing_nodes_in_topological_order,
+    validate_pairing_node_inputs,
+    merge_two_paths,
+
+    # Constants
+    MAX_ITERATIONS,
+)
+
+# Import Photo Pairing Tool for file grouping
+try:
+    import photo_pairing
+    PHOTO_PAIRING_AVAILABLE = True
+except ImportError:
+    PHOTO_PAIRING_AVAILABLE = False
+
 
 # Tool version (semantic versioning)
 TOOL_VERSION = "1.0.0"
 
-# Maximum loop iterations per node to prevent infinite path enumeration
-# Applied to all node types except Capture and Termination nodes
-MAX_ITERATIONS = 5
+# Global flag for graceful shutdown
+shutdown_requested = False
 
 
 # =============================================================================
-# Data Structures - Pipeline Configuration
+# Photo Pairing Integration
 # =============================================================================
-
-@dataclass
-class NodeBase:
-    """Base class for all pipeline nodes."""
-    id: str
-    type: str
-    name: str
-    output: List[str]
-
-
-@dataclass
-class CaptureNode(NodeBase):
-    """
-    Capture Node - Starting point of pipeline.
-
-    Represents the camera capture event that produces initial files.
-    Must have at least one output (typically raw files).
-    """
-    type: str = field(default="Capture", init=False)
-
-
-@dataclass
-class FileNode(NodeBase):
-    """
-    File Node - Represents an expected file in the workflow.
-
-    Attributes:
-        extension: File extension including leading dot (e.g., ".CR3", ".DNG", ".XMP")
-    """
-    extension: str
-    type: str = field(default="File", init=False)
-
-
-@dataclass
-class ProcessNode(NodeBase):
-    """
-    Process Node - Editing/conversion step that adds suffixes to filenames.
-
-    Attributes:
-        method_ids: List of processing method IDs that add suffixes.
-                   Empty string means no suffix added (selection only).
-                   Examples: [""], ["DxO_DeepPRIME_XD2s"], ["Edit"]
-    """
-    method_ids: List[str]
-    type: str = field(default="Process", init=False)
-
-
-@dataclass
-class PairingNode(NodeBase):
-    """
-    Pairing Node - Multi-image merge operation (HDR, Panorama, Focus Stack).
-
-    Attributes:
-        pairing_type: Human-readable pairing operation type
-        input_count: Expected number of input images
-    """
-    pairing_type: str
-    input_count: int
-    type: str = field(default="Pairing", init=False)
-
-
-@dataclass
-class BranchingNode(NodeBase):
-    """
-    Branching Node - Conditional path selection.
-
-    Validation explores ALL branches (not just one path).
-
-    Attributes:
-        condition_description: Human-readable explanation of branching condition
-    """
-    condition_description: str
-    type: str = field(default="Branching", init=False)
-
-
-@dataclass
-class TerminationNode(NodeBase):
-    """
-    Termination Node - End of pipeline (archival ready state).
-
-    Represents a valid archival state. Images matching a path to this
-    termination are considered archival ready for this termination type.
-
-    Attributes:
-        termination_type: Type of archival state (e.g., "Black Box Archive")
-    """
-    termination_type: str
-    type: str = field(default="Termination", init=False)
-
-
-# Type alias for any pipeline node
-PipelineNode = Union[CaptureNode, FileNode, ProcessNode, PairingNode, BranchingNode, TerminationNode]
-
-
-@dataclass
-class PipelineConfig:
-    """
-    Complete pipeline configuration containing all nodes.
-
-    Attributes:
-        nodes: List of all pipeline nodes
-        nodes_by_id: Dictionary mapping node IDs to node objects (populated after init)
-    """
-    nodes: List[PipelineNode]
-    nodes_by_id: Dict[str, PipelineNode] = field(default_factory=dict, init=False)
-
-    def __post_init__(self):
-        """Build node ID lookup dictionary after initialization."""
-        self.nodes_by_id = {node.id: node for node in self.nodes}
-
-
-# =============================================================================
-# Data Structures - Validation Results
-# =============================================================================
-
-class ValidationStatus(Enum):
-    """
-    Validation status classification for image completeness.
-
-    Values:
-        CONSISTENT: All expected files present, no extra files
-        CONSISTENT_WITH_WARNING: All expected files present, but extra files exist
-        PARTIAL: Some expected files missing (incomplete workflow)
-        INCONSISTENT: No matching pipeline paths (wrong files or completely wrong)
-    """
-    CONSISTENT = "CONSISTENT"
-    CONSISTENT_WITH_WARNING = "CONSISTENT-WITH-WARNING"
-    PARTIAL = "PARTIAL"
-    INCONSISTENT = "INCONSISTENT"
-
-
-@dataclass
-class SpecificImage:
-    """
-    Represents a single image within an ImageGroup.
-
-    Flattened from ImageGroup's separate_images structure.
-
-    Attributes:
-        unique_id: Unique identifier (base_filename: camera_id + counter + suffix)
-        group_id: Parent ImageGroup ID (camera_id + counter)
-        camera_id: 4-character camera identifier
-        counter: 4-digit counter string
-        suffix: Separate image suffix ("" for primary, "2", "HDR", etc.)
-        actual_files: List of actual files found for this specific image
-    """
-    unique_id: str
-    group_id: str
-    camera_id: str
-    counter: str
-    suffix: str
-    actual_files: List[str]
-
-
-@dataclass
-class TerminationMatchResult:
-    """
-    Validation result for one termination node path.
-
-    Attributes:
-        termination_id: Termination node ID
-        termination_type: Human-readable termination type
-        status: Validation status for this termination
-        completion_percentage: Percentage of expected files present (0-100)
-        expected_files: List of all expected files for this termination
-        actual_files: List of actual files present
-        missing_files: List of missing expected files
-        extra_files: List of extra files not in pipeline
-        truncated: Whether path was truncated due to loop limit
-        truncation_note: Explanation of truncation (None if not truncated)
-    """
-    termination_id: str
-    termination_type: str
-    status: ValidationStatus
-    completion_percentage: float
-    expected_files: List[str]
-    actual_files: List[str]
-    missing_files: List[str]
-    extra_files: List[str]
-    truncated: bool
-    truncation_note: Optional[str] = None
-
-
-@dataclass
-class ValidationResult:
-    """
-    Complete validation result for one SpecificImage.
-
-    Attributes:
-        unique_id: Specific image unique identifier (base_filename)
-        group_id: Parent ImageGroup ID
-        camera_id: Camera identifier
-        counter: Counter string
-        suffix: Separate image suffix
-        actual_files: Actual files found
-        termination_matches: List of validation results per termination node
-        overall_status: Worst status across all terminations
-        archival_ready_for: List of termination types that are archival ready
-    """
-    unique_id: str
-    group_id: str
-    camera_id: str
-    counter: str
-    suffix: str
-    actual_files: List[str]
-    termination_matches: List[TerminationMatchResult]
-    overall_status: ValidationStatus
-    archival_ready_for: List[str]
-
-
-# =============================================================================
-# Pipeline Configuration Loading
-# =============================================================================
-
-def parse_node_from_yaml(node_dict: Dict[str, Any]) -> PipelineNode:
-    """
-    Parse a pipeline node from YAML dictionary.
-
-    Args:
-        node_dict: Dictionary containing node configuration from YAML
-
-    Returns:
-        Appropriate node object based on 'type' field
-
-    Raises:
-        ValueError: If node type is invalid or required fields are missing
-    """
-    node_type = node_dict.get('type')
-    node_id = node_dict.get('id')
-    name = node_dict.get('name')
-    output = node_dict.get('output', [])
-
-    if not all([node_type, node_id, name]):
-        raise ValueError(f"Missing required fields (id, type, name) in node: {node_dict}")
-
-    # Dispatch based on node type
-    if node_type == 'Capture':
-        return CaptureNode(
-            id=node_id,
-            name=name,
-            output=output
-        )
-    elif node_type == 'File':
-        extension = node_dict.get('extension')
-        if not extension:
-            raise ValueError(f"File node '{node_id}' missing required 'extension' field")
-        return FileNode(
-            id=node_id,
-            name=name,
-            output=output,
-            extension=extension
-        )
-    elif node_type == 'Process':
-        method_ids = node_dict.get('method_ids')
-        if method_ids is None:
-            raise ValueError(f"Process node '{node_id}' missing required 'method_ids' field")
-        return ProcessNode(
-            id=node_id,
-            name=name,
-            output=output,
-            method_ids=method_ids
-        )
-    elif node_type == 'Pairing':
-        pairing_type = node_dict.get('pairing_type')
-        input_count = node_dict.get('input_count')
-        if not pairing_type or input_count is None:
-            raise ValueError(f"Pairing node '{node_id}' missing required fields (pairing_type, input_count)")
-        return PairingNode(
-            id=node_id,
-            name=name,
-            output=output,
-            pairing_type=pairing_type,
-            input_count=input_count
-        )
-    elif node_type == 'Branching':
-        condition_description = node_dict.get('condition_description')
-        if not condition_description:
-            raise ValueError(f"Branching node '{node_id}' missing required 'condition_description' field")
-        return BranchingNode(
-            id=node_id,
-            name=name,
-            output=output,
-            condition_description=condition_description
-        )
-    elif node_type == 'Termination':
-        termination_type = node_dict.get('termination_type')
-        if not termination_type:
-            raise ValueError(f"Termination node '{node_id}' missing required 'termination_type' field")
-        return TerminationNode(
-            id=node_id,
-            name=name,
-            output=output,
-            termination_type=termination_type
-        )
-    else:
-        raise ValueError(f"Unknown node type: {node_type} (node: {node_id})")
-
-
-def load_pipeline_config(config: PhotoAdminConfig, pipeline_name: str = 'default', verbose: bool = False) -> PipelineConfig:
-    """
-    Load pipeline configuration using PhotoAdminConfig.
-
-    Per project constitution: All config interaction must go through PhotoAdminConfig.
-
-    Args:
-        config: PhotoAdminConfig instance
-        pipeline_name: Name of the pipeline to load (default: 'default')
-                      Supports versioned pipelines (e.g., 'default', 'v2', 'experimental')
-        verbose: If True, print detailed loading information
-
-    Returns:
-        PipelineConfig object with all parsed nodes
-
-    Raises:
-        ValueError: If pipeline structure is invalid or nodes cannot be parsed
-    """
-    # Get pipeline configuration from PhotoAdminConfig (handles all YAML access)
-    pipeline_config = config.get_pipeline_config(pipeline_name, verbose=verbose)
-
-    # Extract nodes list from the pipeline
-    nodes_list = pipeline_config.get('nodes', [])
-
-    # Parse each node into typed node objects
-    nodes = []
-    for i, node_dict in enumerate(nodes_list):
-        try:
-            node = parse_node_from_yaml(node_dict)
-            nodes.append(node)
-            if verbose:
-                print(f"    Parsed node {i}: {node.id} ({node.type})")
-        except ValueError as e:
-            raise ValueError(f"Error parsing node at index {i} in pipeline '{pipeline_name}': {e}")
-
-    # Create and return PipelineConfig
-    if verbose:
-        print(f"  Successfully loaded pipeline with {len(nodes)} nodes")
-
-    return PipelineConfig(nodes=nodes)
-
-
-def validate_pipeline_structure(pipeline: PipelineConfig, config) -> List[str]:
-    """
-    Validate pipeline structure for consistency and correctness.
-
-    Performs the following validation checks:
-    1. Exactly one Capture node exists
-    2. At least one Termination node exists
-    3. All output references point to existing nodes
-    4. No orphaned nodes (all reachable from Capture)
-    5. No duplicate node IDs (already enforced by PipelineConfig)
-    6. File extensions match photo_extensions or metadata_extensions
-    7. Processing method_ids exist in processing_methods config
-
-    Args:
-        pipeline: PipelineConfig to validate
-        config: PhotoAdminConfig with photo_extensions, metadata_extensions, processing_methods
-
-    Returns:
-        List of validation error messages (empty if valid)
-    """
-    errors = []
-
-    # Check 1: Exactly one Capture node
-    capture_nodes = [n for n in pipeline.nodes if isinstance(n, CaptureNode)]
-    if len(capture_nodes) == 0:
-        errors.append("Pipeline must have exactly one Capture node (found 0)")
-    elif len(capture_nodes) > 1:
-        capture_ids = [n.id for n in capture_nodes]
-        errors.append(f"Pipeline must have exactly one Capture node (found {len(capture_nodes)}: {capture_ids})")
-
-    # Check 2: At least one Termination node
-    termination_nodes = [n for n in pipeline.nodes if isinstance(n, TerminationNode)]
-    if len(termination_nodes) == 0:
-        errors.append("Pipeline must have at least one Termination node")
-
-    # Check 3: All output references point to existing nodes
-    for node in pipeline.nodes:
-        for output_id in node.output:
-            if output_id not in pipeline.nodes_by_id:
-                errors.append(f"Node '{node.id}' references non-existent output node '{output_id}'")
-
-    # Check 4: No orphaned nodes (all reachable from Capture)
-    if capture_nodes:
-        capture_node = capture_nodes[0]
-        reachable = set()
-        visited = set()
-
-        def dfs(node_id: str):
-            """Depth-first search to find all reachable nodes."""
-            if node_id in visited:
-                return
-            visited.add(node_id)
-            reachable.add(node_id)
-
-            if node_id in pipeline.nodes_by_id:
-                node = pipeline.nodes_by_id[node_id]
-                for output_id in node.output:
-                    dfs(output_id)
-
-        # Start DFS from Capture node
-        dfs(capture_node.id)
-
-        # Find orphaned nodes
-        all_node_ids = set(pipeline.nodes_by_id.keys())
-        orphaned = all_node_ids - reachable
-        if orphaned:
-            errors.append(f"Pipeline has orphaned nodes (unreachable from Capture): {sorted(orphaned)}")
-
-    # Check 6: File extensions validation
-    valid_photo_extensions = [ext.lower() for ext in config.photo_extensions]
-    valid_metadata_extensions = [ext.lower() for ext in config.metadata_extensions]
-    valid_extensions = valid_photo_extensions + valid_metadata_extensions
-
-    for node in pipeline.nodes:
-        if isinstance(node, FileNode):
-            ext_lower = node.extension.lower()
-            if ext_lower not in valid_extensions:
-                # Convert sets to sorted list for display
-                all_valid_extensions = sorted(config.photo_extensions | config.metadata_extensions)
-                errors.append(
-                    f"File node '{node.id}' has invalid extension '{node.extension}'. "
-                    f"Must be one of: {', '.join(all_valid_extensions)}"
-                )
-
-    # Check 7: Processing method_ids validation
-    valid_method_ids = set(config.processing_methods.keys())
-    # Empty string is always valid (means no suffix)
-    valid_method_ids.add('')
-
-    for node in pipeline.nodes:
-        if isinstance(node, ProcessNode):
-            for method_id in node.method_ids:
-                if method_id not in valid_method_ids:
-                    available = [k for k in sorted(valid_method_ids) if k != '']
-                    errors.append(
-                        f"Process node '{node.id}' references undefined processing method '{method_id}'. "
-                        f"Available methods: {', '.join(available) if available else '(none defined)'}"
-                    )
-
-    return errors
-
 
 # =============================================================================
 # Photo Pairing Tool Integration
@@ -592,23 +195,26 @@ def flatten_imagegroups_to_specific_images(imagegroups: List[Dict[str, Any]]) ->
         separate_images = group.get('separate_images', {})
 
         for suffix, image_data in separate_images.items():
-            # Build unique_id (base_filename)
+            # Build base_filename
             if suffix:
-                unique_id = f"{camera_id}{counter}-{suffix}"
+                base_filename = f"{camera_id}{counter}-{suffix}"
             else:
-                unique_id = f"{camera_id}{counter}"
+                base_filename = f"{camera_id}{counter}"
 
             # Get actual files
-            actual_files = sorted(image_data.get('files', []))
+            files = sorted(image_data.get('files', []))
+
+            # Extract properties from suffix (if it contains processing methods)
+            properties = [suffix] if suffix and not suffix.isdigit() else []
 
             # Create SpecificImage
             specific_image = SpecificImage(
-                unique_id=unique_id,
-                group_id=group_id,
+                base_filename=base_filename,
                 camera_id=camera_id,
                 counter=counter,
                 suffix=suffix,
-                actual_files=actual_files
+                properties=properties,
+                files=files
             )
             specific_images.append(specific_image)
 
@@ -653,1060 +259,20 @@ def add_metadata_files_to_specific_images(
 
     # Add metadata files to matching SpecificImages
     for specific_image in specific_images:
-        # Match by unique_id (which is the base filename)
-        if specific_image.unique_id in metadata_files:
-            for metadata_file in metadata_files[specific_image.unique_id]:
-                if metadata_file not in specific_image.actual_files:
-                    specific_image.actual_files.append(metadata_file)
-            # Re-sort actual_files after adding metadata
-            specific_image.actual_files.sort()
+        # Match by base_filename
+        if specific_image.base_filename in metadata_files:
+            for metadata_file in metadata_files[specific_image.base_filename]:
+                if metadata_file not in specific_image.files:
+                    specific_image.files.append(metadata_file)
+            # Re-sort files after adding metadata
+            specific_image.files.sort()
+
+
 
 
 # =============================================================================
-# Core Validation Engine - Path Enumeration and File Validation
+# Signal Handling - Graceful CTRL+C
 # =============================================================================
-
-@dataclass
-class PathState:
-    """
-    State tracking for DFS traversal through pipeline graph.
-
-    Used to track iteration counts per node (except Capture/Termination) to prevent infinite loops.
-
-    Attributes:
-        node_iterations: Dictionary mapping node IDs to iteration count (all nodes except Capture/Termination)
-        current_suffix: Accumulated suffix from all Process nodes traversed
-    """
-    node_iterations: Dict[str, int] = field(default_factory=dict)
-    current_suffix: str = ""
-
-
-def enumerate_all_paths(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
-    """
-    Enumerate all possible paths from Capture to Termination nodes using DFS.
-
-    This function traverses the pipeline graph depth-first, exploring all branches
-    and handling loops with truncation after MAX_ITERATIONS per node (except Capture
-    and Termination nodes, which appear exactly once per path by design).
-
-    Args:
-        pipeline: PipelineConfig object with all nodes
-
-    Returns:
-        List of paths, where each path is a list of node dictionaries containing:
-        - node_id: Node identifier
-        - node_type: Type of node (Capture, File, Process, etc.)
-        - extension: File extension (for File nodes)
-        - method_ids: Processing methods (for Process nodes)
-        - truncated: Whether this path was truncated due to loop limit
-        - iteration_count: Number of times node was visited (all nodes except Capture/Termination)
-
-    Example path:
-        [
-            {'node_id': 'capture', 'node_type': 'Capture'},
-            {'node_id': 'raw_image', 'node_type': 'File', 'extension': '.CR3'},
-            {'node_id': 'process', 'node_type': 'Process', 'method_ids': ['Edit'], 'iteration_count': 1},
-            {'node_id': 'termination', 'node_type': 'Termination', 'truncated': False}
-        ]
-    """
-    # Find Capture node
-    capture_nodes = [n for n in pipeline.nodes if isinstance(n, CaptureNode)]
-    if not capture_nodes:
-        return []
-
-    capture_node = capture_nodes[0]
-    all_paths = []
-
-    def dfs(node_id: str, current_path: List[Dict[str, Any]], state: PathState):
-        """Depth-first search to enumerate all paths."""
-        if node_id not in pipeline.nodes_by_id:
-            return
-
-        node = pipeline.nodes_by_id[node_id]
-
-        # Build node info for path
-        node_info = {
-            'node_id': node.id,
-            'node_type': node.type
-        }
-
-        # Add type-specific fields
-        if isinstance(node, FileNode):
-            node_info['extension'] = node.extension
-        elif isinstance(node, ProcessNode):
-            # Store method_ids temporarily (will be replaced with single method per path)
-            node_info['method_ids'] = node.method_ids
-        elif isinstance(node, TerminationNode):
-            node_info['termination_type'] = node.termination_type
-            node_info['truncated'] = False
-        elif isinstance(node, BranchingNode):
-            node_info['condition_description'] = node.condition_description
-        elif isinstance(node, PairingNode):
-            node_info['pairing_type'] = node.pairing_type
-            node_info['input_count'] = node.input_count
-
-        # Track iteration count for all nodes except Capture and Termination
-        if not isinstance(node, (CaptureNode, TerminationNode)):
-            iteration_count = state.node_iterations.get(node.id, 0) + 1
-            node_info['iteration_count'] = iteration_count
-
-        # Add node to current path
-        current_path.append(node_info)
-
-        # If this is a Termination node, save the complete path
-        if isinstance(node, TerminationNode):
-            all_paths.append(current_path.copy())
-            current_path.pop()
-            return
-
-        # Check loop limit for all nodes except Capture and Termination
-        if not isinstance(node, (CaptureNode, TerminationNode)):
-            iteration_count = state.node_iterations.get(node.id, 0) + 1
-
-            if iteration_count > MAX_ITERATIONS:
-                # Truncate this path - mark termination as truncated
-                truncated_termination = {
-                    'node_id': f'truncated_from_{node.id}',
-                    'node_type': 'Termination',
-                    'termination_type': 'TRUNCATED',
-                    'truncated': True,
-                    'truncation_note': f'Path truncated after {MAX_ITERATIONS} iterations of {node.id}'
-                }
-                current_path.append(truncated_termination)
-                all_paths.append(current_path.copy())
-                current_path.pop()  # Remove truncation marker
-                current_path.pop()  # Remove current node
-                return
-
-            # Update iteration count for this node
-            new_state = PathState(
-                node_iterations=state.node_iterations.copy(),
-                current_suffix=state.current_suffix
-            )
-            new_state.node_iterations[node.id] = iteration_count
-        else:
-            new_state = state
-
-        # PROCESS NODE WITH MULTIPLE METHOD_IDS: Create parallel paths (like branching)
-        if isinstance(node, ProcessNode) and len(node.method_ids) > 1:
-            # Remove the node we just added (we'll add it again with single method per iteration)
-            current_path.pop()
-
-            # Each method_id creates a separate path (user chooses one at runtime)
-            for method_id in node.method_ids:
-                # Create a new node_info with only this single method_id
-                method_node_info = node_info.copy()
-                method_node_info['method_ids'] = [method_id]
-                current_path.append(method_node_info)
-
-                # Explore all output nodes with this method choice
-                for output_id in node.output:
-                    dfs(output_id, current_path, new_state)
-
-                # Backtrack this method's node
-                current_path.pop()
-        else:
-            # Single method_id (or no method_ids) - explore outputs normally
-            for output_id in node.output:
-                dfs(output_id, current_path, new_state)
-
-            # Backtrack
-            current_path.pop()
-
-    # Start DFS from Capture node
-    initial_state = PathState()
-    dfs(capture_node.id, [], initial_state)
-
-    return all_paths
-
-
-# =============================================================================
-# Pairing-Aware Path Enumeration (Handles Pairing Nodes)
-# =============================================================================
-
-def find_pairing_nodes_in_topological_order(pipeline: PipelineConfig) -> List[PairingNode]:
-    """
-    Find all pairing nodes and return them in topological order (upstream first).
-
-    Uses depth-first traversal from Capture node to determine order.
-
-    Args:
-        pipeline: PipelineConfig object
-
-    Returns:
-        List of PairingNode objects in topological order
-
-    Raises:
-        ValueError: If pairing nodes form a cycle (not supported)
-    """
-    pairing_nodes = [n for n in pipeline.nodes if isinstance(n, PairingNode)]
-
-    if not pairing_nodes:
-        return []
-
-    # Build depth map via BFS from capture node
-    from collections import deque
-
-    capture_nodes = [n for n in pipeline.nodes if isinstance(n, CaptureNode)]
-    if not capture_nodes:
-        return pairing_nodes  # Shouldn't happen in valid pipeline
-
-    # Use dynamic programming to find longest path to each node
-    # This ensures correct topological ordering when nodes can be reached via multiple paths
-    node_depth = {capture_nodes[0].id: 0}
-
-    # Build reverse adjacency list (which nodes point to each node)
-    predecessors = {}
-    for node in pipeline.nodes:
-        for output_id in node.output:
-            if output_id not in predecessors:
-                predecessors[output_id] = []
-            predecessors[output_id].append(node.id)
-
-    # Repeatedly relax edges until no changes (Bellman-Ford for longest path)
-    changed = True
-    iterations = 0
-    max_iterations = len(pipeline.nodes) * 2  # Prevent infinite loops
-
-    while changed and iterations < max_iterations:
-        changed = False
-        iterations += 1
-
-        for node in pipeline.nodes:
-            # Skip if this node has no predecessors (except capture)
-            if node.id not in predecessors and not isinstance(node, CaptureNode):
-                continue
-
-            # Calculate longest path to this node
-            if isinstance(node, CaptureNode):
-                max_pred_depth = -1
-            else:
-                max_pred_depth = -1
-                for pred_id in predecessors.get(node.id, []):
-                    if pred_id in node_depth:
-                        max_pred_depth = max(max_pred_depth, node_depth[pred_id])
-
-            new_depth = max_pred_depth + 1
-
-            # Update if we found a longer path
-            if node.id not in node_depth or node_depth[node.id] < new_depth:
-                node_depth[node.id] = new_depth
-                changed = True
-
-    # Sort pairing nodes by depth (topological order)
-    pairing_with_depth = [(n, node_depth.get(n.id, float('inf'))) for n in pairing_nodes]
-    pairing_with_depth.sort(key=lambda x: x[1])
-
-    return [n for n, _ in pairing_with_depth]
-
-
-def validate_pairing_node_inputs(pairing_node: PairingNode, pipeline: PipelineConfig) -> tuple:
-    """
-    Validate that a pairing node has exactly 2 input nodes.
-
-    Args:
-        pairing_node: The pairing node to validate
-        pipeline: PipelineConfig object
-
-    Returns:
-        Tuple of (input1_id, input2_id) - the two nodes that output to this pairing node
-
-    Raises:
-        ValueError: If pairing node doesn't have exactly 2 inputs
-    """
-    # Find all nodes that output to this pairing node
-    input_nodes = []
-    for node in pipeline.nodes:
-        if pairing_node.id in node.output:
-            input_nodes.append(node.id)
-
-    if len(input_nodes) != 2:
-        raise ValueError(
-            f"Pairing node '{pairing_node.id}' must have exactly 2 input nodes, "
-            f"but has {len(input_nodes)}: {input_nodes}"
-        )
-
-    return (input_nodes[0], input_nodes[1])
-
-
-def merge_two_paths(
-    path1: List[Dict[str, Any]],
-    path2: List[Dict[str, Any]],
-    pairing_node: PairingNode,
-    state1: PathState,
-    state2: PathState
-) -> tuple:
-    """
-    Merge two paths that meet at a pairing node.
-
-    Creates a merged path by combining nodes from both branches.
-    Since both paths start from capture and may share common ancestors,
-    we keep path1 as the base and only append the unique branch nodes from path2.
-
-    Args:
-        path1: First path (list of node dicts)
-        path2: Second path (list of node dicts)
-        pairing_node: The pairing node where paths merge
-        state1: PathState from first path
-        state2: PathState from second path
-
-    Returns:
-        Tuple of (merged_path, merged_state) ready to continue DFS
-    """
-    # Start with path1 as base
-    merged_path = path1.copy()
-
-    # Find unique nodes in path2 (nodes not already in path1)
-    path1_node_ids = {n['node_id'] for n in path1}
-    for node in path2:
-        if node['node_id'] not in path1_node_ids:
-            merged_path.append(node)
-
-    # Add pairing node info
-    pairing_info = {
-        'node_id': pairing_node.id,
-        'node_type': 'Pairing',
-        'pairing_type': pairing_node.pairing_type,
-        'input_count': pairing_node.input_count,
-        'iteration_count': 1  # First time visiting this pairing node
-    }
-    merged_path.append(pairing_info)
-
-    # Merge iteration counts - take maximum per node
-    merged_iterations = state1.node_iterations.copy()
-    for node_id, count in state2.node_iterations.items():
-        if node_id in merged_iterations:
-            merged_iterations[node_id] = max(merged_iterations[node_id], count)
-        else:
-            merged_iterations[node_id] = count
-
-    # Mark pairing node as visited once
-    merged_iterations[pairing_node.id] = 1
-
-    # Merged state
-    merged_state = PathState(
-        node_iterations=merged_iterations,
-        current_suffix=state1.current_suffix  # Use first path's suffix (arbitrary choice)
-    )
-
-    return (merged_path, merged_state)
-
-
-def enumerate_paths_with_pairing(pipeline: PipelineConfig) -> List[List[Dict[str, Any]]]:
-    """
-    Enumerate all paths through pipeline, handling Pairing nodes correctly.
-
-    Pairing nodes combine paths from two upstream branches. This function:
-    1. Identifies pairing nodes in topological order
-    2. For each pairing node:
-       - Enumerates paths from current frontier to the pairing node
-       - Groups paths by which input edge they arrived on (2 groups)
-       - Creates all combinations (Cartesian product)
-       - Merges each pair: depth=max, files=union, iterations=max
-    3. Continues from merged paths to next pairing node or terminations
-
-    Restrictions:
-    - Pairing nodes must have exactly 2 inputs (validated)
-    - Pairing nodes cannot be in loops (MAX_ITERATIONS=1 enforced)
-    - If same pairing node encountered again, path is TRUNCATED
-
-    Args:
-        pipeline: PipelineConfig object with all nodes
-
-    Returns:
-        List of paths (same format as enumerate_all_paths)
-
-    Raises:
-        ValueError: If pairing node doesn't have exactly 2 inputs
-    """
-    # Find all pairing nodes in topological order
-    pairing_nodes = find_pairing_nodes_in_topological_order(pipeline)
-
-    # If no pairing nodes, use simpler algorithm
-    if not pairing_nodes:
-        return enumerate_all_paths(pipeline)
-
-    # Validate all pairing nodes have exactly 2 inputs
-    pairing_inputs = {}
-    for pairing_node in pairing_nodes:
-        input1, input2 = validate_pairing_node_inputs(pairing_node, pipeline)
-        pairing_inputs[pairing_node.id] = (input1, input2)
-
-    # Find Capture node
-    capture_nodes = [n for n in pipeline.nodes if isinstance(n, CaptureNode)]
-    if not capture_nodes:
-        return []
-
-    capture_node = capture_nodes[0]
-
-    # Initialize frontier with capture node
-    initial_path = []
-    initial_state = PathState()
-    current_frontier = [(initial_path, initial_state, capture_node.id)]
-
-    # NEW: Collect paths that terminate before reaching later pairing nodes
-    all_completed_paths = []
-
-    # Process each pairing node in topological order
-    for pairing_node in pairing_nodes:
-        input1_id, input2_id = pairing_inputs[pairing_node.id]
-
-        # Enumerate paths from frontier to this pairing node
-        paths_to_pairing = []
-
-        for seed_path, seed_state, start_node_id in current_frontier:
-            # DFS from start_node to pairing_node (treating pairing as termination)
-            # Returns: (incomplete_paths, completed_paths)
-            incomplete, completed = dfs_to_target_node(
-                start_node_id=start_node_id,
-                target_node_id=pairing_node.id,
-                current_path=seed_path.copy(),
-                state=seed_state,
-                pipeline=pipeline
-            )
-            paths_to_pairing.extend(incomplete)
-            all_completed_paths.extend(completed)  # NEW: Save early terminations
-
-        # Group paths by which input they arrived on
-        branch1_paths = []
-        branch2_paths = []
-
-        for path, state, arrived_from in paths_to_pairing:
-            if arrived_from == input1_id:
-                branch1_paths.append((path, state))
-            elif arrived_from == input2_id:
-                branch2_paths.append((path, state))
-            # Ignore paths that didn't arrive via expected inputs
-
-        # Create all combinations (Cartesian product)
-        merged_paths = []
-        for path1, state1 in branch1_paths:
-            for path2, state2 in branch2_paths:
-                merged_path, merged_state = merge_two_paths(
-                    path1, path2, pairing_node, state1, state2
-                )
-                # Continue from pairing node's OUTPUTS, not the pairing node itself
-                for output_id in pairing_node.output:
-                    merged_paths.append((merged_path, merged_state, output_id))
-
-        # Update frontier for next pairing node (or final terminations)
-        current_frontier = merged_paths
-
-    # Final enumeration: frontier to terminations
-    final_paths = []
-    for seed_path, seed_state, start_node_id in current_frontier:
-        # Continue DFS to termination nodes
-        paths = dfs_to_termination_nodes(
-            start_node_id=start_node_id,
-            current_path=seed_path.copy(),
-            state=seed_state,
-            pipeline=pipeline
-        )
-        final_paths.extend(paths)
-
-    # Return all paths: early terminations + final paths
-    return all_completed_paths + final_paths
-
-
-def dfs_to_target_node(
-    start_node_id: str,
-    target_node_id: str,
-    current_path: List[Dict[str, Any]],
-    state: PathState,
-    pipeline: PipelineConfig
-) -> tuple:
-    """
-    DFS from start node to target node (treating target as temporary termination).
-
-    Returns:
-        Tuple of (incomplete_paths, completed_paths):
-        - incomplete_paths: List of (path, state, arrived_from_node_id) that reached target
-        - completed_paths: List of complete paths that reached termination nodes before target
-    """
-    incomplete_paths = []  # Paths that reached the target pairing node
-    completed_paths = []   # Paths that reached termination nodes early
-
-    def dfs(node_id: str, path: List[Dict[str, Any]], current_state: PathState, came_from: str):
-        if node_id not in pipeline.nodes_by_id:
-            return
-
-        node = pipeline.nodes_by_id[node_id]
-
-        # If we reached target pairing node, save as incomplete path
-        if node_id == target_node_id:
-            incomplete_paths.append((path.copy(), current_state, came_from))
-            return
-
-        # NEW: If we reached a termination node, save as completed path
-        if isinstance(node, TerminationNode):
-            # This is a complete path that terminated before reaching target
-            node_info = {
-                'node_id': node.id,
-                'node_type': 'Termination',
-                'termination_type': node.termination_type
-            }
-            path.append(node_info)
-            completed_paths.append(path.copy())
-            path.pop()
-            return
-
-        # Build node info
-        node_info = {
-            'node_id': node.id,
-            'node_type': node.type
-        }
-
-        # Add type-specific fields
-        if isinstance(node, FileNode):
-            node_info['extension'] = node.extension
-        elif isinstance(node, ProcessNode):
-            node_info['method_ids'] = node.method_ids
-        elif isinstance(node, BranchingNode):
-            node_info['condition_description'] = node.condition_description
-        elif isinstance(node, PairingNode):
-            # If we encounter a pairing node that's NOT our target, truncate
-            # (pairing nodes can only be visited once - no loops allowed)
-            if node_id != target_node_id:
-                truncated_termination = {
-                    'node_id': f'truncated_at_pairing_{node_id}',
-                    'node_type': 'Termination',
-                    'termination_type': 'TRUNCATED',
-                    'truncated': True,
-                    'truncation_note': f'Pairing node {node_id} encountered multiple times (loops not allowed)'
-                }
-                path.append(truncated_termination)
-                completed_paths.append(path.copy())  # Truncated paths are "complete"
-                path.pop()
-                return
-
-        # Track iteration count for non-Capture/Termination nodes
-        if not isinstance(node, (CaptureNode, TerminationNode)):
-            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
-            node_info['iteration_count'] = iteration_count
-
-        # Add node to path
-        path.append(node_info)
-
-        # Check loop limit for non-Capture/Termination nodes
-        if not isinstance(node, (CaptureNode, TerminationNode)):
-            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
-
-            if iteration_count > MAX_ITERATIONS:
-                truncated_termination = {
-                    'node_id': f'truncated_from_{node.id}',
-                    'node_type': 'Termination',
-                    'termination_type': 'TRUNCATED',
-                    'truncated': True,
-                    'truncation_note': f'Path truncated after {MAX_ITERATIONS} iterations of {node.id}'
-                }
-                path.append(truncated_termination)
-                completed_paths.append(path.copy())  # Truncated paths are "complete"
-                path.pop()
-                path.pop()
-                return
-
-            # Update state
-            new_state = PathState(
-                node_iterations=current_state.node_iterations.copy(),
-                current_suffix=current_state.current_suffix
-            )
-            new_state.node_iterations[node.id] = iteration_count
-        else:
-            new_state = current_state
-
-        # PROCESS NODE WITH MULTIPLE METHOD_IDS: Create parallel paths (like branching)
-        if isinstance(node, ProcessNode) and len(node.method_ids) > 1:
-            # Remove the node we just added (we'll add it again with single method per iteration)
-            path.pop()
-
-            # Each method_id creates a separate path (user chooses one at runtime)
-            for method_id in node.method_ids:
-                # Create a new node_info with only this single method_id
-                method_node_info = node_info.copy()
-                method_node_info['method_ids'] = [method_id]
-                path.append(method_node_info)
-
-                # Explore all output nodes with this method choice
-                for output_id in node.output:
-                    dfs(output_id, path, new_state, node_id)
-
-                # Backtrack this method's node
-                path.pop()
-        else:
-            # Single method_id (or no method_ids) - explore outputs normally
-            for output_id in node.output:
-                dfs(output_id, path, new_state, node_id)
-
-            # Backtrack
-            path.pop()
-
-    # Start DFS from start_node
-    dfs(start_node_id, current_path, state, start_node_id)
-
-    return (incomplete_paths, completed_paths)
-
-
-def dfs_to_termination_nodes(
-    start_node_id: str,
-    current_path: List[Dict[str, Any]],
-    state: PathState,
-    pipeline: PipelineConfig
-) -> List[List[Dict[str, Any]]]:
-    """
-    DFS from start node to any termination node.
-
-    Similar to enumerate_all_paths but starts from arbitrary node (not Capture).
-    """
-    all_paths = []
-
-    def dfs(node_id: str, path: List[Dict[str, Any]], current_state: PathState):
-        if node_id not in pipeline.nodes_by_id:
-            return
-
-        node = pipeline.nodes_by_id[node_id]
-
-        # Build node info
-        node_info = {
-            'node_id': node.id,
-            'node_type': node.type
-        }
-
-        # Add type-specific fields
-        if isinstance(node, FileNode):
-            node_info['extension'] = node.extension
-        elif isinstance(node, ProcessNode):
-            node_info['method_ids'] = node.method_ids
-        elif isinstance(node, TerminationNode):
-            node_info['termination_type'] = node.termination_type
-            node_info['truncated'] = False
-        elif isinstance(node, BranchingNode):
-            node_info['condition_description'] = node.condition_description
-        elif isinstance(node, PairingNode):
-            # Pairing node encountered again - truncate (no loops)
-            truncated_termination = {
-                'node_id': f'truncated_at_pairing_{node_id}',
-                'node_type': 'Termination',
-                'termination_type': 'TRUNCATED',
-                'truncated': True,
-                'truncation_note': f'Pairing node {node_id} encountered multiple times (loops not allowed)'
-            }
-            path.append(truncated_termination)
-            all_paths.append(path.copy())
-            path.pop()
-            return
-
-        # Track iteration count for non-Capture/Termination nodes
-        if not isinstance(node, (CaptureNode, TerminationNode)):
-            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
-            node_info['iteration_count'] = iteration_count
-
-        # Add node to path
-        path.append(node_info)
-
-        # If termination, save path
-        if isinstance(node, TerminationNode):
-            all_paths.append(path.copy())
-            path.pop()
-            return
-
-        # Check loop limit
-        if not isinstance(node, (CaptureNode, TerminationNode)):
-            iteration_count = current_state.node_iterations.get(node.id, 0) + 1
-
-            if iteration_count > MAX_ITERATIONS:
-                truncated_termination = {
-                    'node_id': f'truncated_from_{node.id}',
-                    'node_type': 'Termination',
-                    'termination_type': 'TRUNCATED',
-                    'truncated': True,
-                    'truncation_note': f'Path truncated after {MAX_ITERATIONS} iterations of {node.id}'
-                }
-                path.append(truncated_termination)
-                all_paths.append(path.copy())
-                path.pop()
-                path.pop()
-                return
-
-            # Update state
-            new_state = PathState(
-                node_iterations=current_state.node_iterations.copy(),
-                current_suffix=current_state.current_suffix
-            )
-            new_state.node_iterations[node.id] = iteration_count
-        else:
-            new_state = current_state
-
-        # PROCESS NODE WITH MULTIPLE METHOD_IDS: Create parallel paths (like branching)
-        if isinstance(node, ProcessNode) and len(node.method_ids) > 1:
-            # Remove the node we just added (we'll add it again with single method per iteration)
-            path.pop()
-
-            # Each method_id creates a separate path (user chooses one at runtime)
-            for method_id in node.method_ids:
-                # Create a new node_info with only this single method_id
-                method_node_info = node_info.copy()
-                method_node_info['method_ids'] = [method_id]
-                path.append(method_node_info)
-
-                # Explore all output nodes with this method choice
-                for output_id in node.output:
-                    dfs(output_id, path, new_state)
-
-                # Backtrack this method's node
-                path.pop()
-        else:
-            # Single method_id (or no method_ids) - explore outputs normally
-            for output_id in node.output:
-                dfs(output_id, path, new_state)
-
-            # Backtrack
-            path.pop()
-
-    # Start DFS from start_node
-    dfs(start_node_id, current_path, state)
-
-    return all_paths
-
-
-def generate_expected_files(path: List[Dict[str, Any]], base_filename: str) -> List[str]:
-    """
-    Generate list of expected files for a specific image following a pipeline path.
-
-    This function walks through a pipeline path and builds filenames with appropriate
-    suffixes from Process nodes. Duplicate filenames are removed, keeping only the
-    last occurrence of each unique filename.
-
-    Args:
-        path: List of node dictionaries from enumerate_all_paths()
-        base_filename: Base filename (e.g., "AB3D0001" or "AB3D0001-2")
-
-    Returns:
-        List of expected filenames (deduplicated, preserving order of last occurrence)
-
-    Example:
-        path = [
-            {'node_type': 'Capture'},
-            {'node_type': 'File', 'extension': '.CR3'},
-            {'node_type': 'Process', 'method_ids': ['DxO_DeepPRIME_XD2s']},
-            {'node_type': 'File', 'extension': '.DNG'},
-            {'node_type': 'Termination'}
-        ]
-        base_filename = 'AB3D0001'
-
-        Returns: ['AB3D0001.CR3', 'AB3D0001-DxO_DeepPRIME_XD2s.DNG']
-    """
-    # Track filenames with their last position in path
-    # Key: filename, Value: (position, filename)
-    file_positions = {}
-    current_suffix = ""
-    position = 0
-
-    for node in path:
-        node_type = node.get('node_type')
-
-        if node_type == 'File':
-            # Generate filename with accumulated suffix
-            extension = node.get('extension', '')
-            if current_suffix:
-                filename = f"{base_filename}{current_suffix}{extension}"
-            else:
-                filename = f"{base_filename}{extension}"
-
-            # Track position of this filename (overwrites if duplicate)
-            file_positions[filename] = (position, filename)
-            position += 1
-
-        elif node_type == 'Process':
-            # Add processing method suffixes
-            method_ids = node.get('method_ids', [])
-            for method_id in method_ids:
-                if method_id:  # Empty string means no suffix
-                    current_suffix += f"-{method_id}"
-
-    # Sort by position to maintain order, extract filenames
-    expected_files = [filename for (pos, filename) in sorted(file_positions.values())]
-
-    return expected_files
-
-
-def generate_sample_base_filename(config: PhotoAdminConfig) -> str:
-    """
-    Generate a sample base filename for graph visualization debugging.
-
-    Uses the first camera ID from camera_mappings in config and a random
-    counter between 0001 and 9999.
-
-    Args:
-        config: PhotoAdminConfig object
-
-    Returns:
-        Sample base filename (e.g., "AB3D0742")
-
-    Example:
-        If config has camera_mappings = {'AB3D': [...], 'XY12': [...]},
-        returns something like "AB3D0742"
-    """
-    import random
-
-    # Get first camera ID from config
-    camera_mappings = config.camera_mappings
-    if camera_mappings:
-        first_camera_id = list(camera_mappings.keys())[0]
-    else:
-        # Fallback to a default camera ID if none configured
-        first_camera_id = "XXXX"
-
-    # Generate random counter between 1 and 9999
-    counter = random.randint(1, 9999)
-    counter_str = f"{counter:04d}"  # Pad to 4 digits
-
-    return f"{first_camera_id}{counter_str}"
-
-
-def classify_validation_status(actual_files: set, expected_files: set) -> ValidationStatus:
-    """
-    Classify validation status by comparing actual vs expected files.
-
-    Classification rules:
-    - CONSISTENT: All expected files present, no extra files
-    - CONSISTENT_WITH_WARNING: All expected files present, but extra files exist
-    - PARTIAL: Some (but not all) expected files present
-    - INCONSISTENT: No expected files present (completely wrong)
-
-    Args:
-        actual_files: Set of actual filenames found
-        expected_files: Set of expected filenames from pipeline
-
-    Returns:
-        ValidationStatus enum value
-    """
-    missing_files = expected_files - actual_files
-    extra_files = actual_files - expected_files
-
-    # INCONSISTENT: No expected files present at all
-    if not actual_files or len(actual_files & expected_files) == 0:
-        return ValidationStatus.INCONSISTENT
-
-    # PARTIAL: Some expected files missing
-    if missing_files:
-        return ValidationStatus.PARTIAL
-
-    # CONSISTENT-WITH-WARNING: All expected files present, but extra files exist
-    if extra_files:
-        return ValidationStatus.CONSISTENT_WITH_WARNING
-
-    # CONSISTENT: Perfect match
-    return ValidationStatus.CONSISTENT
-
-
-def validate_specific_image(
-    specific_image: SpecificImage,
-    pipeline: PipelineConfig
-) -> ValidationResult:
-    """
-    Validate a single SpecificImage against all pipeline paths.
-
-    This function:
-    1. Enumerates all paths from Capture to Termination
-    2. For each path, generates expected files
-    3. Compares actual files vs expected files
-    4. Classifies status for each termination
-    5. Returns aggregated ValidationResult
-
-    Args:
-        specific_image: SpecificImage object with actual files
-        pipeline: PipelineConfig with all nodes
-
-    Returns:
-        ValidationResult with termination_matches and overall_status
-    """
-    # Enumerate all paths through pipeline (pairing-aware)
-    all_paths = enumerate_paths_with_pairing(pipeline)
-
-    # Group paths by termination node (EXCLUDE truncated paths for validation)
-    paths_by_termination = {}
-    for path in all_paths:
-        if path:
-            # Last node should be termination
-            term_node = path[-1]
-
-            # SKIP truncated paths - they should not be used for actual validation
-            if term_node.get('truncated', False):
-                continue
-
-            # SKIP paths with TRUNCATED termination type
-            if term_node.get('termination_type') == 'TRUNCATED':
-                continue
-
-            term_id = term_node.get('node_id')  # Path dicts use 'node_id' key
-            if term_id not in paths_by_termination:
-                paths_by_termination[term_id] = []
-            paths_by_termination[term_id].append(path)
-
-    # Validate against each termination
-    termination_matches = []
-
-    # Normalize filenames to lowercase for case-insensitive comparison
-    # (filesystems like APFS, NTFS, FAT32 are case-insensitive)
-    actual_files_set = set(f.lower() for f in specific_image.actual_files)
-
-    for term_id, paths in paths_by_termination.items():
-        # NEW APPROACH: Evaluate each path independently and find the BEST match
-        # An image group is CONSISTENT if AT LEAST ONE path produces the same files
-
-        path_evaluations = []
-
-        for path in paths:
-            # Double-check: skip any truncated paths (should already be filtered)
-            if any(node.get('truncated', False) for node in path):
-                continue
-
-            expected_files = generate_expected_files(path, specific_image.unique_id)
-            # Normalize expected files to lowercase for comparison
-            expected_files_set = set(f.lower() for f in expected_files)
-
-            # Classify status for this specific path (case-insensitive)
-            path_status = classify_validation_status(actual_files_set, expected_files_set)
-
-            # Calculate metrics for this path (case-insensitive)
-            missing = expected_files_set - actual_files_set
-            extra = actual_files_set - expected_files_set
-
-            if expected_files_set:
-                found_expected = actual_files_set & expected_files_set
-                completion = (len(found_expected) / len(expected_files_set)) * 100
-            else:
-                completion = 0.0
-
-            path_evaluations.append({
-                'path': path,
-                'status': path_status,
-                'expected_files': expected_files_set,  # Lowercase for comparison
-                'expected_files_original': set(expected_files),  # Original case for display
-                'missing_files': missing,  # Lowercase
-                'extra_files': extra,  # Lowercase
-                'completion_percentage': completion,
-                'truncated': False,  # All truncated paths already filtered
-                'truncation_note': None,
-                'path_depth': len([n for n in path if n.get('node_type') not in ('Capture', 'Termination')])
-            })
-
-        # Skip if no valid (non-truncated) paths to this termination
-        if not path_evaluations:
-            continue
-
-        # Find the BEST status (CONSISTENT > CONSISTENT_WITH_WARNING > PARTIAL > INCONSISTENT)
-        status_priority = {
-            ValidationStatus.CONSISTENT: 1,
-            ValidationStatus.CONSISTENT_WITH_WARNING: 2,
-            ValidationStatus.PARTIAL: 3,
-            ValidationStatus.INCONSISTENT: 4
-        }
-
-        best_eval = min(path_evaluations, key=lambda e: (
-            status_priority[e['status']],  # Best status first
-            len(e['missing_files']),        # Fewest missing files second
-            e['path_depth']                 # Shortest path third
-        ))
-
-        # Use the best match for reporting
-        status = best_eval['status']
-        completion_percentage = best_eval['completion_percentage']
-        missing_files_lower = best_eval['missing_files']
-        extra_files_lower = best_eval['extra_files']
-        all_expected_files_original = best_eval['expected_files_original']
-
-        # Get termination type
-        term_node = paths[0][-1] if paths else {}
-        termination_type = term_node.get('termination_type', term_id)
-
-        # Create TerminationMatchResult
-        # Note: truncated is always False for actual validation (truncated paths are excluded)
-        # Use original-case expected files for display
-        term_match = TerminationMatchResult(
-            termination_id=term_id,
-            termination_type=termination_type,
-            status=status,
-            completion_percentage=completion_percentage,
-            expected_files=sorted(list(all_expected_files_original)),
-            actual_files=specific_image.actual_files,
-            missing_files=sorted(list(missing_files_lower)),
-            extra_files=sorted(list(extra_files_lower)),
-            truncated=False,
-            truncation_note=None
-        )
-        termination_matches.append(term_match)
-
-    # Determine overall status (worst status across all terminations)
-    status_priority = {
-        ValidationStatus.INCONSISTENT: 4,
-        ValidationStatus.PARTIAL: 3,
-        ValidationStatus.CONSISTENT_WITH_WARNING: 2,
-        ValidationStatus.CONSISTENT: 1
-    }
-
-    if termination_matches:
-        overall_status = max(
-            termination_matches,
-            key=lambda tm: status_priority[tm.status]
-        ).status
-    else:
-        overall_status = ValidationStatus.INCONSISTENT
-
-    # Determine archival readiness
-    archival_ready_for = [
-        tm.termination_type
-        for tm in termination_matches
-        if tm.status in (ValidationStatus.CONSISTENT, ValidationStatus.CONSISTENT_WITH_WARNING)
-    ]
-
-    # Create ValidationResult
-    return ValidationResult(
-        unique_id=specific_image.unique_id,
-        group_id=specific_image.group_id,
-        camera_id=specific_image.camera_id,
-        counter=specific_image.counter,
-        suffix=specific_image.suffix,
-        actual_files=specific_image.actual_files,
-        termination_matches=termination_matches,
-        overall_status=overall_status,
-        archival_ready_for=archival_ready_for
-    )
-
-
-def validate_all_images(
-    specific_images: List[SpecificImage],
-    pipeline: PipelineConfig,
-    show_progress: bool = True
-) -> List[ValidationResult]:
-    """
-    Validate all SpecificImages against pipeline.
-
-    Args:
-        specific_images: List of SpecificImage objects to validate
-        pipeline: PipelineConfig with all nodes
-        show_progress: Whether to display progress indicators
-
-    Returns:
-        List of ValidationResult objects
-    """
-    validation_results = []
-    total = len(specific_images)
-
-    for i, specific_image in enumerate(specific_images, 1):
-        if show_progress and total > 10:
-            # Show progress for large collections
-            if i % 100 == 0 or i == total:
-                print(f"  Validating images: {i}/{total} ({(i/total)*100:.1f}%)", end='\r')
-
-        result = validate_specific_image(specific_image, pipeline)
-        validation_results.append(result)
-
-    if show_progress and total > 10:
-        print()  # New line after progress
-
-    return validation_results
-
 
 def setup_signal_handlers():
     """
@@ -1722,6 +288,12 @@ def setup_signal_handlers():
 
     signal.signal(signal.SIGINT, signal_handler)
 
+
+
+
+# =============================================================================
+# CLI Argument Parsing and Prerequisite Validation
+# =============================================================================
 
 def parse_arguments():
     """
@@ -1866,6 +438,12 @@ def validate_prerequisites(args):
 
     return True
 
+
+
+
+# =============================================================================
+# Cache Management Functions
+# =============================================================================
 
 # =============================================================================
 # Cache Management Functions
@@ -2201,6 +779,12 @@ def prompt_cache_action(pipeline_changed: bool, folder_changed: bool, cache_edit
         print("\n\nInterrupted by user")
         return None
 
+
+
+
+# =============================================================================
+# HTML Report Generation Functions
+# =============================================================================
 
 # =============================================================================
 # HTML Report Generation Functions
@@ -2769,6 +1353,12 @@ def generate_html_report(
 
     return report_path
 
+
+
+
+# =============================================================================
+# Main Function
+# =============================================================================
 
 def main():
     """Main entry point for pipeline validation tool."""
