@@ -12,17 +12,19 @@ Extend photo-admin from local-only CLI tools to support remote photo collections
 ## Background
 
 ### Current State
-- **CLI-Only Tools**: PhotoStats and Photo Pairing operate as standalone Python scripts
+- **CLI-Only Tools**: PhotoStats, Photo Pairing, and Pipeline Validation operate as standalone Python scripts
 - **Local Filesystem**: Analysis limited to locally accessible directories
-- **YAML Configuration**: Settings stored in config/config.yaml
+- **YAML Configuration**: Settings stored in config/config.yaml, including complex pipeline definitions
 - **One-Time Reports**: HTML reports generated per execution, no historical tracking
 - **Jinja2 Templates**: Centralized template system for consistent HTML output
+- **Pipeline Validation**: Validates photo collections against user-defined processing workflows (directed graphs)
 
 ### Problem Statement
 1. **No Remote Access**: Cannot analyze photo collections on cloud storage (S3, Google Drive, etc.) or network locations
 2. **No Persistence**: Analysis results are lost after report generation, preventing trend analysis
 3. **Manual Tracking**: Users must manually organize and compare reports across executions
 4. **Limited Scalability**: YAML configuration doesn't scale for managing multiple collections
+5. **Complex Pipeline Configuration**: Editing pipeline graphs in YAML is error-prone and difficult to visualize
 
 ## Goals
 
@@ -31,6 +33,7 @@ Extend photo-admin from local-only CLI tools to support remote photo collections
 2. **Persistent Storage**: Store collection definitions, configurations, and analysis results in a database
 3. **Web Interface**: Provide a React-based UI for collection management and result visualization
 4. **Historical Analysis**: Enable trend tracking and comparison of analysis results over time
+5. **Pipeline Configuration UI**: Enable visual pipeline configuration through web forms (future: graph editor)
 
 ### Secondary Goals
 1. **Maintain CLI Tools**: Existing command-line workflows remain functional
@@ -54,6 +57,12 @@ Extend photo-admin from local-only CLI tools to support remote photo collections
 - **Needs**: Validate photo archive integrity across network-attached storage
 - **Pain Point**: Manual execution of CLI tools on each mounted drive
 - **Goal**: Centralized dashboard showing health of all archive locations
+
+### Tertiary: Workflow-Focused Photographer (Taylor)
+- **Needs**: Track which photos have completed processing pipeline (RAW → DNG → Edit → Archive)
+- **Pain Point**: Manually editing complex YAML pipeline definitions is error-prone; cannot visualize workflow
+- **Goal**: Define processing pipeline through visual forms, validate collections, identify incomplete images
+- **Use Case**: Run Pipeline Validation monthly to find photos stuck at intermediate processing stages
 
 ## Requirements
 
@@ -83,17 +92,29 @@ Extend photo-admin from local-only CLI tools to support remote photo collections
 - **FR4.3**: Provide UI for editing configuration parameters
 - **FR4.4**: Export configuration to YAML for CLI tool compatibility
 
-#### FR5: Tool Execution
-- **FR5.1**: Trigger PhotoStats and Photo Pairing from web interface
-- **FR5.2**: Display real-time progress during analysis execution
-- **FR5.3**: Store analysis results in database upon completion
-- **FR5.4**: Generate HTML reports from stored results (not just live execution)
+#### FR5: Pipeline Configuration Management
+- **FR5.1**: Store pipeline definitions in database (nodes, edges, processing methods)
+- **FR5.2**: Provide form-based pipeline editor for creating/editing pipeline configurations
+- **FR5.3**: Validate pipeline structure (no orphaned nodes, valid references, cycle detection)
+- **FR5.4**: Support all node types (Capture, File, Process, Pairing, Branching, Termination)
+- **FR5.5**: Preview expected filenames for a given pipeline configuration
+- **FR5.6**: Export/import pipelines as YAML for CLI tool compatibility
+- **FR5.7**: Version pipeline configurations with change history
 
-#### FR6: Result Visualization
-- **FR6.1**: Display historical analysis results in web UI
-- **FR6.2**: Generate HTML reports using existing Jinja2 templates
-- **FR6.3**: Compare results across multiple executions (trend charts)
-- **FR6.4**: Filter and search analysis history by collection, date, tool
+#### FR6: Tool Execution
+- **FR6.1**: Trigger PhotoStats, Photo Pairing, and Pipeline Validation from web interface
+- **FR6.2**: Display real-time progress during analysis execution
+- **FR6.3**: Store analysis results in database upon completion
+- **FR6.4**: Generate HTML reports from stored results (not just live execution)
+- **FR6.5**: Select active pipeline configuration before running Pipeline Validation
+
+#### FR7: Result Visualization
+- **FR7.1**: Display historical analysis results in web UI
+- **FR7.2**: Generate HTML reports using existing Jinja2 templates
+- **FR7.3**: Compare results across multiple executions (trend charts)
+- **FR7.4**: Filter and search analysis history by collection, date, tool
+- **FR7.5**: Visualize pipeline validation results (CONSISTENT, PARTIAL, INCONSISTENT breakdowns)
+- **FR7.6**: Display archival readiness metrics per termination type
 
 ### Non-Functional Requirements
 
@@ -127,26 +148,34 @@ Extend photo-admin from local-only CLI tools to support remote photo collections
 ### Architecture Overview
 
 ```
-┌─────────────────────────────────────────────┐
-│           React Web Frontend                │
-│  (Collection Mgmt, Config, Results View)    │
-└─────────────────┬───────────────────────────┘
-                  │ REST API
-┌─────────────────▼───────────────────────────┐
-│        Python Backend (FastAPI)             │
-│  - Collection Service                       │
-│  - Tool Execution Service                   │
-│  - Config Service                           │
-│  - Report Generation (Jinja2)               │
-└─────────────────┬───────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│           React Web Frontend                        │
+│  - Collection Management                            │
+│  - Configuration Editor                             │
+│  - Pipeline Editor (Forms, v2: React Flow)          │
+│  - Tool Execution Dashboard                         │
+│  - Results & Trend Visualization                    │
+└─────────────────┬───────────────────────────────────┘
+                  │ REST API + WebSocket
+┌─────────────────▼───────────────────────────────────┐
+│        Python Backend (FastAPI)                     │
+│  - Collection Service (local/remote)                │
+│  - Tool Execution Service (PhotoStats, Pairing,     │
+│    Pipeline Validation)                             │
+│  - Config Service (extensions, cameras, methods)    │
+│  - Pipeline Service (CRUD, validation, versioning)  │
+│  - Report Generation (Jinja2)                       │
+│  - Remote Storage Adapters (S3, GCS, SMB)           │
+└─────────────────┬───────────────────────────────────┘
                   │ ORM (SQLAlchemy)
-┌─────────────────▼───────────────────────────┐
-│            Database Layer                   │
-│  PostgreSQL or Document DB (TBD)            │
-│  - Collections                              │
-│  - Configurations                           │
-│  - Analysis Results                         │
-└─────────────────────────────────────────────┘
+┌─────────────────▼───────────────────────────────────┐
+│            PostgreSQL Database                      │
+│  - Collections (local & remote)                     │
+│  - Configurations (extensions, cameras, methods)    │
+│  - Pipelines (nodes, edges, versions)               │
+│  - Analysis Results (PhotoStats, Pairing, Pipeline) │
+│  - Pipeline History (versioning, change tracking)   │
+└─────────────────────────────────────────────────────┘
 ```
 
 ### Technology Stack Investigation
@@ -233,12 +262,40 @@ CREATE TABLE configurations (
 CREATE TABLE analysis_results (
     id SERIAL PRIMARY KEY,
     collection_id INTEGER REFERENCES collections(id),
-    tool VARCHAR(50) NOT NULL,  -- 'photostats', 'photo_pairing'
+    tool VARCHAR(50) NOT NULL,  -- 'photostats', 'photo_pairing', 'pipeline_validation'
+    pipeline_id INTEGER REFERENCES pipelines(id),  -- NULL for non-pipeline tools
     executed_at TIMESTAMP DEFAULT NOW(),
     results JSONB NOT NULL,  -- full analysis output
     report_html TEXT,  -- generated HTML report
     status VARCHAR(50) NOT NULL,  -- 'completed', 'failed', 'running'
     error_message TEXT
+);
+```
+
+#### Pipelines Table
+```sql
+CREATE TABLE pipelines (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    config JSONB NOT NULL,  -- pipeline nodes and edges definition
+    is_active BOOLEAN DEFAULT FALSE,  -- active pipeline for validation
+    version INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### Pipeline History Table
+```sql
+CREATE TABLE pipeline_history (
+    id SERIAL PRIMARY KEY,
+    pipeline_id INTEGER REFERENCES pipelines(id),
+    version INTEGER NOT NULL,
+    config JSONB NOT NULL,  -- historical pipeline configuration
+    changed_by VARCHAR(255),
+    changed_at TIMESTAMP DEFAULT NOW(),
+    change_notes TEXT
 );
 ```
 
@@ -259,9 +316,23 @@ Configuration:
   POST   /api/config/import        - Import from YAML
   GET    /api/config/export        - Export to YAML
 
+Pipelines:
+  GET    /api/pipelines            - List all pipelines
+  POST   /api/pipelines            - Create pipeline
+  GET    /api/pipelines/{id}       - Get pipeline details
+  PUT    /api/pipelines/{id}       - Update pipeline
+  DELETE /api/pipelines/{id}       - Delete pipeline
+  POST   /api/pipelines/{id}/validate - Validate pipeline structure
+  POST   /api/pipelines/{id}/activate - Set as active pipeline
+  GET    /api/pipelines/{id}/preview - Preview expected filenames
+  GET    /api/pipelines/{id}/history - Get version history
+  POST   /api/pipelines/import     - Import from YAML
+  GET    /api/pipelines/{id}/export - Export to YAML
+
 Tools:
   POST   /api/tools/photostats     - Run PhotoStats on collection
   POST   /api/tools/photo_pairing  - Run Photo Pairing on collection
+  POST   /api/tools/pipeline_validation - Run Pipeline Validation on collection
   GET    /api/tools/status/{job_id} - Get execution status
   WS     /api/tools/progress/{job_id} - WebSocket for progress updates
 
@@ -276,17 +347,19 @@ Results:
 
 #### Phase 1: Database Layer (Weeks 1-2)
 1. Set up PostgreSQL database
-2. Implement SQLAlchemy models
+2. Implement SQLAlchemy models (collections, configurations, pipelines, results)
 3. Create Alembic migrations
 4. Implement configuration import from YAML
-5. Write database integration tests
+5. Implement pipeline import from YAML
+6. Write database integration tests
 
 #### Phase 2: Backend API (Weeks 3-4)
 1. Set up FastAPI application
 2. Implement collection management endpoints
 3. Implement configuration endpoints
-4. Integrate existing tools with database storage
-5. Add WebSocket support for progress updates
+4. Implement pipeline management endpoints (CRUD, validation, activation)
+5. Integrate existing tools with database storage
+6. Add WebSocket support for progress updates
 
 #### Phase 3: Remote Storage (Weeks 5-6)
 1. Implement S3 storage adapter
@@ -299,8 +372,10 @@ Results:
 1. Set up React application
 2. Implement collection management UI
 3. Implement configuration management UI
-4. Implement tool execution UI with progress
-5. Implement results history and visualization
+4. Implement form-based pipeline editor (node creation, editing, validation)
+5. Implement tool execution UI with progress (including Pipeline Validation)
+6. Implement results history and visualization
+7. Add pipeline validation result visualization (CONSISTENT/PARTIAL/INCONSISTENT)
 
 #### Phase 5: CLI Integration (Week 10)
 1. Update CLI tools to read from database
@@ -319,14 +394,17 @@ Results:
 ### Adoption Metrics
 - **M1**: 80% of existing users try web interface within 1 month
 - **M2**: 50% of collections managed are remote (vs local) within 3 months
+- **M3**: 60% of Pipeline Validation users switch from YAML editing to form-based editor within 2 months
 
 ### Performance Metrics
-- **M3**: Analysis execution time within 10% of CLI tool performance
-- **M4**: 95% of collection access operations complete within 5 seconds
+- **M4**: Analysis execution time within 10% of CLI tool performance
+- **M5**: 95% of collection access operations complete within 5 seconds
+- **M6**: Pipeline validation completes within 2 seconds for cached results (same as CLI)
 
 ### Quality Metrics
-- **M5**: Zero data loss incidents in production usage
-- **M6**: Test coverage >80% for new backend code
+- **M7**: Zero data loss incidents in production usage
+- **M8**: Test coverage >80% for new backend code
+- **M9**: Pipeline configuration errors reduced by 70% compared to manual YAML editing
 
 ## Risks and Mitigation
 
@@ -355,6 +433,41 @@ Results:
 - **Probability**: Medium
 - **Mitigation**: Define API contract first; use OpenAPI for documentation; implement mock API for frontend development
 
+### Risk 6: Pipeline Configuration Complexity
+- **Impact**: Medium - Form-based editor may be cumbersome for complex pipelines
+- **Probability**: High (for pipelines with >15 nodes)
+- **Mitigation**: Start with form-based editor for v1; plan React Flow graph editor for v2; provide YAML import/export for power users
+
+## Future Enhancements (Post-v1)
+
+### Visual Pipeline Editor with React Flow
+
+**Rationale**: While v1 will provide a form-based pipeline editor, complex pipelines with branching, pairing nodes, and multiple terminations become difficult to visualize and edit through forms alone.
+
+**Technology**: [React Flow](https://reactflow.dev/) - A highly customizable React library for building node-based editors and interactive diagrams.
+
+**Features for v2**:
+1. **Drag-and-Drop Nodes**: Visually create pipeline nodes by dragging from a palette
+2. **Visual Edge Connections**: Connect nodes by dragging edges between output/input ports
+3. **Node Validation**: Real-time visual feedback on invalid connections (e.g., orphaned nodes)
+4. **Auto-Layout**: Automatic graph layout algorithms for complex pipelines
+5. **Zoom & Pan**: Navigate large pipeline graphs with smooth interactions
+6. **Minimap**: Overview map for large pipelines
+7. **Export to YAML**: Convert visual graph to YAML configuration
+8. **Import from YAML**: Automatically layout existing YAML pipelines
+
+**Benefits**:
+- Reduces cognitive load for understanding complex workflows
+- Prevents configuration errors through visual validation
+- Enables rapid prototyping of pipeline architectures
+- Improves onboarding for new users
+
+**Acceptance Criteria for v2**:
+- User can create a 20-node pipeline with branching and pairing visually
+- Graph automatically detects cycles and orphaned nodes
+- Changes save to database in real-time
+- Export matches existing YAML schema exactly
+
 ## Open Questions
 
 1. **Database Selection**: PostgreSQL vs MongoDB - Which better handles evolving analysis result structures?
@@ -364,6 +477,9 @@ Results:
 5. **Report Generation**: Generate HTML on-demand from stored results, or store pre-generated HTML?
 6. **Version Compatibility**: How to handle results from different tool versions?
 7. **Export Functionality**: Should users be able to export results to CSV, JSON, or other formats?
+8. **Pipeline Versioning**: Should pipeline changes create new versions automatically, or require manual versioning?
+9. **Multiple Active Pipelines**: Allow multiple active pipelines, or enforce single active pipeline?
+10. **Pipeline Node Library**: Should we provide pre-built node templates for common workflows?
 
 ## Dependencies
 
@@ -387,6 +503,7 @@ Results:
 - Axios (HTTP client)
 - Recharts or Victory (data visualization)
 - Material-UI or Ant Design (component library)
+- React Flow (v2 - visual pipeline editor)
 
 ## Appendix
 
@@ -399,6 +516,8 @@ Results:
 - [PostgreSQL JSONB Documentation](https://www.postgresql.org/docs/current/datatype-json.html)
 - [boto3 S3 Documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html)
 - [React Documentation](https://react.dev/)
+- [React Flow Documentation](https://reactflow.dev/) - Visual pipeline editor (v2 enhancement)
 
 ### Revision History
-- **2025-12-29**: Initial draft based on Issue #24 requirements
+- **2025-12-29 (v2)**: Added Pipeline Validation tool integration, pipeline configuration management, React Flow future enhancement
+- **2025-12-29 (v1)**: Initial draft based on Issue #24 requirements
