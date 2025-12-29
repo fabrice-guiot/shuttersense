@@ -917,12 +917,11 @@ def build_kpi_cards(validation_results: list) -> List:
     termination_stats = {}
     for result in validation_results:
         for match in result.get('termination_matches', []):
-            term_id = match.get('termination_id')
             term_type = match.get('termination_type')
             match_status = match.get('status')
 
-            if term_id not in termination_stats:
-                termination_stats[term_id] = {
+            if term_type not in termination_stats:
+                termination_stats[term_type] = {
                     'type': term_type,
                     'consistent': 0,
                     'partial': 0,
@@ -931,13 +930,13 @@ def build_kpi_cards(validation_results: list) -> List:
                 }
 
             if match_status == 'CONSISTENT':
-                termination_stats[term_id]['consistent'] += 1
+                termination_stats[term_type]['consistent'] += 1
             elif match_status == 'PARTIAL':
-                termination_stats[term_id]['partial'] += 1
+                termination_stats[term_type]['partial'] += 1
             elif match_status == 'INCONSISTENT':
-                termination_stats[term_id]['inconsistent'] += 1
+                termination_stats[term_type]['inconsistent'] += 1
             elif match_status == 'CONSISTENT_WITH_WARNING':
-                termination_stats[term_id]['warning'] += 1
+                termination_stats[term_type]['warning'] += 1
 
     kpis = [
         KPICard(
@@ -957,8 +956,7 @@ def build_kpi_cards(validation_results: list) -> List:
     ]
 
     # Add per-termination KPIs (Ready, Partial, With Warnings)
-    for term_id, stats in sorted(termination_stats.items()):
-        term_type = stats['type']
+    for term_type, stats in sorted(termination_stats.items()):
 
         # Ready KPI (CONSISTENT + CONSISTENT-WITH-WARNING)
         term_ready = stats['consistent'] + stats['warning']
@@ -1095,12 +1093,11 @@ def build_chart_sections(validation_results: list) -> List:
     termination_stats = {}
     for result in validation_results:
         for match in result.get('termination_matches', []):
-            term_id = match.get('termination_id')
             term_type = match.get('termination_type')
             match_status = match.get('status')
 
-            if term_id not in termination_stats:
-                termination_stats[term_id] = {
+            if term_type not in termination_stats:
+                termination_stats[term_type] = {
                     'type': term_type,
                     'CONSISTENT': 0,
                     'PARTIAL': 0,
@@ -1108,12 +1105,11 @@ def build_chart_sections(validation_results: list) -> List:
                     'CONSISTENT-WITH-WARNING': 0
                 }
 
-            if match_status in termination_stats[term_id]:
-                termination_stats[term_id][match_status] += 1
+            if match_status in termination_stats[term_type]:
+                termination_stats[term_type][match_status] += 1
 
     # Create one pie chart per termination
-    for term_id, stats in sorted(termination_stats.items()):
-        term_type = stats['type']
+    for term_type, stats in sorted(termination_stats.items()):
 
         # Filter out zero values and ensure JSON serializable (exclude 'type' key)
         filtered_stats = {str(k): int(v) for k, v in stats.items()
@@ -1536,12 +1532,11 @@ def main():
     termination_stats = {}
     for result in validation_results:
         for term_match in result.termination_matches:
-            term_id = term_match.termination_id
             term_type = term_match.termination_type
             match_status = term_match.status
 
-            if term_id not in termination_stats:
-                termination_stats[term_id] = {
+            if term_type not in termination_stats:
+                termination_stats[term_type] = {
                     'type': term_type,
                     'consistent': 0,
                     'warning': 0,
@@ -1550,13 +1545,13 @@ def main():
                 }
 
             if match_status == ValidationStatus.CONSISTENT:
-                termination_stats[term_id]['consistent'] += 1
+                termination_stats[term_type]['consistent'] += 1
             elif match_status == ValidationStatus.CONSISTENT_WITH_WARNING:
-                termination_stats[term_id]['warning'] += 1
+                termination_stats[term_type]['warning'] += 1
             elif match_status == ValidationStatus.PARTIAL:
-                termination_stats[term_id]['partial'] += 1
+                termination_stats[term_type]['partial'] += 1
             elif match_status == ValidationStatus.INCONSISTENT:
-                termination_stats[term_id]['inconsistent'] += 1
+                termination_stats[term_type]['inconsistent'] += 1
 
     total_images = len(validation_results)
 
@@ -1569,10 +1564,10 @@ def main():
     print()
 
     print("  Per-Termination Statistics:")
-    for term_id, stats in sorted(termination_stats.items()):
+    for term_type, stats in sorted(termination_stats.items()):
         ready_count = stats['consistent'] + stats['warning']
         ready_pct = (ready_count / total_images * 100) if total_images > 0 else 0
-        print(f"    {stats['type']}: {ready_count}/{total_images} ready ({ready_pct:.1f}%)")
+        print(f"    {term_type}: {ready_count}/{total_images} ready ({ready_pct:.1f}%)")
         print(f"      ✓ Consistent: {stats['consistent']}, "
               f"⚠ Warning: {stats['warning']}, "
               f"⚠ Partial: {stats['partial']}, "
