@@ -828,12 +828,12 @@ def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdmin
         # Get termination info
         termination_node = path[-1] if path else None
         if termination_node:
-            termination_type = termination_node.get('termination_type', 'Unknown')
+            termination_type = termination_node.get('term_type', 'Unknown')
             truncated = termination_node.get('truncated', False)
             truncated_str = "Yes" if truncated else "No"
 
             # Build node path string with newlines before arrows
-            node_ids = [node.get('node_id', 'unknown') for node in path]
+            node_ids = [node.get('id', 'unknown') for node in path]
             if len(node_ids) > 0:
                 # First node ID without arrow, then newline before each subsequent arrow
                 node_path_parts = [node_ids[0]]
