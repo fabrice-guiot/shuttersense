@@ -43,17 +43,17 @@
 
 ### Master Key Management (NEW from research.md)
 
-- [ ] T010 Create setup_master_key.py (repository root) with interactive key generation using Fernet.generate_key()
-- [ ] T011 In setup_master_key.py, add platform-specific environment variable instructions (macOS/Linux/Windows)
-- [ ] T012 In setup_master_key.py, add key validation function to check Fernet format
-- [ ] T013 In setup_master_key.py, add option to save key to ~/.photo_admin_master_key.txt with chmod 600
-- [ ] T014 In setup_master_key.py, add warnings about key loss consequences
+- [X] T010 Create setup_master_key.py (repository root) with interactive key generation using Fernet.generate_key()
+- [X] T011 In setup_master_key.py, add platform-specific environment variable instructions (macOS/Linux/Windows)
+- [X] T012 In setup_master_key.py, add key validation function to check Fernet format
+- [X] T013 In setup_master_key.py, add option to save key to ~/.photo_admin_master_key.txt with chmod 600
+- [X] T014 In setup_master_key.py, add warnings about key loss consequences
 
 ### Encryption Infrastructure (from research.md Task 2)
 
-- [ ] T015 Create backend/src/utils/crypto.py with CredentialEncryptor class (Fernet encryption/decryption)
-- [ ] T016 In backend/src/utils/crypto.py, implement encrypt() and decrypt() methods using PHOTO_ADMIN_MASTER_KEY env var
-- [ ] T017 In backend/src/utils/crypto.py, add master key validation on CredentialEncryptor initialization (fail fast if missing/invalid)
+- [X] T015 Create backend/src/utils/crypto.py with CredentialEncryptor class (Fernet encryption/decryption)
+- [X] T016 In backend/src/utils/crypto.py, implement encrypt() and decrypt() methods using PHOTO_ADMIN_MASTER_KEY env var
+- [X] T017 In backend/src/utils/crypto.py, add master key validation on CredentialEncryptor initialization (fail fast if missing/invalid)
 
 ### File Listing Cache (from research.md Task 3)
 

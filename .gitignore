@@ -213,6 +213,9 @@ __marimo__/
 # User configuration (use config/template-config.yaml as template)
 config/config.yaml
 
+# Master encryption key (NEVER commit this!)
+.photo_admin_master_key.txt
+
 # IDE
 .DS_Store
 .idea/
