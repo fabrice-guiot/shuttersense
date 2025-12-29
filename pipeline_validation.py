@@ -1868,7 +1868,7 @@ def validate_prerequisites(args):
 
 
 # =============================================================================
-# Cache Management Functions (Phase 6 - User Story 4)
+# Cache Management Functions
 # =============================================================================
 
 def calculate_pipeline_config_hash(config_path: Path) -> str:
@@ -2203,7 +2203,7 @@ def prompt_cache_action(pipeline_changed: bool, folder_changed: bool, cache_edit
 
 
 # =============================================================================
-# HTML Report Generation Functions (Phase 7 - User Story 5)
+# HTML Report Generation Functions
 # =============================================================================
 
 def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdminConfig):
@@ -2878,7 +2878,7 @@ def main():
     print(f"Analyzing: {args.folder_path}")
     print()
 
-    # Phase 2: Load configuration and data
+    # Load configuration and data
     print("Loading configuration...")
     config = PhotoAdminConfig(config_path=args.config)
 
@@ -2898,12 +2898,12 @@ def main():
     # Track scan timestamps for report
     scan_start = datetime.now()
 
-    # Phase 2: Load Photo Pairing results
+    # Load Photo Pairing results
     print("Loading Photo Pairing results...")
     imagegroups = load_or_generate_imagegroups(args.folder_path, force_regenerate=args.force_regenerate)
     print(f"  Loaded {len(imagegroups)} image groups")
 
-    # Phase 2: Flatten to SpecificImages
+    # Flatten ImageGroups to individual SpecificImages for validation
     specific_images = flatten_imagegroups_to_specific_images(imagegroups)
     print(f"  Flattened to {len(specific_images)} specific images")
 
@@ -2912,9 +2912,8 @@ def main():
     add_metadata_files_to_specific_images(specific_images, args.folder_path, config)
     print()
 
-    # Phase 3 & 4: Validate images against pipeline
+    # Validate images against pipeline
     print("Validating images against pipeline...")
-    print(f"  Pipeline supports all 6 node types (Phases 3 & 4 complete)")
     validation_results = validate_all_images(specific_images, pipeline, show_progress=True)
 
     scan_end = datetime.now()
@@ -2986,7 +2985,7 @@ def main():
               f"✗ Inconsistent: {stats['inconsistent']}")
     print()
 
-    # Phase 7 (US5): Generate HTML report
+    # Generate HTML report
     print("Generating HTML report...")
 
     # Convert ValidationResult objects to dictionaries for report functions
