@@ -338,6 +338,11 @@ class PhotoAdminConfig:
         return self._config.get('processing_methods', {})
 
     @property
+    def processing_pipelines(self):
+        """Get the processing pipelines configuration."""
+        return self._config.get('processing_pipelines', {})
+
+    @property
     def raw_config(self):
         """Get the raw configuration dictionary."""
         return self._config

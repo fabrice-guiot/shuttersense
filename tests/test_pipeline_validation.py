@@ -527,25 +527,25 @@ class TestPhotoPairingIntegration:
         assert len(specific_images) == 3  # AB3D0001, AB3D0002, AB3D0003
 
         # Check first image (AB3D0001 base image)
-        img1 = [img for img in specific_images if img.unique_id == 'AB3D0001'][0]
+        img1 = [img for img in specific_images if img.base_filename == 'AB3D0001'][0]
         assert img1.group_id == 'AB3D0001'
         assert img1.camera_id == 'AB3D'
         assert img1.counter == '0001'
         assert img1.suffix == ''
-        assert 'AB3D0001.CR3' in img1.actual_files
-        assert 'AB3D0001.XMP' in img1.actual_files
+        assert 'AB3D0001.CR3' in img1.files
+        assert 'AB3D0001.XMP' in img1.files
 
         # Check second image (AB3D0002)
-        img2 = [img for img in specific_images if img.unique_id == 'AB3D0002'][0]
+        img2 = [img for img in specific_images if img.base_filename == 'AB3D0002'][0]
         assert img2.group_id == 'AB3D0002'
         assert img2.suffix == ''
-        assert 'AB3D0002.CR3' in img2.actual_files
+        assert 'AB3D0002.CR3' in img2.files
 
         # Check third image (AB3D0003)
-        img3 = [img for img in specific_images if img.unique_id == 'AB3D0003'][0]
+        img3 = [img for img in specific_images if img.base_filename == 'AB3D0003'][0]
         assert img3.group_id == 'AB3D0003'
         assert img3.suffix == ''
-        assert 'AB3D0003-backup.CR3' in img3.actual_files  # Extra file
+        assert 'AB3D0003-backup.CR3' in img3.files  # Extra file
 
 
 # =============================================================================
@@ -578,8 +578,8 @@ class TestPathEnumeration:
         # Each path should start with Capture and end with Termination
         for path in paths:
             assert len(path) > 0
-            assert path[0]['node_id'] == 'capture'
-            assert path[-1]['node_id'] == 'termination_blackbox'
+            assert path[0]['id'] == 'capture'
+            assert path[-1]['id'] == 'termination_blackbox'
 
     def test_enumerate_branching_paths(self, tmp_path, sample_pipeline_with_loop, mock_photo_admin_config):
         """Test enumeration with Branching nodes."""
@@ -630,11 +630,11 @@ class TestFileGeneration:
         """Test generate_expected_files() with processing method suffixes."""
         # Create a simple path through the pipeline
         path = [
-            {'node_id': 'capture', 'node_type': 'Capture'},
-            {'node_id': 'raw_file', 'node_type': 'File', 'extension': '.CR3'},
-            {'node_id': 'process', 'node_type': 'Process', 'method_ids': ['DxO_DeepPRIME_XD2s']},
-            {'node_id': 'dng_file', 'node_type': 'File', 'extension': '.DNG'},
-            {'node_id': 'termination', 'node_type': 'Termination'}
+            {'id': 'capture', 'type': 'Capture'},
+            {'id': 'raw_file', 'type': 'File', 'extension': '.CR3'},
+            {'id': 'process', 'type': 'Process', 'method_id': 'DxO_DeepPRIME_XD2s'},
+            {'id': 'dng_file', 'type': 'File', 'extension': '.DNG'},
+            {'id': 'termination', 'type': 'Termination'}
         ]
 
         base_filename = 'AB3D0001'
@@ -652,14 +652,14 @@ class TestFileValidation:
         """Test CONSISTENT status classification."""
         # AB3D0001 has all expected files
         specific_images = pipeline_validation.flatten_imagegroups_to_specific_images(sample_imagegroups)
-        img = [s for s in specific_images if s.unique_id == 'AB3D0001'][0]
+        img = [s for s in specific_images if s.base_filename == 'AB3D0001'][0]
 
         # Expected files for this image (based on pipeline)
         expected_files = ['AB3D0001.CR3', 'AB3D0001.XMP', 'AB3D0001-DxO_DeepPRIME_XD2s.DNG']
 
         # Classify status
         status = pipeline_validation.classify_validation_status(
-            actual_files=set(img.actual_files),
+            actual_files=set(img.files),
             expected_files=set(expected_files)
         )
 
@@ -669,14 +669,14 @@ class TestFileValidation:
         """Test PARTIAL status classification."""
         # AB3D0002 is missing DNG file
         specific_images = pipeline_validation.flatten_imagegroups_to_specific_images(sample_imagegroups)
-        img = [s for s in specific_images if s.unique_id == 'AB3D0002'][0]
+        img = [s for s in specific_images if s.base_filename == 'AB3D0002'][0]
 
         # Expected files
         expected_files = ['AB3D0002.CR3', 'AB3D0002.XMP', 'AB3D0002-DxO_DeepPRIME_XD2s.DNG']
 
         # Classify status
         status = pipeline_validation.classify_validation_status(
-            actual_files=set(img.actual_files),
+            actual_files=set(img.files),
             expected_files=set(expected_files)
         )
 
@@ -686,14 +686,14 @@ class TestFileValidation:
         """Test CONSISTENT-WITH-WARNING status classification."""
         # AB3D0003 has all expected files plus an extra file
         specific_images = pipeline_validation.flatten_imagegroups_to_specific_images(sample_imagegroups)
-        img = [s for s in specific_images if s.unique_id == 'AB3D0003'][0]
+        img = [s for s in specific_images if s.base_filename == 'AB3D0003'][0]
 
         # Expected files (without backup file)
         expected_files = ['AB3D0003.CR3', 'AB3D0003.XMP', 'AB3D0003-DxO_DeepPRIME_XD2s.DNG']
 
         # Classify status
         status = pipeline_validation.classify_validation_status(
-            actual_files=set(img.actual_files),
+            actual_files=set(img.files),
             expected_files=set(expected_files)
         )
 
@@ -891,7 +891,7 @@ class TestCustomPipelines:
         assert len(errors) == 0
 
         # Enumerate paths - should handle Pairing node
-        paths = pipeline_validation.enumerate_all_paths(pipeline)
+        paths = pipeline_validation.enumerate_paths_with_pairing(pipeline)
         assert len(paths) > 0
 
 
@@ -932,37 +932,37 @@ class TestCounterLooping:
 
         # Check primary image (no suffix)
         primary = [img for img in specific_images if img.suffix == ''][0]
-        assert primary.unique_id == 'AB3D0001'
+        assert primary.base_filename == 'AB3D0001'
         assert primary.group_id == 'AB3D0001'
         assert primary.camera_id == 'AB3D'
         assert primary.counter == '0001'
         assert primary.suffix == ''
-        assert 'AB3D0001.CR3' in primary.actual_files
-        assert 'AB3D0001.XMP' in primary.actual_files
+        assert 'AB3D0001.CR3' in primary.files
+        assert 'AB3D0001.XMP' in primary.files
 
         # Check second capture (suffix '2')
         second = [img for img in specific_images if img.suffix == '2'][0]
-        assert second.unique_id == 'AB3D0001-2'
+        assert second.base_filename == 'AB3D0001-2'
         assert second.group_id == 'AB3D0001'
         assert second.suffix == '2'
-        assert 'AB3D0001-2.CR3' in second.actual_files
-        assert 'AB3D0001-2.XMP' in second.actual_files
+        assert 'AB3D0001-2.CR3' in second.files
+        assert 'AB3D0001-2.XMP' in second.files
 
         # Check third capture (suffix '3')
         third = [img for img in specific_images if img.suffix == '3'][0]
-        assert third.unique_id == 'AB3D0001-3'
+        assert third.base_filename == 'AB3D0001-3'
         assert third.suffix == '3'
-        assert 'AB3D0001-3.CR3' in third.actual_files
+        assert 'AB3D0001-3.CR3' in third.files
 
     def test_base_filename_generation_with_suffix(self):
         """Test T036: base_filename generation with suffix (e.g., AB3D0001-2)."""
         # Test with primary image (no suffix)
         path = [
-            {'node_type': 'Capture'},
-            {'node_type': 'File', 'extension': '.CR3'},
-            {'node_type': 'Process', 'method_ids': ['DxO_DeepPRIME_XD2s']},
-            {'node_type': 'File', 'extension': '.DNG'},
-            {'node_type': 'Termination'}
+            {'type': 'Capture'},
+            {'type': 'File', 'extension': '.CR3'},
+            {'type': 'Process', 'method_id': 'DxO_DeepPRIME_XD2s'},
+            {'type': 'File', 'extension': '.DNG'},
+            {'type': 'Termination'}
         ]
 
         # Primary image - base_filename without suffix
@@ -1057,8 +1057,8 @@ class TestCounterLooping:
         assert len(results) == 2
 
         # Find results by unique_id
-        primary_result = [r for r in results if r.unique_id == 'AB3D0001'][0]
-        second_result = [r for r in results if r.unique_id == 'AB3D0001-2'][0]
+        primary_result = [r for r in results if r.base_filename == 'AB3D0001'][0]
+        second_result = [r for r in results if r.base_filename == 'AB3D0001-2'][0]
 
         # Primary image should be CONSISTENT_WITH_WARNING
         # (With best-path selection: Path1 expects {CR3}, Path2 expects {XMP},
@@ -1658,8 +1658,8 @@ class TestGraphVisualization:
         # Generate sample filename
         sample = pipeline_validation.generate_sample_base_filename(mock_config)
 
-        # Should use fallback "XXXX"
-        assert sample.startswith('XXXX')
+        # Should use fallback "ABCD0001"
+        assert sample == 'ABCD0001'
         assert len(sample) == 8
 
     def test_build_graph_visualization_table(self, sample_pipeline_config):
@@ -1761,8 +1761,8 @@ class TestGraphVisualization:
 
             # Should have one truncated path
             assert len(paths) == 1
-            assert paths[0][-1]['node_type'] == 'Termination'
-            assert paths[0][-1]['termination_type'] == 'TRUNCATED'
+            assert paths[0][-1]['type'] == 'Termination'
+            assert paths[0][-1]['term_type'] == 'TRUNCATED'
             assert paths[0][-1]['truncated'] is True
 
     def test_max_iterations_applied_to_branching_nodes(self):
@@ -1835,13 +1835,13 @@ class TestGraphVisualization:
         """Test that duplicate filenames are removed, keeping only the last occurrence."""
         # Create a path with duplicate File nodes (same extension)
         path = [
-            {'node_type': 'Capture'},
-            {'node_type': 'File', 'extension': '.CR3'},  # First CR3
-            {'node_type': 'Process', 'method_ids': ['']},  # No suffix
-            {'node_type': 'File', 'extension': '.CR3'},  # Second CR3 (same filename!)
-            {'node_type': 'Process', 'method_ids': ['DxO']},
-            {'node_type': 'File', 'extension': '.DNG'},
-            {'node_type': 'Termination'}
+            {'type': 'Capture'},
+            {'type': 'File', 'extension': '.CR3'},  # First CR3
+            {'type': 'Process', 'method_id': ''},  # No suffix
+            {'type': 'File', 'extension': '.CR3'},  # Second CR3 (same filename!)
+            {'type': 'Process', 'method_id': 'DxO'},
+            {'type': 'File', 'extension': '.DNG'},
+            {'type': 'Termination'}
         ]
 
         expected_files = pipeline_validation.generate_expected_files(path, 'AB3D0001')
@@ -2067,7 +2067,7 @@ class TestPairingNodes:
 
             # Check path structure
             path = paths[0]
-            node_ids = [n['node_id'] for n in path]
+            node_ids = [n['id'] for n in path]
 
             assert 'capture' in node_ids
             assert 'file1' in node_ids
@@ -2147,7 +2147,7 @@ class TestPairingNodes:
             assert len(paths) == 1
 
             path = paths[0]
-            node_ids = [n['node_id'] for n in path]
+            node_ids = [n['id'] for n in path]
 
             # Path should include all nodes
             assert 'capture' in node_ids
@@ -2242,7 +2242,7 @@ class TestPairingNodes:
 
             # Verify all paths go through both pairing nodes and reach termination
             for path in paths:
-                node_ids = [n['node_id'] for n in path]
+                node_ids = [n['id'] for n in path]
                 assert 'pairing1' in node_ids, "Path should include pairing1"
                 assert 'pairing2' in node_ids, "Path should include pairing2"
                 assert 'termination' in node_ids, "Path should reach termination"
@@ -2357,16 +2357,16 @@ class TestPairingNodes:
             late_term_paths = []
 
             for path in paths:
-                node_ids = [n['node_id'] for n in path]
+                node_ids = [n['id'] for n in path]
                 last_node = path[-1]
 
-                if last_node['node_id'] == 'termination_early':
+                if last_node['id'] == 'termination_early':
                     early_term_paths.append(path)
                     # Early termination should NOT include pairing2
                     assert 'pairing2' not in node_ids, "Early termination should not include pairing2"
                     # But should include pairing1
                     assert 'pairing1' in node_ids, "Early termination should include pairing1"
-                elif last_node['node_id'] == 'termination_late':
+                elif last_node['id'] == 'termination_late':
                     late_term_paths.append(path)
                     # Late termination should include both pairing nodes
                     assert 'pairing1' in node_ids, "Late termination should include pairing1"

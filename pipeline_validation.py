@@ -1591,7 +1591,6 @@ def main():
         termination_matches_dict = []
         for term_match in result.termination_matches:
             termination_matches_dict.append({
-                'termination_id': term_match.termination_id,
                 'termination_type': term_match.termination_type,
                 'status': term_match.status.name,
                 'expected_files': term_match.expected_files,
@@ -1600,9 +1599,13 @@ def main():
                 'extra_files': term_match.extra_files
             })
 
+        # Extract group_id from base_filename (remove any suffix)
+        # E.g., "AB3D0001-2" -> "AB3D0001"
+        group_id = f"{result.camera_id}{result.counter}"
+
         validation_results_dict.append({
-            'unique_id': result.unique_id,
-            'group_id': result.group_id,
+            'unique_id': result.base_filename,  # Use base_filename as unique_id
+            'group_id': group_id,
             'status': worst_status.name,
             'termination_matches': termination_matches_dict
         })

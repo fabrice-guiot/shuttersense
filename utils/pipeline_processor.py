@@ -39,10 +39,10 @@ MAX_ITERATIONS = 5
 # Data Structures - Pipeline Configuration
 # =============================================================================
 
+@dataclass
 class NodeBase:
     """Base class for all pipeline nodes."""
     id: str
-    type: str
     name: str
     output: List[str]  # List of node IDs that this node outputs to
 
@@ -126,6 +126,11 @@ class PipelineConfig:
     branching_nodes: List[BranchingNode] = field(default_factory=list)
     termination_nodes: List[TerminationNode] = field(default_factory=list)
 
+    @property
+    def nodes_by_id(self) -> Dict[str, PipelineNode]:
+        """Dictionary lookup of nodes by ID."""
+        return {node.id: node for node in self.nodes}
+
 
 # =============================================================================
 # Data Structures - Validation Results
@@ -163,11 +168,14 @@ class SpecificImage:
     suffix: str  # e.g., "" (primary) or "2", "3" (counter looping)
     properties: List[str]  # e.g., ["HDR", "BW"] - processing methods applied
     files: List[str]  # List of actual files present for this specific image
+    group_id: str = ""  # Parent ImageGroup ID (camera_id + counter), e.g., "AB3D0001"
 
     def __post_init__(self):
-        """Ensure files is always a list."""
+        """Ensure files is always a list and set group_id if not provided."""
         if not isinstance(self.files, list):
             self.files = []
+        if not self.group_id:
+            self.group_id = f"{self.camera_id}{self.counter}"
 
 
 @dataclass
@@ -234,39 +242,39 @@ def parse_node_from_yaml(node_dict: Dict[str, Any]) -> PipelineNode:
         raise ValueError(f"Node '{node_id}' missing required 'type' field")
 
     if node_type == 'Capture':
-        return CaptureNode(id=node_id, type=node_type, name=name, output=output)
+        return CaptureNode(id=node_id, name=name, output=output)
 
     elif node_type == 'File':
         extension = node_dict.get('extension', '')
         if not extension:
             raise ValueError(f"FileNode '{node_id}' missing required 'extension' field")
-        return FileNode(id=node_id, type=node_type, name=name, output=output, extension=extension)
+        return FileNode(id=node_id, name=name, output=output, extension=extension)
 
     elif node_type == 'Process':
         method_ids = node_dict.get('method_ids', [])
         if not isinstance(method_ids, list):
             method_ids = [method_ids]
-        return ProcessNode(id=node_id, type=node_type, name=name, output=output, method_ids=method_ids)
+        return ProcessNode(id=node_id, name=name, output=output, method_ids=method_ids)
 
     elif node_type == 'Pairing':
         pairing_type = node_dict.get('pairing_type', '')
         input_count = node_dict.get('input_count', 2)
         return PairingNode(
-            id=node_id, type=node_type, name=name, output=output,
+            id=node_id, name=name, output=output,
             pairing_type=pairing_type, input_count=input_count
         )
 
     elif node_type == 'Branching':
         condition_description = node_dict.get('condition_description', '')
         return BranchingNode(
-            id=node_id, type=node_type, name=name, output=output,
+            id=node_id, name=name, output=output,
             condition_description=condition_description
         )
 
     elif node_type == 'Termination':
         termination_type = node_dict.get('termination_type', '')
         return TerminationNode(
-            id=node_id, type=node_type, name=name, output=output,
+            id=node_id, name=name, output=output,
             termination_type=termination_type
         )
 
@@ -296,11 +304,24 @@ def load_pipeline_config(config: PhotoAdminConfig, pipeline_name: str = 'default
             "See template-config.yaml for examples."
         )
 
-    pipeline_data = config.processing_pipelines
+    pipelines = config.processing_pipelines
+
+    # Check if pipeline_name exists
+    if pipeline_name not in pipelines:
+        available_pipelines = list(pipelines.keys())
+        raise ValueError(
+            f"Pipeline '{pipeline_name}' not found in configuration. "
+            f"Available pipelines: {available_pipelines}"
+        )
+
+    pipeline_data = pipelines[pipeline_name]
     nodes_data = pipeline_data.get('nodes', [])
 
     if not nodes_data:
-        raise ValueError("Pipeline configuration has no nodes. Add nodes to the 'processing_pipelines.nodes' list.")
+        raise ValueError(
+            f"Pipeline '{pipeline_name}' has no nodes. "
+            f"Add nodes to the 'processing_pipelines.{pipeline_name}.nodes' list."
+        )
 
     # Parse all nodes
     nodes = []
@@ -621,7 +642,7 @@ def validate_pairing_node_inputs(pairing_node: PairingNode, pipeline: PipelineCo
         pipeline: PipelineConfig instance
 
     Returns:
-        Tuple of (is_valid, error_message)
+        Tuple of (input1_id, input2_id) - the two input node IDs
 
     Raises:
         ValueError: If pairing node doesn't have exactly 2 inputs
@@ -638,7 +659,7 @@ def validate_pairing_node_inputs(pairing_node: PairingNode, pipeline: PipelineCo
             f"found {len(input_node_ids)}: {input_node_ids}"
         )
 
-    return True, None
+    return input_node_ids[0], input_node_ids[1]
 
 
 def merge_two_paths(path1: List[Dict[str, Any]], path2: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
