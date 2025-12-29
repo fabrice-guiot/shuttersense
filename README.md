@@ -26,6 +26,7 @@ python photo_stats.py /path/to/your/photos
 - **[Configuration Guide](docs/configuration.md)** - How to configure file types and settings
 - **[PhotoStats Tool](docs/photostats.md)** - Complete guide to using the PhotoStats tool
 - **[Photo Pairing Tool](docs/photo-pairing.md)** - Complete guide to using the Photo Pairing tool
+- **[Pipeline Validation Tool](docs/pipeline-validation.md)** - Complete guide to using the Pipeline Validation tool
 
 ## Tools
 
@@ -87,6 +88,52 @@ The tool will:
 
 See the [Photo Pairing documentation](docs/photo-pairing.md) for complete usage details.
 
+### Pipeline Validation Tool
+
+The Pipeline Validation Tool validates photo collections against user-defined processing workflows (pipelines). It integrates with the Photo Pairing Tool to analyze file groups and check if images have completed expected processing steps.
+
+**Features:**
+- Validate processing workflows against directed graph pipelines
+- Assess archival readiness across multiple termination endpoints
+- Detect incomplete processing (PARTIAL status)
+- Identify extra files (CONSISTENT-WITH-WARNING)
+- Interactive HTML reports with validation statistics
+- Smart caching for fast re-runs (10,000+ images in <60 seconds)
+- Support for complex workflows (loops, branching, pairing nodes)
+
+**Pipeline Concepts:**
+
+Pipelines are directed graphs with 6 node types:
+- **Capture**: Camera capture (starting point)
+- **File**: Expected files (`.CR3`, `.DNG`, `.TIF`, `.JPG`, `.XMP`)
+- **Process**: Processing steps that add suffixes (e.g., `-DxO_DeepPRIME_XD2s`, `-Edit`)
+- **Branching**: User decision points (archive now vs. continue processing)
+- **Pairing**: Merge multiple images (e.g., HDR from 3 bracketed exposures)
+- **Termination**: End states (e.g., "Black Box Archive", "Browsable Archive")
+
+**Validation Statuses:**
+- ✅ **CONSISTENT**: All expected files present, no extras (archival ready)
+- ⚠️ **CONSISTENT-WITH-WARNING**: All expected files present, extra files exist (archival ready)
+- ⏳ **PARTIAL**: Incomplete processing (missing expected files)
+- ❌ **INCONSISTENT**: No valid path match or critical files missing
+
+**Quick Usage:**
+
+```bash
+# Step 1: Run Photo Pairing Tool first (prerequisite)
+python3 photo_pairing.py /path/to/photos
+
+# Step 2: Define pipeline in config/config.yaml (see docs for examples)
+
+# Step 3: Validate against pipeline
+python3 pipeline_validation.py /path/to/photos
+
+# Step 4: Review HTML report
+open pipeline_validation_report_*.html
+```
+
+See the [Pipeline Validation documentation](docs/pipeline-validation.md) for complete usage details and pipeline configuration examples.
+
 ## Development
 
 ### Running Tests
@@ -116,7 +163,7 @@ python -m pytest tests/test_photo_stats.py::TestFileScanningFunctionality::test_
 
 ### Test Coverage
 
-The test suite includes 109 tests covering:
+The test suite includes 160 tests covering:
 
 **PhotoStats (50 tests):**
 - Initialization and configuration
@@ -138,6 +185,23 @@ The test suite includes 109 tests covering:
 - Help text and CLI argument parsing
 - Integration workflows (first-run, cached, stale cache)
 
+**Pipeline Validation (51 tests):**
+- CLI interface and argument parsing
+- Signal handling (SIGINT/CTRL+C)
+- Prerequisite validation (Photo Pairing cache)
+- Pipeline configuration loading and validation
+- Photo Pairing integration
+- Path enumeration (simple, branching, loops)
+- File generation from pipeline nodes
+- Validation status classification (CONSISTENT/PARTIAL/INCONSISTENT/CONSISTENT-WITH-WARNING)
+- Custom pipelines (processing methods, pairing nodes)
+- Counter looping with suffixes
+- Caching (hash calculation, invalidation, reuse)
+- HTML report generation
+- Graph visualization and expected file examples
+- Pairing node Cartesian product logic
+- Process node branching for multiple methods
+
 **Report Rendering (12 tests):**
 - ReportContext and dataclass structures
 - Template-based HTML generation
@@ -154,47 +218,59 @@ The test suite includes 109 tests covering:
 
 ```
 photo-admin/
-├── photo_stats.py              # PhotoStats tool
-├── photo_pairing.py            # Photo Pairing tool
-├── utils/                      # Shared utilities
-│   ├── __init__.py            # Package init
-│   ├── config_manager.py      # Configuration management
-│   ├── filename_parser.py     # Filename validation and parsing
-│   └── report_renderer.py     # Jinja2-based HTML report generation
-├── templates/                  # HTML report templates
-│   ├── base.html.j2           # Base template with shared styling
-│   ├── photo_stats.html.j2    # PhotoStats report template
-│   └── photo_pairing.html.j2  # Photo Pairing report template
+├── photo_stats.py                  # PhotoStats tool
+├── photo_pairing.py                # Photo Pairing tool
+├── pipeline_validation.py          # Pipeline Validation tool
+├── utils/                          # Shared utilities
+│   ├── __init__.py                # Package init
+│   ├── config_manager.py          # Configuration management
+│   ├── filename_parser.py         # Filename validation and parsing
+│   └── report_renderer.py         # Jinja2-based HTML report generation
+├── templates/                      # HTML report templates
+│   ├── base.html.j2               # Base template with shared styling
+│   ├── photo_stats.html.j2        # PhotoStats report template
+│   ├── photo_pairing.html.j2      # Photo Pairing report template
+│   └── pipeline_validation.html.j2 # Pipeline Validation report template
 ├── config/
-│   ├── template-config.yaml   # Configuration template
-│   └── config.yaml            # User configuration (gitignored)
-├── docs/                      # Documentation
-│   ├── installation.md        # Installation guide
-│   ├── configuration.md       # Configuration guide
-│   ├── photostats.md          # PhotoStats tool documentation
-│   └── photo-pairing.md       # Photo Pairing tool documentation
-├── specs/                     # Design specifications
+│   ├── template-config.yaml       # Configuration template
+│   └── config.yaml                # User configuration (gitignored)
+├── docs/                          # Documentation
+│   ├── installation.md            # Installation guide
+│   ├── configuration.md           # Configuration guide
+│   ├── photostats.md              # PhotoStats tool documentation
+│   ├── photo-pairing.md           # Photo Pairing tool documentation
+│   └── pipeline-validation.md     # Pipeline Validation tool documentation
+├── specs/                         # Design specifications
 │   ├── 001-photo-pairing-tool/
-│   │   ├── constitution.md    # Design principles
-│   │   ├── spec.md            # Technical specification
-│   │   ├── plan.md            # Implementation plan
-│   │   └── tasks.md           # Task breakdown
-│   └── 002-html-report-consistency/
-│       ├── spec.md            # HTML consistency specification
-│       ├── plan.md            # Implementation plan
-│       └── tasks.md           # Task breakdown
-├── requirements.txt           # Python dependencies (PyYAML, Jinja2)
-├── pytest.ini                # Pytest configuration
-├── .coveragerc               # Coverage configuration
+│   │   ├── constitution.md        # Design principles
+│   │   ├── spec.md                # Technical specification
+│   │   ├── plan.md                # Implementation plan
+│   │   └── tasks.md               # Task breakdown
+│   ├── 002-html-report-consistency/
+│   │   ├── spec.md                # HTML consistency specification
+│   │   ├── plan.md                # Implementation plan
+│   │   └── tasks.md               # Task breakdown
+│   └── 003-pipeline-validation/
+│       ├── spec.md                # Pipeline validation specification
+│       ├── plan.md                # Implementation plan
+│       ├── tasks.md               # Task breakdown
+│       ├── data-model.md          # Data model and structures
+│       ├── research.md            # Technical research and decisions
+│       ├── quickstart.md          # Quick start guide and examples
+│       └── contracts/             # API contracts and test scenarios
+├── requirements.txt               # Python dependencies (PyYAML, Jinja2)
+├── pytest.ini                    # Pytest configuration
+├── .coveragerc                   # Coverage configuration
 ├── tests/
-│   ├── __init__.py              # Test package
-│   ├── conftest.py              # Test fixtures and configuration
-│   ├── test_photo_stats.py      # PhotoStats test suite (50 tests)
-│   ├── test_photo_pairing.py    # Photo Pairing test suite (43 tests)
-│   ├── test_report_renderer.py  # Report renderer tests (12 tests)
-│   └── test_signal_handling.py  # Signal handling tests (7 tests)
-├── LICENSE                   # AGPL v3 license
-└── README.md                 # This file
+│   ├── __init__.py                  # Test package
+│   ├── conftest.py                  # Test fixtures and configuration
+│   ├── test_photo_stats.py          # PhotoStats test suite (50 tests)
+│   ├── test_photo_pairing.py        # Photo Pairing test suite (43 tests)
+│   ├── test_pipeline_validation.py  # Pipeline Validation test suite (51 tests)
+│   ├── test_report_renderer.py      # Report renderer tests (12 tests)
+│   └── test_signal_handling.py      # Signal handling tests (7 tests)
+├── LICENSE                       # AGPL v3 license
+└── README.md                     # This file
 ```
 
 ## License
