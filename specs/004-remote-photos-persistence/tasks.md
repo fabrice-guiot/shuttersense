@@ -71,22 +71,22 @@
 
 ### Pipeline Processor (CRITICAL - from data-model.md and research.md Task 7)
 
-- [ ] T026 [P] Create utils/pipeline_processor.py with Node and Edge dataclasses
-- [ ] T027 [P] In utils/pipeline_processor.py, create PipelineGraph class with __init__(config), _parse_config(), get_children(), get_parents(), get_nodes_by_type()
-- [ ] T028 In utils/pipeline_processor.py, implement PipelineGraph.topological_sort() using Kahn's algorithm for cycle detection
-- [ ] T029 In utils/pipeline_processor.py, implement PipelineGraph.dfs_from_nodes() for orphaned node detection
-- [ ] T030 [P] In utils/pipeline_processor.py, create ValidationError dataclass (error_type, message, node_ids, guidance)
-- [ ] T031 In utils/pipeline_processor.py, create StructureValidator class with validate(), detect_cycles(), find_orphaned_nodes(), find_dead_ends()
-- [ ] T032 In utils/pipeline_processor.py, implement StructureValidator.validate_nodes() for node-specific constraints (Capture, File, Process, Pairing, Branching, Termination)
-- [ ] T033 In utils/pipeline_processor.py, implement StructureValidator.validate_property_references() to check processing_methods exist in config
-- [ ] T034 [P] In utils/pipeline_processor.py, create FilenamePreviewGenerator class with generate_preview(camera_id, counter)
-- [ ] T035 In utils/pipeline_processor.py, implement FilenamePreviewGenerator._find_all_paths() using DFS to find Capture → Termination paths
-- [ ] T036 In utils/pipeline_processor.py, implement FilenamePreviewGenerator._apply_path_transformations() to build filename from node properties
-- [ ] T037 [P] In utils/pipeline_processor.py, create ImageGroupStatus enum (CONSISTENT, PARTIAL, INCONSISTENT)
-- [ ] T038 [P] In utils/pipeline_processor.py, create ImageGroup dataclass (base, files, status, completed_nodes, missing_files)
-- [ ] T039 In utils/pipeline_processor.py, create CollectionValidator class with validate(), _group_files(), _validate_group()
-- [ ] T040 In utils/pipeline_processor.py, implement CollectionValidator._get_expected_files_for_base() using FilenamePreviewGenerator logic
-- [ ] T041 [P] In utils/pipeline_processor.py, create ReadinessCalculator class with calculate(), _count_groups_reaching_node()
+- [X] T026 [P] Create utils/pipeline_processor.py with Node and Edge dataclasses
+- [X] T027 [P] In utils/pipeline_processor.py, create PipelineGraph class with __init__(config), _parse_config(), get_children(), get_parents(), get_nodes_by_type()
+- [X] T028 In utils/pipeline_processor.py, implement PipelineGraph.topological_sort() using Kahn's algorithm for cycle detection
+- [X] T029 In utils/pipeline_processor.py, implement PipelineGraph.dfs_from_nodes() for orphaned node detection
+- [X] T030 [P] In utils/pipeline_processor.py, create ValidationError dataclass (error_type, message, node_ids, guidance)
+- [X] T031 In utils/pipeline_processor.py, create StructureValidator class with validate(), detect_cycles(), find_orphaned_nodes(), find_dead_ends()
+- [X] T032 In utils/pipeline_processor.py, implement StructureValidator.validate_nodes() for node-specific constraints (Capture, File, Process, Pairing, Branching, Termination)
+- [X] T033 In utils/pipeline_processor.py, implement StructureValidator.validate_property_references() to check processing_methods exist in config
+- [X] T034 [P] In utils/pipeline_processor.py, create FilenamePreviewGenerator class with generate_preview(camera_id, counter)
+- [X] T035 In utils/pipeline_processor.py, implement FilenamePreviewGenerator._find_all_paths() using DFS to find Capture → Termination paths
+- [X] T036 In utils/pipeline_processor.py, implement FilenamePreviewGenerator._apply_path_transformations() to build filename from node properties
+- [X] T037 [P] In utils/pipeline_processor.py, create ImageGroupStatus enum (CONSISTENT, PARTIAL, INCONSISTENT)
+- [X] T038 [P] In utils/pipeline_processor.py, create ImageGroup dataclass (base, files, status, completed_nodes, missing_files)
+- [X] T039 In utils/pipeline_processor.py, create CollectionValidator class with validate(), _group_files(), _validate_group()
+- [X] T040 In utils/pipeline_processor.py, implement CollectionValidator._get_expected_files_for_base() using FilenamePreviewGenerator logic
+- [X] T041 [P] In utils/pipeline_processor.py, create ReadinessCalculator class with calculate(), _count_groups_reaching_node()
 
 ### Logging Infrastructure
 
