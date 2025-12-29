@@ -221,56 +221,86 @@ photo-admin/
 ├── photo_stats.py                  # PhotoStats tool
 ├── photo_pairing.py                # Photo Pairing tool
 ├── pipeline_validation.py          # Pipeline Validation tool
+├── CLAUDE.md                       # Claude Code development guidelines
 ├── utils/                          # Shared utilities
-│   ├── __init__.py                # Package init
-│   ├── config_manager.py          # Configuration management
-│   ├── filename_parser.py         # Filename validation and parsing
-│   └── report_renderer.py         # Jinja2-based HTML report generation
+│   ├── __init__.py                 # Package init
+│   ├── config_manager.py           # Configuration management
+│   ├── filename_parser.py          # Filename validation and parsing
+│   ├── pipeline_processor.py       # Pipeline processing and validation logic
+│   └── report_renderer.py          # Jinja2-based HTML report generation
 ├── templates/                      # HTML report templates
-│   ├── base.html.j2               # Base template with shared styling
-│   ├── photo_stats.html.j2        # PhotoStats report template
-│   ├── photo_pairing.html.j2      # Photo Pairing report template
+│   ├── base.html.j2                # Base template with shared styling
+│   ├── photo_stats.html.j2         # PhotoStats report template
+│   ├── photo_pairing.html.j2       # Photo Pairing report template
 │   └── pipeline_validation.html.j2 # Pipeline Validation report template
 ├── config/
-│   ├── template-config.yaml       # Configuration template
-│   └── config.yaml                # User configuration (gitignored)
-├── docs/                          # Documentation
-│   ├── installation.md            # Installation guide
-│   ├── configuration.md           # Configuration guide
-│   ├── photostats.md              # PhotoStats tool documentation
-│   ├── photo-pairing.md           # Photo Pairing tool documentation
-│   └── pipeline-validation.md     # Pipeline Validation tool documentation
-├── specs/                         # Design specifications
+│   ├── README.md                   # Configuration guide
+│   ├── template-config.yaml        # Configuration template
+│   └── config.yaml                 # User configuration (gitignored)
+├── docs/                           # Documentation
+│   ├── installation.md             # Installation guide
+│   ├── configuration.md            # Configuration guide
+│   ├── photostats.md               # PhotoStats tool documentation
+│   ├── photo-pairing.md            # Photo Pairing tool documentation
+│   ├── pipeline-validation.md      # Pipeline Validation tool documentation
+│   └── prd/                        # Product Requirements Documents
+│       ├── 004-remote-photos-persistence.md # PRD for remote collections & DB
+│       ├── photo-pairing-tool.md   # Photo Pairing PRD
+│       └── pipeline-validation/    # Pipeline Validation PRD materials
+│           ├── README.md
+│           ├── spec.md
+│           ├── flowchart-to-config-mapping.md
+│           ├── node-architecture-analysis.md
+│           ├── photo_processing_pipeline_configuration_proposal.md
+│           ├── pipeline-config-example.yaml
+│           └── pipeline-config-deprecated.yaml
+├── specs/                          # Design specifications
 │   ├── 001-photo-pairing-tool/
-│   │   ├── constitution.md        # Design principles
-│   │   ├── spec.md                # Technical specification
-│   │   ├── plan.md                # Implementation plan
-│   │   └── tasks.md               # Task breakdown
+│   │   ├── spec.md                 # Technical specification
+│   │   ├── plan.md                 # Implementation plan
+│   │   ├── tasks.md                # Task breakdown
+│   │   ├── data-model.md           # Data model and structures
+│   │   ├── research.md             # Technical research
+│   │   ├── quickstart.md           # Quick start guide
+│   │   ├── checklists/
+│   │   │   └── requirements.md     # Requirements checklist
+│   │   └── contracts/
+│   │       └── filename-validation.md # Filename validation contracts
 │   ├── 002-html-report-consistency/
-│   │   ├── spec.md                # HTML consistency specification
-│   │   ├── plan.md                # Implementation plan
-│   │   └── tasks.md               # Task breakdown
+│   │   ├── spec.md                 # HTML consistency specification
+│   │   ├── plan.md                 # Implementation plan
+│   │   ├── tasks.md                # Task breakdown
+│   │   ├── data-model.md           # Data model
+│   │   ├── research.md             # Technical research
+│   │   ├── quickstart.md           # Quick start guide
+│   │   └── checklists/
+│   │       └── requirements.md     # Requirements checklist
 │   └── 003-pipeline-validation/
-│       ├── spec.md                # Pipeline validation specification
-│       ├── plan.md                # Implementation plan
-│       ├── tasks.md               # Task breakdown
-│       ├── data-model.md          # Data model and structures
-│       ├── research.md            # Technical research and decisions
-│       ├── quickstart.md          # Quick start guide and examples
-│       └── contracts/             # API contracts and test scenarios
-├── requirements.txt               # Python dependencies (PyYAML, Jinja2)
-├── pytest.ini                    # Pytest configuration
-├── .coveragerc                   # Coverage configuration
+│       ├── spec.md                 # Pipeline validation specification
+│       ├── plan.md                 # Implementation plan
+│       ├── tasks.md                # Task breakdown
+│       ├── data-model.md           # Data model and structures
+│       ├── research.md             # Technical research and decisions
+│       ├── research-cache-hashing.md # Cache hashing research
+│       ├── quickstart.md           # Quick start guide and examples
+│       ├── checklists/
+│       │   └── requirements.md     # Requirements checklist
+│       └── contracts/
+│           ├── pipeline-config-schema.yaml # Pipeline config schema
+│           └── validation-result-schema.json # Validation result schema
+├── requirements.txt                # Python dependencies (PyYAML, Jinja2)
+├── pytest.ini                      # Pytest configuration
+├── .coveragerc                     # Coverage configuration
 ├── tests/
-│   ├── __init__.py                  # Test package
-│   ├── conftest.py                  # Test fixtures and configuration
-│   ├── test_photo_stats.py          # PhotoStats test suite (50 tests)
-│   ├── test_photo_pairing.py        # Photo Pairing test suite (43 tests)
-│   ├── test_pipeline_validation.py  # Pipeline Validation test suite (51 tests)
-│   ├── test_report_renderer.py      # Report renderer tests (12 tests)
-│   └── test_signal_handling.py      # Signal handling tests (7 tests)
-├── LICENSE                       # AGPL v3 license
-└── README.md                     # This file
+│   ├── __init__.py                 # Test package
+│   ├── conftest.py                 # Test fixtures and configuration
+│   ├── test_photo_stats.py         # PhotoStats test suite (50 tests)
+│   ├── test_photo_pairing.py       # Photo Pairing test suite (43 tests)
+│   ├── test_pipeline_validation.py # Pipeline Validation test suite (51 tests)
+│   ├── test_report_renderer.py     # Report renderer tests (12 tests)
+│   └── test_signal_handling.py     # Signal handling tests (7 tests)
+├── LICENSE                         # AGPL v3 license
+└── README.md                       # This file
 ```
 
 ## License
