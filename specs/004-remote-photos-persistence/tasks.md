@@ -192,7 +192,7 @@
 
 ### Database Migration for Collections
 
-- [ ] T104 [US1] Create Alembic migration backend/src/db/migrations/versions/001_initial_collections.py with connectors, collections tables, enums, indexes, foreign keys
+- [x] T104 [US1] Create Alembic migration backend/src/db/migrations/versions/001_initial_collections.py with connectors, collections tables, enums, indexes, foreign keys
 
 ### Frontend - Collection Components
 
