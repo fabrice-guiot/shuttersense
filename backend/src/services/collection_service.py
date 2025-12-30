@@ -161,7 +161,7 @@ class CollectionService:
 
         except Exception as e:
             self.db.rollback()
-            logger.error(f"Failed to create collection: {str(e)}", extra={"name": name})
+            logger.error(f"Failed to create collection: {str(e)}", extra={"collection_name": name})
             raise
 
     def get_collection(self, collection_id: int) -> Optional[Collection]:

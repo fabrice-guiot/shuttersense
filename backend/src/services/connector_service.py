@@ -117,7 +117,7 @@ class ConnectorService:
 
         except Exception as e:
             self.db.rollback()
-            logger.error(f"Failed to create connector: {str(e)}", extra={"name": name})
+            logger.error(f"Failed to create connector: {str(e)}", extra={"connector_name": name})
             raise
 
     def get_connector(self, connector_id: int, decrypt_credentials: bool = False) -> Optional[Connector]:
@@ -354,7 +354,7 @@ class ConnectorService:
 
             logger.info(
                 f"Tested connector: {connector.name}",
-                extra={"connector_id": connector_id, "success": success, "message": message}
+                extra={"connector_id": connector_id, "success": success, "test_message": message}
             )
 
             return success, message
