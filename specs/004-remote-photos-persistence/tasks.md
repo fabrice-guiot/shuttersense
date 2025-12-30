@@ -223,36 +223,36 @@
 
 ### Frontend - Connector Components (NEW - addresses architectural gap)
 
-- [ ] T105 [P] [US1] Create frontend/src/services/api.js with Axios instance configured for http://localhost:8000/api
-- [ ] T106 [P] [US1] Create frontend/src/services/connectors.js with API calls (listConnectors, createConnector, getConnector, updateConnector, deleteConnector, testConnector)
-- [ ] T107 [P] [US1] Create frontend/src/hooks/useConnectors.js with React hook for connector state (fetch, create, update, delete)
-- [ ] T108 Create frontend/src/components/connectors/ConnectorList.jsx displaying connectors with type badges, active status, last_validated timestamp, action buttons
-- [ ] T109 In frontend/src/components/connectors/ConnectorList.jsx, add filters for type (S3, GCS, SMB) and active_only with URL query params
-- [ ] T110 In frontend/src/components/connectors/ConnectorList.jsx, add delete confirmation dialog with warning if collections reference connector
-- [ ] T111 Create frontend/src/components/connectors/ConnectorForm.jsx with fields (name, type, credentials based on type, metadata)
-- [ ] T112 In frontend/src/components/connectors/ConnectorForm.jsx, add dynamic credential input fields based on connector type (S3: access_key_id/secret_access_key/region, GCS: service_account_json, SMB: server/share/username/password)
-- [ ] T113 In frontend/src/components/connectors/ConnectorForm.jsx, add test connection button calling POST /connectors/{id}/test with real-time feedback
-- [ ] T114 In frontend/src/components/connectors/ConnectorForm.jsx, add credential validation with helpful error messages (minimum lengths, required fields)
-- [ ] T115 Create frontend/src/pages/ConnectorsPage.jsx with ConnectorList, create/edit modals using ConnectorForm
-- [ ] T116 In frontend/src/pages/ConnectorsPage.jsx, add active/inactive toggle with confirmation for collections in use
-- [ ] T117 In frontend/src/App.jsx, add route /connectors → ConnectorsPage
-- [ ] T118 In frontend/src/App.jsx, add navigation link to Connectors page in sidebar/header
+- [x] T105 [P] [US1] Create frontend/src/services/api.js with Axios instance configured for http://localhost:8000/api
+- [x] T106 [P] [US1] Create frontend/src/services/connectors.js with API calls (listConnectors, createConnector, getConnector, updateConnector, deleteConnector, testConnector)
+- [x] T107 [P] [US1] Create frontend/src/hooks/useConnectors.js with React hook for connector state (fetch, create, update, delete)
+- [x] T108 Create frontend/src/components/connectors/ConnectorList.jsx displaying connectors with type badges, active status, last_validated timestamp, action buttons
+- [x] T109 In frontend/src/components/connectors/ConnectorList.jsx, add filters for type (S3, GCS, SMB) and active_only with URL query params
+- [x] T110 In frontend/src/components/connectors/ConnectorList.jsx, add delete confirmation dialog with warning if collections reference connector
+- [x] T111 Create frontend/src/components/connectors/ConnectorForm.jsx with fields (name, type, credentials based on type, metadata)
+- [x] T112 In frontend/src/components/connectors/ConnectorForm.jsx, add dynamic credential input fields based on connector type (S3: access_key_id/secret_access_key/region, GCS: service_account_json, SMB: server/share/username/password)
+- [x] T113 In frontend/src/components/connectors/ConnectorForm.jsx, add test connection button calling POST /connectors/{id}/test with real-time feedback
+- [x] T114 In frontend/src/components/connectors/ConnectorForm.jsx, add credential validation with helpful error messages (minimum lengths, required fields)
+- [x] T115 Create frontend/src/pages/ConnectorsPage.jsx with ConnectorList, create/edit modals using ConnectorForm
+- [x] T116 In frontend/src/pages/ConnectorsPage.jsx, add active/inactive toggle with confirmation for collections in use
+- [x] T117 In frontend/src/App.jsx, add route /connectors → ConnectorsPage
+- [x] T118 In frontend/src/App.jsx, add navigation link to Connectors page in sidebar/header
 
 ### Frontend - Collection Components
 
-- [ ] T118a [P] [US1] Create frontend/src/services/collections.js with API calls (listCollections, createCollection, getCollection, updateCollection, deleteCollection, testCollection, refreshCollection)
-- [ ] T118b [P] [US1] Create frontend/src/hooks/useCollections.js with React hook for collection state (fetch, create, update, delete)
-- [ ] T118c Create frontend/src/components/collections/CollectionList.jsx displaying collections with state badges, accessibility status, action buttons
-- [ ] T118d In frontend/src/components/collections/CollectionList.jsx, add filters for state, type, accessible_only with URL query params
-- [ ] T118e In frontend/src/components/collections/CollectionList.jsx, add delete confirmation dialog showing result/job counts if exists
-- [ ] T118f Create frontend/src/components/collections/CollectionForm.jsx with fields (name, type, location, state, connector_id, cache_ttl, metadata)
-- [ ] T118g In frontend/src/components/collections/CollectionForm.jsx, add connector selection dropdown - local collections = no connector, remote collections = select from existing connectors (from useConnectors hook)
-- [ ] T118h In frontend/src/components/collections/CollectionForm.jsx, add "Create New Connector" button that opens ConnectorForm modal inline for convenience
-- [ ] T118i In frontend/src/components/collections/CollectionForm.jsx, add test connection button calling POST /collections/{id}/test
-- [ ] T118j [P] [US1] Create frontend/src/components/collections/CollectionStatus.jsx showing accessibility status with actionable error messages
-- [ ] T118k Create frontend/src/pages/CollectionsPage.jsx with CollectionList, create/edit modals using CollectionForm
-- [ ] T118l In frontend/src/pages/CollectionsPage.jsx, add manual refresh button with confirmation dialog if file count > threshold
-- [ ] T118m In frontend/src/App.jsx, add route /collections → CollectionsPage
+- [x] T118a [P] [US1] Create frontend/src/services/collections.js with API calls (listCollections, createCollection, getCollection, updateCollection, deleteCollection, testCollection, refreshCollection)
+- [x] T118b [P] [US1] Create frontend/src/hooks/useCollections.js with React hook for collection state (fetch, create, update, delete)
+- [x] T118c Create frontend/src/components/collections/CollectionList.jsx displaying collections with state badges, accessibility status, action buttons
+- [x] T118d In frontend/src/components/collections/CollectionList.jsx, add filters for state, type, accessible_only with URL query params
+- [x] T118e In frontend/src/components/collections/CollectionList.jsx, add delete confirmation dialog showing result/job counts if exists
+- [x] T118f Create frontend/src/components/collections/CollectionForm.jsx with fields (name, type, location, state, connector_id, cache_ttl, metadata)
+- [x] T118g In frontend/src/components/collections/CollectionForm.jsx, add connector selection dropdown - local collections = no connector, remote collections = select from existing connectors (from useConnectors hook)
+- [x] T118h In frontend/src/components/collections/CollectionForm.jsx, add "Create New Connector" button that opens ConnectorForm modal inline for convenience
+- [x] T118i In frontend/src/components/collections/CollectionForm.jsx, add test connection button calling POST /collections/{id}/test
+- [x] T118j [P] [US1] Create frontend/src/components/collections/CollectionStatus.jsx showing accessibility status with actionable error messages
+- [x] T118k Create frontend/src/pages/CollectionsPage.jsx with CollectionList, create/edit modals using CollectionForm
+- [x] T118l In frontend/src/pages/CollectorsPage.jsx, add manual refresh button with confirmation dialog if file count > threshold
+- [x] T118m In frontend/src/App.jsx, add route /collections → CollectionsPage
 
 ### Phase 3 Frontend Testing (Constitution Compliance)
 
