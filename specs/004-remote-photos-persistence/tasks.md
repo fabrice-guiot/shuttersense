@@ -120,20 +120,20 @@
 
 ### Backend - Connector Model (NEW from data-model.md)
 
-- [ ] T053 [P] [US1] Create backend/src/models/connector.py with ConnectorType enum (S3, GCS, SMB)
-- [ ] T054 [US1] In backend/src/models/connector.py, create Connector model (id, name, type, credentials, metadata_json, is_active, last_validated, last_error, created_at, updated_at)
-- [ ] T055 [US1] In backend/src/models/connector.py, add unique constraint on name, indexes on type and is_active
-- [ ] T056 [US1] In backend/src/models/connector.py, add relationship to Collection (one-to-many, RESTRICT delete)
+- [X] T053 [P] [US1] Create backend/src/models/connector.py with ConnectorType enum (S3, GCS, SMB)
+- [X] T054 [US1] In backend/src/models/connector.py, create Connector model (id, name, type, credentials, metadata_json, is_active, last_validated, last_error, created_at, updated_at)
+- [X] T055 [US1] In backend/src/models/connector.py, add unique constraint on name, indexes on type and is_active
+- [X] T056 [US1] In backend/src/models/connector.py, add relationship to Collection (one-to-many, RESTRICT delete)
 
 ### Backend - Collection Model
 
-- [ ] T057 [P] [US1] Create backend/src/models/collection.py with CollectionType enum (LOCAL, S3, GCS, SMB)
-- [ ] T058 [P] [US1] In backend/src/models/collection.py, create CollectionState enum (LIVE, CLOSED, ARCHIVED)
-- [ ] T059 [US1] In backend/src/models/collection.py, create Collection model (id, connector_id, name, type, location, state, cache_ttl, is_accessible, last_error, metadata_json, created_at, updated_at)
-- [ ] T060 [US1] In backend/src/models/collection.py, add unique constraint on name, foreign key to connectors(id) with RESTRICT delete
-- [ ] T061 [US1] In backend/src/models/collection.py, add indexes on state, type, is_accessible
-- [ ] T062 [US1] In backend/src/models/collection.py, add relationship to Connector (many-to-one)
-- [ ] T063 [US1] In backend/src/models/collection.py, implement get_effective_cache_ttl() method (user override or state default)
+- [X] T057 [P] [US1] Create backend/src/models/collection.py with CollectionType enum (LOCAL, S3, GCS, SMB)
+- [X] T058 [P] [US1] In backend/src/models/collection.py, create CollectionState enum (LIVE, CLOSED, ARCHIVED)
+- [X] T059 [US1] In backend/src/models/collection.py, create Collection model (id, connector_id, name, type, location, state, cache_ttl, is_accessible, last_error, metadata_json, created_at, updated_at)
+- [X] T060 [US1] In backend/src/models/collection.py, add unique constraint on name, foreign key to connectors(id) with RESTRICT delete
+- [X] T061 [US1] In backend/src/models/collection.py, add indexes on state, type, is_accessible
+- [X] T062 [US1] In backend/src/models/collection.py, add relationship to Connector (many-to-one)
+- [X] T063 [US1] In backend/src/models/collection.py, implement get_effective_cache_ttl() method (user override or state default)
 
 ### Backend - Remote Storage Adapters (from research.md Tasks 1-3)
 
