@@ -6,7 +6,13 @@
 
 **Organization**: Tasks are grouped by user story (US1-US5 from spec.md) to enable independent implementation and testing.
 
-**Tests**: NO test tasks included (Constitution: tests optional, spec doesn't explicitly request TDD)
+**Testing Strategy**: Comprehensive test coverage (>80%) for constitution compliance. Testing phases added after implementation phases:
+- Phase 3.5: Testing Phase 2-3 (31 tasks) - Core infrastructure, services, models, API
+- Phase 4: Includes 10 testing tasks - Tool execution, WebSocket, results
+- Phase 5: Includes 8 testing tasks - Pipeline service, validation, activation
+- Phase 6: Includes 3 testing tasks - Trend analysis, JSONB queries
+- Phase 7: Includes 7 testing tasks - Config service, YAML migration, CLI fallback
+- **Total**: 59 testing tasks ensuring >80% coverage throughout development
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -253,6 +259,72 @@
 
 ---
 
+## Phase 3.5: Testing Phase 2-3 Implementation (CRITICAL - Constitution Compliance)
+
+**Purpose**: Achieve >80% test coverage for all code implemented in Phase 2 (Foundational) and Phase 3 (User Story 1) to comply with project constitution
+
+**Rationale**: Constitution requires "comprehensive test coverage (target >80% for core logic)" with tests written "alongside implementation". This phase addresses the gap before proceeding with Phase 4.
+
+**Independent Test**: Run pytest with coverage report, verify >80% coverage for services, utils, models, API endpoints
+
+### Core Infrastructure Tests (Phase 2)
+
+- [ ] T104a [P] Create backend/tests/unit/test_crypto.py with CredentialEncryptor tests (encrypt/decrypt roundtrip, master key validation, invalid key handling, UTF-8 support)
+- [ ] T104b [P] Create backend/tests/unit/test_cache.py with FileListingCache tests (get/set/invalidate/clear, TTL expiry logic, concurrent access with threading, state-based TTL defaults)
+- [ ] T104c [P] Create backend/tests/unit/test_job_queue.py with JobQueue tests (enqueue/dequeue FIFO, get_position, cancel, concurrent access, job status transitions)
+- [ ] T104d [P] Create backend/tests/unit/test_pipeline_processor.py with StructureValidator tests (cycle detection, orphaned nodes, dead ends, node-specific constraints, processing_method validation)
+- [ ] T104e [P] In backend/tests/unit/test_pipeline_processor.py, add FilenamePreviewGenerator tests (all paths generation, property transformations, multiple branches, pairing separators)
+- [ ] T104f [P] In backend/tests/unit/test_pipeline_processor.py, add CollectionValidator tests (file grouping, expected files, status determination: CONSISTENT/PARTIAL/INCONSISTENT)
+
+### Storage Adapter Tests
+
+- [ ] T104g [P] Create backend/tests/unit/test_s3_adapter.py with S3Adapter tests using mocked boto3 (list_files with pagination, test_connection success/failure, retry logic, credential validation)
+- [ ] T104h [P] Create backend/tests/unit/test_gcs_adapter.py with GCSAdapter tests using mocked google-cloud-storage (list_files, test_connection, service account validation, error handling)
+- [ ] T104i [P] Create backend/tests/unit/test_smb_adapter.py with SMBAdapter tests using mocked smbprotocol (list_files, test_connection, credential validation, network error handling)
+
+### Service Layer Tests
+
+- [ ] T104j Create backend/tests/unit/test_connector_service.py with ConnectorService tests (create with encryption, get with decryption, list with filters, update with re-encryption)
+- [ ] T104k In backend/tests/unit/test_connector_service.py, add delete_connector tests (success when no collections, ValueError when collections exist, collection count check)
+- [ ] T104l In backend/tests/unit/test_connector_service.py, add test_connector tests (adapter selection by type, last_validated update on success, last_error update on failure)
+- [ ] T104m Create backend/tests/unit/test_collection_service.py with CollectionService tests (create with accessibility test, get with connector details, list with filters, update with cache invalidation)
+- [ ] T104n In backend/tests/unit/test_collection_service.py, add delete_collection tests (check for analysis_results, check for active jobs, force flag behavior)
+- [ ] T104o In backend/tests/unit/test_collection_service.py, add get_collection_files tests (cache hit/miss logic, TTL expiry, state-based TTL selection)
+
+### Model Validation Tests
+
+- [ ] T104p [P] Create backend/tests/unit/test_models.py with Connector model tests (unique name constraint, type enum validation, is_active default, relationship to collections)
+- [ ] T104q [P] In backend/tests/unit/test_models.py, add Collection model tests (connector_id validation by type, state enum, get_effective_cache_ttl with user override and defaults)
+- [ ] T104r [P] In backend/tests/unit/test_models.py, add schema validation tests for CollectionCreate (LOCAL rejects connector_id, remote types require connector_id, connector_id >= 1)
+
+### API Endpoint Tests
+
+- [ ] T104s Create backend/tests/unit/test_api_connectors.py with Connector API tests (POST creates and returns 201, GET list with type filter, GET by ID returns 404 if not found)
+- [ ] T104t In backend/tests/unit/test_api_connectors.py, add PUT tests (update name/metadata, 409 on duplicate name, credential re-encryption)
+- [ ] T104u In backend/tests/unit/test_api_connectors.py, add DELETE tests (204 when no collections, 409 when collections exist with descriptive message, protection logic)
+- [ ] T104v In backend/tests/unit/test_api_connectors.py, add POST /test tests (success/failure responses, last_validated/last_error updates)
+- [ ] T104w Create backend/tests/unit/test_api_collections.py with Collection API tests (POST creates with accessibility test, GET list with state/type/accessible filters, DELETE with result/job checks)
+- [ ] T104x In backend/tests/unit/test_api_collections.py, add POST /test and /refresh tests (accessibility status, file count warnings, cache invalidation on refresh)
+
+### Integration Tests
+
+- [ ] T104y Create backend/tests/integration/test_connector_collection_flow.py testing full flow (create connector → create collection → delete connector fails with 409 → delete collection → delete connector succeeds)
+- [ ] T104z In backend/tests/integration/test_connector_collection_flow.py, add remote collection accessibility test (create S3 connector with invalid creds → create collection → verify is_accessible=false and last_error populated)
+
+### Test Infrastructure
+
+- [ ] T104aa [P] Create backend/tests/conftest.py with pytest fixtures (test database session, in-memory cache, mock encryptor with test key, sample connector/collection factories)
+- [ ] T104ab [P] In backend/tests/conftest.py, add fixtures for mocked storage adapters (mock_s3_client, mock_gcs_client, mock_smb_connection)
+- [ ] T104ac [P] Update backend/requirements.txt with test dependencies (pytest-cov, pytest-mock, pytest-asyncio, freezegun for time-based tests)
+- [ ] T104ad Create backend/.coveragerc with coverage configuration (exclude migrations, __init__.py, target 80% minimum)
+- [ ] T104ae Update backend/README.md with testing instructions (pytest commands, coverage reporting, test organization)
+
+**Checkpoint**: Comprehensive test coverage achieved (>80%) for Phase 2-3 code - safe to proceed with Phase 4
+
+**Constitution Compliance**: This phase satisfies "comprehensive test coverage (target >80% for core logic)" requirement from Architecture Principles section 2
+
+---
+
 ## Phase 4: User Story 2 - Execute Analysis Tools and Store Results (Priority: P1)
 
 **Goal**: Run PhotoStats, Photo Pairing, and Pipeline Validation on collections with persistent storage of results and HTML reports
@@ -366,7 +438,20 @@
 - [ ] T191 Update photo_stats.py to use PhotoAdminConfig() with automatic database-first fallback (no code changes needed)
 - [ ] T192 Update photo_pairing.py to use PhotoAdminConfig() with automatic database-first fallback (no code changes needed)
 
-**Checkpoint**: User Story 2 complete - users can run analysis tools, monitor progress via WebSocket, and view stored results with HTML reports
+### Phase 4 Testing (Constitution Compliance)
+
+- [ ] T192a [P] Create backend/tests/unit/test_tool_service.py with ToolService tests (enqueue_analysis, process_job_queue, run_analysis_tool dispatch, progress updates, error handling)
+- [ ] T192b [P] Create backend/tests/unit/test_result_service.py with ResultService tests (list_results with pagination/filters, get_result, delete_result, get_result_report)
+- [ ] T192c [P] Create backend/tests/unit/test_api_tools.py with Tools API tests (POST /photostats enqueue, POST /photo_pairing enqueue, GET /status/{job_id}, WebSocket connection/disconnect)
+- [ ] T192d [P] Create backend/tests/unit/test_api_results.py with Results API tests (GET /results with filters, GET /results/{id}, DELETE /results/{id}, GET /results/{id}/report HTML download)
+- [ ] T192e [P] Create backend/tests/unit/test_analysis_result_model.py with AnalysisResult model tests (tool enum, status enum, JSONB results validation, schema_version, relationships)
+- [ ] T192f [P] In backend/tests/unit/test_tool_service.py, add HTML report generation tests (generate_html_report using Jinja2 templates, pre-generated report_html storage)
+- [ ] T192g Create backend/tests/integration/test_tool_execution_flow.py testing full flow (create collection → enqueue PhotoStats → monitor progress → job completes → result stored → HTML report accessible)
+- [ ] T192h In backend/tests/integration/test_tool_execution_flow.py, add WebSocket progress monitoring test (connect → receive queued event → receive running events → receive complete event)
+- [ ] T192i In backend/tests/integration/test_tool_execution_flow.py, add error handling test (network failure during tool run → partial progress discarded → error_message stored)
+- [ ] T192j [P] Update backend/.coveragerc to include new Phase 4 modules (tool_service, result_service, api/tools, api/results, models/analysis_result)
+
+**Checkpoint**: User Story 2 complete - users can run analysis tools, monitor progress via WebSocket, and view stored results with HTML reports. Test coverage maintained at >80%.
 
 ---
 
@@ -450,7 +535,18 @@
 - [ ] T247 In frontend/src/pages/PipelinesPage.jsx, add version history view showing PipelineHistoryEntry list with change notes
 - [ ] T248 In frontend/src/App.jsx, add route /pipelines → PipelinesPage
 
-**Checkpoint**: User Story 3 complete - users can create/edit pipelines through forms with validation, preview, activation
+### Phase 5 Testing (Constitution Compliance)
+
+- [ ] T248a [P] Create backend/tests/unit/test_pipeline_service.py with PipelineService tests (create with structure validation, get, list, update with version increment, delete)
+- [ ] T248b [P] In backend/tests/unit/test_pipeline_service.py, add validate_pipeline_structure tests (StructureValidator integration, error list return)
+- [ ] T248c [P] In backend/tests/unit/test_pipeline_service.py, add activate_pipeline tests (single active constraint, deactivate others, get_active_pipeline)
+- [ ] T248d [P] In backend/tests/unit/test_pipeline_service.py, add preview_filenames tests (FilenamePreviewGenerator integration, camera_id/counter input)
+- [ ] T248e [P] In backend/tests/unit/test_pipeline_service.py, add pipeline history tests (get_pipeline_history, PipelineHistory creation on update)
+- [ ] T248f [P] In backend/tests/unit/test_pipeline_service.py, add import/export YAML tests (import_pipeline_yaml, export_pipeline_yaml, format compatibility)
+- [ ] T248g [P] Create backend/tests/unit/test_api_pipelines.py with Pipeline API tests (POST with validation, GET list, PUT with version increment, DELETE, POST /validate, POST /activate)
+- [ ] T248h Create backend/tests/integration/test_pipeline_activation_flow.py testing activation constraint (create pipeline1 → activate → create pipeline2 → activate → verify pipeline1.is_active=false)
+
+**Checkpoint**: User Story 3 complete - users can create/edit pipelines through forms with validation, preview, activation. Test coverage maintained at >80%.
 
 ---
 
@@ -479,7 +575,13 @@
 - [ ] T260 In frontend/src/components/results/TrendChart.jsx, add collection comparison mode (multiple collections on same chart with legend)
 - [ ] T261 In frontend/src/pages/ResultsPage.jsx, add "Trends" tab with TrendChart component and collection/tool/metric selectors
 
-**Checkpoint**: User Story 4 complete - users can view trend analysis across multiple executions
+### Phase 6 Testing (Constitution Compliance)
+
+- [ ] T261a [P] Create backend/tests/unit/test_api_results_trends.py with trend endpoint tests (GET /results/trends with metric extraction for PhotoStats, Photo Pairing, Pipeline Validation)
+- [ ] T261b [P] In backend/tests/unit/test_api_results_trends.py, add JSONB query tests (verify GIN index usage, metric extraction from results.summary, results.camera_groups, results.validation_details)
+- [ ] T261c Create backend/tests/integration/test_trend_data_flow.py testing multi-execution trend (run PhotoStats 3 times → query trends → verify chronological data with executed_at/metric_value pairs)
+
+**Checkpoint**: User Story 4 complete - users can view trend analysis across multiple executions. Test coverage maintained at >80%.
 
 ---
 
@@ -551,7 +653,17 @@
 - [ ] T301 In frontend/src/App.jsx, show modal prompt "Existing config.yaml detected. Import to database?" with "Import" and "Skip" buttons
 - [ ] T302 In frontend/src/App.jsx, call POST /config/import automatically if user clicks "Import", show ConflictResolver if conflicts
 
-**Checkpoint**: User Story 5 complete - users can import YAML config with conflict resolution, CLI tools read from database with YAML fallback
+### Phase 7 Testing (Constitution Compliance)
+
+- [ ] T302a [P] Create backend/tests/unit/test_config_service.py with ConfigService tests (get_config, update_config upsert, import_yaml_config with conflict detection)
+- [ ] T302b [P] In backend/tests/unit/test_config_service.py, add detect_conflicts tests (compare db vs YAML, nested object handling for camera_mappings, ConfigConflict dataclass creation)
+- [ ] T302c [P] In backend/tests/unit/test_config_service.py, add session management tests (store_pending_import with 1-hour expiry, apply_yaml_config_with_resolution, session cleanup)
+- [ ] T302d [P] In backend/tests/unit/test_config_service.py, add export_yaml_config tests (format compatibility with original config.yaml schema, nested structure preservation)
+- [ ] T302e [P] Create backend/tests/unit/test_api_config.py with Config API tests (GET /config, PUT /config upsert, POST /import with conflict detection, POST /resolve with session validation)
+- [ ] T302f Create backend/tests/integration/test_config_migration_flow.py testing full flow (seed database config → import YAML with conflicts → resolve conflicts → verify merged config → verify CLI tools use database)
+- [ ] T302g In backend/tests/integration/test_config_migration_flow.py, add YAML fallback test (unset PHOTO_ADMIN_DB_URL → verify CLI tools load from YAML → verify warning message)
+
+**Checkpoint**: User Story 5 complete - users can import YAML config with conflict resolution, CLI tools read from database with YAML fallback. Test coverage maintained at >80%.
 
 ---
 
@@ -661,21 +773,24 @@ Within each phase, tasks marked [P] can run in parallel:
 1. Complete Phase 1: Setup (6 tasks)
 2. Complete Phase 2: Foundational (46 tasks) - **CRITICAL**
 3. Complete Phase 3: User Story 1 (91 tasks - includes connector tasks T094a-T094l and frontend tasks T106-T118m)
-4. Complete Phase 4: User Story 2 (74 tasks)
-5. **STOP and VALIDATE**: Test connector management, collection management + tool execution independently
-6. Deploy/demo MVP (217 total tasks)
+4. **Complete Phase 3.5: Testing Phase 2-3 (31 tasks)** - **CONSTITUTION COMPLIANCE**
+5. Complete Phase 4: User Story 2 (74 tasks + 10 testing tasks = 84 tasks)
+6. **STOP and VALIDATE**: Test connector management, collection management + tool execution independently with >80% coverage
+7. Deploy/demo MVP (258 total tasks)
 
 ### Incremental Delivery
 
-1. MVP (US1 + US2): 217 tasks → Connector + collection management + tool execution
-2. Add US3: 56 tasks → Pipeline forms editor
-3. Add US4: 13 tasks → Trend analysis
-4. Add US5: 41 tasks → YAML migration
-5. Polish: 33 tasks → Documentation, security, performance
+1. **MVP (US1 + US2)**: 258 tasks → Connector + collection management + tool execution **with comprehensive test coverage**
+2. **Add US3**: 56 implementation + 8 testing = 64 tasks → Pipeline forms editor
+3. **Add US4**: 13 implementation + 3 testing = 16 tasks → Trend analysis
+4. **Add US5**: 41 implementation + 7 testing = 48 tasks → YAML migration
+5. **Polish**: 33 tasks → Documentation, security, performance
 
-Total: 360 tasks (updated from 329 to include connector architecture)
+**Total: 419 tasks** (includes 59 testing tasks for constitution compliance)
 
-**Task Numbering Note**: Frontend Collection Components use T118a-T118m notation to avoid collision with Phase 4 (T119+)
+**Task Numbering Note**:
+- Frontend Collection Components use T118a-T118m notation to avoid collision with Phase 4 (T119+)
+- Testing tasks use letter suffixes (e.g., T104a-ae, T192a-j) to maintain phase association
 
 ### Parallel Team Strategy
 
@@ -697,7 +812,8 @@ Then converge for US4 (Trends - depends on US2) and Polish.
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
 - All file paths are absolute from repository root
-- NO test tasks included (Constitution: tests optional, spec doesn't request TDD)
+- **Test tasks included for constitution compliance**: Target >80% coverage for core logic, written alongside implementation (flexible approach)
+- **Testing phases** (3.5, 4 testing, 5 testing, 6 testing, 7 testing) ensure comprehensive coverage before proceeding
 - **Pipeline Processor (utils/pipeline_processor.py)** is CRITICAL shared infrastructure used by US2 and US3
 - **Master Key Setup (setup_master_key.py)** is required one-time setup before web server starts
 - **Database-first with YAML fallback** enables seamless CLI tool integration
