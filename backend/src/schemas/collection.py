@@ -312,6 +312,30 @@ class ConnectorResponse(BaseModel):
     }
 
 
+class ConnectorTestResponse(BaseModel):
+    """
+    Schema for connector connection test response.
+
+    Fields:
+        success: Test result
+        message: Descriptive message
+
+    Example:
+        >>> response = ConnectorTestResponse(success=True, message="Connected successfully")
+    """
+    success: bool = Field(..., description="Test success status")
+    message: str = Field(..., description="Descriptive message")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "success": True,
+                "message": "Connected to S3 bucket. Found 1,234 objects."
+            }
+        }
+    }
+
+
 # ============================================================================
 # Collection Schemas (T092-T094)
 # ============================================================================

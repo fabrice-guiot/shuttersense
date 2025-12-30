@@ -116,7 +116,9 @@
 
 **Goal**: Enable users to create, view, edit, and delete photo collections (local and remote) with credential management through web UI
 
-**Independent Test**: Create collection, refresh browser, verify collection persists and shows accessibility status
+**Independent Test**: Create connector, create collection referencing connector, refresh browser, verify both persist and collection shows accessibility status
+
+**Architecture Note**: Connectors (T053-T094l) are separate from Collections to enable credential reuse - one S3 connector can service multiple bucket collections. Delete protection prevents orphaned collections.
 
 ### Backend - Connector Model (NEW from data-model.md)
 
@@ -178,6 +180,24 @@
 - [x] T093 [P] [US1] In backend/src/schemas/collection.py, create CollectionUpdate schema (name, location, state, cache_ttl, metadata)
 - [x] T094 [P] [US1] In backend/src/schemas/collection.py, create CollectionResponse schema (id, name, type, location, state, connector_id, cache_ttl, is_accessible, last_error, metadata, created_at, updated_at)
 
+### Backend - Pydantic Schemas for Connectors
+
+- [x] T094a [P] [US1] In backend/src/schemas/collection.py, create ConnectorCreate schema (name, type, credentials, metadata) with credential validation
+- [x] T094b [P] [US1] In backend/src/schemas/collection.py, create ConnectorUpdate schema (name, credentials, metadata, is_active)
+- [x] T094c [P] [US1] In backend/src/schemas/collection.py, create ConnectorResponse schema (id, name, type, metadata, is_active, last_validated, last_error, created_at, updated_at) - credentials NEVER exposed
+- [x] T094d [P] [US1] In backend/src/schemas/collection.py, create ConnectorTestResponse schema (success, message)
+
+### Backend - API Endpoints for Connectors (NEW - addresses architectural gap)
+
+- [x] T094e Create backend/src/api/connectors.py with FastAPI router
+- [x] T094f [P] [US1] In backend/src/api/connectors.py, implement GET /connectors with filters (type, active_only) returning ConnectorResponse list
+- [x] T094g [P] [US1] In backend/src/api/connectors.py, implement POST /connectors with ConnectorCreate, credential validation, encryption, return 201 with ConnectorResponse or 409 if name exists
+- [x] T094h [P] [US1] In backend/src/api/connectors.py, implement GET /connectors/{id} returning ConnectorResponse (credentials not included) or 404
+- [x] T094i [P] [US1] In backend/src/api/connectors.py, implement PUT /connectors/{id} with ConnectorUpdate, credential re-encryption if provided, return 200 or 404/409
+- [x] T094j [US1] In backend/src/api/connectors.py, implement DELETE /connectors/{id} with PROTECTION - return 409 Conflict if collections reference connector, 204 if successful
+- [x] T094k [P] [US1] In backend/src/api/connectors.py, implement POST /connectors/{id}/test with connection test using appropriate adapter, update last_validated/last_error
+- [x] T094l [US1] In backend/src/main.py, register connectors router with /api prefix
+
 ### Backend - API Endpoints for Collections
 
 - [x] T095 Create backend/src/api/collections.py with FastAPI router
@@ -194,24 +214,42 @@
 
 - [x] T104 [US1] Create Alembic migration backend/src/db/migrations/versions/001_initial_collections.py with connectors, collections tables, enums, indexes, foreign keys
 
-### Frontend - Collection Components
+### Frontend - Connector Components (NEW - addresses architectural gap)
 
 - [ ] T105 [P] [US1] Create frontend/src/services/api.js with Axios instance configured for http://localhost:8000/api
-- [ ] T106 [P] [US1] Create frontend/src/services/collections.js with API calls (listCollections, createCollection, getCollection, updateCollection, deleteCollection, testCollection, refreshCollection)
-- [ ] T107 [P] [US1] Create frontend/src/hooks/useCollections.js with React hook for collection state (fetch, create, update, delete)
-- [ ] T108 Create frontend/src/components/collections/CollectionList.jsx displaying collections with state badges, accessibility status, action buttons
-- [ ] T109 In frontend/src/components/collections/CollectionList.jsx, add filters for state, type, accessible_only with URL query params
-- [ ] T110 In frontend/src/components/collections/CollectionList.jsx, add delete confirmation dialog showing result/job counts if exists
-- [ ] T111 Create frontend/src/components/collections/CollectionForm.jsx with fields (name, type, location, state, connector_id, cache_ttl, metadata)
-- [ ] T112 In frontend/src/components/collections/CollectionForm.jsx, add connector selection dropdown (local = no connector, remote = select existing connector)
-- [ ] T113 In frontend/src/components/collections/CollectionForm.jsx, add credential input fields based on selected type (S3/GCS/SMB)
-- [ ] T114 In frontend/src/components/collections/CollectionForm.jsx, add test connection button calling POST /collections/{id}/test
-- [ ] T115 [P] [US1] Create frontend/src/components/collections/CollectionStatus.jsx showing accessibility status with actionable error messages
-- [ ] T116 Create frontend/src/pages/CollectionsPage.jsx with CollectionList, create/edit modals using CollectionForm
-- [ ] T117 In frontend/src/pages/CollectionsPage.jsx, add manual refresh button with confirmation dialog if file count > threshold
-- [ ] T118 In frontend/src/App.jsx, add route /collections → CollectionsPage
+- [ ] T106 [P] [US1] Create frontend/src/services/connectors.js with API calls (listConnectors, createConnector, getConnector, updateConnector, deleteConnector, testConnector)
+- [ ] T107 [P] [US1] Create frontend/src/hooks/useConnectors.js with React hook for connector state (fetch, create, update, delete)
+- [ ] T108 Create frontend/src/components/connectors/ConnectorList.jsx displaying connectors with type badges, active status, last_validated timestamp, action buttons
+- [ ] T109 In frontend/src/components/connectors/ConnectorList.jsx, add filters for type (S3, GCS, SMB) and active_only with URL query params
+- [ ] T110 In frontend/src/components/connectors/ConnectorList.jsx, add delete confirmation dialog with warning if collections reference connector
+- [ ] T111 Create frontend/src/components/connectors/ConnectorForm.jsx with fields (name, type, credentials based on type, metadata)
+- [ ] T112 In frontend/src/components/connectors/ConnectorForm.jsx, add dynamic credential input fields based on connector type (S3: access_key_id/secret_access_key/region, GCS: service_account_json, SMB: server/share/username/password)
+- [ ] T113 In frontend/src/components/connectors/ConnectorForm.jsx, add test connection button calling POST /connectors/{id}/test with real-time feedback
+- [ ] T114 In frontend/src/components/connectors/ConnectorForm.jsx, add credential validation with helpful error messages (minimum lengths, required fields)
+- [ ] T115 Create frontend/src/pages/ConnectorsPage.jsx with ConnectorList, create/edit modals using ConnectorForm
+- [ ] T116 In frontend/src/pages/ConnectorsPage.jsx, add active/inactive toggle with confirmation for collections in use
+- [ ] T117 In frontend/src/App.jsx, add route /connectors → ConnectorsPage
+- [ ] T118 In frontend/src/App.jsx, add navigation link to Connectors page in sidebar/header
 
-**Checkpoint**: User Story 1 complete - users can manage collections through web UI with credential encryption and cache management
+### Frontend - Collection Components
+
+- [ ] T118a [P] [US1] Create frontend/src/services/collections.js with API calls (listCollections, createCollection, getCollection, updateCollection, deleteCollection, testCollection, refreshCollection)
+- [ ] T118b [P] [US1] Create frontend/src/hooks/useCollections.js with React hook for collection state (fetch, create, update, delete)
+- [ ] T118c Create frontend/src/components/collections/CollectionList.jsx displaying collections with state badges, accessibility status, action buttons
+- [ ] T118d In frontend/src/components/collections/CollectionList.jsx, add filters for state, type, accessible_only with URL query params
+- [ ] T118e In frontend/src/components/collections/CollectionList.jsx, add delete confirmation dialog showing result/job counts if exists
+- [ ] T118f Create frontend/src/components/collections/CollectionForm.jsx with fields (name, type, location, state, connector_id, cache_ttl, metadata)
+- [ ] T118g In frontend/src/components/collections/CollectionForm.jsx, add connector selection dropdown - local collections = no connector, remote collections = select from existing connectors (from useConnectors hook)
+- [ ] T118h In frontend/src/components/collections/CollectionForm.jsx, add "Create New Connector" button that opens ConnectorForm modal inline for convenience
+- [ ] T118i In frontend/src/components/collections/CollectionForm.jsx, add test connection button calling POST /collections/{id}/test
+- [ ] T118j [P] [US1] Create frontend/src/components/collections/CollectionStatus.jsx showing accessibility status with actionable error messages
+- [ ] T118k Create frontend/src/pages/CollectionsPage.jsx with CollectionList, create/edit modals using CollectionForm
+- [ ] T118l In frontend/src/pages/CollectionsPage.jsx, add manual refresh button with confirmation dialog if file count > threshold
+- [ ] T118m In frontend/src/App.jsx, add route /collections → CollectionsPage
+
+**Checkpoint**: User Story 1 complete - users can manage connectors and collections through web UI with credential encryption, delete protection, and cache management
+
+**Note**: Tasks T094a-T094l (Connector schemas/API) and T106-T118m (Connector/Collection frontend) were added to address critical architectural gap - Connector CRUD endpoints and frontend were missing from initial design
 
 ---
 
@@ -622,20 +660,22 @@ Within each phase, tasks marked [P] can run in parallel:
 
 1. Complete Phase 1: Setup (6 tasks)
 2. Complete Phase 2: Foundational (46 tasks) - **CRITICAL**
-3. Complete Phase 3: User Story 1 (66 tasks)
+3. Complete Phase 3: User Story 1 (91 tasks - includes connector tasks T094a-T094l and frontend tasks T106-T118m)
 4. Complete Phase 4: User Story 2 (74 tasks)
-5. **STOP and VALIDATE**: Test collection management + tool execution independently
-6. Deploy/demo MVP (186 total tasks)
+5. **STOP and VALIDATE**: Test connector management, collection management + tool execution independently
+6. Deploy/demo MVP (217 total tasks)
 
 ### Incremental Delivery
 
-1. MVP (US1 + US2): 186 tasks → Collection management + tool execution
+1. MVP (US1 + US2): 217 tasks → Connector + collection management + tool execution
 2. Add US3: 56 tasks → Pipeline forms editor
 3. Add US4: 13 tasks → Trend analysis
 4. Add US5: 41 tasks → YAML migration
 5. Polish: 33 tasks → Documentation, security, performance
 
-Total: 329 tasks
+Total: 360 tasks (updated from 329 to include connector architecture)
+
+**Task Numbering Note**: Frontend Collection Components use T118a-T118m notation to avoid collision with Phase 4 (T119+)
 
 ### Parallel Team Strategy
 
