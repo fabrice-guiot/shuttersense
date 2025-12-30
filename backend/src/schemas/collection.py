@@ -253,7 +253,7 @@ class ConnectorResponse(BaseModel):
     Fields:
         id: Connector ID
         name: Connector name
-        type: Connector type
+        type: ConnectorType
         metadata: User-defined metadata
         is_active: Active status
         last_validated: Last successful connection test
@@ -267,12 +267,32 @@ class ConnectorResponse(BaseModel):
     id: int
     name: str
     type: ConnectorType
-    metadata: Optional[Dict[str, Any]]
+    metadata: Optional[Dict[str, Any]] = None
     is_active: bool
     last_validated: Optional[datetime]
     last_error: Optional[str]
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode='before')
+    @classmethod
+    def deserialize_metadata(cls, data):
+        """Deserialize metadata_json field to metadata dict."""
+        if isinstance(data, dict):
+            # Already a dict (from JSON API request)
+            return data
+        # It's an ORM object
+        if hasattr(data, 'metadata_json'):
+            import json
+            metadata_json = data.metadata_json
+            if metadata_json:
+                try:
+                    data.metadata = json.loads(metadata_json)
+                except (json.JSONDecodeError, TypeError):
+                    data.metadata = None
+            else:
+                data.metadata = None
+        return data
 
     model_config = {
         "from_attributes": True,
@@ -437,10 +457,30 @@ class CollectionResponse(BaseModel):
     cache_ttl: Optional[int]
     is_accessible: bool
     last_error: Optional[str]
-    metadata: Optional[Dict[str, Any]]
+    metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
     connector: Optional[ConnectorResponse] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def deserialize_metadata(cls, data):
+        """Deserialize metadata_json field to metadata dict."""
+        if isinstance(data, dict):
+            # Already a dict (from JSON API request)
+            return data
+        # It's an ORM object
+        if hasattr(data, 'metadata_json'):
+            import json
+            metadata_json = data.metadata_json
+            if metadata_json:
+                try:
+                    data.metadata = json.loads(metadata_json)
+                except (json.JSONDecodeError, TypeError):
+                    data.metadata = None
+            else:
+                data.metadata = None
+        return data
 
     model_config = {
         "from_attributes": True,
