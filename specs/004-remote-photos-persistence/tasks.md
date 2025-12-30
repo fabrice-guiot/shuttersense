@@ -150,33 +150,33 @@
 
 ### Backend - Connector Service (NEW from data-model.md)
 
-- [ ] T074 Create backend/src/services/connector_service.py with ConnectorService class
-- [ ] T075 In backend/src/services/connector_service.py, implement create_connector(name, type, credentials, metadata) with credential encryption using CredentialEncryptor
-- [ ] T076 In backend/src/services/connector_service.py, implement get_connector(id) with credential decryption
-- [ ] T077 In backend/src/services/connector_service.py, implement list_connectors(type_filter, active_only)
-- [ ] T078 In backend/src/services/connector_service.py, implement update_connector(id, name, credentials, metadata) with re-encryption
-- [ ] T079 In backend/src/services/connector_service.py, implement delete_connector(id) with check for referenced collections (raise error if collections exist per RESTRICT)
-- [ ] T080 In backend/src/services/connector_service.py, implement test_connector(id) to validate connection using appropriate adapter
-- [ ] T081 In backend/src/services/connector_service.py, update last_validated and last_error fields on test_connector() results
+- [X] T074 Create backend/src/services/connector_service.py with ConnectorService class
+- [X] T075 In backend/src/services/connector_service.py, implement create_connector(name, type, credentials, metadata) with credential encryption using CredentialEncryptor
+- [X] T076 In backend/src/services/connector_service.py, implement get_connector(id) with credential decryption
+- [X] T077 In backend/src/services/connector_service.py, implement list_connectors(type_filter, active_only)
+- [X] T078 In backend/src/services/connector_service.py, implement update_connector(id, name, credentials, metadata) with re-encryption
+- [X] T079 In backend/src/services/connector_service.py, implement delete_connector(id) with check for referenced collections (raise error if collections exist per RESTRICT)
+- [X] T080 In backend/src/services/connector_service.py, implement test_connector(id) to validate connection using appropriate adapter
+- [X] T081 In backend/src/services/connector_service.py, implement last_validated and last_error fields on test_connector() results
 
 ### Backend - Collection Service
 
-- [ ] T082 Create backend/src/services/collection_service.py with CollectionService class
-- [ ] T083 In backend/src/services/collection_service.py, implement create_collection(name, type, location, state, connector_id, cache_ttl, metadata) with accessibility test
-- [ ] T084 In backend/src/services/collection_service.py, implement get_collection(id) returning Collection with connector details
-- [ ] T085 In backend/src/services/collection_service.py, implement list_collections(state_filter, type_filter, accessible_only) sorted by created_at DESC
-- [ ] T086 In backend/src/services/collection_service.py, implement update_collection(id, name, location, state, cache_ttl, metadata) with cache invalidation on state change
-- [ ] T087 In backend/src/services/collection_service.py, implement delete_collection(id, force) with check for analysis_results and active jobs (FR-005)
-- [ ] T088 In backend/src/services/collection_service.py, implement test_collection_accessibility(id) using appropriate adapter (local filesystem or remote)
-- [ ] T089 In backend/src/services/collection_service.py, implement get_collection_files(id, cache) with cache hit/miss logic using FileListingCache
-- [ ] T090 In backend/src/services/collection_service.py, implement refresh_collection_cache(id, confirm, threshold) with file count warning logic (FR-013a, default 100K threshold)
+- [X] T082 Create backend/src/services/collection_service.py with CollectionService class
+- [X] T083 In backend/src/services/collection_service.py, implement create_collection(name, type, location, state, connector_id, cache_ttl, metadata) with accessibility test
+- [X] T084 In backend/src/services/collection_service.py, implement get_collection(id) returning Collection with connector details
+- [X] T085 In backend/src/services/collection_service.py, implement list_collections(state_filter, type_filter, accessible_only) sorted by created_at DESC
+- [X] T086 In backend/src/services/collection_service.py, implement update_collection(id, name, location, state, cache_ttl, metadata) with cache invalidation on state change
+- [X] T087 In backend/src/services/collection_service.py, implement delete_collection(id, force) with check for analysis_results and active jobs (FR-005)
+- [X] T088 In backend/src/services/collection_service.py, implement test_collection_accessibility(id) using appropriate adapter (local filesystem or remote)
+- [X] T089 In backend/src/services/collection_service.py, implement get_collection_files(id, cache) with cache hit/miss logic using FileListingCache
+- [X] T090 In backend/src/services/collection_service.py, implement refresh_collection_cache(id, confirm, threshold) with file count warning logic (FR-013a, default 100K threshold)
 
 ### Backend - Pydantic Schemas for Collections
 
-- [ ] T091 [P] [US1] Create backend/src/schemas/collection.py with S3Credentials, GCSCredentials, SMBCredentials schemas
-- [ ] T092 [P] [US1] In backend/src/schemas/collection.py, create CollectionCreate schema (name, type, location, state, connector_id, cache_ttl, metadata) with validation
-- [ ] T093 [P] [US1] In backend/src/schemas/collection.py, create CollectionUpdate schema (name, location, state, cache_ttl, metadata)
-- [ ] T094 [P] [US1] In backend/src/schemas/collection.py, create CollectionResponse schema (id, name, type, location, state, connector_id, cache_ttl, is_accessible, last_error, metadata, created_at, updated_at)
+- [x] T091 [P] [US1] Create backend/src/schemas/collection.py with S3Credentials, GCSCredentials, SMBCredentials schemas
+- [x] T092 [P] [US1] In backend/src/schemas/collection.py, create CollectionCreate schema (name, type, location, state, connector_id, cache_ttl, metadata) with validation
+- [x] T093 [P] [US1] In backend/src/schemas/collection.py, create CollectionUpdate schema (name, location, state, cache_ttl, metadata)
+- [x] T094 [P] [US1] In backend/src/schemas/collection.py, create CollectionResponse schema (id, name, type, location, state, connector_id, cache_ttl, is_accessible, last_error, metadata, created_at, updated_at)
 
 ### Backend - API Endpoints for Collections
 
