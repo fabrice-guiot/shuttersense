@@ -3,9 +3,10 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, IconButton, Chip, CircularProgress, Box, Dialog,
   DialogTitle, DialogContent, DialogContentText, DialogActions, Button,
-  FormControl, InputLabel, Select, MenuItem, FormControlLabel, Checkbox
+  FormControl, InputLabel, Select, MenuItem, FormControlLabel, Checkbox,
+  Tooltip
 } from '@mui/material';
-import { Edit, Delete, PlayArrow } from '@mui/icons-material';
+import { Edit, Delete, FactCheck } from '@mui/icons-material';
 
 function ConnectorList({ connectors, loading, onEdit, onDelete, onTest }) {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, connector: null });
@@ -84,15 +85,21 @@ function ConnectorList({ connectors, loading, onEdit, onDelete, onTest }) {
                     : 'Never'}
                 </TableCell>
                 <TableCell align="right">
-                  <IconButton size="small" onClick={() => onTest(connector.id)}>
-                    <PlayArrow />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => onEdit(connector)}>
-                    <Edit />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => handleDeleteClick(connector)}>
-                    <Delete />
-                  </IconButton>
+                  <Tooltip title="Test Connection">
+                    <IconButton size="small" onClick={() => onTest(connector.id)}>
+                      <FactCheck />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Edit Connector">
+                    <IconButton size="small" onClick={() => onEdit(connector)}>
+                      <Edit />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete Connector">
+                    <IconButton size="small" onClick={() => handleDeleteClick(connector)}>
+                      <Delete />
+                    </IconButton>
+                  </Tooltip>
                 </TableCell>
               </TableRow>
             ))}

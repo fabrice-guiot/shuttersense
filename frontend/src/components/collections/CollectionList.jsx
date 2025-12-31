@@ -3,9 +3,10 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, IconButton, Chip, CircularProgress, Box, Dialog,
   DialogTitle, DialogContent, DialogContentText, DialogActions, Button,
-  FormControl, InputLabel, Select, MenuItem, FormControlLabel, Checkbox
+  FormControl, InputLabel, Select, MenuItem, FormControlLabel, Checkbox,
+  Tooltip
 } from '@mui/material';
-import { Edit, Delete, PlayArrow, Refresh } from '@mui/icons-material';
+import { Edit, Delete, FactCheck, Refresh } from '@mui/icons-material';
 import CollectionStatus from './CollectionStatus';
 
 function CollectionList({ collections, loading, onEdit, onDelete, onTest, onRefresh }) {
@@ -82,15 +83,42 @@ function CollectionList({ collections, loading, onEdit, onDelete, onTest, onRefr
             {filteredCollections.map((collection) => (
               <TableRow key={collection.id}>
                 <TableCell>{collection.name}</TableCell>
-                <TableCell><Chip label={collection.type.toUpperCase()} size="small" /></TableCell>
-                <TableCell><Chip label={collection.state} size="small" color="primary" /></TableCell>
+                <TableCell>
+                  <Chip
+                    label={collection.type === 'local' ? 'Local' : collection.type.toUpperCase()}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label={collection.state.charAt(0).toUpperCase() + collection.state.slice(1)}
+                    size="small"
+                    color="primary"
+                  />
+                </TableCell>
                 <TableCell>{collection.location}</TableCell>
                 <TableCell><CollectionStatus collection={collection} /></TableCell>
                 <TableCell align="right">
-                  <IconButton size="small" onClick={() => onTest(collection.id)}><PlayArrow /></IconButton>
-                  <IconButton size="small" onClick={() => onRefresh(collection.id, false)}><Refresh /></IconButton>
-                  <IconButton size="small" onClick={() => onEdit(collection)}><Edit /></IconButton>
-                  <IconButton size="small" onClick={() => handleDeleteClick(collection)}><Delete /></IconButton>
+                  <Tooltip title="Test Collection">
+                    <IconButton size="small" onClick={() => onTest(collection.id)}>
+                      <FactCheck />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Refresh Collection">
+                    <IconButton size="small" onClick={() => onRefresh(collection.id, false)}>
+                      <Refresh />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Edit Collection">
+                    <IconButton size="small" onClick={() => onEdit(collection)}>
+                      <Edit />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete Collection">
+                    <IconButton size="small" onClick={() => handleDeleteClick(collection)}>
+                      <Delete />
+                    </IconButton>
+                  </Tooltip>
                 </TableCell>
               </TableRow>
             ))}
