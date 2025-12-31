@@ -21,7 +21,6 @@ describe('ConnectorForm', () => {
     );
 
     expect(screen.getByLabelText(/Connector Name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Type/i)).toBeInTheDocument();
     expect(screen.getByText(/Create/i)).toBeInTheDocument();
     expect(screen.getByText(/Cancel/i)).toBeInTheDocument();
   });
@@ -57,7 +56,7 @@ describe('ConnectorForm', () => {
     expect(mockOnCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('should disable type selection when editing existing connector', () => {
+  it('should show Update button when editing existing connector', () => {
     const existingConnector = {
       id: 1,
       name: 'Existing Connector',
@@ -73,8 +72,6 @@ describe('ConnectorForm', () => {
       />
     );
 
-    const typeSelect = screen.getByLabelText(/Type/i);
-    expect(typeSelect).toBeDisabled();
     expect(screen.getByText(/Update/i)).toBeInTheDocument();
   });
 

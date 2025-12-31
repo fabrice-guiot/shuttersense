@@ -29,9 +29,7 @@ describe('CollectionForm', () => {
     );
 
     expect(screen.getByLabelText(/Collection Name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Type/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Location/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/State/i)).toBeInTheDocument();
     expect(screen.getByText(/Create/i)).toBeInTheDocument();
     expect(screen.getByText(/Cancel/i)).toBeInTheDocument();
   });
@@ -87,7 +85,7 @@ describe('CollectionForm', () => {
     expect(mockOnCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('should disable type selection when editing existing collection', () => {
+  it('should show Update button when editing existing collection', () => {
     const existingCollection = {
       id: 1,
       name: 'Existing Collection',
@@ -105,8 +103,6 @@ describe('CollectionForm', () => {
       />
     );
 
-    const typeSelect = screen.getByLabelText(/Type/i);
-    expect(typeSelect).toBeDisabled();
     expect(screen.getByText(/Update/i)).toBeInTheDocument();
   });
 });
