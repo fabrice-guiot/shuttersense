@@ -284,9 +284,9 @@
 
 ### Core Infrastructure Tests (Phase 2)
 
-- [ ] T104a [P] Create backend/tests/unit/test_crypto.py with CredentialEncryptor tests (encrypt/decrypt roundtrip, master key validation, invalid key handling, UTF-8 support)
-- [ ] T104b [P] Create backend/tests/unit/test_cache.py with FileListingCache tests (get/set/invalidate/clear, TTL expiry logic, concurrent access with threading, state-based TTL defaults)
-- [ ] T104c [P] Create backend/tests/unit/test_job_queue.py with JobQueue tests (enqueue/dequeue FIFO, get_position, cancel, concurrent access, job status transitions)
+- [x] T104a [P] Create backend/tests/unit/test_crypto.py with CredentialEncryptor tests (encrypt/decrypt roundtrip, master key validation, invalid key handling, UTF-8 support)
+- [x] T104b [P] Create backend/tests/unit/test_cache.py with FileListingCache tests (get/set/invalidate/clear, TTL expiry logic, concurrent access with threading, state-based TTL defaults)
+- [x] T104c [P] Create backend/tests/unit/test_job_queue.py with JobQueue tests (enqueue/dequeue FIFO, get_position, cancel, concurrent access, job status transitions)
 - [ ] T104d [P] Create backend/tests/unit/test_pipeline_processor.py with StructureValidator tests (cycle detection, orphaned nodes, dead ends, node-specific constraints, processing_method validation)
 - [ ] T104e [P] In backend/tests/unit/test_pipeline_processor.py, add FilenamePreviewGenerator tests (all paths generation, property transformations, multiple branches, pairing separators)
 - [ ] T104f [P] In backend/tests/unit/test_pipeline_processor.py, add CollectionValidator tests (file grouping, expected files, status determination: CONSISTENT/PARTIAL/INCONSISTENT)
@@ -308,9 +308,9 @@
 
 ### Model Validation Tests
 
-- [ ] T104p [P] Create backend/tests/unit/test_models.py with Connector model tests (unique name constraint, type enum validation, is_active default, relationship to collections)
-- [ ] T104q [P] In backend/tests/unit/test_models.py, add Collection model tests (connector_id validation by type, state enum, get_effective_cache_ttl with user override and defaults)
-- [ ] T104r [P] In backend/tests/unit/test_models.py, add schema validation tests for CollectionCreate (LOCAL rejects connector_id, remote types require connector_id, connector_id >= 1)
+- [x] T104p [P] Create backend/tests/unit/test_models.py with Connector model tests (unique name constraint, type enum validation, is_active default, relationship to collections)
+- [x] T104q [P] In backend/tests/unit/test_models.py, add Collection model tests (connector_id validation by type, state enum, get_effective_cache_ttl with user override and defaults)
+- [x] T104r [P] In backend/tests/unit/test_models.py, add schema validation tests for CollectionCreate (LOCAL rejects connector_id, remote types require connector_id, connector_id >= 1)
 
 ### API Endpoint Tests
 
@@ -328,10 +328,10 @@
 
 ### Test Infrastructure
 
-- [ ] T104aa [P] Create backend/tests/conftest.py with pytest fixtures (test database session, in-memory cache, mock encryptor with test key, sample connector/collection factories)
-- [ ] T104ab [P] In backend/tests/conftest.py, add fixtures for mocked storage adapters (mock_s3_client, mock_gcs_client, mock_smb_connection)
-- [ ] T104ac [P] Update backend/requirements.txt with test dependencies (pytest-cov, pytest-mock, pytest-asyncio, freezegun for time-based tests)
-- [ ] T104ad Create backend/.coveragerc with coverage configuration (exclude migrations, __init__.py, target 80% minimum)
+- [x] T104aa [P] Create backend/tests/conftest.py with pytest fixtures (test database session, in-memory cache, mock encryptor with test key, sample connector/collection factories)
+- [x] T104ab [P] In backend/tests/conftest.py, add fixtures for mocked storage adapters (mock_s3_client, mock_gcs_client, mock_smb_connection)
+- [x] T104ac [P] Update backend/requirements.txt with test dependencies (pytest-cov, pytest-mock, pytest-asyncio, freezegun for time-based tests)
+- [x] T104ad Create backend/.coveragerc with coverage configuration (exclude migrations, __init__.py, target 80% minimum)
 - [ ] T104ae Update backend/README.md with testing instructions (pytest commands, coverage reporting, test organization)
 
 **Checkpoint**: Comprehensive test coverage achieved (>80%) for Phase 2-3 code - safe to proceed with Phase 4
