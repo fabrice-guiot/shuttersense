@@ -293,9 +293,9 @@
 
 ### Storage Adapter Tests
 
-- [ ] T104g [P] Create backend/tests/unit/test_s3_adapter.py with S3Adapter tests using mocked boto3 (list_files with pagination, test_connection success/failure, retry logic, credential validation)
-- [ ] T104h [P] Create backend/tests/unit/test_gcs_adapter.py with GCSAdapter tests using mocked google-cloud-storage (list_files, test_connection, service account validation, error handling)
-- [ ] T104i [P] Create backend/tests/unit/test_smb_adapter.py with SMBAdapter tests using mocked smbprotocol (list_files, test_connection, credential validation, network error handling)
+- [x] T104g [P] Create backend/tests/unit/test_s3_adapter.py with S3Adapter tests using mocked boto3 (list_files with pagination, test_connection success/failure, retry logic, credential validation)
+- [x] T104h [P] Create backend/tests/unit/test_gcs_adapter.py with GCSAdapter tests using mocked google-cloud-storage (list_files, test_connection, service account validation, error handling)
+- [x] T104i [P] Create backend/tests/unit/test_smb_adapter.py with SMBAdapter tests using mocked smbprotocol (list_files, test_connection, credential validation, network error handling)
 
 ### Service Layer Tests
 
