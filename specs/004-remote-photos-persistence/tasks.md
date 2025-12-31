@@ -287,9 +287,9 @@
 - [x] T104a [P] Create backend/tests/unit/test_crypto.py with CredentialEncryptor tests (encrypt/decrypt roundtrip, master key validation, invalid key handling, UTF-8 support)
 - [x] T104b [P] Create backend/tests/unit/test_cache.py with FileListingCache tests (get/set/invalidate/clear, TTL expiry logic, concurrent access with threading, state-based TTL defaults)
 - [x] T104c [P] Create backend/tests/unit/test_job_queue.py with JobQueue tests (enqueue/dequeue FIFO, get_position, cancel, concurrent access, job status transitions)
-- [ ] T104d [P] Create backend/tests/unit/test_pipeline_processor.py with StructureValidator tests (cycle detection, orphaned nodes, dead ends, node-specific constraints, processing_method validation)
-- [ ] T104e [P] In backend/tests/unit/test_pipeline_processor.py, add FilenamePreviewGenerator tests (all paths generation, property transformations, multiple branches, pairing separators)
-- [ ] T104f [P] In backend/tests/unit/test_pipeline_processor.py, add CollectionValidator tests (file grouping, expected files, status determination: CONSISTENT/PARTIAL/INCONSISTENT)
+- [ ] T104d [P] **DEFERRED TO PHASE 4** Create backend/tests/unit/test_pipeline_processor.py with StructureValidator tests (cycle detection, orphaned nodes, dead ends, node-specific constraints, processing_method validation) - *Blocked by: Phase 4 CLI Tool Database Integration - need unified YAML/database config handling*
+- [ ] T104e [P] **DEFERRED TO PHASE 4** In backend/tests/unit/test_pipeline_processor.py, add FilenamePreviewGenerator tests (all paths generation, property transformations, multiple branches, pairing separators) - *Blocked by: Phase 4 CLI Tool Database Integration*
+- [ ] T104f [P] **DEFERRED TO PHASE 4** In backend/tests/unit/test_pipeline_processor.py, add CollectionValidator tests (file grouping, expected files, status determination: CONSISTENT/PARTIAL/INCONSISTENT) - *Blocked by: Phase 4 CLI Tool Database Integration*
 
 ### Storage Adapter Tests
 
