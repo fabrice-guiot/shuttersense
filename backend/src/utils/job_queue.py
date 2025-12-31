@@ -12,7 +12,7 @@ in-memory job queue for sequential processing.
 import threading
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, List, Optional, Any
 
@@ -399,7 +399,7 @@ class JobQueue:
             >>> print(f"Removed {removed} old jobs")
         """
         with self._lock:
-            cutoff = datetime.utcnow() - datetime.timedelta(hours=max_age_hours)
+            cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
             removed_count = 0
 
             for job_id, job in list(self._jobs.items()):
