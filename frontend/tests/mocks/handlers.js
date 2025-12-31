@@ -221,13 +221,13 @@ export const handlers = [
 
   http.post(`${BASE_URL}/collections/:id/refresh`, ({ params, request }) => {
     const url = new URL(request.url);
-    const forceRefresh = url.searchParams.get('force') === 'true';
+    const confirm = url.searchParams.get('confirm') === 'true';
     const collection = collections.find((c) => c.id === Number(params.id));
     if (!collection) {
       return new HttpResponse(null, { status: 404 });
     }
     return HttpResponse.json({
-      message: forceRefresh ? 'Force refresh initiated' : 'Refresh initiated',
+      message: confirm ? 'Force refresh initiated' : 'Refresh initiated',
       task_id: 'mock-task-123',
     });
   }),

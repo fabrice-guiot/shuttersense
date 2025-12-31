@@ -71,12 +71,17 @@ export const updateCollection = async (id, data) => {
  * Delete a collection
  * @param {number} id - Collection ID
  * @param {boolean} force - Force delete even if results/jobs exist
- * @returns {Promise<void>}
+ * @returns {Promise<Object|void>} Returns result info if collection has data, void if deleted
  * @throws {Error} 409 if results/jobs exist and force=false
  */
 export const deleteCollection = async (id, force = false) => {
-  const params = force ? { force: true } : {};
-  await api.delete(`/collections/${id}`, { params });
+  const params = force ? { force_delete: force } : {};
+  const response = await api.delete(`/collections/${id}`, { params });
+  // If status is 200, return the result/job info
+  if (response.status === 200) {
+    return response.data;
+  }
+  // Status 204 means deleted successfully, no data to return
 };
 
 /**

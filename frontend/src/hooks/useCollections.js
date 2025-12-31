@@ -78,7 +78,12 @@ export const useCollections = (autoFetch = true) => {
     setLoading(true);
     setError(null);
     try {
-      await collectionService.deleteCollection(id, force);
+      const response = await collectionService.deleteCollection(id, force);
+      // If response exists, it means collection has results/jobs (status 200)
+      if (response) {
+        return response;
+      }
+      // No response means deleted successfully (status 204)
       setCollections(prev => prev.filter(c => c.id !== id));
     } catch (err) {
       const errorMessage = err.userMessage || 'Failed to delete collection';
