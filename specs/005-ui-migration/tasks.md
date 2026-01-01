@@ -30,13 +30,13 @@ description: "Task list for UI Migration to Modern Design System"
 
 **Purpose**: Install and configure Tailwind CSS, shadcn/ui, TypeScript - foundation for all user stories
 
-- [ ] T001 Install and configure Tailwind CSS v4 in frontend/package.json and create frontend/tailwind.config.js
-- [ ] T002 [P] Initialize shadcn/ui via npx and create frontend/components.json configuration
-- [ ] T003 [P] Create design system CSS variables in frontend/src/globals.css with dark theme tokens
-- [ ] T004 Install required shadcn/ui components (button, input, table, dialog, badge, select, checkbox, form, etc.)
-- [ ] T005 [P] Configure TypeScript with frontend/tsconfig.json and path aliases (@/components, @/lib)
-- [ ] T006 [P] Update frontend/vite.config.ts to support TypeScript and path resolution
-- [ ] T007 [P] Install form dependencies (react-hook-form, zod, @hookform/resolvers, lucide-react, clsx, tailwind-merge)
+- [X] T001 Install and configure Tailwind CSS v4 in frontend/package.json and create frontend/tailwind.config.js
+- [X] T002 [P] Initialize shadcn/ui via npx and create frontend/components.json configuration
+- [X] T003 [P] Create design system CSS variables in frontend/src/globals.css with dark theme tokens
+- [X] T004 Install required shadcn/ui components (button, input, table, dialog, badge, select, checkbox, form, etc.)
+- [X] T005 [P] Configure TypeScript with frontend/tsconfig.json and path aliases (@/components, @/lib)
+- [X] T006 [P] Update frontend/vite.config.ts to support TypeScript and path resolution
+- [X] T007 [P] Install form dependencies (react-hook-form, zod, @hookform/resolvers, lucide-react, clsx, tailwind-merge)
 
 **Checkpoint**: ✅ Build passes, Tailwind works, shadcn components available, TypeScript configured
 
