@@ -323,8 +323,8 @@
 
 ### Integration Tests
 
-- [ ] T104y Create backend/tests/integration/test_connector_collection_flow.py testing full flow (create connector → create collection → delete connector fails with 409 → delete collection → delete connector succeeds)
-- [ ] T104z In backend/tests/integration/test_connector_collection_flow.py, add remote collection accessibility test (create S3 connector with invalid creds → create collection → verify is_accessible=false and last_error populated)
+- [x] T104y Create backend/tests/integration/test_connector_collection_flow.py testing full flow (create connector → create collection → delete connector fails with 409 → delete collection → delete connector succeeds)
+- [x] T104z In backend/tests/integration/test_connector_collection_flow.py, add remote collection accessibility test (create S3 connector with invalid creds → create collection → verify is_accessible=false and last_error populated)
 
 ### Test Infrastructure
 
