@@ -13,6 +13,7 @@ import {
   Archive,
   BarChart3,
   Users,
+  Plug,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
@@ -46,6 +47,7 @@ const MENU_ITEMS: Omit<MenuItem, 'active'>[] = [
   { id: 'assets', icon: Archive, label: 'Assets', href: '/assets' },
   { id: 'analytics', icon: BarChart3, label: 'Analytics', href: '/analytics' },
   { id: 'team', icon: Users, label: 'Team', href: '/team' },
+  { id: 'connectors', icon: Plug, label: 'Connectors', href: '/connectors' },
   { id: 'settings', icon: Settings, label: 'Settings', href: '/settings' },
 ]
 
