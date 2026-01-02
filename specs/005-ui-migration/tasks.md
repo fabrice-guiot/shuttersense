@@ -119,17 +119,17 @@ description: "Task list for UI Migration to Modern Design System"
 
 ### Implementation for User Story 4
 
-- [ ] T025 [P] [US4] Create frontend/src/components/collections/FiltersSection.tsx with state, type, and accessible-only filters
-- [ ] T026 [P] [US4] Create frontend/src/components/collections/CollectionStatus.tsx to display accessibility badges
-- [ ] T027 [US4] Migrate frontend/src/components/collections/CollectionList.jsx to .tsx replacing MUI Table with shadcn Table
-- [ ] T028 [US4] Add tab navigation (All Collections, Recently Accessed, Archived) to CollectionList component
-- [ ] T029 [US4] Update CollectionList to use FiltersSection component for state/type/accessible filters
-- [ ] T030 [US4] Add action buttons (Info, RefreshCw, Edit, Trash2) with Lucide icons and tooltips
-- [ ] T031 [US4] Migrate frontend/src/pages/CollectionsPage.jsx to .tsx with shadcn Dialog for create/edit
-- [ ] T032 [US4] Update frontend/src/hooks/useCollections.js to .ts with TypeScript types from @/types/collection
-- [ ] T033 [US4] Update frontend/src/services/collections.js to .ts with typed axios responses
+- [X] T025 [P] [US4] Create frontend/src/components/collections/FiltersSection.tsx with state, type, and accessible-only filters
+- [X] T026 [P] [US4] Create frontend/src/components/collections/CollectionStatus.tsx to display accessibility badges
+- [X] T027 [US4] Migrate frontend/src/components/collections/CollectionList.jsx to .tsx replacing MUI Table with shadcn Table
+- [X] T028 [US4] Add tab navigation (All Collections, Recently Accessed, Archived) to CollectionList component
+- [X] T029 [US4] Update CollectionList to use FiltersSection component for state/type/accessible filters
+- [X] T030 [US4] Add action buttons (Info, RefreshCw, Edit, Trash2) with Lucide icons and tooltips
+- [X] T031 [US4] Migrate frontend/src/pages/CollectionsPage.jsx to .tsx with shadcn Dialog for create/edit
+- [X] T032 [US4] Update frontend/src/hooks/useCollections.js to .ts with TypeScript types from @/types/collection
+- [X] T033 [US4] Update frontend/src/services/collections.js to .ts with typed axios responses
 
-**Checkpoint**: Collections page fully functional with tabs, filters, table, and all features
+**Checkpoint**: ✅ Collections page fully functional with tabs, filters, table, and all features
 
 ---
 
