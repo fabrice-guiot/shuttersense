@@ -1,17 +1,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
-import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import App from './App.tsx';
+import { ThemeProvider, createTheme } from '@mui/material';
 import './globals.css';
 
+// MUI theme for legacy components (Collections/Connectors pages not yet migrated)
+// TODO: Remove once all pages are migrated to shadcn/ui (Phase 6-7)
 const theme = createTheme({
   palette: {
-    mode: 'light',
+    mode: 'dark', // Match our dark theme
     primary: {
-      main: '#1976d2',
+      main: '#3b82f6', // Match our --primary color
     },
     secondary: {
-      main: '#dc004e',
+      main: '#6b7280', // Match our --secondary color
     },
   },
 });
@@ -19,7 +21,6 @@ const theme = createTheme({
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ThemeProvider theme={theme}>
-      <CssBaseline />
       <App />
     </ThemeProvider>
   </React.StrictMode>
