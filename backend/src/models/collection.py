@@ -15,7 +15,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, Boolean, ForeignKey, Index
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Enum, Text, Boolean, ForeignKey, Index
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
@@ -133,6 +133,11 @@ class Collection(Base):
 
     # Optional metadata
     metadata_json = Column(Text, nullable=True)  # JSON string for flexibility
+
+    # KPI statistics (populated during collection scan/refresh)
+    storage_bytes = Column(BigInteger, nullable=True)  # Total storage in bytes
+    file_count = Column(Integer, nullable=True)  # Total number of files
+    image_count = Column(Integer, nullable=True)  # Number of images after grouping
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

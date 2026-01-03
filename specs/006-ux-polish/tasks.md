@@ -23,9 +23,9 @@
 
 **Purpose**: Project initialization and schema changes required for KPIs
 
-- [ ] T001 Create Alembic migration for Collection stats columns (storage_bytes, file_count, image_count) in backend/src/db/migrations/versions/
-- [ ] T002 Run migration to add new columns: `alembic upgrade head`
-- [ ] T003 [P] Add new columns to Collection model in backend/src/models/collection.py
+- [x] T001 Create Alembic migration for Collection stats columns (storage_bytes, file_count, image_count) in backend/src/db/migrations/versions/
+- [x] T002 Run migration to add new columns: `alembic upgrade head`
+- [x] T003 [P] Add new columns to Collection model in backend/src/models/collection.py
 
 ---
 
@@ -35,11 +35,11 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Add CollectionStatsResponse schema in backend/src/schemas/collection.py
-- [ ] T005 [P] Add ConnectorStatsResponse schema in backend/src/schemas/collection.py
-- [ ] T006 [P] Add format_storage_bytes utility function in backend/src/utils/ (bytes → human-readable)
-- [ ] T007 [P] Add CollectionStatsResponse TypeScript type in frontend/src/contracts/api/collection-api.ts
-- [ ] T008 [P] Add ConnectorStatsResponse TypeScript type in frontend/src/contracts/api/connector-api.ts
+- [x] T004 Add CollectionStatsResponse schema in backend/src/schemas/collection.py
+- [x] T005 [P] Add ConnectorStatsResponse schema in backend/src/schemas/collection.py
+- [x] T006 [P] Add format_storage_bytes utility function in backend/src/utils/ (bytes → human-readable)
+- [x] T007 [P] Add CollectionStatsResponse TypeScript type in frontend/src/contracts/api/collection-api.ts
+- [x] T008 [P] Add ConnectorStatsResponse TypeScript type in frontend/src/contracts/api/connector-api.ts
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 

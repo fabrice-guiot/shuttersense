@@ -206,3 +206,20 @@ export interface ConnectorDeleteConflictResponse {
  *   - 404: Connector not found
  *   - 500: Connection test failed (ConnectorTestResponse with success=false)
  */
+
+// ============================================================================
+// KPI Statistics Types (Issue #37)
+// ============================================================================
+
+/**
+ * Aggregated statistics for all connectors (KPI endpoint)
+ *
+ * GET /api/connectors/stats
+ */
+export interface ConnectorStatsResponse {
+  /** Total number of connectors */
+  total_connectors: number
+
+  /** Number of active connectors (is_active=true) */
+  active_connectors: number
+}

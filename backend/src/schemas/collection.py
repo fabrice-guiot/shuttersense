@@ -616,3 +616,72 @@ class CollectionFilesResponse(BaseModel):
             }
         }
     }
+
+
+# ============================================================================
+# KPI Statistics Schemas (Issue #37)
+# ============================================================================
+
+class CollectionStatsResponse(BaseModel):
+    """
+    Aggregated statistics for all collections (KPI endpoint).
+
+    These values are NOT affected by any filter parameters - always shows system-wide totals.
+
+    Fields:
+        total_collections: Count of all collections
+        storage_used_bytes: Sum of storage_bytes across all collections
+        storage_used_formatted: Human-readable storage (e.g., "2.5 TB")
+        file_count: Sum of file_count across all collections
+        image_count: Sum of image_count across all collections
+
+    Example:
+        >>> response = CollectionStatsResponse(
+        ...     total_collections=42,
+        ...     storage_used_bytes=2748779069440,
+        ...     storage_used_formatted="2.5 TB",
+        ...     file_count=125000,
+        ...     image_count=98500
+        ... )
+    """
+    total_collections: int = Field(..., ge=0, description="Total number of collections")
+    storage_used_bytes: int = Field(..., ge=0, description="Total storage used in bytes")
+    storage_used_formatted: str = Field(..., description="Human-readable storage amount")
+    file_count: int = Field(..., ge=0, description="Total number of files")
+    image_count: int = Field(..., ge=0, description="Total number of images after grouping")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "total_collections": 42,
+                "storage_used_bytes": 2748779069440,
+                "storage_used_formatted": "2.5 TB",
+                "file_count": 125000,
+                "image_count": 98500
+            }
+        }
+    }
+
+
+class ConnectorStatsResponse(BaseModel):
+    """
+    Aggregated statistics for all connectors (KPI endpoint).
+
+    Fields:
+        total_connectors: Count of all connectors
+        active_connectors: Count of connectors where is_active=true
+
+    Example:
+        >>> response = ConnectorStatsResponse(total_connectors=5, active_connectors=3)
+    """
+    total_connectors: int = Field(..., ge=0, description="Total number of connectors")
+    active_connectors: int = Field(..., ge=0, description="Number of active connectors")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "total_connectors": 5,
+                "active_connectors": 3
+            }
+        }
+    }

@@ -256,3 +256,31 @@ export function toApiQueryParams(filters: CollectionFilters): CollectionListQuer
 
   return params
 }
+
+// ============================================================================
+// KPI Statistics Types (Issue #37)
+// ============================================================================
+
+/**
+ * Aggregated statistics for all collections (KPI endpoint)
+ *
+ * GET /api/collections/stats
+ *
+ * These values are NOT affected by any filter parameters - always shows system-wide totals.
+ */
+export interface CollectionStatsResponse {
+  /** Total number of collections */
+  total_collections: number
+
+  /** Total storage used across all collections in bytes */
+  storage_used_bytes: number
+
+  /** Human-readable storage amount (e.g., "2.5 TB") */
+  storage_used_formatted: string
+
+  /** Total number of files across all collections */
+  file_count: number
+
+  /** Total number of images after grouping */
+  image_count: number
+}
