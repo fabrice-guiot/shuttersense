@@ -49,7 +49,7 @@ export default function CollectionsPage() {
   const { connectors } = useConnectors()
 
   // KPI Stats for header (Issue #37)
-  const { stats } = useCollectionStats()
+  const { stats, refetch: refetchStats } = useCollectionStats()
   const { setStats } = useHeaderStats()
 
   // Update header stats when data changes
@@ -88,6 +88,8 @@ export default function CollectionsPage() {
         await updateCollection(editingCollection.id, formData)
       } else {
         await createCollection(formData)
+        // Refresh KPI stats after creating a new collection
+        refetchStats()
       }
       handleClose()
     } catch (err: any) {
@@ -96,9 +98,14 @@ export default function CollectionsPage() {
   }
 
   const handleDelete = (collection: Collection) => {
-    deleteCollection(collection.id, false).catch(() => {
-      // Error handled by hook
-    })
+    deleteCollection(collection.id, false)
+      .then(() => {
+        // Refresh KPI stats after deleting a collection
+        refetchStats()
+      })
+      .catch(() => {
+        // Error handled by hook
+      })
   }
 
   const handleInfo = (collection: Collection) => {

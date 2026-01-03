@@ -32,7 +32,7 @@ export default function ConnectorsPage() {
   } = useConnectors()
 
   // KPI Stats for header (Issue #37)
-  const { stats } = useConnectorStats()
+  const { stats, refetch: refetchStats } = useConnectorStats()
   const { setStats } = useHeaderStats()
 
   // Update header stats when data changes
@@ -69,6 +69,8 @@ export default function ConnectorsPage() {
         await updateConnector(editingConnector.id, formData)
       } else {
         await createConnector(formData)
+        // Refresh KPI stats after creating a new connector
+        refetchStats()
       }
       handleClose()
     } catch (err: any) {
@@ -77,9 +79,14 @@ export default function ConnectorsPage() {
   }
 
   const handleDelete = (connector: Connector) => {
-    deleteConnector(connector.id).catch(() => {
-      // Error handled by hook
-    })
+    deleteConnector(connector.id)
+      .then(() => {
+        // Refresh KPI stats after deleting a connector
+        refetchStats()
+      })
+      .catch(() => {
+        // Error handled by hook
+      })
   }
 
   const handleTest = (connector: Connector) => {
