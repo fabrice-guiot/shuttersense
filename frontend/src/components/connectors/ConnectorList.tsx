@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Info, Edit, Trash2 } from 'lucide-react'
+import { CloudCheck, Edit, Trash2 } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -227,7 +227,7 @@ export function ConnectorList({
                                 onClick={() => onTest(connector)}
                                 aria-label="Test Connection"
                               >
-                                <Info className="h-4 w-4" />
+                                <CloudCheck className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>Test Connection</TooltipContent>

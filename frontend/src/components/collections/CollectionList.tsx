@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Info, RefreshCw, Edit, Trash2 } from 'lucide-react'
+import { FolderCheck, FolderSync, Edit, Trash2 } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -32,7 +32,6 @@ import type { Collection, CollectionState, CollectionType } from '@/contracts/ap
 import {
   COLLECTION_TYPE_LABELS,
   COLLECTION_STATE_LABELS,
-  COLLECTION_TYPE_BADGE_VARIANT,
   COLLECTION_STATE_BADGE_VARIANT,
   COLLECTION_TABS
 } from '@/contracts/components/collection-components'
@@ -148,7 +147,7 @@ export function CollectionList({
               <TableRow key={collection.id}>
                 <TableCell className="font-medium">{collection.name}</TableCell>
                 <TableCell>
-                  <Badge variant={COLLECTION_TYPE_BADGE_VARIANT[collection.type]}>
+                  <Badge variant="secondary">
                     {COLLECTION_TYPE_LABELS[collection.type]}
                   </Badge>
                 </TableCell>
@@ -172,12 +171,12 @@ export function CollectionList({
                             variant="ghost"
                             size="icon"
                             onClick={() => onInfo(collection)}
-                            aria-label="View Details"
+                            aria-label="Test Accessibility"
                           >
-                            <Info className="h-4 w-4" />
+                            <FolderCheck className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>View Details</TooltipContent>
+                        <TooltipContent>Test Accessibility</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
 
@@ -188,12 +187,12 @@ export function CollectionList({
                             variant="ghost"
                             size="icon"
                             onClick={() => onRefresh(collection)}
-                            aria-label="Test Accessibility"
+                            aria-label="Refresh Collection"
                           >
-                            <RefreshCw className="h-4 w-4" />
+                            <FolderSync className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Test Accessibility</TooltipContent>
+                        <TooltipContent>Refresh Collection</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
 

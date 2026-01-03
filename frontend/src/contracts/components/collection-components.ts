@@ -258,11 +258,11 @@ export const COLLECTION_TYPE_BADGE_VARIANT: Record<
  */
 export const COLLECTION_STATE_BADGE_VARIANT: Record<
   CollectionState,
-  'default' | 'secondary' | 'outline'
+  'success' | 'muted' | 'info'
 > = {
-  live: 'default',
-  closed: 'secondary',
-  archived: 'outline'
+  live: 'success',
+  closed: 'muted',
+  archived: 'info'
 }
 
 /**
