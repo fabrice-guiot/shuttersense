@@ -84,10 +84,6 @@ export function Sidebar({
 }: SidebarProps) {
   const location = useLocation()
 
-  // Determine if we're showing the sidebar in mobile/hamburger mode
-  // This happens when: mobile menu is open OR collapsed on tablet
-  const isHamburgerMode = isMobileMenuOpen || isCollapsed
-
   // Determine active menu item based on current route
   const getActiveItem = () => {
     if (activeItem) return activeItem
@@ -107,22 +103,18 @@ export function Sidebar({
 
   const activeId = getActiveItem()
 
-  // Handle closing the sidebar (works for both mobile and collapsed tablet)
-  const handleCloseSidebar = () => {
-    if (isCollapsed) {
-      // Don't close on overlay click when collapsed - only close via explicit action
-      return
-    }
-    onCloseMobileMenu?.()
-  }
-
   return (
     <>
-      {/* Mobile overlay - only shown for true mobile menu, not collapsed state */}
-      {isMobileMenuOpen && !isCollapsed && (
+      {/* Overlay - shown when mobile menu is open (on mobile or when collapsed on tablet+) */}
+      {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
-          onClick={handleCloseSidebar}
+          className={cn(
+            'fixed inset-0 z-40 bg-background/80 backdrop-blur-sm',
+            // On mobile: always show when menu is open
+            // On tablet+: only show when collapsed (hamburger mode)
+            isCollapsed ? '' : 'md:hidden'
+          )}
+          onClick={onCloseMobileMenu}
           aria-hidden="true"
         />
       )}
@@ -133,14 +125,17 @@ export function Sidebar({
           'flex h-screen w-56 flex-col border-r border-sidebar-border bg-sidebar',
           // Position and transition
           'fixed left-0 top-0 z-50 transition-transform duration-300',
-          // On desktop (md+): relative positioning unless collapsed
-          'md:relative',
+          // On desktop (md+): relative positioning ONLY when not collapsed
+          // When collapsed, stay fixed so it doesn't take layout space (Issue #41)
+          !isCollapsed && 'md:relative',
           // Visibility logic:
           // - Mobile (<md): show when isMobileMenuOpen, hide otherwise
-          // - Tablet/Desktop (md+): show unless isCollapsed
+          // - Tablet/Desktop (md+): show unless isCollapsed (or mobile menu open)
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full',
-          // On md+, override mobile hidden state unless collapsed
-          isCollapsed ? 'md:-translate-x-full' : 'md:translate-x-0',
+          // On md+, show if not collapsed OR if mobile menu is open (for collapsed+hamburger click)
+          isCollapsed
+            ? (isMobileMenuOpen ? 'md:translate-x-0' : 'md:-translate-x-full')
+            : 'md:translate-x-0',
           className
         )}
       >

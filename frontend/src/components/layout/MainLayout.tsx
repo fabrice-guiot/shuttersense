@@ -88,6 +88,7 @@ function MainLayoutInner({
           pageIcon={pageIcon}
           stats={stats}
           onOpenMobileMenu={onOpenMobileMenu}
+          isSidebarCollapsed={isCollapsed}
         />
 
         {/* Scrollable Content Area */}

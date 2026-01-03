@@ -30,6 +30,11 @@ export interface TopHeaderProps {
   stats?: HeaderStat[]
   className?: string
   onOpenMobileMenu?: () => void
+  /**
+   * Whether sidebar is collapsed (Issue #41)
+   * When true, show hamburger button even on tablet/desktop
+   */
+  isSidebarCollapsed?: boolean
 }
 
 // ============================================================================
@@ -51,7 +56,8 @@ export function TopHeader({
   pageIcon: PageIcon,
   stats = [],
   className,
-  onOpenMobileMenu
+  onOpenMobileMenu,
+  isSidebarCollapsed = false
 }: TopHeaderProps) {
   return (
     <header
@@ -62,10 +68,14 @@ export function TopHeader({
     >
       {/* Left: Mobile Menu Button + Page Title & Icon */}
       <div className="flex items-center gap-3">
-        {/* Mobile menu button */}
+        {/* Menu button - shown on mobile OR when sidebar is collapsed on tablet+ (Issue #41) */}
         <button
           onClick={onOpenMobileMenu}
-          className="md:hidden rounded-md p-2 hover:bg-accent transition-colors"
+          className={cn(
+            'rounded-md p-2 hover:bg-accent transition-colors',
+            // Show on mobile, or when sidebar is collapsed on tablet+
+            isSidebarCollapsed ? 'flex' : 'md:hidden'
+          )}
           aria-label="Open menu"
         >
           <Menu className="h-5 w-5 text-foreground" />
