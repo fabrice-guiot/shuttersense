@@ -205,11 +205,11 @@ description: "Task list for UI Migration to Modern Design System"
 - [X] T058 [P] Update frontend/vitest.config.js to .ts with TypeScript support and path aliases
 - [X] T059 [P] Update frontend/tests/mocks/handlers.js to .ts with typed MSW request handlers
 - [X] T060 [P] Create frontend/tests/utils/test-utils.tsx with custom render function for shadcn components
-- [ ] T061 [P] Update frontend/tests/components/ConnectorForm.test.jsx to .tsx with shadcn Select selectors
-- [ ] T062 [P] Update frontend/tests/components/ConnectorList.test.jsx to .tsx with shadcn Table and Badge selectors
-- [ ] T063 [P] Update frontend/tests/components/CollectionForm.test.jsx to .tsx with react-hook-form field selectors
-- [ ] T064 [P] Update frontend/tests/hooks/useConnectors.test.js to .ts with type assertions
-- [ ] T065 [P] Update frontend/tests/hooks/useCollections.test.js to .ts with type assertions
+- [X] T061 [P] Update frontend/tests/components/ConnectorForm.test.jsx to .tsx with shadcn Select selectors
+- [X] T062 [P] Update frontend/tests/components/ConnectorList.test.jsx to .tsx with shadcn Table and Badge selectors
+- [X] T063 [P] Update frontend/tests/components/CollectionForm.test.jsx to .tsx with react-hook-form field selectors
+- [X] T064 [P] Update frontend/tests/hooks/useConnectors.test.js to .ts with type assertions
+- [X] T065 [P] Update frontend/tests/hooks/useCollections.test.js to .ts with type assertions
 - [ ] T066 Update frontend/tests/integration/connector-collection-flow.test.jsx to .tsx with new layout selectors
 - [ ] T067 Run full test suite and verify >75% coverage maintained
 - [ ] T068 Fix any failing tests related to component selector changes or type mismatches
