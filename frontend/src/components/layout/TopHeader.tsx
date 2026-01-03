@@ -5,7 +5,7 @@
  * Updates dynamically based on current route and page context.
  */
 
-import { Bell, type LucideIcon } from 'lucide-react'
+import { Bell, Menu, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 
@@ -29,6 +29,7 @@ export interface TopHeaderProps {
   pageIcon?: LucideIcon
   stats?: HeaderStat[]
   className?: string
+  onOpenMobileMenu?: () => void
 }
 
 // ============================================================================
@@ -50,25 +51,34 @@ export function TopHeader({
   pageIcon: PageIcon,
   stats = [],
   className,
+  onOpenMobileMenu
 }: TopHeaderProps) {
   return (
     <header
       className={cn(
-        'flex h-16 items-center justify-between border-b border-border bg-background px-6',
+        'flex h-16 items-center justify-between border-b border-border bg-background px-4 md:px-6',
         className
       )}
     >
-      {/* Left: Page Title & Icon */}
+      {/* Left: Mobile Menu Button + Page Title & Icon */}
       <div className="flex items-center gap-3">
+        {/* Mobile menu button */}
+        <button
+          onClick={onOpenMobileMenu}
+          className="md:hidden rounded-md p-2 hover:bg-accent transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5 text-foreground" />
+        </button>
         {PageIcon && <PageIcon className="h-6 w-6 text-primary" />}
         <h1 className="text-xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
 
       {/* Right: Stats, Notifications, User Profile */}
-      <div className="flex items-center gap-6">
-        {/* Stats */}
+      <div className="flex items-center gap-3 md:gap-6">
+        {/* Stats - hidden on mobile */}
         {stats.length > 0 && (
-          <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-4">
             {stats.map((stat, index) => (
               <div key={index} className="flex flex-col">
                 <span className="text-xs text-muted-foreground">{stat.label}</span>
@@ -99,7 +109,8 @@ export function TopHeader({
           className="flex items-center gap-3 rounded-md p-2 hover:bg-accent transition-colors"
           aria-label="User profile menu"
         >
-          <div className="text-right">
+          {/* User info - hidden on mobile */}
+          <div className="hidden md:block text-right">
             <div className="text-sm font-medium text-foreground">
               {DEFAULT_USER_PROFILE.name}
             </div>

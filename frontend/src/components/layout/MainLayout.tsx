@@ -5,7 +5,7 @@
  * Provides consistent structure across all pages of the application.
  */
 
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { TopHeader, type HeaderStat } from './TopHeader'
@@ -66,19 +66,35 @@ export function MainLayout({
   stats,
   className,
 }: MainLayoutProps) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  const handleOpenMobileMenu = () => setIsMobileMenuOpen(true)
+  const handleCloseMobileMenu = () => setIsMobileMenuOpen(false)
+
   return (
     <div className="flex h-screen w-full bg-background">
       {/* Sidebar: Fixed left navigation */}
-      <Sidebar />
+      <Sidebar
+        isMobileMenuOpen={isMobileMenuOpen}
+        onCloseMobileMenu={handleCloseMobileMenu}
+      />
 
       {/* Main Content Area */}
       <div className="flex flex-1 flex-col">
         {/* TopHeader: Page title, stats, notifications, user profile */}
-        <TopHeader pageTitle={pageTitle} pageIcon={pageIcon} stats={stats} />
+        <TopHeader
+          pageTitle={pageTitle}
+          pageIcon={pageIcon}
+          stats={stats}
+          onOpenMobileMenu={handleOpenMobileMenu}
+        />
 
         {/* Scrollable Content Area */}
-        <main className={cn('flex-1 overflow-auto p-6', className)}>
-          {children}
+        <main className={cn('flex-1 overflow-auto p-4 md:p-6', className)}>
+          {/* Max-width container for ultra-wide monitors */}
+          <div className="mx-auto w-full max-w-[2560px]">
+            {children}
+          </div>
         </main>
       </div>
     </div>

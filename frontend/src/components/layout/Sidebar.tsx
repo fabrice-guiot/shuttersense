@@ -15,6 +15,7 @@ import {
   Users,
   Plug,
   Settings,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -34,6 +35,8 @@ export interface MenuItem {
 export interface SidebarProps {
   activeItem?: string
   className?: string
+  isMobileMenuOpen?: boolean
+  onCloseMobileMenu?: () => void
 }
 
 // ============================================================================
@@ -55,7 +58,12 @@ const MENU_ITEMS: Omit<MenuItem, 'active'>[] = [
 // Component
 // ============================================================================
 
-export function Sidebar({ activeItem, className }: SidebarProps) {
+export function Sidebar({
+  activeItem,
+  className,
+  isMobileMenuOpen = false,
+  onCloseMobileMenu
+}: SidebarProps) {
   const location = useLocation()
 
   // Determine active menu item based on current route
@@ -78,20 +86,42 @@ export function Sidebar({ activeItem, className }: SidebarProps) {
   const activeId = getActiveItem()
 
   return (
-    <aside
-      className={cn(
-        'flex h-screen w-56 flex-col border-r border-sidebar-border bg-sidebar',
-        className
+    <>
+      {/* Mobile overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
+          onClick={onCloseMobileMenu}
+          aria-hidden="true"
+        />
       )}
-    >
+
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          'flex h-screen w-56 flex-col border-r border-sidebar-border bg-sidebar',
+          // Mobile: fixed positioned, slide in from left
+          'fixed left-0 top-0 z-50 transition-transform duration-300 md:relative md:translate-x-0',
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          className
+        )}
+      >
       {/* Logo / Header */}
-      <div className="flex h-16 items-center border-b border-sidebar-border px-6">
+      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
         <div className="flex items-center gap-2">
           <Archive className="h-6 w-6 text-sidebar-primary" />
           <span className="text-lg font-semibold text-sidebar-foreground">
             Photo Admin
           </span>
         </div>
+        {/* Mobile close button */}
+        <button
+          onClick={onCloseMobileMenu}
+          className="md:hidden rounded-md p-1 hover:bg-sidebar-accent transition-colors"
+          aria-label="Close menu"
+        >
+          <X className="h-5 w-5 text-sidebar-foreground" />
+        </button>
       </div>
 
       {/* Navigation Menu */}
@@ -104,6 +134,7 @@ export function Sidebar({ activeItem, className }: SidebarProps) {
             <Link
               key={item.id}
               to={item.href}
+              onClick={() => onCloseMobileMenu?.()}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
@@ -126,6 +157,7 @@ export function Sidebar({ activeItem, className }: SidebarProps) {
         </div>
       </div>
     </aside>
+    </>
   )
 }
 

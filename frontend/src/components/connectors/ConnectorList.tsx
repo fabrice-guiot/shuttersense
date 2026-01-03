@@ -172,7 +172,7 @@ export function ConnectorList({
         </div>
 
         {/* Table */}
-        <div className="rounded-md border border-border">
+        <div className="rounded-md border border-border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
