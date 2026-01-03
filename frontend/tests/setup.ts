@@ -1,28 +1,28 @@
-import '@testing-library/jest-dom';
-import { cleanup } from '@testing-library/react';
-import { afterEach, beforeAll, afterAll } from 'vitest';
-import { server } from './mocks/server';
+import '@testing-library/jest-dom'
+import { cleanup } from '@testing-library/react'
+import { afterEach, beforeAll, afterAll } from 'vitest'
+import { server } from './mocks/server'
 
 // Establish API mocking before all tests
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
-});
+  server.listen({ onUnhandledRequest: 'error' })
+})
 
 // Reset handlers after each test
 afterEach(() => {
-  server.resetHandlers();
-  cleanup();
-});
+  server.resetHandlers()
+  cleanup()
+})
 
 // Clean up after all tests are done
 afterAll(() => {
-  server.close();
-});
+  server.close()
+})
 
-// Mock window.matchMedia for Material-UI components
+// Mock window.matchMedia for responsive components
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: (query) => ({
+  value: (query: string): MediaQueryList => ({
     matches: false,
     media: query,
     onchange: null,
@@ -30,6 +30,6 @@ Object.defineProperty(window, 'matchMedia', {
     removeListener: () => {}, // deprecated
     addEventListener: () => {},
     removeEventListener: () => {},
-    dispatchEvent: () => {},
+    dispatchEvent: () => false,
   }),
-});
+})
