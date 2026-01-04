@@ -39,19 +39,35 @@ class ToolType(enum.Enum):
 from backend.src.models.connector import Connector, ConnectorType
 from backend.src.models.collection import Collection, CollectionType, CollectionState
 
-# Future models (will be imported as they are created):
-# from backend.src.models.configuration import Configuration
-# from backend.src.models.pipeline import Pipeline, PipelineHistory
-# from backend.src.models.analysis_result import AnalysisResult
+# Pipeline models (must be imported before AnalysisResult due to FK reference)
+from backend.src.models.pipeline import Pipeline
+from backend.src.models.pipeline_history import PipelineHistory
+
+# Analysis Result model
+from backend.src.models.analysis_result import AnalysisResult
+
+# Configuration model
+from backend.src.models.configuration import Configuration, ConfigSource
 
 # Export Base and all models
 __all__ = [
     "Base",
+    # Enums
+    "ResultStatus",
+    "ToolType",
+    "ConfigSource",
+    # Connector
     "Connector",
     "ConnectorType",
+    # Collection
     "Collection",
     "CollectionType",
     "CollectionState",
-    "ResultStatus",
-    "ToolType",
+    # Pipeline
+    "Pipeline",
+    "PipelineHistory",
+    # Analysis
+    "AnalysisResult",
+    # Configuration
+    "Configuration",
 ]

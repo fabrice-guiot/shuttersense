@@ -45,18 +45,18 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T010 Create AnalysisResult model in backend/src/models/analysis_result.py with all fields from data-model.md
-- [ ] T011 Create Pipeline model in backend/src/models/pipeline.py with nodes_json, edges_json JSONB fields
-- [ ] T012 [P] Create PipelineHistory model in backend/src/models/pipeline_history.py
-- [ ] T013 [P] Create Configuration model in backend/src/models/configuration.py
-- [ ] T014 Export new models in backend/src/models/__init__.py
-- [ ] T015 Create migration 003_analysis_results.py in backend/src/db/migrations/versions/
-- [ ] T016 Create migration 004_pipelines.py in backend/src/db/migrations/versions/
-- [ ] T017 Create migration 005_configurations.py in backend/src/db/migrations/versions/
-- [ ] T018 Run migrations: `alembic upgrade head` and verify tables created
-- [ ] T019 [P] Add backend unit test for AnalysisResult model in backend/tests/unit/test_models_analysis_result.py
-- [ ] T020 [P] Add backend unit test for Pipeline model in backend/tests/unit/test_models_pipeline.py
-- [ ] T021 [P] Add backend unit test for Configuration model in backend/tests/unit/test_models_configuration.py
+- [x] T010 Create AnalysisResult model in backend/src/models/analysis_result.py with all fields from data-model.md
+- [x] T011 Create Pipeline model in backend/src/models/pipeline.py with nodes_json, edges_json JSON fields
+- [x] T012 [P] Create PipelineHistory model in backend/src/models/pipeline_history.py
+- [x] T013 [P] Create Configuration model in backend/src/models/configuration.py
+- [x] T014 Export new models in backend/src/models/__init__.py
+- [x] T015 Create migration 003_pipelines.py in backend/src/db/migrations/versions/ (pipelines before analysis_results due to FK)
+- [x] T016 Create migration 004_analysis_results.py in backend/src/db/migrations/versions/
+- [x] T017 Create migration 005_configurations.py in backend/src/db/migrations/versions/
+- [x] T018 Run migrations: `alembic upgrade head` and verify tables created
+- [x] T019 [P] Add backend unit test for AnalysisResult model in backend/tests/unit/test_models_analysis_result.py
+- [x] T020 [P] Add backend unit test for Pipeline model in backend/tests/unit/test_models_pipeline.py
+- [x] T021 [P] Add backend unit test for Configuration model in backend/tests/unit/test_models_configuration.py
 
 **Checkpoint**: Foundation ready - all database tables exist, models tested. User story implementation can now begin.
 

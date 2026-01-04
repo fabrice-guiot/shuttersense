@@ -150,14 +150,12 @@ class Collection(Base):
 
     # Relationships
     connector = relationship("Connector", back_populates="collections")
-
-    # Note: analysis_results relationship will be added when AnalysisResult model is created
-    # analysis_results = relationship(
-    #     "AnalysisResult",
-    #     back_populates="collection",
-    #     cascade="all, delete-orphan",
-    #     lazy="dynamic"
-    # )
+    analysis_results = relationship(
+        "AnalysisResult",
+        back_populates="collection",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
 
     # Table-level constraints
     __table_args__ = (
