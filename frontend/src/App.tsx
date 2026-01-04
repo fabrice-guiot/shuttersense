@@ -15,6 +15,8 @@ import {
   Users,
   Plug,
   Settings,
+  Wrench,
+  FileText,
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
@@ -28,6 +30,8 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import TeamPage from './pages/TeamPage'
 import ConnectorsPage from './pages/ConnectorsPage'
 import SettingsPage from './pages/SettingsPage'
+import ToolsPage from './pages/ToolsPage'
+import ResultsPage from './pages/ResultsPage'
 
 // ============================================================================
 // Route Configuration
@@ -82,6 +86,18 @@ const routes: RouteConfig[] = [
     element: <ConnectorsPage />,
     pageTitle: 'Connectors',
     pageIcon: Plug,
+  },
+  {
+    path: '/tools',
+    element: <ToolsPage />,
+    pageTitle: 'Tools',
+    pageIcon: Wrench,
+  },
+  {
+    path: '/results',
+    element: <ResultsPage />,
+    pageTitle: 'Results',
+    pageIcon: FileText,
   },
   {
     path: '/settings',

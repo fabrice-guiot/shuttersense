@@ -70,18 +70,18 @@
 
 ### Tests for User Story 1
 
-- [ ] T022 [P] [US1] Contract test for POST /api/tools/run in backend/tests/unit/test_api_tools.py
-- [ ] T023 [P] [US1] Contract test for GET /api/tools/jobs/{id} in backend/tests/unit/test_api_tools.py
-- [ ] T024 [P] [US1] Contract test for POST /api/tools/jobs/{id}/cancel in backend/tests/unit/test_api_tools.py
-- [ ] T025 [P] [US1] Contract test for GET /api/results in backend/tests/unit/test_api_results.py
-- [ ] T026 [P] [US1] Contract test for GET /api/results/{id} in backend/tests/unit/test_api_results.py
-- [ ] T027 [P] [US1] Contract test for GET /api/results/{id}/report in backend/tests/unit/test_api_results.py
-- [ ] T028 [P] [US1] Contract test for DELETE /api/results/{id} in backend/tests/unit/test_api_results.py
-- [ ] T029 [P] [US1] Unit test for ToolService.run_photostats() in backend/tests/unit/test_tool_service.py
-- [ ] T030 [P] [US1] Unit test for ToolService.run_photo_pairing() in backend/tests/unit/test_tool_service.py
-- [ ] T031 [P] [US1] Unit test for ToolService.run_pipeline_validation() in backend/tests/unit/test_tool_service.py
-- [ ] T032 [P] [US1] Unit test for collection statistics update after tool completion in backend/tests/unit/test_tool_service.py
-- [ ] T033 [P] [US1] Unit test for ResultService CRUD operations in backend/tests/unit/test_result_service.py
+- [x] T022 [P] [US1] Contract test for POST /api/tools/run in backend/tests/unit/test_api_tools.py
+- [x] T023 [P] [US1] Contract test for GET /api/tools/jobs/{id} in backend/tests/unit/test_api_tools.py
+- [x] T024 [P] [US1] Contract test for POST /api/tools/jobs/{id}/cancel in backend/tests/unit/test_api_tools.py
+- [x] T025 [P] [US1] Contract test for GET /api/results in backend/tests/unit/test_api_results.py
+- [x] T026 [P] [US1] Contract test for GET /api/results/{id} in backend/tests/unit/test_api_results.py
+- [x] T027 [P] [US1] Contract test for GET /api/results/{id}/report in backend/tests/unit/test_api_results.py
+- [x] T028 [P] [US1] Contract test for DELETE /api/results/{id} in backend/tests/unit/test_api_results.py
+- [x] T029 [P] [US1] Unit test for ToolService.run_photostats() in backend/tests/unit/test_tool_service.py
+- [x] T030 [P] [US1] Unit test for ToolService.run_photo_pairing() in backend/tests/unit/test_tool_service.py
+- [x] T031 [P] [US1] Unit test for ToolService.run_pipeline_validation() in backend/tests/unit/test_tool_service.py
+- [x] T032 [P] [US1] Unit test for collection statistics update after tool completion in backend/tests/unit/test_tool_service.py
+- [x] T033 [P] [US1] Unit test for ResultService CRUD operations in backend/tests/unit/test_result_service.py
 - [ ] T034 [P] [US1] Frontend test for useTools hook in frontend/tests/hooks/useTools.test.ts
 - [ ] T035 [P] [US1] Frontend test for useResults hook in frontend/tests/hooks/useResults.test.ts
 - [ ] T036 [P] [US1] Frontend test for ToolSelector component in frontend/tests/components/ToolSelector.test.tsx
@@ -90,41 +90,64 @@
 
 ### Backend Implementation for User Story 1
 
-- [ ] T039 [US1] Create ToolService class in backend/src/services/tool_service.py with run_photostats method
-- [ ] T040 [US1] Add run_photo_pairing method to ToolService in backend/src/services/tool_service.py
-- [ ] T041 [US1] Add run_pipeline_validation method to ToolService in backend/src/services/tool_service.py
-- [ ] T042 [US1] Implement collection statistics update after successful tool completion in backend/src/services/tool_service.py
-- [ ] T043 [US1] Create ResultService class in backend/src/services/result_service.py with list, get, delete methods
-- [ ] T044 [US1] Add report download method to ResultService in backend/src/services/result_service.py
-- [ ] T045 [US1] Add stats method to ResultService for KPIs in backend/src/services/result_service.py
-- [ ] T046 [US1] Create tools API router in backend/src/api/tools.py with POST /run endpoint
-- [ ] T047 [US1] Add GET /jobs, GET /jobs/{id}, POST /jobs/{id}/cancel to tools router in backend/src/api/tools.py
-- [ ] T048 [US1] Add GET /queue/status endpoint to tools router in backend/src/api/tools.py
-- [ ] T049 [US1] Add WebSocket endpoint /ws/jobs/{job_id} for progress in backend/src/api/tools.py
-- [ ] T050 [US1] Create results API router in backend/src/api/results.py with list, get, delete, report download
-- [ ] T051 [US1] Add GET /stats endpoint to results router in backend/src/api/results.py
-- [ ] T052 [US1] Register tools and results routers in backend/src/main.py
+- [x] T039 [US1] Create ToolService class in backend/src/services/tool_service.py with run_photostats method
+- [x] T040 [US1] Add run_photo_pairing method to ToolService in backend/src/services/tool_service.py
+- [x] T041 [US1] Add run_pipeline_validation method to ToolService in backend/src/services/tool_service.py
+- [x] T042 [US1] Implement collection statistics update after successful tool completion in backend/src/services/tool_service.py
+- [x] T043 [US1] Create ResultService class in backend/src/services/result_service.py with list, get, delete methods
+- [x] T044 [US1] Add report download method to ResultService in backend/src/services/result_service.py
+- [x] T045 [US1] Add stats method to ResultService for KPIs in backend/src/services/result_service.py
+- [x] T046 [US1] Create tools API router in backend/src/api/tools.py with POST /run endpoint
+- [x] T047 [US1] Add GET /jobs, GET /jobs/{id}, POST /jobs/{id}/cancel to tools router in backend/src/api/tools.py
+- [x] T048 [US1] Add GET /queue/status endpoint to tools router in backend/src/api/tools.py
+- [x] T049 [US1] Add WebSocket endpoint /ws/jobs/{job_id} for progress in backend/src/api/tools.py
+- [x] T050 [US1] Create results API router in backend/src/api/results.py with list, get, delete, report download
+- [x] T051 [US1] Add GET /stats endpoint to results router in backend/src/api/results.py
+- [x] T052 [US1] Register tools and results routers in backend/src/main.py
 - [ ] T053 [US1] Integration test for full tool execution flow in backend/tests/integration/test_tool_execution_flow.py
 
 ### Frontend Implementation for User Story 1
 
-- [ ] T054 [P] [US1] Create tools API service in frontend/src/services/tools.ts
-- [ ] T055 [P] [US1] Create results API service in frontend/src/services/results.ts
-- [ ] T056 [US1] Create useTools hook with runTool, cancelJob methods in frontend/src/hooks/useTools.ts
-- [ ] T057 [US1] Create useJobProgress hook with WebSocket connection in frontend/src/hooks/useTools.ts
-- [ ] T058 [US1] Create useResults hook with list, get, delete methods in frontend/src/hooks/useResults.ts
-- [ ] T059 [US1] Create useResultStats hook for KPIs in frontend/src/hooks/useResults.ts
-- [ ] T060 [P] [US1] Create ToolSelector component with tool dropdown and collection selector in frontend/src/components/tools/ToolSelector.tsx
-- [ ] T061 [P] [US1] Create ProgressMonitor component with WebSocket progress display in frontend/src/components/tools/ProgressMonitor.tsx
-- [ ] T062 [P] [US1] Create ResultViewer component showing result summary in frontend/src/components/tools/ResultViewer.tsx
-- [ ] T063 [P] [US1] Create ResultList component with filtering and pagination in frontend/src/components/results/ResultList.tsx
-- [ ] T064 [P] [US1] Create ReportViewer component with iframe/dialog display in frontend/src/components/results/ReportViewer.tsx
-- [ ] T065 [US1] Create ToolsPage with TopHeader KPI integration in frontend/src/pages/ToolsPage.tsx
-- [ ] T066 [US1] Create ResultsPage with TopHeader KPI integration in frontend/src/pages/ResultsPage.tsx
-- [ ] T067 [US1] Add routes for /tools and /results in frontend/src/App.tsx
+- [x] T054 [P] [US1] Create tools API service in frontend/src/services/tools.ts
+- [x] T055 [P] [US1] Create results API service in frontend/src/services/results.ts
+- [x] T056 [US1] Create useTools hook with runTool, cancelJob methods in frontend/src/hooks/useTools.ts
+- [x] T057 [US1] Create useJobProgress hook with WebSocket connection in frontend/src/hooks/useTools.ts
+- [x] T058 [US1] Create useResults hook with list, get, delete methods in frontend/src/hooks/useResults.ts
+- [x] T059 [US1] Create useResultStats hook for KPIs in frontend/src/hooks/useResults.ts
+- [x] T060 [P] [US1] Create ToolSelector component with tool dropdown and collection selector in frontend/src/components/tools/RunToolDialog.tsx
+- [x] T061 [P] [US1] Create ProgressMonitor component with WebSocket progress display in frontend/src/components/tools/JobProgressCard.tsx
+- [x] T062 [P] [US1] Create ResultViewer component showing result summary in frontend/src/components/results/ResultDetailPanel.tsx
+- [x] T063 [P] [US1] Create ResultList component with filtering and pagination in frontend/src/components/results/ResultsTable.tsx
+- [x] T064 [P] [US1] Create ReportViewer component with iframe/dialog display in frontend/src/components/results/ResultDetailPanel.tsx
+- [x] T065 [US1] Create ToolsPage with TopHeader KPI integration in frontend/src/pages/ToolsPage.tsx
+- [x] T066 [US1] Create ResultsPage with TopHeader KPI integration in frontend/src/pages/ResultsPage.tsx
+- [x] T067 [US1] Add routes for /tools and /results in frontend/src/App.tsx
 - [ ] T068 [US1] Integration test for tool execution user flow in frontend/tests/integration/toolExecution.test.tsx
 
-**Checkpoint**: User Story 1 complete. Users can run tools from web UI, see real-time progress, view stored results, download HTML reports. TopHeader KPIs show real collection statistics.
+### Remote Collection Support for User Story 1
+
+**Goal**: Enable PhotoStats and Photo Pairing tools to work on remote collections (S3, GCS, SMB) in addition to local collections
+
+**Note**: Local collection support is implemented first. Remote collection support builds on top of it by providing an abstraction layer for file listing that works across all collection types.
+
+#### Backend Implementation for Remote Collection Support
+
+- [ ] T068a [US1] Create FileListingAdapter abstract class in backend/src/utils/file_listing.py with list_files() interface
+- [ ] T068b [P] [US1] Create LocalFileListingAdapter in backend/src/utils/file_listing.py using pathlib
+- [ ] T068c [P] [US1] Create S3FileListingAdapter in backend/src/utils/file_listing.py using S3Adapter
+- [ ] T068d [P] [US1] Create GCSFileListingAdapter in backend/src/utils/file_listing.py using GCSAdapter
+- [ ] T068e [P] [US1] Create SMBFileListingAdapter in backend/src/utils/file_listing.py using SMBAdapter
+- [ ] T068f [US1] Create FileListingFactory in backend/src/utils/file_listing.py to select adapter based on collection type
+- [ ] T068g [US1] Update _run_photostats in backend/src/services/tool_service.py to use FileListingAdapter instead of local scan_folder
+- [ ] T068h [US1] Update _run_photo_pairing in backend/src/services/tool_service.py to use FileListingAdapter instead of local scan_folder
+- [ ] T068i [P] [US1] Unit test for LocalFileListingAdapter in backend/tests/unit/test_file_listing.py
+- [ ] T068j [P] [US1] Unit test for S3FileListingAdapter in backend/tests/unit/test_file_listing.py
+- [ ] T068k [P] [US1] Unit test for GCSFileListingAdapter in backend/tests/unit/test_file_listing.py
+- [ ] T068l [P] [US1] Unit test for SMBFileListingAdapter in backend/tests/unit/test_file_listing.py
+- [ ] T068m [US1] Integration test for PhotoStats on S3 collection in backend/tests/integration/test_tool_execution_flow.py
+- [ ] T068n [US1] Integration test for Photo Pairing on SMB collection in backend/tests/integration/test_tool_execution_flow.py
+
+**Checkpoint**: User Story 1 complete. Users can run tools from web UI on both local and remote collections, see real-time progress, view stored results, download HTML reports. TopHeader KPIs show real collection statistics.
 
 ---
 
@@ -183,7 +206,22 @@
 - [ ] T107 [US2] Add route for /pipelines in frontend/src/App.tsx
 - [ ] T108 [US2] Integration test for pipeline creation flow in frontend/tests/integration/pipelineCreation.test.tsx
 
-**Checkpoint**: User Story 2 complete. Users can create/edit pipelines via forms, validate structure, preview filenames, activate pipelines.
+### Pipeline Validation Tool Integration for User Story 2
+
+**Goal**: Enable Pipeline Validation tool to work with database-stored pipelines instead of YAML config files
+
+**Note**: The CLI pipeline_validation.py reads pipeline config from YAML files via PhotoAdminConfig. The backend stores pipelines in the database (Pipeline model with nodes_json, edges_json). This section integrates the tool with database pipelines.
+
+#### Backend Implementation for Pipeline Validation Integration
+
+- [ ] T108a [US2] Create PipelineConfigAdapter in backend/src/utils/pipeline_adapter.py to convert Pipeline model to format expected by pipeline_validation
+- [ ] T108b [US2] Update _run_pipeline_validation in backend/src/services/tool_service.py to load pipeline from database and use PipelineConfigAdapter
+- [ ] T108c [US2] Implement pipeline validation execution using pipeline_validation functions with database pipeline in backend/src/services/tool_service.py
+- [ ] T108d [US2] Generate HTML report for pipeline validation results in backend/src/services/tool_service.py
+- [ ] T108e [P] [US2] Unit test for PipelineConfigAdapter in backend/tests/unit/test_pipeline_adapter.py
+- [ ] T108f [US2] Integration test for pipeline validation with database pipeline in backend/tests/integration/test_tool_execution_flow.py
+
+**Checkpoint**: User Story 2 complete. Users can create/edit pipelines via forms, validate structure, preview filenames, activate pipelines. Pipeline Validation tool uses database-stored pipelines.
 
 ---
 
@@ -468,13 +506,13 @@ With multiple developers:
 |-------|------------|------------|----------------|
 | 1 | Setup | 9 | 7 |
 | 2 | Foundational | 12 | 3 |
-| 3 | US1 - Tool Execution | 47 | 22 |
-| 4 | US2 - Pipeline Management | 40 | 16 |
+| 3 | US1 - Tool Execution (incl. Remote Collections) | 61 | 28 |
+| 4 | US2 - Pipeline Management (incl. Validation Integration) | 46 | 17 |
 | 5 | US3 - Trend Analysis | 26 | 14 |
 | 6 | US4 - Config Migration | 33 | 12 |
 | 7 | US5 - Production Polish | 30 | 5 |
 | 8 | Final Polish | 6 | 1 |
-| **Total** | | **203** | **80** |
+| **Total** | | **223** | **87** |
 
 ---
 

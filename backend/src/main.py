@@ -156,6 +156,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],  # Allow all headers
+    expose_headers=["Content-Disposition"],  # Expose for report download filenames
 )
 
 
@@ -301,10 +302,12 @@ async def get_version() -> Dict[str, str]:
 
 
 # API routers
-from backend.src.api import collections, connectors
+from backend.src.api import collections, connectors, tools, results
 
 app.include_router(collections.router, prefix="/api")
 app.include_router(connectors.router, prefix="/api")
+app.include_router(tools.router, prefix="/api")
+app.include_router(results.router, prefix="/api")
 
 
 # Root endpoint

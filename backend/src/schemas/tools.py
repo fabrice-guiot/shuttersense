@@ -1,0 +1,186 @@
+"""
+Pydantic schemas for tools API request/response validation.
+
+Provides data validation and serialization for:
+- Tool run requests
+- Job status responses
+- Progress data
+- Queue status
+
+Design:
+- Strict enum validation for tool types and job status
+- UUID format for job IDs
+- Optional fields with sensible defaults
+- DateTime serialization for API responses
+"""
+
+from datetime import datetime
+from enum import Enum
+from typing import Optional, Dict, Any
+from uuid import UUID
+from pydantic import BaseModel, Field
+
+
+class ToolType(str, Enum):
+    """Available analysis tools."""
+    PHOTOSTATS = "photostats"
+    PHOTO_PAIRING = "photo_pairing"
+    PIPELINE_VALIDATION = "pipeline_validation"
+
+
+class JobStatus(str, Enum):
+    """Job execution status."""
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+# ============================================================================
+# Request Schemas
+# ============================================================================
+
+class ToolRunRequest(BaseModel):
+    """
+    Request to start a tool execution.
+
+    Required:
+        collection_id: ID of the collection to analyze
+        tool: Tool to run (photostats, photo_pairing, pipeline_validation)
+
+    Optional:
+        pipeline_id: Pipeline ID (required for pipeline_validation)
+
+    Example:
+        >>> request = ToolRunRequest(
+        ...     collection_id=1,
+        ...     tool=ToolType.PHOTOSTATS
+        ... )
+    """
+    collection_id: int = Field(..., gt=0, description="ID of the collection to analyze")
+    tool: ToolType = Field(..., description="Tool to run")
+    pipeline_id: Optional[int] = Field(
+        None,
+        gt=0,
+        description="Pipeline ID (required for pipeline_validation)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_id": 1,
+                "tool": "photostats"
+            }
+        }
+    }
+
+
+# ============================================================================
+# Response Schemas
+# ============================================================================
+
+class ProgressData(BaseModel):
+    """
+    Progress data for a running job.
+
+    Fields:
+        stage: Current processing stage
+        files_scanned: Number of files processed so far
+        total_files: Total files to process
+        issues_found: Issues detected so far
+        percentage: Completion percentage (0-100)
+    """
+    stage: str = Field("initializing", description="Current stage")
+    files_scanned: int = Field(0, ge=0, description="Files processed")
+    total_files: int = Field(0, ge=0, description="Total files")
+    issues_found: int = Field(0, ge=0, description="Issues found")
+    percentage: float = Field(0.0, ge=0, le=100, description="Completion percentage")
+
+
+class JobResponse(BaseModel):
+    """
+    Job status response.
+
+    Contains full job state including progress for running jobs
+    and result_id for completed jobs.
+    """
+    id: UUID = Field(..., description="Unique job identifier")
+    collection_id: int = Field(..., description="Collection being analyzed")
+    tool: ToolType = Field(..., description="Tool being run")
+    pipeline_id: Optional[int] = Field(None, description="Pipeline ID if applicable")
+    status: JobStatus = Field(..., description="Current job status")
+    position: Optional[int] = Field(None, ge=1, description="Queue position if queued")
+    created_at: datetime = Field(..., description="Job creation time")
+    started_at: Optional[datetime] = Field(None, description="Execution start time")
+    completed_at: Optional[datetime] = Field(None, description="Execution end time")
+    progress: Optional[ProgressData] = Field(None, description="Progress data if running")
+    error_message: Optional[str] = Field(None, description="Error details if failed")
+    result_id: Optional[int] = Field(None, description="Analysis result ID when completed")
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "collection_id": 1,
+                "tool": "photostats",
+                "status": "running",
+                "created_at": "2024-01-15T10:30:00Z",
+                "started_at": "2024-01-15T10:30:05Z",
+                "progress": {
+                    "stage": "scanning",
+                    "files_scanned": 150,
+                    "total_files": 500,
+                    "issues_found": 3,
+                    "percentage": 30.0
+                }
+            }
+        }
+    }
+
+
+class QueueStatusResponse(BaseModel):
+    """
+    Queue status statistics.
+
+    Provides counts for each job state and the current running job ID.
+    """
+    queued_count: int = Field(0, ge=0, description="Jobs waiting in queue")
+    running_count: int = Field(0, ge=0, description="Currently running jobs")
+    completed_count: int = Field(0, ge=0, description="Completed jobs")
+    failed_count: int = Field(0, ge=0, description="Failed jobs")
+    cancelled_count: int = Field(0, ge=0, description="Cancelled jobs")
+    current_job_id: Optional[UUID] = Field(None, description="Currently running job ID")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "queued_count": 2,
+                "running_count": 1,
+                "completed_count": 10,
+                "failed_count": 1,
+                "cancelled_count": 0,
+                "current_job_id": "550e8400-e29b-41d4-a716-446655440000"
+            }
+        }
+    }
+
+
+class ConflictResponse(BaseModel):
+    """
+    Response when a tool is already running on a collection.
+    """
+    message: str = Field(..., description="Conflict description")
+    existing_job_id: UUID = Field(..., description="ID of the existing job")
+    position: Optional[int] = Field(None, description="Queue position of existing job")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "message": "Tool photostats is already running on collection 1",
+                "existing_job_id": "550e8400-e29b-41d4-a716-446655440000",
+                "position": None
+            }
+        }
+    }

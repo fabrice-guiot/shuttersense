@@ -34,13 +34,24 @@ export interface PhotoStatsResults {
   orphaned_xmp: string[]
 }
 
+export interface CameraUsageInfo {
+  /** Camera display name */
+  name: string
+  /** Camera serial number */
+  serial_number?: string
+  /** Number of images for this camera */
+  image_count: number
+  /** Number of groups for this camera */
+  group_count: number
+}
+
 export interface PhotoPairingResults {
   /** Number of image groups */
   group_count: number
   /** Total images in groups */
   image_count: number
-  /** Image count by camera ID */
-  camera_usage: Record<string, number>
+  /** Camera usage details by camera ID */
+  camera_usage: Record<string, CameraUsageInfo | number>
 }
 
 export interface PipelineValidationResults {
