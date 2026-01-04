@@ -41,3 +41,12 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 })
+
+// Mock pointer capture methods for Radix UI Select components
+// These are not available in JSDOM and cause test failures
+Element.prototype.hasPointerCapture = () => false
+Element.prototype.setPointerCapture = () => {}
+Element.prototype.releasePointerCapture = () => {}
+
+// Mock scrollIntoView for list components
+Element.prototype.scrollIntoView = () => {}

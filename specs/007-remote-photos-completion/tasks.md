@@ -82,11 +82,11 @@
 - [x] T031 [P] [US1] Unit test for ToolService.run_pipeline_validation() in backend/tests/unit/test_tool_service.py
 - [x] T032 [P] [US1] Unit test for collection statistics update after tool completion in backend/tests/unit/test_tool_service.py
 - [x] T033 [P] [US1] Unit test for ResultService CRUD operations in backend/tests/unit/test_result_service.py
-- [ ] T034 [P] [US1] Frontend test for useTools hook in frontend/tests/hooks/useTools.test.ts
-- [ ] T035 [P] [US1] Frontend test for useResults hook in frontend/tests/hooks/useResults.test.ts
-- [ ] T036 [P] [US1] Frontend test for ToolSelector component in frontend/tests/components/ToolSelector.test.tsx
-- [ ] T037 [P] [US1] Frontend test for ProgressMonitor component in frontend/tests/components/ProgressMonitor.test.tsx
-- [ ] T038 [P] [US1] Frontend test for ResultList component in frontend/tests/components/ResultList.test.tsx
+- [x] T034 [P] [US1] Frontend test for useTools hook in frontend/tests/hooks/useTools.test.ts
+- [x] T035 [P] [US1] Frontend test for useResults hook in frontend/tests/hooks/useResults.test.ts
+- [x] T036 [P] [US1] Frontend test for RunToolDialog component in frontend/tests/components/tools/RunToolDialog.test.tsx
+- [x] T037 [P] [US1] Frontend test for JobProgressCard component in frontend/tests/components/tools/JobProgressCard.test.tsx
+- [x] T038 [P] [US1] Frontend test for ResultsTable component in frontend/tests/components/results/ResultsTable.test.tsx
 
 ### Backend Implementation for User Story 1
 
@@ -104,7 +104,7 @@
 - [x] T050 [US1] Create results API router in backend/src/api/results.py with list, get, delete, report download
 - [x] T051 [US1] Add GET /stats endpoint to results router in backend/src/api/results.py
 - [x] T052 [US1] Register tools and results routers in backend/src/main.py
-- [ ] T053 [US1] Integration test for full tool execution flow in backend/tests/integration/test_tool_execution_flow.py
+- [x] T053 [US1] Integration test for full tool execution flow in backend/tests/integration/test_tool_execution_flow.py
 
 ### Frontend Implementation for User Story 1
 
@@ -122,7 +122,7 @@
 - [x] T065 [US1] Create ToolsPage with TopHeader KPI integration in frontend/src/pages/ToolsPage.tsx
 - [x] T066 [US1] Create ResultsPage with TopHeader KPI integration in frontend/src/pages/ResultsPage.tsx
 - [x] T067 [US1] Add routes for /tools and /results in frontend/src/App.tsx
-- [ ] T068 [US1] Integration test for tool execution user flow in frontend/tests/integration/toolExecution.test.tsx
+- [x] T068 [US1] Integration test for tool execution user flow in frontend/tests/integration/tool-execution.test.tsx
 
 ### Remote Collection Support for User Story 1
 
