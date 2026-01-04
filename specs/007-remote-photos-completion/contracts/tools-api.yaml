@@ -1,0 +1,263 @@
+openapi: 3.0.3
+info:
+  title: Photo Admin Tools API
+  description: API endpoints for tool execution and job management (Phase 4)
+  version: 1.0.0
+
+paths:
+  /api/tools/run:
+    post:
+      summary: Start tool execution on a collection
+      operationId: runTool
+      tags:
+        - Tools
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolRunRequest'
+      responses:
+        '202':
+          description: Job accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '400':
+          description: Invalid request (missing fields, invalid tool)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Tool already running on this collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictResponse'
+
+  /api/tools/jobs:
+    get:
+      summary: List all jobs (queued, running, completed)
+      operationId: listJobs
+      tags:
+        - Tools
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, running, completed, failed, cancelled]
+        - name: collection_id
+          in: query
+          schema:
+            type: integer
+        - name: tool
+          in: query
+          schema:
+            type: string
+            enum: [photostats, photo_pairing, pipeline_validation]
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobResponse'
+
+  /api/tools/jobs/{job_id}:
+    get:
+      summary: Get job status and details
+      operationId: getJob
+      tags:
+        - Tools
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '404':
+          description: Job not found
+
+  /api/tools/jobs/{job_id}/cancel:
+    post:
+      summary: Cancel a queued job
+      operationId: cancelJob
+      tags:
+        - Tools
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '400':
+          description: Cannot cancel running job
+        '404':
+          description: Job not found
+
+  /api/tools/queue/status:
+    get:
+      summary: Get queue status
+      operationId: getQueueStatus
+      tags:
+        - Tools
+      responses:
+        '200':
+          description: Queue statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueStatusResponse'
+
+  /ws/jobs/{job_id}:
+    get:
+      summary: WebSocket endpoint for job progress
+      description: |
+        Connect to receive real-time progress updates for a job.
+        Messages are JSON objects with progress data.
+      operationId: jobWebSocket
+      tags:
+        - Tools
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+
+components:
+  schemas:
+    ToolRunRequest:
+      type: object
+      required:
+        - collection_id
+        - tool
+      properties:
+        collection_id:
+          type: integer
+          description: ID of the collection to analyze
+        tool:
+          type: string
+          enum: [photostats, photo_pairing, pipeline_validation]
+          description: Tool to run
+        pipeline_id:
+          type: integer
+          description: Pipeline ID (required for pipeline_validation)
+
+    JobResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        collection_id:
+          type: integer
+        tool:
+          type: string
+        pipeline_id:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled]
+        position:
+          type: integer
+          nullable: true
+          description: Position in queue (null if not queued)
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        progress:
+          $ref: '#/components/schemas/ProgressData'
+        error_message:
+          type: string
+          nullable: true
+        result_id:
+          type: integer
+          nullable: true
+          description: Analysis result ID when completed
+
+    ProgressData:
+      type: object
+      properties:
+        stage:
+          type: string
+          description: Current stage (scanning, analyzing, generating_report)
+        files_scanned:
+          type: integer
+        total_files:
+          type: integer
+        issues_found:
+          type: integer
+        percentage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+
+    QueueStatusResponse:
+      type: object
+      properties:
+        queued_count:
+          type: integer
+        running_count:
+          type: integer
+        completed_count:
+          type: integer
+        failed_count:
+          type: integer
+        cancelled_count:
+          type: integer
+        current_job_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    ConflictResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        existing_job_id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+        userMessage:
+          type: string

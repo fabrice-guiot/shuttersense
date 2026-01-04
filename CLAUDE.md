@@ -19,6 +19,7 @@ Photo Administration toolbox - Python utilities for analyzing photo collections.
 - N/A (frontend only, uses existing PostgreSQL backend API) (005-ui-migration)
 - Python 3.10+ (backend), TypeScript 5.x (frontend) + FastAPI, SQLAlchemy (backend); React 18.3.1, Tailwind CSS, Lucide Icons (frontend) (006-ux-polish)
 - PostgreSQL 12+ with existing collections/connectors tables (006-ux-polish)
+- PostgreSQL 12+ with JSONB columns (existing connectors, collections tables) (007-remote-photos-completion)
 
 - **Python 3.10+**
 - **PyYAML** (>=6.0) - Configuration file handling
@@ -323,9 +324,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 007-remote-photos-completion: Added Python 3.10+ (backend), TypeScript 5.x (frontend)
 - 006-ux-polish: Added Python 3.10+ (backend), TypeScript 5.x (frontend) + FastAPI, SQLAlchemy (backend); React 18.3.1, Tailwind CSS, Lucide Icons (frontend)
 - 005-ui-migration: Added TypeScript 5.x (migration from JavaScript ES6+), React 18.3.1
-- 004-remote-photos-persistence: Added Python 3.10+ (backend), JavaScript ES6+ (frontend)
 
 ### HTML Report Consistency & Tool Improvements (2025-12-25)
   - Created templates/base.html.j2 with shared styling and Chart.js theme
