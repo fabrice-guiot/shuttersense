@@ -240,3 +240,6 @@ frontend/.env.production.local
 # Note: package-lock.json is committed for reproducible builds in CI/CD
 frontend/yarn.lock
 frontend/pnpm-lock.yaml
+# Coverage reports
+frontend/coverage/
+
