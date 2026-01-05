@@ -9,7 +9,8 @@ import type {
   ToolRunRequest,
   Job,
   JobListQueryParams,
-  QueueStatusResponse
+  QueueStatusResponse,
+  RunAllToolsResponse
 } from '@/contracts/api/tools-api'
 
 /**
@@ -61,4 +62,13 @@ export const getJobWebSocketUrl = (jobId: string): string => {
   // Convert HTTP URL to WebSocket URL
   const wsUrl = baseUrl.replace(/^http/, 'ws')
   return `${wsUrl}/tools/ws/jobs/${jobId}`
+}
+
+/**
+ * Run all analysis tools on a collection
+ * Queues photostats and photo_pairing tools for execution
+ */
+export const runAllTools = async (collectionId: number): Promise<RunAllToolsResponse> => {
+  const response = await api.post<RunAllToolsResponse>(`/tools/run-all/${collectionId}`)
+  return response.data
 }

@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from backend.src.db.database import get_db
 from backend.src.schemas.tools import (
     ToolType, JobStatus, ToolRunRequest, JobResponse,
-    QueueStatusResponse, ConflictResponse
+    QueueStatusResponse, ConflictResponse, RunAllToolsResponse
 )
 from backend.src.services.tool_service import ToolService
 from backend.src.services.exceptions import ConflictError, NotFoundError, CollectionNotAccessibleError
@@ -139,6 +139,94 @@ async def run_tool(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+
+@router.post(
+    "/run-all/{collection_id}",
+    response_model=RunAllToolsResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Run all analysis tools on a collection",
+    responses={
+        202: {"description": "Jobs accepted and queued"},
+        404: {"description": "Collection not found"},
+        422: {"description": "Collection not accessible"},
+    }
+)
+async def run_all_tools(
+    collection_id: int,
+    background_tasks: BackgroundTasks,
+    service: ToolService = Depends(get_tool_service)
+) -> RunAllToolsResponse:
+    """
+    Run all available analysis tools on a collection.
+
+    Queues photostats and photo_pairing tools for execution.
+    Pipeline validation is excluded as it requires a pipeline_id.
+
+    For inaccessible collections, returns 422 with a warning message.
+    Tools already running on the collection are skipped.
+
+    Args:
+        collection_id: ID of the collection to analyze
+
+    Returns:
+        List of created jobs and any skipped tools
+    """
+    # Tools to run (excluding pipeline_validation which requires pipeline_id)
+    tools_to_run = [ToolType.PHOTOSTATS, ToolType.PHOTO_PAIRING]
+
+    created_jobs = []
+    skipped_tools = []
+
+    for tool in tools_to_run:
+        try:
+            job = service.run_tool(
+                collection_id=collection_id,
+                tool=tool
+            )
+            created_jobs.append(job)
+            logger.info(f"Job {job.id} queued: {tool.value} on collection {collection_id}")
+        except CollectionNotAccessibleError as e:
+            # If collection is not accessible, fail immediately
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": f"Cannot run tools: {e.message}",
+                    "collection_id": e.collection_id,
+                    "collection_name": e.collection_name
+                }
+            )
+        except ConflictError:
+            # Tool already running - skip it
+            skipped_tools.append(tool.value)
+            logger.info(f"Skipped {tool.value} on collection {collection_id}: already running")
+        except ValueError as e:
+            # Collection not found - fail immediately
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+
+    # Start processing queue in background (only if we created jobs)
+    if created_jobs:
+        background_tasks.add_task(service.process_queue)
+
+    # Build summary message
+    queued_count = len(created_jobs)
+    skipped_count = len(skipped_tools)
+
+    if queued_count == 0:
+        message = f"No jobs queued, {skipped_count} skipped (already running)"
+    elif skipped_count == 0:
+        message = f"{queued_count} analysis job{'s' if queued_count > 1 else ''} queued"
+    else:
+        message = f"{queued_count} job{'s' if queued_count > 1 else ''} queued, {skipped_count} skipped (already running)"
+
+    return RunAllToolsResponse(
+        jobs=created_jobs,
+        skipped=skipped_tools,
+        message=message
+    )
 
 
 # ============================================================================

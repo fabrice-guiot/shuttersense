@@ -113,6 +113,15 @@ export interface QueueStatusResponse {
   current_job_id: string | null
 }
 
+export interface RunAllToolsResponse {
+  /** List of created jobs */
+  jobs: Job[]
+  /** Tools that were skipped (already running) */
+  skipped: string[]
+  /** Summary message */
+  message: string
+}
+
 // ============================================================================
 // API Error Response
 // ============================================================================

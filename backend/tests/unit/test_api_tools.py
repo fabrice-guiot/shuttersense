@@ -127,3 +127,55 @@ class TestQueueStatusEndpoint:
         assert "completed_count" in data
         assert "failed_count" in data
         assert "cancelled_count" in data
+
+
+class TestRunAllToolsEndpoint:
+    """Tests for POST /api/tools/run-all/{collection_id} endpoint."""
+
+    def test_run_all_tools_success(self, test_client, sample_collection):
+        """Test successful run-all tools request queues both tools."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(
+                name="Test Collection",
+                type="local",
+                location=temp_dir
+            )
+
+            response = test_client.post(f"/api/tools/run-all/{collection.id}")
+
+            assert response.status_code == 202
+            data = response.json()
+            assert len(data["jobs"]) == 2
+            assert data["skipped"] == []
+            assert "2 analysis jobs queued" in data["message"]
+
+            # Verify both tools are queued
+            tools = [job["tool"] for job in data["jobs"]]
+            assert "photostats" in tools
+            assert "photo_pairing" in tools
+
+    def test_run_all_tools_inaccessible_collection(self, test_client, sample_collection, test_db_session):
+        """Test run-all on inaccessible collection returns 422."""
+        # Create collection with non-existent path and mark it as inaccessible
+        collection = sample_collection(
+            name="Inaccessible",
+            type="local",
+            location="/nonexistent/path/to/photos"
+        )
+        # Update the collection to be inaccessible
+        collection.is_accessible = False
+        test_db_session.commit()
+
+        response = test_client.post(f"/api/tools/run-all/{collection.id}")
+
+        assert response.status_code == 422
+        data = response.json()
+        assert "Cannot run tools" in data["detail"]["message"]
+        assert data["detail"]["collection_id"] == collection.id
+
+    def test_run_all_tools_nonexistent_collection(self, test_client):
+        """Test run-all on non-existent collection returns 400."""
+        response = test_client.post("/api/tools/run-all/99999")
+
+        assert response.status_code == 400
+        assert "not found" in response.json()["detail"].lower()

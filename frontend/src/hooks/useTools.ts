@@ -15,7 +15,8 @@ import type {
   JobListQueryParams,
   QueueStatusResponse,
   ProgressData,
-  WebSocketMessage
+  WebSocketMessage,
+  RunAllToolsResponse
 } from '@/contracts/api/tools-api'
 
 // ============================================================================
@@ -33,6 +34,7 @@ interface UseToolsReturn {
   error: string | null
   fetchJobs: (params?: JobListQueryParams) => Promise<Job[]>
   runTool: (request: ToolRunRequest) => Promise<Job>
+  runAllTools: (collectionId: number) => Promise<RunAllToolsResponse>
   cancelJob: (jobId: string) => Promise<Job>
   getJob: (jobId: string) => Promise<Job>
 }
@@ -84,6 +86,42 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
       toast.error('Failed to start tool', {
         description: errorMessage
       })
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  /**
+   * Run all analysis tools on a collection
+   */
+  const runAllTools = useCallback(async (collectionId: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await toolsService.runAllTools(collectionId)
+      // Add new jobs to state
+      if (result.jobs.length > 0) {
+        setJobs(prev => [...result.jobs, ...prev])
+      }
+      toast.success('Analysis started', {
+        description: result.message
+      })
+      return result
+    } catch (err: any) {
+      // Handle inaccessible collection error (422)
+      const detail = err.response?.data?.detail
+      if (detail?.message) {
+        toast.warning('Cannot run analysis', {
+          description: detail.message
+        })
+      } else {
+        const errorMessage = err.userMessage || 'Failed to start analysis'
+        setError(errorMessage)
+        toast.error('Failed to start analysis', {
+          description: errorMessage
+        })
+      }
       throw err
     } finally {
       setLoading(false)
@@ -161,6 +199,7 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     error,
     fetchJobs,
     runTool,
+    runAllTools,
     cancelJob,
     getJob
   }

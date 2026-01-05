@@ -184,3 +184,34 @@ class ConflictResponse(BaseModel):
             }
         }
     }
+
+
+class RunAllToolsResponse(BaseModel):
+    """
+    Response for running all tools on a collection.
+
+    Returns the list of created jobs and any tools that were skipped
+    (e.g., due to already running).
+    """
+    jobs: list[JobResponse] = Field(..., description="List of created jobs")
+    skipped: list[str] = Field(default_factory=list, description="Tools skipped (already running)")
+    message: str = Field(..., description="Summary message")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "jobs": [
+                    {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "collection_id": 1,
+                        "tool": "photostats",
+                        "status": "queued",
+                        "position": 1,
+                        "created_at": "2024-01-15T10:30:00Z"
+                    }
+                ],
+                "skipped": ["photo_pairing"],
+                "message": "1 job queued, 1 skipped (already running)"
+            }
+        }
+    }

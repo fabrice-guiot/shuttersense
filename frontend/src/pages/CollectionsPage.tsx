@@ -10,6 +10,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useCollections, useCollectionStats } from '../hooks/useCollections'
 import { useConnectors } from '../hooks/useConnectors'
+import { useTools } from '../hooks/useTools'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { CollectionList } from '../components/collections/CollectionList'
 import { FiltersSection } from '../components/collections/FiltersSection'
@@ -28,9 +29,11 @@ export default function CollectionsPage() {
     createCollection,
     updateCollection,
     deleteCollection,
-    testCollection,
-    refreshCollection
+    testCollection
   } = useCollections()
+
+  // Tools hook for running analysis on collections
+  const { runAllTools } = useTools({ autoFetch: false })
 
   // Filter UI state (for select components)
   const [selectedState, setSelectedState] = useState<CollectionState | 'ALL' | ''>('ALL')
@@ -115,8 +118,8 @@ export default function CollectionsPage() {
   }
 
   const handleRefresh = (collection: Collection) => {
-    refreshCollection(collection.id, false).catch(() => {
-      // Error handled by hook
+    runAllTools(collection.id).catch(() => {
+      // Error handled by hook with toast notifications
     })
   }
 
