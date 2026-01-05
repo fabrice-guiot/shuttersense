@@ -544,7 +544,7 @@ class TestFileListingFactory:
         collection.name = "Test S3"
 
         connector = Mock()
-        connector.credentials_encrypted = {
+        connector.credentials = {
             "aws_access_key_id": "key",
             "aws_secret_access_key": "secret"
         }
@@ -566,7 +566,7 @@ class TestFileListingFactory:
         collection.name = "Test GCS"
 
         connector = Mock()
-        connector.credentials_encrypted = {
+        connector.credentials = {
             "service_account_json": '{"type": "service_account"}'
         }
 
@@ -587,7 +587,7 @@ class TestFileListingFactory:
         collection.name = "Test SMB"
 
         connector = Mock()
-        connector.credentials_encrypted = {
+        connector.credentials = {
             "server": "nas",
             "share": "photos",
             "username": "user",
@@ -610,7 +610,7 @@ class TestFileListingFactory:
         collection.name = "Test FTP"
 
         connector = Mock()
-        connector.credentials_encrypted = {}
+        connector.credentials = {}
 
         db = Mock()
         db.query.return_value.filter.return_value.first.return_value = connector
@@ -628,7 +628,7 @@ class TestFileListingFactory:
         collection.name = "Test S3"
 
         connector = Mock()
-        connector.credentials_encrypted = "encrypted_data"
+        connector.credentials = "encrypted_data"
 
         # Mock encryptor
         encryptor = Mock()

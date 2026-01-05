@@ -725,11 +725,11 @@ class FileListingFactory:
             )
 
         # Decrypt credentials
-        if encryptor and connector.credentials_encrypted:
-            credentials = encryptor.decrypt(connector.credentials_encrypted)
+        if encryptor and connector.credentials:
+            credentials = encryptor.decrypt(connector.credentials)
         else:
             # For testing without encryption
-            credentials = connector.credentials_encrypted or {}
+            credentials = connector.credentials or {}
 
         if collection_type == "s3":
             return S3FileListingAdapter(credentials, collection.location)
