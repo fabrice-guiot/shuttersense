@@ -632,7 +632,7 @@ class TestFileListingFactory:
 
         # Mock encryptor
         encryptor = Mock()
-        encryptor.decrypt.return_value = {
+        encryptor.decrypt_dict.return_value = {
             "aws_access_key_id": "decrypted_key",
             "aws_secret_access_key": "decrypted_secret"
         }
@@ -643,5 +643,5 @@ class TestFileListingFactory:
         adapter = FileListingFactory.create_adapter(collection, db, encryptor)
 
         # Verify encryptor was called
-        encryptor.decrypt.assert_called_once_with("encrypted_data")
+        encryptor.decrypt_dict.assert_called_once_with("encrypted_data")
         assert isinstance(adapter, S3FileListingAdapter)

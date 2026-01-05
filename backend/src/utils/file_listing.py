@@ -726,10 +726,10 @@ class FileListingFactory:
 
         # Decrypt credentials
         if encryptor and connector.credentials:
-            credentials = encryptor.decrypt(connector.credentials)
+            credentials = encryptor.decrypt_dict(connector.credentials)
         else:
-            # For testing without encryption
-            credentials = connector.credentials or {}
+            # For testing without encryption (credentials already a dict)
+            credentials = connector.credentials if isinstance(connector.credentials, dict) else {}
 
         if collection_type == "s3":
             return S3FileListingAdapter(credentials, collection.location)
