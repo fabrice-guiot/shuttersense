@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
 import * as connectorService from '../services/connectors'
 import type {
   Connector,
@@ -58,10 +59,14 @@ export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
     try {
       const newConnector = await connectorService.createConnector(connectorData)
       setConnectors(prev => [...prev, newConnector])
+      toast.success('Connector created successfully')
       return newConnector
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to create connector'
       setError(errorMessage)
+      toast.error('Failed to create connector', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -79,10 +84,14 @@ export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
       setConnectors(prev =>
         prev.map(c => c.id === id ? updated : c)
       )
+      toast.success('Connector updated successfully')
       return updated
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to update connector'
       setError(errorMessage)
+      toast.error('Failed to update connector', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -98,9 +107,13 @@ export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
     try {
       await connectorService.deleteConnector(id)
       setConnectors(prev => prev.filter(c => c.id !== id))
+      toast.success('Connector deleted successfully')
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete connector'
       setError(errorMessage)
+      toast.error('Failed to delete connector', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)

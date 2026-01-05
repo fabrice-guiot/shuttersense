@@ -132,20 +132,20 @@
 
 #### Backend Implementation for Remote Collection Support
 
-- [ ] T068a [US1] Create FileListingAdapter abstract class in backend/src/utils/file_listing.py with list_files() interface
-- [ ] T068b [P] [US1] Create LocalFileListingAdapter in backend/src/utils/file_listing.py using pathlib
-- [ ] T068c [P] [US1] Create S3FileListingAdapter in backend/src/utils/file_listing.py using S3Adapter
-- [ ] T068d [P] [US1] Create GCSFileListingAdapter in backend/src/utils/file_listing.py using GCSAdapter
-- [ ] T068e [P] [US1] Create SMBFileListingAdapter in backend/src/utils/file_listing.py using SMBAdapter
-- [ ] T068f [US1] Create FileListingFactory in backend/src/utils/file_listing.py to select adapter based on collection type
-- [ ] T068g [US1] Update _run_photostats in backend/src/services/tool_service.py to use FileListingAdapter instead of local scan_folder
-- [ ] T068h [US1] Update _run_photo_pairing in backend/src/services/tool_service.py to use FileListingAdapter instead of local scan_folder
-- [ ] T068i [P] [US1] Unit test for LocalFileListingAdapter in backend/tests/unit/test_file_listing.py
-- [ ] T068j [P] [US1] Unit test for S3FileListingAdapter in backend/tests/unit/test_file_listing.py
-- [ ] T068k [P] [US1] Unit test for GCSFileListingAdapter in backend/tests/unit/test_file_listing.py
-- [ ] T068l [P] [US1] Unit test for SMBFileListingAdapter in backend/tests/unit/test_file_listing.py
-- [ ] T068m [US1] Integration test for PhotoStats on S3 collection in backend/tests/integration/test_tool_execution_flow.py
-- [ ] T068n [US1] Integration test for Photo Pairing on SMB collection in backend/tests/integration/test_tool_execution_flow.py
+- [x] T068a [US1] Create FileListingAdapter abstract class in backend/src/utils/file_listing.py with list_files() interface
+- [x] T068b [P] [US1] Create LocalFileListingAdapter in backend/src/utils/file_listing.py using pathlib
+- [x] T068c [P] [US1] Create S3FileListingAdapter in backend/src/utils/file_listing.py using S3Adapter
+- [x] T068d [P] [US1] Create GCSFileListingAdapter in backend/src/utils/file_listing.py using GCSAdapter
+- [x] T068e [P] [US1] Create SMBFileListingAdapter in backend/src/utils/file_listing.py using SMBAdapter
+- [x] T068f [US1] Create FileListingFactory in backend/src/utils/file_listing.py to select adapter based on collection type
+- [x] T068g [US1] Update _run_photostats in backend/src/services/tool_service.py to use FileListingAdapter instead of local scan_folder
+- [x] T068h [US1] Update _run_photo_pairing in backend/src/services/tool_service.py to use FileListingAdapter instead of local scan_folder
+- [x] T068i [P] [US1] Unit test for LocalFileListingAdapter in backend/tests/unit/test_file_listing.py
+- [x] T068j [P] [US1] Unit test for S3FileListingAdapter in backend/tests/unit/test_file_listing.py
+- [x] T068k [P] [US1] Unit test for GCSFileListingAdapter in backend/tests/unit/test_file_listing.py
+- [x] T068l [P] [US1] Unit test for SMBFileListingAdapter in backend/tests/unit/test_file_listing.py
+- [x] T068m [US1] Integration test for PhotoStats on S3 collection in backend/tests/integration/test_tool_execution_flow.py
+- [x] T068n [US1] Integration test for Photo Pairing on SMB collection in backend/tests/integration/test_tool_execution_flow.py
 
 **Checkpoint**: User Story 1 complete. Users can run tools from web UI on both local and remote collections, see real-time progress, view stored results, download HTML reports. TopHeader KPIs show real collection statistics.
 

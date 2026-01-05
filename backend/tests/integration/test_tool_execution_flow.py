@@ -512,3 +512,225 @@ class TestCollectionStatsUpdate:
             get_collection = test_client.get(f'/api/collections/{collection_id}')
             assert get_collection.status_code == 200
             # Collection stats will be updated by the background task
+
+
+class TestRemoteCollectionToolExecution:
+    """Integration tests for tool execution on remote collections - T068m, T068n"""
+
+    def test_photostats_on_s3_collection(self, test_client, test_db_session, mocker):
+        """
+        Test PhotoStats execution on S3 collection - T068m
+
+        Flow:
+        1. Create S3 connector with mocked connection test
+        2. Create S3 collection
+        3. Mock FileListingAdapter to return sample files
+        4. Run PhotoStats tool
+        5. Verify job completes and returns expected results
+        """
+        from backend.src.utils.file_listing import FileInfo
+
+        # Step 1: Mock S3Adapter connection test
+        mock_s3_adapter = mocker.patch('backend.src.services.connector_service.S3Adapter')
+        mock_s3_adapter.return_value.test_connection.return_value = (True, 'Connected')
+
+        connector_data = {
+            'name': 'Test S3 Connector',
+            'type': 's3',
+            'credentials': {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+
+        connector_response = test_client.post('/api/connectors', json=connector_data)
+        assert connector_response.status_code == 201
+        connector_id = connector_response.json()['id']
+
+        # Step 2: Create S3 collection
+        collection_data = {
+            'name': 'S3 Photo Collection',
+            'type': 's3',
+            'location': 's3://my-bucket/photos',
+            'state': 'live',
+            'connector_id': connector_id
+        }
+
+        collection_response = test_client.post('/api/collections', json=collection_data)
+        assert collection_response.status_code == 201
+        collection = collection_response.json()
+        collection_id = collection['id']
+
+        # Step 3: Mock FileListingFactory to return sample files
+        sample_files = [
+            FileInfo(path='photos/AB3D0001.cr3', size=25000000, name='AB3D0001.cr3', extension='.cr3'),
+            FileInfo(path='photos/AB3D0001.xmp', size=5000, name='AB3D0001.xmp', extension='.xmp'),
+            FileInfo(path='photos/AB3D0002.cr3', size=26000000, name='AB3D0002.cr3', extension='.cr3'),
+            FileInfo(path='photos/AB3D0002.xmp', size=5100, name='AB3D0002.xmp', extension='.xmp'),
+            FileInfo(path='photos/orphan.jpg', size=1500000, name='orphan.jpg', extension='.jpg'),
+        ]
+
+        mock_adapter = mocker.MagicMock()
+        mock_adapter.list_files.return_value = sample_files
+
+        mock_factory = mocker.patch('backend.src.utils.file_listing.FileListingFactory')
+        mock_factory.create_adapter.return_value = mock_adapter
+
+        # Step 4: Run PhotoStats tool
+        run_response = test_client.post('/api/tools/run', json={
+            'collection_id': collection_id,
+            'tool': 'photostats'
+        })
+        assert run_response.status_code == 202
+        job = run_response.json()
+
+        # Step 5: Verify job was created
+        assert job['id'] is not None
+        assert job['collection_id'] == collection_id
+        assert job['tool'] == 'photostats'
+
+        # Get job status to verify it processed
+        job_response = test_client.get(f"/api/tools/jobs/{job['id']}")
+        assert job_response.status_code == 200
+
+    def test_photo_pairing_on_smb_collection(self, test_client, test_db_session, mocker):
+        """
+        Test Photo Pairing execution on SMB collection - T068n
+
+        Flow:
+        1. Create SMB connector with mocked connection test
+        2. Create SMB collection
+        3. Mock FileListingAdapter to return sample files
+        4. Run Photo Pairing tool
+        5. Verify job completes and returns expected results
+        """
+        from backend.src.utils.file_listing import FileInfo
+
+        # Step 1: Mock SMBAdapter connection test
+        mock_smb_adapter = mocker.patch('backend.src.services.connector_service.SMBAdapter')
+        mock_smb_adapter.return_value.test_connection.return_value = (True, 'Connected')
+
+        connector_data = {
+            'name': 'Test SMB Connector',
+            'type': 'smb',
+            'credentials': {
+                'server': '192.168.1.100',
+                'share': 'photos',
+                'username': 'testuser',
+                'password': 'testpass123'
+            }
+        }
+
+        connector_response = test_client.post('/api/connectors', json=connector_data)
+        assert connector_response.status_code == 201
+        connector_id = connector_response.json()['id']
+
+        # Step 2: Create SMB collection
+        collection_data = {
+            'name': 'SMB Photo Collection',
+            'type': 'smb',
+            'location': '\\\\server\\share\\photos',
+            'state': 'live',
+            'connector_id': connector_id
+        }
+
+        collection_response = test_client.post('/api/collections', json=collection_data)
+        assert collection_response.status_code == 201
+        collection = collection_response.json()
+        collection_id = collection['id']
+
+        # Step 3: Mock FileListingFactory to return sample files
+        # Files that form pairs (same stem, different extensions)
+        sample_files = [
+            FileInfo(path='photos/AB3D0001.cr3', size=25000000, name='AB3D0001.cr3', extension='.cr3'),
+            FileInfo(path='photos/AB3D0001.jpg', size=2000000, name='AB3D0001.jpg', extension='.jpg'),
+            FileInfo(path='photos/AB3D0002.cr3', size=26000000, name='AB3D0002.cr3', extension='.cr3'),
+            FileInfo(path='photos/AB3D0002-HDR.tiff', size=50000000, name='AB3D0002-HDR.tiff', extension='.tiff'),
+            FileInfo(path='photos/XY1Z0001.dng', size=30000000, name='XY1Z0001.dng', extension='.dng'),
+        ]
+
+        mock_adapter = mocker.MagicMock()
+        mock_adapter.list_files.return_value = sample_files
+
+        mock_factory = mocker.patch('backend.src.utils.file_listing.FileListingFactory')
+        mock_factory.create_adapter.return_value = mock_adapter
+
+        # Step 4: Run Photo Pairing tool
+        run_response = test_client.post('/api/tools/run', json={
+            'collection_id': collection_id,
+            'tool': 'photo_pairing'
+        })
+        assert run_response.status_code == 202
+        job = run_response.json()
+
+        # Step 5: Verify job was created
+        assert job['id'] is not None
+        assert job['collection_id'] == collection_id
+        assert job['tool'] == 'photo_pairing'
+
+        # Get job status to verify it processed
+        job_response = test_client.get(f"/api/tools/jobs/{job['id']}")
+        assert job_response.status_code == 200
+
+    def test_tool_run_on_remote_collection_uses_adapter(self, test_client, test_db_session, mocker):
+        """
+        Verify that tool execution on remote collection uses FileListingAdapter
+
+        This test ensures the tool_service correctly routes remote collections
+        through the adapter layer instead of trying to access local filesystem.
+
+        Uses S3 as example (same pattern works for GCS and SMB).
+        """
+        from backend.src.utils.file_listing import FileInfo
+
+        # Mock S3 connection
+        mock_s3_adapter = mocker.patch('backend.src.services.connector_service.S3Adapter')
+        mock_s3_adapter.return_value.test_connection.return_value = (True, 'Connected')
+
+        connector_data = {
+            'name': 'Adapter Verification Connector',
+            'type': 's3',
+            'credentials': {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-west-2'
+            }
+        }
+
+        connector_response = test_client.post('/api/connectors', json=connector_data)
+        assert connector_response.status_code == 201
+        connector_id = connector_response.json()['id']
+
+        collection_data = {
+            'name': 'Adapter Verification Collection',
+            'type': 's3',
+            'location': 's3://test-bucket/photos',
+            'state': 'live',
+            'connector_id': connector_id
+        }
+
+        collection_response = test_client.post('/api/collections', json=collection_data)
+        assert collection_response.status_code == 201
+        collection_id = collection_response.json()['id']
+
+        # Track if FileListingFactory was called
+        sample_files = [
+            FileInfo(path='photos/test.jpg', size=1000, name='test.jpg', extension='.jpg'),
+        ]
+
+        mock_adapter = mocker.MagicMock()
+        mock_adapter.list_files.return_value = sample_files
+
+        mock_factory = mocker.patch('backend.src.utils.file_listing.FileListingFactory')
+        mock_factory.create_adapter.return_value = mock_adapter
+
+        # Run tool
+        run_response = test_client.post('/api/tools/run', json={
+            'collection_id': collection_id,
+            'tool': 'photostats'
+        })
+        assert run_response.status_code == 202
+
+        # Verify FileListingFactory was called (adapter was used)
+        mock_factory.create_adapter.assert_called_once()

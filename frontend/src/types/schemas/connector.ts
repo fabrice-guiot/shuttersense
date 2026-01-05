@@ -15,11 +15,11 @@ import type { ConnectorType } from '@/contracts/api/connector-api'
  * S3 Credentials Schema
  */
 export const s3CredentialsSchema = z.object({
-  access_key_id: z
+  aws_access_key_id: z
     .string()
     .min(1, 'Access Key ID is required')
     .max(128, 'Access Key ID is too long'),
-  secret_access_key: z
+  aws_secret_access_key: z
     .string()
     .min(1, 'Secret Access Key is required')
     .max(128, 'Secret Access Key is too long'),

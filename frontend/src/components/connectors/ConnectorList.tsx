@@ -59,8 +59,15 @@ const CONNECTOR_TYPE_LABELS: Record<ConnectorType, string> = {
   smb: 'SMB/CIFS'
 }
 
+// Connector types still in beta/QA - remove from this set once QA'd
+const BETA_CONNECTOR_TYPES: Set<ConnectorType> = new Set(['s3', 'gcs', 'smb'])
+
 function getConnectorTypeLabel(type: ConnectorType): string {
   return CONNECTOR_TYPE_LABELS[type] || type
+}
+
+function isBetaConnectorType(type: ConnectorType): boolean {
+  return BETA_CONNECTOR_TYPES.has(type)
 }
 
 function formatDate(dateString: string | null | undefined): string {
@@ -157,9 +164,36 @@ export function ConnectorList({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Types</SelectItem>
-                <SelectItem value="s3">Amazon S3</SelectItem>
-                <SelectItem value="gcs">Google Cloud Storage</SelectItem>
-                <SelectItem value="smb">SMB/CIFS</SelectItem>
+                <SelectItem value="s3">
+                  <span className="flex items-center gap-2">
+                    Amazon S3
+                    {isBetaConnectorType('s3') && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        Beta
+                      </span>
+                    )}
+                  </span>
+                </SelectItem>
+                <SelectItem value="gcs">
+                  <span className="flex items-center gap-2">
+                    Google Cloud Storage
+                    {isBetaConnectorType('gcs') && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        Beta
+                      </span>
+                    )}
+                  </span>
+                </SelectItem>
+                <SelectItem value="smb">
+                  <span className="flex items-center gap-2">
+                    SMB/CIFS
+                    {isBetaConnectorType('smb') && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        Beta
+                      </span>
+                    )}
+                  </span>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -204,9 +238,16 @@ export function ConnectorList({
                   <TableRow key={connector.id}>
                     <TableCell className="font-medium">{connector.name}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">
-                        {getConnectorTypeLabel(connector.type)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                          {getConnectorTypeLabel(connector.type)}
+                        </Badge>
+                        {isBetaConnectorType(connector.type) && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            Beta
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={connector.is_active ? 'default' : 'outline'}>

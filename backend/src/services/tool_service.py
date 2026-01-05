@@ -408,6 +408,10 @@ class ToolService:
         """
         Execute PhotoStats tool.
 
+        Supports both local and remote collections using FileListingAdapter.
+        For local collections, uses the native PhotoStats tool.
+        For remote collections, uses file listing adapter and processes files.
+
         Args:
             job: Job being executed
             db: Database session for this job execution
@@ -417,6 +421,7 @@ class ToolService:
         """
         import tempfile
         import os
+        from collections import defaultdict
 
         collection = db.query(Collection).filter(
             Collection.id == job.collection_id
@@ -426,40 +431,70 @@ class ToolService:
         job.progress = {"stage": "initializing", "percentage": 0}
         await self._broadcast_progress(job)
 
-        # Import PhotoStats - it takes folder_path as first argument
-        from photo_stats import PhotoStats
+        # Check if this is a local or remote collection
+        is_local = collection.type.value.lower() == "local"
 
-        # PhotoStats constructor: __init__(self, folder_path, config_path=None)
-        stats_tool = PhotoStats(collection.location)
+        if is_local:
+            # Use native PhotoStats tool for local collections
+            from photo_stats import PhotoStats
+            stats_tool = PhotoStats(collection.location)
 
-        # Scanning phase
-        job.progress = {"stage": "scanning", "percentage": 10}
-        await self._broadcast_progress(job)
+            job.progress = {"stage": "scanning", "percentage": 10}
+            await self._broadcast_progress(job)
 
-        # Run analysis - scan_folder() returns self.stats dict
-        job.progress = {"stage": "analyzing", "percentage": 30}
-        await self._broadcast_progress(job)
+            job.progress = {"stage": "analyzing", "percentage": 30}
+            await self._broadcast_progress(job)
 
-        results = stats_tool.scan_folder()
+            results = stats_tool.scan_folder()
 
-        job.progress = {"stage": "generating_report", "percentage": 80}
-        await self._broadcast_progress(job)
+            job.progress = {"stage": "generating_report", "percentage": 80}
+            await self._broadcast_progress(job)
 
-        # Generate HTML report to temp file, then read content
-        # generate_html_report(output_path=None) writes to file and returns Path
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-            temp_path = f.name
+            # Generate HTML report
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+                temp_path = f.name
 
-        try:
-            report_path = stats_tool.generate_html_report(temp_path)
-            if report_path and report_path.exists():
-                report_html = report_path.read_text()
-            else:
-                report_html = None
-        finally:
-            # Clean up temp file
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
+            try:
+                report_path = stats_tool.generate_html_report(temp_path)
+                if report_path and report_path.exists():
+                    report_html = report_path.read_text()
+                else:
+                    report_html = None
+            finally:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+
+        else:
+            # Use FileListingAdapter for remote collections
+            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
+            from utils.config_manager import PhotoAdminConfig
+
+            config = PhotoAdminConfig()
+
+            # Get encryptor from app state if available
+            encryptor = getattr(self, '_encryptor', None)
+
+            job.progress = {"stage": "scanning", "percentage": 10}
+            await self._broadcast_progress(job)
+
+            # Create adapter and list files
+            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
+
+            # Get all photo and metadata files
+            all_extensions = config.photo_extensions | config.metadata_extensions
+            file_infos = adapter.list_files(extensions=all_extensions)
+
+            job.progress = {"stage": "analyzing", "percentage": 30}
+            await self._broadcast_progress(job)
+
+            # Process files similar to PhotoStats.scan_folder()
+            results = self._process_photostats_files(file_infos, config)
+
+            job.progress = {"stage": "generating_report", "percentage": 80}
+            await self._broadcast_progress(job)
+
+            # Generate HTML report using template
+            report_html = self._generate_photostats_report(results, collection.location)
 
         job.progress = {
             "stage": "completed",
@@ -477,12 +512,129 @@ class ToolService:
             "issues_found": len(results.get("orphaned_images", [])) + len(results.get("orphaned_xmp", []))
         }
 
+    def _process_photostats_files(self, file_infos: List, config) -> Dict[str, Any]:
+        """
+        Process file list to generate PhotoStats results.
+
+        Replicates PhotoStats.scan_folder() logic for remote files.
+
+        Args:
+            file_infos: List of FileInfo objects
+            config: PhotoAdminConfig with extensions configuration
+
+        Returns:
+            Results dictionary matching PhotoStats output format
+        """
+        from collections import defaultdict
+
+        stats = {
+            'total_files': 0,
+            'total_size': 0,
+            'file_counts': defaultdict(int),
+            'file_sizes': defaultdict(list),
+            'orphaned_images': [],
+            'orphaned_xmp': [],
+            'paired_files': [],
+            'scan_time': 0
+        }
+
+        # Group files by extension and base name
+        all_files = {}
+        for fi in file_infos:
+            ext = fi.extension.lower()
+            if ext in config.photo_extensions or ext in config.metadata_extensions:
+                all_files[fi.path] = {
+                    'extension': ext,
+                    'size': fi.size,
+                    'name': fi.name
+                }
+                stats['file_counts'][ext] += 1
+                stats['total_files'] += 1
+                stats['file_sizes'][ext].append(fi.size)
+                stats['total_size'] += fi.size
+
+        # Analyze pairing (XMP to image files)
+        file_groups = defaultdict(list)
+        for path, info in all_files.items():
+            # Get base name without extension
+            base_name = info['name'].rsplit('.', 1)[0] if '.' in info['name'] else info['name']
+            # Get directory path
+            dir_path = path.rsplit('/', 1)[0] if '/' in path else ''
+            key = f"{dir_path}/{base_name}" if dir_path else base_name
+            file_groups[key].append((path, info['extension']))
+
+        # Check for orphans
+        for base_key, files in file_groups.items():
+            extensions = {ext for _, ext in files}
+
+            # Check for images that require sidecar but don't have one
+            has_xmp = '.xmp' in extensions
+            for path, ext in files:
+                if ext in config.require_sidecar and not has_xmp:
+                    stats['orphaned_images'].append(path)
+                elif ext == '.xmp':
+                    # Check if XMP has corresponding image
+                    image_exts = extensions - {'.xmp'}
+                    if not image_exts:
+                        stats['orphaned_xmp'].append(path)
+                    else:
+                        stats['paired_files'].append(path)
+
+        return stats
+
+    def _generate_photostats_report(self, results: Dict[str, Any], location: str) -> str:
+        """
+        Generate HTML report for PhotoStats results.
+
+        Uses Jinja2 template to generate report matching CLI tool format.
+
+        Args:
+            results: PhotoStats results dictionary
+            location: Collection location for report header
+
+        Returns:
+            HTML report string
+        """
+        from jinja2 import Environment, FileSystemLoader
+        from pathlib import Path
+        from datetime import datetime
+
+        # Load template
+        template_dir = Path(__file__).parent.parent.parent.parent / "templates"
+        if template_dir.exists():
+            env = Environment(loader=FileSystemLoader(str(template_dir)))
+            try:
+                template = env.get_template("photostats_report.html.j2")
+                return template.render(
+                    stats=results,
+                    folder_path=location,
+                    scan_time=results.get('scan_time', 0),
+                    generation_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+            except Exception as e:
+                logger.warning(f"Failed to render template: {e}")
+
+        # Fallback: simple HTML report
+        return f"""
+        <html>
+        <head><title>PhotoStats Report</title></head>
+        <body>
+            <h1>PhotoStats Report</h1>
+            <p>Location: {location}</p>
+            <p>Total Files: {results.get('total_files', 0)}</p>
+            <p>Total Size: {results.get('total_size', 0)} bytes</p>
+            <p>Orphaned Images: {len(results.get('orphaned_images', []))}</p>
+            <p>Orphaned XMP: {len(results.get('orphaned_xmp', []))}</p>
+        </body>
+        </html>
+        """
+
     async def _run_photo_pairing(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
         """
         Execute Photo Pairing tool.
 
-        Photo Pairing is a function-based module (not a class).
-        Key functions: scan_folder, build_imagegroups, calculate_analytics, generate_html_report
+        Supports both local and remote collections using FileListingAdapter.
+        Photo Pairing analyzes filename patterns and groups files.
 
         Args:
             job: Job being executed
@@ -500,25 +652,43 @@ class ToolService:
             Collection.id == job.collection_id
         ).first()
 
-        folder_path = Path(collection.location)
-
         job.progress = {"stage": "initializing", "percentage": 0}
         await self._broadcast_progress(job)
 
         # Import photo_pairing functions and config
         from photo_pairing import (
-            scan_folder, build_imagegroups, calculate_analytics, generate_html_report
+            build_imagegroups, calculate_analytics, generate_html_report
         )
         from utils.config_manager import PhotoAdminConfig
 
         config = PhotoAdminConfig()
         scan_start = time.time()
 
-        # Scanning phase
+        # Check if this is a local or remote collection
+        is_local = collection.type.value.lower() == "local"
+
         job.progress = {"stage": "scanning", "percentage": 10}
         await self._broadcast_progress(job)
 
-        photo_files = list(scan_folder(folder_path, config.photo_extensions))
+        if is_local:
+            # Use native scan_folder for local collections
+            from photo_pairing import scan_folder
+            folder_path = Path(collection.location)
+            photo_files = list(scan_folder(folder_path, config.photo_extensions))
+        else:
+            # Use FileListingAdapter for remote collections
+            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
+
+            # Get encryptor from app state if available
+            encryptor = getattr(self, '_encryptor', None)
+
+            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
+            file_infos = adapter.list_files(extensions=config.photo_extensions)
+
+            # Convert FileInfo to VirtualPath for use with build_imagegroups
+            # Use empty string as base so relative_to works correctly
+            photo_files = [fi.to_virtual_path("") for fi in file_infos]
+            folder_path = VirtualPath("", 0, "")
 
         job.progress = {"stage": "analyzing", "percentage": 30}
         await self._broadcast_progress(job)
@@ -543,19 +713,20 @@ class ToolService:
         job.progress = {"stage": "generating_report", "percentage": 80}
         await self._broadcast_progress(job)
 
-        # Generate HTML report to temp file, then read content
+        # Generate HTML report
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
             temp_path = f.name
 
         try:
-            generate_html_report(analytics, invalid_files, temp_path, folder_path, scan_duration)
+            # For remote collections, use collection.location as display path
+            display_path = folder_path if is_local else Path(collection.location)
+            generate_html_report(analytics, invalid_files, temp_path, display_path, scan_duration)
             if os.path.exists(temp_path):
                 with open(temp_path, 'r') as f:
                     report_html = f.read()
             else:
                 report_html = None
         finally:
-            # Clean up temp file
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
@@ -572,10 +743,6 @@ class ToolService:
         }
         await self._broadcast_progress(job)
 
-        # Return results with rich camera_usage format:
-        # - group_count: number of image groups
-        # - image_count: total images in groups
-        # - camera_usage: detailed camera info including name, image_count, group_count
         return {
             "results": {
                 "group_count": len(imagegroups),

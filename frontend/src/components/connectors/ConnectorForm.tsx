@@ -48,12 +48,19 @@ export interface ConnectorFormProps {
 // Helper Functions
 // ============================================================================
 
+// Connector types still in beta/QA - remove from this set once QA'd
+const BETA_CONNECTOR_TYPES: Set<ConnectorType> = new Set(['s3', 'gcs', 'smb'])
+
+function isBetaConnectorType(type: ConnectorType): boolean {
+  return BETA_CONNECTOR_TYPES.has(type)
+}
+
 function getDefaultCredentials(type: ConnectorType) {
   switch (type) {
     case 's3':
       return {
-        access_key_id: '',
-        secret_access_key: '',
+        aws_access_key_id: '',
+        aws_secret_access_key: '',
         region: '',
         bucket: ''
       }
@@ -185,9 +192,36 @@ export default function ConnectorForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="s3">Amazon S3</SelectItem>
-                    <SelectItem value="gcs">Google Cloud Storage</SelectItem>
-                    <SelectItem value="smb">SMB/CIFS</SelectItem>
+                    <SelectItem value="s3">
+                      <span className="flex items-center gap-2">
+                        Amazon S3
+                        {isBetaConnectorType('s3') && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            Beta
+                          </span>
+                        )}
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="gcs">
+                      <span className="flex items-center gap-2">
+                        Google Cloud Storage
+                        {isBetaConnectorType('gcs') && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            Beta
+                          </span>
+                        )}
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="smb">
+                      <span className="flex items-center gap-2">
+                        SMB/CIFS
+                        {isBetaConnectorType('smb') && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            Beta
+                          </span>
+                        )}
+                      </span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 {isEdit && (
@@ -231,7 +265,7 @@ export default function ConnectorForm({
               <>
                 <FormField
                   control={form.control}
-                  name="credentials.access_key_id"
+                  name="credentials.aws_access_key_id"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>AWS Access Key ID</FormLabel>
@@ -245,7 +279,7 @@ export default function ConnectorForm({
 
                 <FormField
                   control={form.control}
-                  name="credentials.secret_access_key"
+                  name="credentials.aws_secret_access_key"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>AWS Secret Access Key</FormLabel>

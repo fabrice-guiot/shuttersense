@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import * as toolsService from '../services/tools'
 import type {
   Job,
@@ -73,10 +74,16 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     try {
       const job = await toolsService.runTool(request)
       setJobs(prev => [job, ...prev])
+      toast.success('Tool started successfully', {
+        description: `Job ${job.id.slice(0, 8)} is now running`
+      })
       return job
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to start tool'
       setError(errorMessage)
+      toast.error('Failed to start tool', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -92,10 +99,14 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     try {
       const cancelledJob = await toolsService.cancelJob(jobId)
       setJobs(prev => prev.map(j => j.id === jobId ? cancelledJob : j))
+      toast.success('Job cancelled')
       return cancelledJob
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to cancel job'
       setError(errorMessage)
+      toast.error('Failed to cancel job', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)

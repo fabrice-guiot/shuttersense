@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import * as collectionService from '../services/collections'
 import type {
   Collection,
@@ -93,10 +94,14 @@ export const useCollections = (
     try {
       const newCollection = await collectionService.createCollection(collectionData)
       setCollections(prev => [...prev, newCollection])
+      toast.success('Collection created successfully')
       return newCollection
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to create collection'
       setError(errorMessage)
+      toast.error('Failed to create collection', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -114,10 +119,14 @@ export const useCollections = (
       setCollections(prev =>
         prev.map(c => c.id === id ? updated : c)
       )
+      toast.success('Collection updated successfully')
       return updated
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to update collection'
       setError(errorMessage)
+      toast.error('Failed to update collection', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -138,9 +147,13 @@ export const useCollections = (
       }
       // No response means deleted successfully (status 204)
       setCollections(prev => prev.filter(c => c.id !== id))
+      toast.success('Collection deleted successfully')
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete collection'
       setError(errorMessage)
+      toast.error('Failed to delete collection', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)

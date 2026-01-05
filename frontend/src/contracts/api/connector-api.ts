@@ -29,8 +29,8 @@ export type ConnectorCredentials =
   | SMBCredentials
 
 export interface S3Credentials {
-  access_key_id: string
-  secret_access_key: string
+  aws_access_key_id: string
+  aws_secret_access_key: string
   region: string
   bucket?: string
 }
