@@ -30,6 +30,26 @@ import {
 } from '@/types/schemas/collection'
 
 // ============================================================================
+// Beta Collection Types
+// ============================================================================
+
+// Collection types still in beta/QA - remove from this set once QA'd
+const BETA_COLLECTION_TYPES: Set<CollectionType> = new Set(['gcs', 'smb'])
+
+function isBetaCollectionType(type: CollectionType): boolean {
+  return BETA_COLLECTION_TYPES.has(type)
+}
+
+// Beta chip component for consistent styling
+function BetaChip() {
+  return (
+    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+      Beta
+    </span>
+  )
+}
+
+// ============================================================================
 // Component Props
 // ============================================================================
 
@@ -191,8 +211,18 @@ export default function CollectionForm({
                   <SelectContent>
                     <SelectItem value="local">Local Filesystem</SelectItem>
                     <SelectItem value="s3">Amazon S3</SelectItem>
-                    <SelectItem value="gcs">Google Cloud Storage</SelectItem>
-                    <SelectItem value="smb">SMB/CIFS</SelectItem>
+                    <SelectItem value="gcs">
+                      <span className="flex items-center gap-2">
+                        Google Cloud Storage
+                        {isBetaCollectionType('gcs') && <BetaChip />}
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="smb">
+                      <span className="flex items-center gap-2">
+                        SMB/CIFS
+                        {isBetaCollectionType('smb') && <BetaChip />}
+                      </span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 {isEdit && (

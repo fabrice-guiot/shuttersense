@@ -27,7 +27,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectionStatus } from './CollectionStatus'
 import type { CollectionListProps } from '@/contracts/components/collection-components'
-import type { Collection } from '@/contracts/api/collection-api'
+import type { Collection, CollectionType } from '@/contracts/api/collection-api'
 import {
   COLLECTION_TYPE_LABELS,
   COLLECTION_STATE_LABELS,
@@ -35,6 +35,22 @@ import {
   COLLECTION_TABS
 } from '@/contracts/components/collection-components'
 import { cn } from '@/lib/utils'
+
+// Collection types still in beta/QA - remove from this set once QA'd
+const BETA_COLLECTION_TYPES: Set<CollectionType> = new Set(['gcs', 'smb'])
+
+function isBetaCollectionType(type: CollectionType): boolean {
+  return BETA_COLLECTION_TYPES.has(type)
+}
+
+// Beta chip component for consistent styling
+function BetaChip() {
+  return (
+    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+      Beta
+    </span>
+  )
+}
 
 /**
  * Collection list component
@@ -136,9 +152,12 @@ export function CollectionList({
               <TableRow key={collection.id}>
                 <TableCell className="font-medium">{collection.name}</TableCell>
                 <TableCell>
-                  <Badge variant="secondary">
-                    {COLLECTION_TYPE_LABELS[collection.type]}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">
+                      {COLLECTION_TYPE_LABELS[collection.type]}
+                    </Badge>
+                    {isBetaCollectionType(collection.type) && <BetaChip />}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Badge variant={COLLECTION_STATE_BADGE_VARIANT[collection.state]}>

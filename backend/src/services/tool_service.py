@@ -33,6 +33,7 @@ from backend.src.utils.job_queue import (
     JobQueue, AnalysisJob, get_job_queue,
     JobStatus as QueueJobStatus, create_job_id
 )
+from version import __version__ as TOOL_VERSION
 
 
 logger = get_logger("services")
@@ -469,6 +470,7 @@ class ToolService:
 
         else:
             # Use FileListingAdapter for remote collections
+            import time
             from backend.src.utils.file_listing import FileListingFactory, VirtualPath
             from utils.config_manager import PhotoAdminConfig
 
@@ -476,6 +478,9 @@ class ToolService:
 
             # Get encryptor from app state if available
             encryptor = getattr(self, '_encryptor', None)
+
+            # Start timing for scan duration
+            scan_start = time.time()
 
             job.progress = {"stage": "scanning", "percentage": 10}
             await self._broadcast_progress(job)
@@ -492,6 +497,9 @@ class ToolService:
 
             # Process files similar to PhotoStats.scan_folder()
             results = self._process_photostats_files(file_infos, config)
+
+            # Record scan duration
+            results['scan_time'] = time.time() - scan_start
 
             job.progress = {"stage": "generating_report", "percentage": 80}
             await self._broadcast_progress(job)
@@ -538,7 +546,8 @@ class ToolService:
             'orphaned_images': [],
             'orphaned_xmp': [],
             'paired_files': [],
-            'scan_time': 0
+            'scan_time': 0,
+            'storage_by_type': defaultdict(int)  # For storage distribution chart
         }
 
         # Group files by extension and base name
@@ -556,23 +565,32 @@ class ToolService:
                 stats['file_sizes'][ext].append(fi.size)
                 stats['total_size'] += fi.size
 
-        # Analyze pairing (XMP to image files)
-        file_groups = defaultdict(list)
+        # Group files by base name for pairing analysis and storage distribution
+        file_groups = defaultdict(lambda: {'files': [], 'image_ext': None, 'image_size': 0, 'sidecar_size': 0})
         for path, info in all_files.items():
             # Get base name without extension
             base_name = info['name'].rsplit('.', 1)[0] if '.' in info['name'] else info['name']
             # Get directory path
             dir_path = path.rsplit('/', 1)[0] if '/' in path else ''
             key = f"{dir_path}/{base_name}" if dir_path else base_name
-            file_groups[key].append((path, info['extension']))
+            file_groups[key]['files'].append((path, info['extension'], info['size']))
 
-        # Check for orphans
-        for base_key, files in file_groups.items():
-            extensions = {ext for _, ext in files}
+            # Track sizes for storage distribution
+            if info['extension'] in config.photo_extensions:
+                file_groups[key]['image_ext'] = info['extension']
+                file_groups[key]['image_size'] = info['size']
+            elif info['extension'] in config.metadata_extensions:
+                file_groups[key]['sidecar_size'] = info['size']
+
+        # Analyze orphans and calculate storage distribution
+        orphaned_sidecar_size = 0
+        for base_key, group in file_groups.items():
+            files = group['files']
+            extensions = {ext for _, ext, _ in files}
 
             # Check for images that require sidecar but don't have one
             has_xmp = '.xmp' in extensions
-            for path, ext in files:
+            for path, ext, _ in files:
                 if ext in config.require_sidecar and not has_xmp:
                     stats['orphaned_images'].append(path)
                 elif ext == '.xmp':
@@ -582,6 +600,17 @@ class ToolService:
                         stats['orphaned_xmp'].append(path)
                     else:
                         stats['paired_files'].append(path)
+
+            # Calculate storage distribution (image + paired sidecar)
+            if group['image_ext']:
+                combined_size = group['image_size'] + group['sidecar_size']
+                stats['storage_by_type'][group['image_ext']] += combined_size
+            elif group['sidecar_size'] > 0:
+                orphaned_sidecar_size += group['sidecar_size']
+
+        # Add orphaned sidecar storage
+        if orphaned_sidecar_size > 0:
+            stats['storage_by_type']['orphaned_sidecars'] = orphaned_sidecar_size
 
         return stats
 
@@ -683,6 +712,34 @@ class ToolService:
                 )
             ]
 
+            # Add Storage Distribution section (bar chart)
+            storage_by_type = results.get('storage_by_type', {})
+            if storage_by_type:
+                # Order by extension, put orphaned_sidecars last
+                storage_labels = []
+                storage_sizes = []
+                for ext, size in storage_by_type.items():
+                    if ext != 'orphaned_sidecars':
+                        storage_labels.append(ext.upper())
+                        storage_sizes.append(round(size / 1024 / 1024, 2))  # Convert to MB
+                # Add orphaned sidecars last if present
+                if 'orphaned_sidecars' in storage_by_type:
+                    storage_labels.append('ORPHANED SIDECARS')
+                    storage_sizes.append(round(storage_by_type['orphaned_sidecars'] / 1024 / 1024, 2))
+
+                if storage_labels:
+                    sections.append(
+                        ReportSection(
+                            title="💾 Storage Distribution",
+                            type="chart_bar",
+                            data={
+                                "labels": storage_labels,
+                                "values": storage_sizes
+                            },
+                            description="Storage usage by image type (including paired sidecars) in MB"
+                        )
+                    )
+
             # Add file pairing status
             orphaned_count = len(results.get('orphaned_images', [])) + len(results.get('orphaned_xmp', []))
             if orphaned_count > 0:
@@ -740,7 +797,7 @@ class ToolService:
                 template = env.get_template("photo_stats.html.j2")
                 return template.render(
                     tool_name="PhotoStats",
-                    tool_version="1.0.0",
+                    tool_version=TOOL_VERSION,
                     scan_path=location,
                     scan_timestamp=datetime.now(),
                     scan_duration=results.get('scan_time', 0),

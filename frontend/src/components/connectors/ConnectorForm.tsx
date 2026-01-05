@@ -49,7 +49,7 @@ export interface ConnectorFormProps {
 // ============================================================================
 
 // Connector types still in beta/QA - remove from this set once QA'd
-const BETA_CONNECTOR_TYPES: Set<ConnectorType> = new Set(['s3', 'gcs', 'smb'])
+const BETA_CONNECTOR_TYPES: Set<ConnectorType> = new Set(['gcs', 'smb'])
 
 function isBetaConnectorType(type: ConnectorType): boolean {
   return BETA_CONNECTOR_TYPES.has(type)

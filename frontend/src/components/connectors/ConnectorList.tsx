@@ -60,7 +60,7 @@ const CONNECTOR_TYPE_LABELS: Record<ConnectorType, string> = {
 }
 
 // Connector types still in beta/QA - remove from this set once QA'd
-const BETA_CONNECTOR_TYPES: Set<ConnectorType> = new Set(['s3', 'gcs', 'smb'])
+const BETA_CONNECTOR_TYPES: Set<ConnectorType> = new Set(['gcs', 'smb'])
 
 function getConnectorTypeLabel(type: ConnectorType): string {
   return CONNECTOR_TYPE_LABELS[type] || type
