@@ -52,12 +52,18 @@ def get_websocket_manager(request: Request) -> ConnectionManager:
     return request.app.state.websocket_manager
 
 
+def get_encryptor(request: Request):
+    """Get credential encryptor from application state."""
+    return request.app.state.credential_encryptor
+
+
 def get_tool_service(
     db: Session = Depends(get_db),
-    ws_manager: ConnectionManager = Depends(get_websocket_manager)
+    ws_manager: ConnectionManager = Depends(get_websocket_manager),
+    encryptor = Depends(get_encryptor)
 ) -> ToolService:
     """Create ToolService instance with dependencies."""
-    return ToolService(db=db, websocket_manager=ws_manager)
+    return ToolService(db=db, websocket_manager=ws_manager, encryptor=encryptor)
 
 
 # ============================================================================

@@ -108,7 +108,8 @@ class ToolService:
         db: Session,
         websocket_manager: Optional[ConnectionManager] = None,
         job_queue: Optional[JobQueue] = None,
-        session_factory: Optional[Any] = None
+        session_factory: Optional[Any] = None,
+        encryptor: Optional[Any] = None
     ):
         """
         Initialize tool service.
@@ -119,11 +120,13 @@ class ToolService:
             job_queue: Optional job queue (uses singleton if not provided)
             session_factory: Optional session factory for background tasks
                            (uses default SessionLocal if not provided)
+            encryptor: Optional credential encryptor for remote collection access
         """
         self.db = db
         self.websocket_manager = websocket_manager
         self._queue = job_queue or get_job_queue()
         self._session_factory = session_factory
+        self._encryptor = encryptor
 
     def run_tool(
         self,
