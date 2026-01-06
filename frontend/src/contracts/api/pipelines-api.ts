@@ -244,14 +244,14 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
   {
     type: 'process',
     label: 'Process',
-    description: 'Defines a processing step that may add a suffix',
+    description: 'Defines a processing step that may add one or more suffixes',
     properties: [
       {
-        key: 'suffix',
-        label: 'Suffix',
-        type: 'string',
+        key: 'suffixes',
+        label: 'Suffixes',
+        type: 'array',
         required: false,
-        hint: 'Optional filename suffix indicating processing. Example: -HDR, -BW, -Edit. Leave empty if the process does not transform the filename.',
+        hint: 'Comma-separated filename suffixes. Example: -HDR, -BW, -Edit. Leave empty if the process does not transform the filename.',
       },
     ],
   },
