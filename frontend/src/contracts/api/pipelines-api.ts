@@ -264,24 +264,8 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
   {
     type: 'branching',
     label: 'Branching',
-    description: 'Conditional branch based on file properties',
-    properties: [
-      {
-        key: 'condition',
-        label: 'Condition',
-        type: 'select',
-        required: true,
-        options: ['has_suffix', 'has_extension'],
-        hint: 'Property to check for branching decision',
-      },
-      {
-        key: 'value',
-        label: 'Value',
-        type: 'string',
-        required: true,
-        hint: 'Value to match. Example: -HDR for suffix, .xmp for extension',
-      },
-    ],
+    description: 'Splits the flow into multiple paths. All paths are explored during validation.',
+    properties: [],
   },
   {
     type: 'termination',
