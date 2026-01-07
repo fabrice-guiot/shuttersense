@@ -353,9 +353,13 @@ Collections contain **Files**, not Images directly. A Collection is a storage lo
 
 ### AnalysisResult
 
-**Purpose:** Stores execution history and results for analysis tools.
+**Purpose:** Stores execution history and results for asynchronous analysis jobs run against any domain entity.
 
 **Current Location:** `backend/src/models/analysis_result.py`
+
+AnalysisResult is a **polymorphic results store** designed to capture the output of complex analysis jobs executed through the async Job Queue. While the current implementation supports only Collections and Pipelines as targets, the future vision expands this to any analyzable domain entity.
+
+#### Current Implementation
 
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
@@ -375,13 +379,113 @@ Collections contain **Files**, not Images directly. A Collection is a storage lo
 | `issues_found` | Integer | nullable | Issues detected count |
 | `created_at` | DateTime | not null | Record creation timestamp |
 
-**Tool Types:**
+**Current Tool Types:**
 
-| Tool | Description | Requires Collection |
-|------|-------------|---------------------|
-| `photostats` | File statistics and orphan detection | Yes |
-| `photo_pairing` | Filename pattern analysis | Yes |
-| `pipeline_validation` | Pipeline structure validation | No (display-graph mode) |
+| Tool | Description | Target Entity |
+|------|-------------|---------------|
+| `photostats` | File statistics and orphan detection | Collection |
+| `photo_pairing` | Filename pattern analysis | Collection |
+| `pipeline_validation` | Pipeline structure validation | Pipeline (or Collection+Pipeline) |
+
+#### Future Vision: Polymorphic Target Entity
+
+As the domain model expands, AnalysisResult will support analysis on any entity type. This requires a **polymorphic foreign key pattern**:
+
+**Proposed Schema Evolution:**
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `target_entity_type` | Enum | not null | Type of entity being analyzed |
+| `target_entity_id` | Integer | not null | ID of the target entity |
+| `tool` | String(50) | not null | Analysis tool name |
+| `tool_version` | String(20) | nullable | Tool version for reproducibility |
+
+**Target Entity Types:**
+
+| Entity Type | Current | Future Tools |
+|-------------|---------|--------------|
+| `COLLECTION` | :white_check_mark: | photostats, photo_pairing, storage_analysis |
+| `PIPELINE` | :white_check_mark: | pipeline_validation, complexity_analysis |
+| `ALBUM` | :construction: | completeness_check, coverage_analysis, duplicate_detection |
+| `IMAGE` | :construction: | ai_subject_detection, quality_assessment, metadata_extraction |
+| `WORKFLOW` | :construction: | progress_analysis, bottleneck_detection, eta_estimation |
+| `CAMERA` | :construction: | health_analysis, maintenance_prediction, usage_statistics |
+| `EVENT` | :construction: | logistics_validation, scheduling_conflicts |
+| `PERFORMER` | :construction: | appearance_frequency, coverage_across_events |
+
+**Future Analysis Tools by Category:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ANALYSIS TOOL CATEGORIES                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  STORAGE ANALYSIS (Target: Collection)                                       │
+│  ├── photostats          - File counts, sizes, orphan detection             │
+│  ├── photo_pairing       - Filename pattern analysis, grouping              │
+│  ├── storage_health      - Accessibility, latency, capacity trends          │
+│  └── deduplication       - Cross-collection duplicate detection             │
+│                                                                              │
+│  PIPELINE ANALYSIS (Target: Pipeline)                                        │
+│  ├── pipeline_validation - Structure validation, node connectivity          │
+│  ├── complexity_metrics  - Path analysis, branching factor                  │
+│  └── usage_statistics    - Which workflows use this pipeline                │
+│                                                                              │
+│  CONTENT ANALYSIS (Target: Album, Image)                                     │
+│  ├── album_completeness  - Expected vs actual file coverage                 │
+│  ├── ai_subject_detect   - ML-based performer identification                │
+│  ├── quality_assessment  - Sharpness, exposure, composition scoring         │
+│  ├── metadata_extract    - Batch EXIF/XMP extraction                        │
+│  └── duplicate_finder    - Perceptual hash-based duplicate detection        │
+│                                                                              │
+│  WORKFLOW ANALYSIS (Target: Workflow)                                        │
+│  ├── progress_report     - Per-node completion statistics                   │
+│  ├── bottleneck_detect   - Identify slow processing stages                  │
+│  ├── eta_estimation      - Predict completion time                          │
+│  └── stalled_detection   - Find images stuck in processing                  │
+│                                                                              │
+│  EQUIPMENT ANALYSIS (Target: Camera)                                         │
+│  ├── health_check        - Actuation tracking, maintenance alerts           │
+│  ├── usage_patterns      - Shooting frequency, event correlation            │
+│  └── lens_statistics     - Per-lens usage across cameras                    │
+│                                                                              │
+│  EVENT ANALYSIS (Target: Event)                                              │
+│  ├── logistics_check     - Verify ticket/lodging/travel status              │
+│  ├── schedule_conflicts  - Overlapping event detection                      │
+│  └── coverage_analysis   - Performer appearance vs scheduled                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Polymorphic Query Pattern:**
+
+```python
+# Future: Query results for any entity
+def get_results_for_entity(entity_type: str, entity_id: int):
+    return db.query(AnalysisResult).filter(
+        AnalysisResult.target_entity_type == entity_type,
+        AnalysisResult.target_entity_id == entity_id
+    ).order_by(AnalysisResult.created_at.desc())
+
+# Usage examples:
+get_results_for_entity("ALBUM", album_id)
+get_results_for_entity("CAMERA", camera_id)
+get_results_for_entity("WORKFLOW", workflow_id)
+```
+
+**Migration Strategy:**
+
+The transition from current FK-based to polymorphic pattern:
+
+1. **Phase 1 (Current):** Specific FKs (`collection_id`, `pipeline_id`)
+2. **Phase 2:** Add `target_entity_type` + `target_entity_id`, backfill existing data
+3. **Phase 3:** Deprecate specific FKs, use polymorphic pattern for new tools
+4. **Phase 4:** Remove deprecated FKs after migration
+
+**Relationships (Future):**
+- Polymorphic many-to-one with target entity (Collection, Pipeline, Album, Image, Workflow, Camera, Event, Performer)
+- Many-to-one with User (who triggered the analysis)
+- Many-to-one with Team (tenant isolation)
 
 ---
 
