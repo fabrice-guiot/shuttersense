@@ -59,7 +59,7 @@ class TestResultServiceList:
         """Test listing results returns summaries."""
         # Setup mock query chain
         mock_query = MagicMock()
-        mock_query.join.return_value = mock_query
+        mock_query.outerjoin.return_value = mock_query
         mock_query.filter.return_value = mock_query
         mock_query.count.return_value = 1
         mock_query.order_by.return_value = mock_query
@@ -81,7 +81,7 @@ class TestResultServiceList:
     def test_list_results_with_filters(self, mock_db):
         """Test listing results with filters."""
         mock_query = MagicMock()
-        mock_query.join.return_value = mock_query
+        mock_query.outerjoin.return_value = mock_query
         mock_query.filter.return_value = mock_query
         mock_query.count.return_value = 0
         mock_query.order_by.return_value = mock_query

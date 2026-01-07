@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, ws } from 'msw'
 import type { Connector } from '@/contracts/api/connector-api'
 import type { Collection } from '@/contracts/api/collection-api'
 import type { JobResponse, JobStatus, ToolType, ToolMode, QueueStatusResponse, ToolRunRequest } from '@/contracts/api/tools-api'
@@ -260,7 +260,16 @@ let nextCollectionId = 3
 
 const BASE_URL = 'http://localhost:8000/api'
 
+// WebSocket handler for job updates
+const jobsWebSocket = ws.link('ws://localhost:8000/api/tools/ws/jobs/*')
+
 export const handlers = [
+  // WebSocket handler for all job channels
+  jobsWebSocket.addEventListener('connection', ({ client }) => {
+    // Send initial connection acknowledgment
+    client.send(JSON.stringify({ type: 'connected', message: 'WebSocket connected' }))
+  }),
+
   // Version endpoint
   http.get(`${BASE_URL}/version`, () => {
     return HttpResponse.json({ version: 'v1.0.0' })
