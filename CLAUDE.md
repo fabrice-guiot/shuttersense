@@ -171,6 +171,19 @@ black .
 
 ## Frontend Architecture
 
+### Design System (Required Reading)
+
+All frontend development MUST follow the Design System documentation at `frontend/docs/design-system.md`. Key requirements:
+
+- **Colors**: Use design tokens, never hardcoded colors
+- **Buttons**: Primary=default, Cancel=outline, Delete=destructive, Icons=ghost
+- **Status Colors**: success=positive, destructive=negative, muted=inactive, info=archived
+- **Domain Labels**: Import from centralized `@/contracts/domain-labels.ts`
+- **Error Handling**: Page errors at top, form errors above buttons, field errors via FormMessage
+- **Icons**: Use consistent domain icons (Collection=FolderOpen, Connector=Plug, etc.)
+
+See [Design System](frontend/docs/design-system.md) for complete guidelines.
+
 ### TopHeader KPI Pattern (Required for all pages)
 
 All frontend pages MUST display relevant KPIs in the TopHeader stats area (next to the bell icon). This is a mandatory UX pattern established in Issue #37.
