@@ -29,6 +29,8 @@ interface UseToolsOptions {
   pollInterval?: number  // Poll interval in ms (0 to disable)
   /** Enable WebSocket for real-time job updates (default: true) */
   useWebSocket?: boolean
+  /** Callback fired when a job transitions to a terminal state (completed, failed, cancelled) */
+  onJobComplete?: (job: Job) => void
 }
 
 interface UseToolsReturn {
@@ -44,7 +46,7 @@ interface UseToolsReturn {
 }
 
 export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
-  const { autoFetch = true, pollInterval = 0, useWebSocket = true } = options
+  const { autoFetch = true, pollInterval = 0, useWebSocket = true, onJobComplete } = options
 
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
@@ -208,15 +210,29 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
 
         if (message.type === 'job_update' && message.job) {
           const updatedJob = message.job as Job
+          const terminalStatuses: JobStatus[] = ['completed', 'failed', 'cancelled']
+          const isTerminal = terminalStatuses.includes(updatedJob.status)
+
           setJobs(prev => {
             const existingIndex = prev.findIndex(j => j.id === updatedJob.id)
             if (existingIndex >= 0) {
+              const existingJob = prev[existingIndex]
+              // Check if this is a transition to terminal state
+              const wasTerminal = terminalStatuses.includes(existingJob.status)
+              if (isTerminal && !wasTerminal && onJobComplete) {
+                // Defer callback to avoid state update during render
+                setTimeout(() => onJobComplete(updatedJob), 0)
+              }
               // Update existing job
               const newJobs = [...prev]
               newJobs[existingIndex] = updatedJob
               return newJobs
             } else {
               // New job - add to front
+              // If it's already terminal (e.g., fast completion), still notify
+              if (isTerminal && onJobComplete) {
+                setTimeout(() => onJobComplete(updatedJob), 0)
+              }
               return [updatedJob, ...prev]
             }
           })
@@ -245,7 +261,7 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     }
 
     wsRef.current = ws
-  }, [useWebSocket])
+  }, [useWebSocket, onJobComplete])
 
   // Initialize WebSocket connection
   useEffect(() => {
