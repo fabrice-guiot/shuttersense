@@ -6,6 +6,13 @@ This module provides configuration loading and management for the photo-admin to
 It handles YAML configuration files with automatic discovery, interactive creation,
 and user prompts for missing camera/method mappings.
 
+Supports two configuration sources:
+1. YAML file (default): Local config.yaml file
+2. Database (optional): PostgreSQL database via backend API
+
+When database URL is provided, configuration is read from/written to the database,
+enabling shared configuration across web UI and CLI tools.
+
 Copyright (C) 2024 Fabrice Guiot
 
 This program is free software: you can redistribute it and/or modify
@@ -22,24 +29,301 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
 
+import os
 import sys
 from pathlib import Path
 import yaml
 
+# Optional database support - only import if needed
+_sqlalchemy_available = False
+try:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    _sqlalchemy_available = True
+except ImportError:
+    pass
+
 
 class PhotoAdminConfig:
-    """Manages configuration loading and updates for photo-admin tools."""
+    """
+    Manages configuration loading and updates for photo-admin tools.
 
-    def __init__(self, config_path=None):
+    Supports two modes:
+    - File mode (default): Configuration stored in YAML file
+    - Database mode: Configuration stored in PostgreSQL database
+
+    The mode is determined by the presence of PHOTO_ADMIN_DB_URL environment variable
+    or explicit db_url parameter. Database mode requires SQLAlchemy.
+
+    Example:
+        # File mode (default)
+        config = PhotoAdminConfig()
+
+        # Database mode (via environment variable)
+        # Set PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
+        config = PhotoAdminConfig()
+
+        # Database mode (explicit)
+        config = PhotoAdminConfig(db_url='postgresql://user:pass@host/db')
+    """
+
+    def __init__(self, config_path=None, db_url=None, use_database=None):
         """
         Initialize the configuration manager.
 
         Args:
             config_path: Optional explicit path to config file.
                         If None, will search standard locations.
+            db_url: Optional database connection URL. If provided, uses database mode.
+                   Can also be set via PHOTO_ADMIN_DB_URL environment variable.
+            use_database: Optional boolean to force database mode (True) or file mode (False).
+                         If None, auto-detect based on db_url or environment variable.
+
+        Raises:
+            RuntimeError: If database mode requested but SQLAlchemy not available
         """
         self._config_path = None
-        self._config = self._load_config(config_path)
+        self._db_session = None
+        self._db_url = db_url or os.environ.get('PHOTO_ADMIN_DB_URL')
+        self._use_database = use_database
+
+        # Determine configuration mode
+        if self._use_database is None:
+            self._use_database = self._db_url is not None
+
+        if self._use_database:
+            self._init_database_mode()
+        else:
+            self._config = self._load_config(config_path)
+
+    def _init_database_mode(self):
+        """Initialize database mode configuration."""
+        if not _sqlalchemy_available:
+            raise RuntimeError(
+                "Database mode requires SQLAlchemy. "
+                "Install with: pip install sqlalchemy"
+            )
+
+        if not self._db_url:
+            raise RuntimeError(
+                "Database URL required for database mode. "
+                "Set PHOTO_ADMIN_DB_URL environment variable or pass db_url parameter."
+            )
+
+        # Create database session
+        try:
+            engine = create_engine(self._db_url)
+            Session = sessionmaker(bind=engine)
+            self._db_session = Session()
+        except Exception as e:
+            print(f"Error connecting to configuration database: {e}")
+            raise
+
+        # Load configuration from database into _config dict for compatibility
+        self._config = self._load_from_database()
+
+    def _load_from_database(self):
+        """
+        Load configuration from database.
+
+        Loads configuration from the 'configurations' table and the default
+        pipeline from the 'pipelines' table. The pipeline is converted from
+        database format (nodes_json + edges_json) to the YAML config format
+        expected by the CLI tools.
+
+        Returns:
+            dict: Configuration dictionary structured like YAML config
+        """
+        from backend.src.models import Configuration
+        from backend.src.models.pipeline import Pipeline
+
+        config = {
+            'photo_extensions': [],
+            'metadata_extensions': [],
+            'require_sidecar': [],
+            'camera_mappings': {},
+            'processing_methods': {},
+            'processing_pipelines': {}
+        }
+
+        try:
+            # Query all configurations
+            configs = self._db_session.query(Configuration).all()
+
+            for item in configs:
+                if item.category == 'extensions':
+                    if item.key == 'photo_extensions':
+                        config['photo_extensions'] = item.value_json or []
+                    elif item.key == 'metadata_extensions':
+                        config['metadata_extensions'] = item.value_json or []
+                    elif item.key == 'require_sidecar':
+                        config['require_sidecar'] = item.value_json or []
+                elif item.category == 'cameras':
+                    # Store as list for compatibility with existing code
+                    config['camera_mappings'][item.key] = [item.value_json] if item.value_json else []
+                elif item.category == 'processing_methods':
+                    config['processing_methods'][item.key] = item.value_json
+
+            # Load default pipeline from pipelines table
+            default_pipeline = self._db_session.query(Pipeline).filter(
+                Pipeline.is_default == True
+            ).first()
+
+            if default_pipeline and default_pipeline.nodes_json:
+                config['processing_pipelines']['default'] = {
+                    'nodes': self._convert_db_pipeline_to_config_format(
+                        default_pipeline.nodes_json,
+                        default_pipeline.edges_json or []
+                    )
+                }
+
+        except Exception as e:
+            print(f"Warning: Could not load from database, using defaults: {e}")
+
+        return config
+
+    def _convert_db_pipeline_to_config_format(self, nodes_json, edges_json):
+        """
+        Convert database pipeline format to YAML config format.
+
+        Database format stores edges separately, while YAML config format
+        uses inline 'output' arrays in each node.
+
+        Args:
+            nodes_json: List of node dicts from database
+                Each dict has: id, type, properties (with name, extension, etc.)
+            edges_json: List of edge dicts from database
+                Each dict has: from, to
+
+        Returns:
+            list: Nodes in YAML config format with inline 'output' arrays
+        """
+        # Build output map from edges (outgoing edges per node)
+        outputs_by_node = {}
+        # Build input count map from edges (incoming edges per node)
+        # Used to auto-calculate input_count for Pairing nodes
+        inputs_count_by_node = {}
+        for edge in edges_json:
+            from_node = edge.get('from', '')
+            to_node = edge.get('to', '')
+            if from_node not in outputs_by_node:
+                outputs_by_node[from_node] = []
+            outputs_by_node[from_node].append(to_node)
+            # Count incoming edges for each node
+            inputs_count_by_node[to_node] = inputs_count_by_node.get(to_node, 0) + 1
+
+        # Convert nodes to config format
+        config_nodes = []
+        for node_data in nodes_json:
+            node_id = node_data.get('id', '')
+            node_type = node_data.get('type', '')
+            properties = node_data.get('properties', {})
+
+            # Capitalize node type to match expected format
+            # Database stores lowercase (capture, file, process, etc.)
+            # CLI tool expects capitalized (Capture, File, Process, etc.)
+            node_type_capitalized = node_type.capitalize() if node_type else ''
+
+            # Build config node with flattened properties
+            config_node = {
+                'id': node_id,
+                'type': node_type_capitalized,
+                'name': properties.get('name', node_id),
+                'output': outputs_by_node.get(node_id, [])
+            }
+
+            # Add type-specific properties
+            if 'extension' in properties:
+                config_node['extension'] = properties['extension']
+            if 'method_ids' in properties:
+                config_node['method_ids'] = properties['method_ids']
+            if 'pairing_type' in properties:
+                config_node['pairing_type'] = properties['pairing_type']
+            if 'inputs' in properties:
+                config_node['inputs'] = properties['inputs']
+            # Build condition_description for Branching nodes (required by CLI tool)
+            # Branching nodes represent user choices at processing time, not deterministic conditions
+            if node_type.lower() == 'branching':
+                config_node['condition_description'] = properties.get('name', 'User choice')
+            if 'termination_type' in properties:
+                config_node['termination_type'] = properties['termination_type']
+            # Legacy support for 'classification' field
+            if 'classification' in properties and 'termination_type' not in properties:
+                config_node['termination_type'] = properties['classification']
+
+            # Auto-calculate input_count for Pairing nodes from incoming edges
+            if node_type.lower() == 'pairing':
+                # Use explicit input_count if provided, otherwise calculate from edges
+                if 'input_count' in properties:
+                    config_node['input_count'] = properties['input_count']
+                else:
+                    # Count incoming edges to this pairing node
+                    # Default to 0 if no edges - config validation will catch this as invalid
+                    config_node['input_count'] = inputs_count_by_node.get(node_id, 0)
+
+            config_nodes.append(config_node)
+
+        return config_nodes
+
+    def _save_to_database(self, category, key, value):
+        """
+        Save a configuration item to the database.
+
+        Args:
+            category: Configuration category (extensions, cameras, processing_methods)
+            key: Configuration key
+            value: Configuration value (will be stored as JSONB)
+        """
+        if not self._use_database or not self._db_session:
+            return
+
+        from backend.src.models import Configuration, ConfigSource
+
+        try:
+            # Check if exists
+            existing = self._db_session.query(Configuration).filter(
+                Configuration.category == category,
+                Configuration.key == key
+            ).first()
+
+            if existing:
+                existing.value_json = value
+                existing.source = ConfigSource.DATABASE
+            else:
+                new_config = Configuration(
+                    category=category,
+                    key=key,
+                    value_json=value,
+                    source=ConfigSource.DATABASE
+                )
+                self._db_session.add(new_config)
+
+            self._db_session.commit()
+
+        except Exception as e:
+            self._db_session.rollback()
+            print(f"Error saving to database: {e}")
+            raise
+
+    @property
+    def is_database_mode(self):
+        """Check if configuration is using database mode."""
+        return self._use_database
+
+    @property
+    def config_source_description(self):
+        """
+        Get a human-readable description of the configuration source.
+
+        Returns:
+            str: Description of where configuration is being loaded from
+        """
+        if self._use_database:
+            return f"Using database configuration (PHOTO_ADMIN_DB_URL is set)"
+        elif self._config_path:
+            return f"Using file configuration: {self._config_path}"
+        else:
+            return "Using default configuration"
 
     def _load_config(self, config_path=None):
         """Load configuration from YAML file."""
@@ -51,7 +335,6 @@ class PhotoAdminConfig:
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f)
                     self._config_path = Path(config_path)
-                    print(f"Loaded configuration from: {config_path}")
                     return config
             except Exception as e:
                 print(f"Error: Could not load config from {config_path}: {e}")
@@ -154,7 +437,16 @@ class PhotoAdminConfig:
             sys.exit(1)
 
     def _save_config(self):
-        """Save current configuration back to file."""
+        """
+        Save current configuration back to storage.
+
+        In file mode, saves to YAML file.
+        In database mode, this is a no-op since saves are done incrementally.
+        """
+        if self._use_database:
+            # Database saves are done incrementally in _save_to_database
+            return
+
         if not self._config_path:
             raise RuntimeError("Cannot save config: config path not set")
 
@@ -218,8 +510,13 @@ class PhotoAdminConfig:
             dict: Camera info {'name': str, 'serial_number': str} or None if cancelled
         """
         if camera_id in self.camera_mappings:
-            # Already exists
-            return self.camera_mappings[camera_id][0] if self.camera_mappings[camera_id] else {}
+            # Already exists - handle both array and object formats
+            # Database may store as: dict, [dict], or [[dict]] depending on source
+            value = self.camera_mappings[camera_id]
+            # Unwrap lists until we get a dict or None
+            while isinstance(value, list):
+                value = value[0] if value else None
+            return value if isinstance(value, dict) else {}
 
         # Need to prompt user
         info = self.prompt_camera_info(camera_id)
@@ -231,12 +528,17 @@ class PhotoAdminConfig:
             self._config['camera_mappings'] = {}
 
         # Store as list for future compatibility
-        self._config['camera_mappings'][camera_id] = [{
+        camera_value = {
             'name': info['name'],
             'serial_number': info['serial_number']
-        }]
+        }
+        self._config['camera_mappings'][camera_id] = [camera_value]
 
-        self._save_config()
+        # Save to appropriate storage
+        if self._use_database:
+            self._save_to_database('cameras', camera_id, camera_value)
+        else:
+            self._save_config()
         return info
 
     def ensure_processing_method(self, method_keyword):
@@ -264,12 +566,16 @@ class PhotoAdminConfig:
 
         self._config['processing_methods'][method_keyword] = description
 
-        self._save_config()
+        # Save to appropriate storage
+        if self._use_database:
+            self._save_to_database('processing_methods', method_keyword, description)
+        else:
+            self._save_config()
         return description
 
     def update_camera_mappings(self, camera_updates):
         """
-        Update config file with new camera mappings.
+        Update configuration with new camera mappings.
 
         Args:
             camera_updates: dict of {camera_id: {'name': str, 'serial_number': str}}
@@ -279,16 +585,22 @@ class PhotoAdminConfig:
 
         for camera_id, info in camera_updates.items():
             # Store as list for future compatibility
-            self._config['camera_mappings'][camera_id] = [{
+            camera_value = {
                 'name': info['name'],
                 'serial_number': info['serial_number']
-            }]
+            }
+            self._config['camera_mappings'][camera_id] = [camera_value]
 
-        self._save_config()
+            # Save to database if in database mode
+            if self._use_database:
+                self._save_to_database('cameras', camera_id, camera_value)
+
+        if not self._use_database:
+            self._save_config()
 
     def update_processing_methods(self, method_updates):
         """
-        Update config file with new processing method descriptions.
+        Update configuration with new processing method descriptions.
 
         Args:
             method_updates: dict of {method_keyword: description}
@@ -299,11 +611,18 @@ class PhotoAdminConfig:
         for keyword, description in method_updates.items():
             self._config['processing_methods'][keyword] = description
 
-        self._save_config()
+            # Save to database if in database mode
+            if self._use_database:
+                self._save_to_database('processing_methods', keyword, description)
+
+        if not self._use_database:
+            self._save_config()
 
     def reload(self):
-        """Reload configuration from file."""
-        if self._config_path:
+        """Reload configuration from storage (file or database)."""
+        if self._use_database:
+            self._config = self._load_from_database()
+        elif self._config_path:
             with open(self._config_path, 'r') as f:
                 self._config = yaml.safe_load(f)
 

@@ -134,7 +134,7 @@ export interface CredentialFieldConfig {
 export const S3_CREDENTIAL_FIELDS: CredentialFieldConfig[] = [
   {
     type: 'text',
-    name: 'access_key_id',
+    name: 'aws_access_key_id',
     label: 'Access Key ID',
     placeholder: 'AKIAIOSFODNN7EXAMPLE',
     required: true,
@@ -142,7 +142,7 @@ export const S3_CREDENTIAL_FIELDS: CredentialFieldConfig[] = [
   },
   {
     type: 'password',
-    name: 'secret_access_key',
+    name: 'aws_secret_access_key',
     label: 'Secret Access Key',
     placeholder: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
     required: true,

@@ -1,0 +1,322 @@
+openapi: 3.0.3
+info:
+  title: Photo Admin Results API
+  description: API endpoints for analysis results (Phase 4)
+  version: 1.0.0
+
+paths:
+  /api/results:
+    get:
+      summary: List analysis results with filtering
+      operationId: listResults
+      tags:
+        - Results
+      parameters:
+        - name: collection_id
+          in: query
+          schema:
+            type: integer
+        - name: tool
+          in: query
+          schema:
+            type: string
+            enum: [photostats, photo_pairing, pipeline_validation]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [COMPLETED, FAILED, CANCELLED]
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [created_at, duration_seconds, files_scanned]
+            default: created_at
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Paginated list of results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListResponse'
+
+  /api/results/{result_id}:
+    get:
+      summary: Get analysis result details
+      operationId: getResult
+      tags:
+        - Results
+      parameters:
+        - name: result_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Result details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResultResponse'
+        '404':
+          description: Result not found
+
+    delete:
+      summary: Delete an analysis result
+      operationId: deleteResult
+      tags:
+        - Results
+      parameters:
+        - name: result_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Result deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '404':
+          description: Result not found
+
+  /api/results/{result_id}/report:
+    get:
+      summary: Download HTML report
+      operationId: downloadReport
+      tags:
+        - Results
+      parameters:
+        - name: result_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: HTML report file
+          content:
+            text/html:
+              schema:
+                type: string
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="report_123.html"
+        '404':
+          description: Result or report not found
+
+  /api/results/stats:
+    get:
+      summary: Get results statistics for KPIs
+      operationId: getResultStats
+      tags:
+        - Results
+      responses:
+        '200':
+          description: Results statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultStatsResponse'
+
+components:
+  schemas:
+    ResultListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisResultSummary'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    AnalysisResultSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        collection_id:
+          type: integer
+        collection_name:
+          type: string
+        tool:
+          type: string
+        status:
+          type: string
+          enum: [COMPLETED, FAILED, CANCELLED]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+          format: float
+        files_scanned:
+          type: integer
+          nullable: true
+        issues_found:
+          type: integer
+          nullable: true
+        has_report:
+          type: boolean
+
+    AnalysisResultResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        collection_id:
+          type: integer
+        collection_name:
+          type: string
+        tool:
+          type: string
+        pipeline_id:
+          type: integer
+          nullable: true
+        pipeline_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [COMPLETED, FAILED, CANCELLED]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+          format: float
+        files_scanned:
+          type: integer
+          nullable: true
+        issues_found:
+          type: integer
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        has_report:
+          type: boolean
+        results:
+          $ref: '#/components/schemas/ToolResults'
+        created_at:
+          type: string
+          format: date-time
+
+    ToolResults:
+      type: object
+      description: Tool-specific results (varies by tool type)
+      properties:
+        # PhotoStats results
+        total_size:
+          type: integer
+          description: Total size in bytes (PhotoStats)
+        total_files:
+          type: integer
+          description: Total file count (PhotoStats)
+        file_counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: File counts by extension (PhotoStats)
+        orphaned_images:
+          type: array
+          items:
+            type: string
+          description: List of orphaned image files (PhotoStats)
+        orphaned_xmp:
+          type: array
+          items:
+            type: string
+          description: List of orphaned XMP files (PhotoStats)
+        # Photo Pairing results
+        group_count:
+          type: integer
+          description: Number of image groups (Photo Pairing)
+        image_count:
+          type: integer
+          description: Total images in groups (Photo Pairing)
+        camera_usage:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Image count by camera ID (Photo Pairing)
+        # Pipeline Validation results
+        consistency_counts:
+          type: object
+          properties:
+            CONSISTENT:
+              type: integer
+            PARTIAL:
+              type: integer
+            INCONSISTENT:
+              type: integer
+          description: Counts by consistency status (Pipeline Validation)
+
+    ResultStatsResponse:
+      type: object
+      properties:
+        total_results:
+          type: integer
+        completed_count:
+          type: integer
+        failed_count:
+          type: integer
+        by_tool:
+          type: object
+          additionalProperties:
+            type: integer
+        last_run:
+          type: string
+          format: date-time
+          nullable: true
+
+    DeleteResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        deleted_id:
+          type: integer

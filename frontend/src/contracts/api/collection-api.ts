@@ -19,6 +19,9 @@ export interface Collection {
   state: CollectionState
   location: string
   connector_id: number | null  // null for LOCAL, required for remote
+  pipeline_id: number | null  // null = use default pipeline at runtime
+  pipeline_version: number | null  // pinned version when explicitly assigned
+  pipeline_name: string | null  // name of assigned pipeline
   is_accessible: boolean
   accessibility_message: string | null
   cache_ttl: number | null
@@ -37,6 +40,7 @@ export interface CollectionCreateRequest {
   state: CollectionState
   location: string
   connector_id: number | null
+  pipeline_id?: number | null  // Optional: assign specific pipeline
   cache_ttl: number | null
 }
 
@@ -46,6 +50,7 @@ export interface CollectionUpdateRequest {
   state?: CollectionState
   location?: string
   connector_id?: number | null
+  pipeline_id?: number | null  // Optional: update pipeline assignment
   cache_ttl?: number | null
 }
 
@@ -279,3 +284,43 @@ export interface CollectionStatsResponse {
   /** Total number of images after grouping */
   image_count: number
 }
+
+// ============================================================================
+// Pipeline Assignment Endpoint Definitions
+// ============================================================================
+
+/**
+ * POST /api/collections/{id}/assign-pipeline?pipeline_id={pipeline_id}
+ *
+ * Assign a pipeline to a collection with version pinning
+ *
+ * Path Parameters:
+ *   - id: number (collection ID)
+ * Query Parameters:
+ *   - pipeline_id: number (pipeline ID to assign)
+ *
+ * The pipeline's current version will be stored as the pinned version.
+ * The collection will use this specific version until manually reassigned.
+ *
+ * Response: 200 Collection (with pipeline_id, pipeline_version, pipeline_name set)
+ * Errors:
+ *   - 400: Pipeline is not active
+ *   - 404: Collection or pipeline not found
+ *   - 500: Internal server error
+ */
+
+/**
+ * POST /api/collections/{id}/clear-pipeline
+ *
+ * Clear pipeline assignment from a collection
+ *
+ * Path Parameters:
+ *   - id: number (collection ID)
+ *
+ * After clearing, the collection will use the default pipeline at runtime.
+ *
+ * Response: 200 Collection (with pipeline_id, pipeline_version, pipeline_name set to null)
+ * Errors:
+ *   - 404: Collection not found
+ *   - 500: Internal server error
+ */

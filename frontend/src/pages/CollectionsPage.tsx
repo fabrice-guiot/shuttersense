@@ -10,6 +10,8 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useCollections, useCollectionStats } from '../hooks/useCollections'
 import { useConnectors } from '../hooks/useConnectors'
+import { usePipelines } from '../hooks/usePipelines'
+import { useTools } from '../hooks/useTools'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { CollectionList } from '../components/collections/CollectionList'
 import { FiltersSection } from '../components/collections/FiltersSection'
@@ -28,9 +30,11 @@ export default function CollectionsPage() {
     createCollection,
     updateCollection,
     deleteCollection,
-    testCollection,
-    refreshCollection
+    testCollection
   } = useCollections()
+
+  // Tools hook for running analysis on collections
+  const { runAllTools } = useTools({ autoFetch: false })
 
   // Filter UI state (for select components)
   const [selectedState, setSelectedState] = useState<CollectionState | 'ALL' | ''>('ALL')
@@ -47,6 +51,7 @@ export default function CollectionsPage() {
   }, [selectedState, selectedType, accessibleOnly, setFilters])
 
   const { connectors } = useConnectors()
+  const { pipelines } = usePipelines()
 
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useCollectionStats()
@@ -115,8 +120,8 @@ export default function CollectionsPage() {
   }
 
   const handleRefresh = (collection: Collection) => {
-    refreshCollection(collection.id, false).catch(() => {
-      // Error handled by hook
+    runAllTools(collection.id).catch(() => {
+      // Error handled by hook with toast notifications
     })
   }
 
@@ -178,6 +183,7 @@ export default function CollectionsPage() {
             <CollectionForm
               collection={editingCollection}
               connectors={connectors}
+              pipelines={pipelines}
               onSubmit={handleSubmit}
               onCancel={handleClose}
             />

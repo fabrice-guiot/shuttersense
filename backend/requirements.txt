@@ -33,5 +33,8 @@ pytest-mock>=3.14.0
 freezegun>=1.5.0  # For time-based tests
 httpx>=0.27.0  # For testing FastAPI endpoints
 
+# Security
+slowapi>=0.1.9  # Rate limiting middleware
+
 # Development
 ruff>=0.8.0  # Linter and formatter

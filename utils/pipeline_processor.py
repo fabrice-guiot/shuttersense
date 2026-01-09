@@ -1117,7 +1117,11 @@ def validate_specific_image(
     3. For each termination type:
        a. Generate expected files for each path
        b. Classify status (CONSISTENT/PARTIAL/etc.)
-       c. Select best path (best status, then fewest missing files, then shortest path)
+       c. Select best path using these criteria (in priority order):
+          - Most actual files matched (prefer paths that explain our files)
+          - Shortest path (prefer simpler workflows)
+          - Best validation status as tiebreaker
+          - Fewest missing files as final tiebreaker
     4. Overall status = worst status across all terminations
     5. Overall archival ready = at least one termination is ready
 
@@ -1172,6 +1176,8 @@ def validate_specific_image(
         best_missing = []
         best_extra = []
         best_completion = 0.0
+        best_path_length = float('inf')
+        best_matched_count = 0
 
         for path in paths:
             # Generate expected files for this path
@@ -1188,42 +1194,49 @@ def validate_specific_image(
             missing_files = sorted(expected_files_set - actual_files_set)
             extra_files = sorted(actual_files_set - expected_files_set)
 
+            # Count how many actual files are matched by this path's expected files
+            matched_count = len(actual_files_set.intersection(expected_files_set))
+
             # Calculate completion percentage
             if expected_files_set:
-                completion = (len(expected_files_set.intersection(actual_files_set)) / len(expected_files_set)) * 100.0
+                completion = (matched_count / len(expected_files_set)) * 100.0
             else:
                 completion = 0.0
 
-            # Select best path:
-            # 1. Best validation status (CONSISTENT > CONSISTENT_WITH_WARNING > PARTIAL > INCONSISTENT)
-            # 2. Fewest missing files
-            # 3. Shortest path depth
-            if status < best_status:
-                # Better status
+            path_length = len(path)
+
+            # Select best path using these criteria (in priority order):
+            # 1. Most actual files matched (prefer paths that explain our files)
+            # 2. Shortest path (prefer simpler workflows)
+            # 3. Best validation status as tiebreaker
+            # 4. Fewest missing files as final tiebreaker
+            is_better = False
+
+            if matched_count > best_matched_count:
+                # This path matches more of our actual files
+                is_better = True
+            elif matched_count == best_matched_count:
+                # Same match count - prefer shorter path
+                if path_length < best_path_length:
+                    is_better = True
+                elif path_length == best_path_length:
+                    # Same path length - prefer better status
+                    if status < best_status:
+                        is_better = True
+                    elif status == best_status:
+                        # Same status - prefer fewer missing files
+                        if len(missing_files) < len(best_missing):
+                            is_better = True
+
+            if is_better:
                 best_status = status
                 best_expected_original = expected_files  # Original case for display
                 best_expected = list(expected_files_set)  # Lowercase for comparison
                 best_missing = missing_files
                 best_extra = extra_files
                 best_completion = completion
-            elif status == best_status:
-                # Same status - compare missing files count
-                if len(missing_files) < len(best_missing):
-                    best_status = status
-                    best_expected_original = expected_files
-                    best_expected = list(expected_files_set)
-                    best_missing = missing_files
-                    best_extra = extra_files
-                    best_completion = completion
-                elif len(missing_files) == len(best_missing):
-                    # Same missing count - prefer shorter path
-                    if len(path) < len(best_expected):
-                        best_status = status
-                        best_expected_original = expected_files
-                        best_expected = list(expected_files_set)
-                        best_missing = missing_files
-                        best_extra = extra_files
-                        best_completion = completion
+                best_path_length = path_length
+                best_matched_count = matched_count
 
         # Create termination match result
         is_archival_ready = best_status in [ValidationStatus.CONSISTENT, ValidationStatus.CONSISTENT_WITH_WARNING]

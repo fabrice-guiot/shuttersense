@@ -356,6 +356,7 @@ class CollectionCreate(BaseModel):
         location: File path or remote location
         state: Collection state (defaults to LIVE)
         connector_id: Required for remote collections
+        pipeline_id: Explicit pipeline assignment (NULL = use default at runtime)
         cache_ttl: Override default cache TTL (seconds)
         metadata: User-defined metadata
 
@@ -373,6 +374,7 @@ class CollectionCreate(BaseModel):
     location: str = Field(..., min_length=1, max_length=1024, description="File path or remote location")
     state: CollectionState = Field(default=CollectionState.LIVE, description="Collection state")
     connector_id: Optional[int] = Field(default=None, description="Connector ID (required for remote)")
+    pipeline_id: Optional[int] = Field(default=None, description="Explicit pipeline assignment (NULL = use default)")
     cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800, description="Cache TTL in seconds (max 7 days)")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="User-defined metadata")
 
@@ -404,6 +406,7 @@ class CollectionCreate(BaseModel):
                 "location": "s3://my-bucket/photos/2024/vacation",
                 "state": "live",
                 "connector_id": 1,
+                "pipeline_id": 1,
                 "cache_ttl": 7200,
                 "metadata": {"year": 2024, "season": "summer", "location": "Hawaii"}
             }
@@ -421,12 +424,15 @@ class CollectionUpdate(BaseModel):
         name: New collection name
         location: New location path
         state: New state (LIVE, CLOSED, ARCHIVED)
+        pipeline_id: New pipeline assignment (set to explicit None to clear)
         cache_ttl: New cache TTL override
         metadata: New metadata
 
     Note:
         - Cannot change collection type or connector_id after creation
         - Changing state invalidates cache (new TTL applies)
+        - Setting pipeline_id assigns a pipeline and pins the current version
+        - Use clear_pipeline endpoint to explicitly remove assignment
 
     Example:
         >>> update = CollectionUpdate(state=CollectionState.ARCHIVED, cache_ttl=86400)
@@ -434,6 +440,7 @@ class CollectionUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     location: Optional[str] = Field(default=None, min_length=1, max_length=1024)
     state: Optional[CollectionState] = Field(default=None)
+    pipeline_id: Optional[int] = Field(default=None, description="Pipeline assignment (NULL = keep current)")
     cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800)
     metadata: Optional[Dict[str, Any]] = Field(default=None)
 
@@ -441,6 +448,7 @@ class CollectionUpdate(BaseModel):
         "json_schema_extra": {
             "example": {
                 "state": "archived",
+                "pipeline_id": 2,
                 "cache_ttl": 86400,
                 "metadata": {"archived_by": "admin", "reason": "project completed"}
             }
@@ -452,7 +460,7 @@ class CollectionResponse(BaseModel):
     """
     Schema for collection API responses.
 
-    Includes all collection fields and connector information.
+    Includes all collection fields, connector information, and pipeline assignment.
 
     Fields:
         id: Collection ID
@@ -461,6 +469,9 @@ class CollectionResponse(BaseModel):
         location: File path or remote location
         state: Collection state
         connector_id: Connector ID (null for local)
+        pipeline_id: Explicit pipeline assignment (null = use default)
+        pipeline_version: Pinned pipeline version (null if using default)
+        pipeline_name: Name of assigned pipeline (null if using default)
         cache_ttl: Cache TTL override
         is_accessible: Accessibility flag
         last_error: Last error message
@@ -478,6 +489,9 @@ class CollectionResponse(BaseModel):
     location: str
     state: CollectionState
     connector_id: Optional[int]
+    pipeline_id: Optional[int] = None
+    pipeline_version: Optional[int] = None
+    pipeline_name: Optional[str] = None
     cache_ttl: Optional[int]
     is_accessible: bool
     last_error: Optional[str]
@@ -488,8 +502,8 @@ class CollectionResponse(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def deserialize_metadata(cls, data):
-        """Deserialize metadata_json field to metadata dict."""
+    def deserialize_metadata_and_pipeline(cls, data):
+        """Deserialize metadata_json and extract pipeline_name from relationship."""
         if isinstance(data, dict):
             # Already a dict (from JSON API request)
             return data
@@ -504,6 +518,9 @@ class CollectionResponse(BaseModel):
                     data.metadata = None
             else:
                 data.metadata = None
+        # Extract pipeline_name from relationship
+        if hasattr(data, 'pipeline') and data.pipeline:
+            data.pipeline_name = data.pipeline.name
         return data
 
     model_config = {
@@ -516,6 +533,9 @@ class CollectionResponse(BaseModel):
                 "location": "s3://my-bucket/photos/2024/vacation",
                 "state": "live",
                 "connector_id": 1,
+                "pipeline_id": 1,
+                "pipeline_version": 3,
+                "pipeline_name": "Standard RAW Workflow",
                 "cache_ttl": 7200,
                 "is_accessible": True,
                 "last_error": None,

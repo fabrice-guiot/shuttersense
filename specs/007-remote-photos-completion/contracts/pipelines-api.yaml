@@ -1,0 +1,541 @@
+openapi: 3.0.3
+info:
+  title: Photo Admin Pipelines API
+  description: API endpoints for pipeline management (Phase 5)
+  version: 1.0.0
+
+paths:
+  /api/pipelines:
+    get:
+      summary: List all pipelines
+      operationId: listPipelines
+      tags:
+        - Pipelines
+      parameters:
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+        - name: is_valid
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of pipelines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PipelineSummary'
+
+    post:
+      summary: Create a new pipeline
+      operationId: createPipeline
+      tags:
+        - Pipelines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineCreateRequest'
+      responses:
+        '201':
+          description: Pipeline created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '409':
+          description: Pipeline name already exists
+
+  /api/pipelines/{pipeline_id}:
+    get:
+      summary: Get pipeline details
+      operationId: getPipeline
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pipeline details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineResponse'
+        '404':
+          description: Pipeline not found
+
+    put:
+      summary: Update pipeline
+      operationId: updatePipeline
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineUpdateRequest'
+      responses:
+        '200':
+          description: Pipeline updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineResponse'
+        '400':
+          description: Validation error
+        '404':
+          description: Pipeline not found
+
+    delete:
+      summary: Delete pipeline
+      operationId: deletePipeline
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pipeline deleted
+        '404':
+          description: Pipeline not found
+        '409':
+          description: Cannot delete active pipeline
+
+  /api/pipelines/{pipeline_id}/activate:
+    post:
+      summary: Activate pipeline for validation
+      operationId: activatePipeline
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pipeline activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineResponse'
+        '400':
+          description: Pipeline has validation errors
+        '404':
+          description: Pipeline not found
+
+  /api/pipelines/{pipeline_id}/deactivate:
+    post:
+      summary: Deactivate pipeline
+      operationId: deactivatePipeline
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pipeline deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineResponse'
+        '404':
+          description: Pipeline not found
+
+  /api/pipelines/{pipeline_id}/validate:
+    post:
+      summary: Validate pipeline structure
+      operationId: validatePipeline
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+        '404':
+          description: Pipeline not found
+
+  /api/pipelines/{pipeline_id}/preview:
+    post:
+      summary: Preview expected filenames for pipeline
+      operationId: previewFilenames
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FilenamePreviewRequest'
+      responses:
+        '200':
+          description: Expected filenames
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilenamePreviewResponse'
+        '400':
+          description: Pipeline has validation errors
+        '404':
+          description: Pipeline not found
+
+  /api/pipelines/{pipeline_id}/history:
+    get:
+      summary: Get pipeline version history
+      operationId: getPipelineHistory
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Version history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PipelineHistoryEntry'
+        '404':
+          description: Pipeline not found
+
+  /api/pipelines/import:
+    post:
+      summary: Import pipeline from YAML
+      operationId: importPipeline
+      tags:
+        - Pipelines
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Pipeline imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineResponse'
+        '400':
+          description: Invalid YAML or structure
+
+  /api/pipelines/{pipeline_id}/export:
+    get:
+      summary: Export pipeline as YAML
+      operationId: exportPipeline
+      tags:
+        - Pipelines
+      parameters:
+        - name: pipeline_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: YAML file
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+        '404':
+          description: Pipeline not found
+
+  /api/pipelines/stats:
+    get:
+      summary: Get pipeline statistics for KPIs
+      operationId: getPipelineStats
+      tags:
+        - Pipelines
+      responses:
+        '200':
+          description: Pipeline statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineStatsResponse'
+
+components:
+  schemas:
+    PipelineNode:
+      type: object
+      required:
+        - id
+        - type
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [capture, file, process, pairing, branching, termination]
+        properties:
+          type: object
+          additionalProperties: true
+
+    PipelineEdge:
+      type: object
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+
+    PipelineCreateRequest:
+      type: object
+      required:
+        - name
+        - nodes
+        - edges
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineNode'
+          minItems: 1
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineEdge'
+
+    PipelineUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineEdge'
+        change_summary:
+          type: string
+          maxLength: 500
+
+    PipelineSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        version:
+          type: integer
+        is_active:
+          type: boolean
+        is_valid:
+          type: boolean
+        node_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PipelineResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineEdge'
+        version:
+          type: integer
+        is_active:
+          type: boolean
+        is_valid:
+          type: boolean
+        validation_errors:
+          type: array
+          items:
+            type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ValidationResult:
+      type: object
+      properties:
+        is_valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+
+    ValidationError:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [cycle_detected, orphaned_node, invalid_reference, missing_required_node, invalid_property]
+        message:
+          type: string
+        node_id:
+          type: string
+          nullable: true
+        suggestion:
+          type: string
+          nullable: true
+
+    FilenamePreviewRequest:
+      type: object
+      properties:
+        camera_id:
+          type: string
+          default: "AB3D"
+        counter:
+          type: string
+          default: "0001"
+
+    FilenamePreviewResponse:
+      type: object
+      properties:
+        base_filename:
+          type: string
+        expected_files:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+                description: Node path that leads to this file
+              filename:
+                type: string
+              optional:
+                type: boolean
+
+    PipelineHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        version:
+          type: integer
+        change_summary:
+          type: string
+          nullable: true
+        changed_by:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+        validation_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+
+    PipelineStatsResponse:
+      type: object
+      properties:
+        total_pipelines:
+          type: integer
+        valid_pipelines:
+          type: integer
+        active_pipeline_id:
+          type: integer
+          nullable: true
+        active_pipeline_name:
+          type: string
+          nullable: true

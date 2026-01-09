@@ -243,6 +243,7 @@ async def create_collection(
             location=collection.location,
             state=collection.state,
             connector_id=collection.connector_id,
+            pipeline_id=collection.pipeline_id,
             cache_ttl=collection.cache_ttl,
             metadata=collection.metadata
         )
@@ -365,6 +366,7 @@ async def update_collection(
             name=collection_update.name,
             location=collection_update.location,
             state=collection_update.state,
+            pipeline_id=collection_update.pipeline_id,
             cache_ttl=collection_update.cache_ttl,
             metadata=collection_update.metadata
         )
@@ -639,4 +641,164 @@ async def refresh_collection_cache(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to refresh collection cache: {str(e)}"
+        )
+
+
+@router.post(
+    "/{collection_id}/assign-pipeline",
+    response_model=CollectionResponse,
+    summary="Assign pipeline to collection",
+    description="Assign a specific pipeline to a collection with version pinning"
+)
+async def assign_pipeline(
+    collection_id: int,
+    pipeline_id: int = Query(..., description="Pipeline ID to assign"),
+    collection_service: CollectionService = Depends(get_collection_service)
+) -> CollectionResponse:
+    """
+    Assign a pipeline to a collection.
+
+    The pipeline's current version will be stored as the pinned version.
+    The collection will use this specific version until manually reassigned.
+
+    Path Parameters:
+        collection_id: Collection ID
+
+    Query Parameters:
+        pipeline_id: Pipeline ID to assign
+
+    Returns:
+        CollectionResponse with updated collection including pipeline info
+
+    Raises:
+        404 Not Found: If collection or pipeline doesn't exist
+        400 Bad Request: If pipeline is not active
+
+    Example:
+        POST /api/collections/1/assign-pipeline?pipeline_id=2
+
+        Response:
+        {
+          "id": 1,
+          "name": "Vacation 2024",
+          "pipeline_id": 2,
+          "pipeline_version": 3,
+          "pipeline_name": "Standard RAW Workflow",
+          ...
+        }
+    """
+    try:
+        updated_collection = collection_service.assign_pipeline(
+            collection_id=collection_id,
+            pipeline_id=pipeline_id
+        )
+
+        logger.info(
+            f"Assigned pipeline to collection",
+            extra={
+                "collection_id": collection_id,
+                "pipeline_id": pipeline_id,
+                "pipeline_version": updated_collection.pipeline_version
+            }
+        )
+
+        return CollectionResponse.model_validate(updated_collection)
+
+    except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg:
+            logger.warning(f"Not found for pipeline assignment: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg
+            )
+        elif "not active" in error_msg:
+            logger.warning(f"Pipeline not active: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
+        else:
+            logger.warning(f"Pipeline assignment validation failed: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
+
+    except Exception as e:
+        logger.error(f"Error assigning pipeline: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign pipeline: {str(e)}"
+        )
+
+
+@router.post(
+    "/{collection_id}/clear-pipeline",
+    response_model=CollectionResponse,
+    summary="Clear pipeline assignment from collection",
+    description="Remove explicit pipeline assignment, collection will use default pipeline at runtime"
+)
+async def clear_pipeline(
+    collection_id: int,
+    collection_service: CollectionService = Depends(get_collection_service)
+) -> CollectionResponse:
+    """
+    Clear pipeline assignment from a collection.
+
+    After clearing, the collection will use the default pipeline at runtime
+    for Pipeline Validation operations.
+
+    Path Parameters:
+        collection_id: Collection ID
+
+    Returns:
+        CollectionResponse with updated collection (pipeline_id and pipeline_version are null)
+
+    Raises:
+        404 Not Found: If collection doesn't exist
+
+    Example:
+        POST /api/collections/1/clear-pipeline
+
+        Response:
+        {
+          "id": 1,
+          "name": "Vacation 2024",
+          "pipeline_id": null,
+          "pipeline_version": null,
+          "pipeline_name": null,
+          ...
+        }
+    """
+    try:
+        updated_collection = collection_service.clear_pipeline(collection_id=collection_id)
+
+        logger.info(
+            f"Cleared pipeline assignment from collection",
+            extra={"collection_id": collection_id}
+        )
+
+        return CollectionResponse.model_validate(updated_collection)
+
+    except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg:
+            logger.warning(f"Collection not found for clear pipeline: {collection_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg
+            )
+        else:
+            logger.warning(f"Clear pipeline validation failed: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
+
+    except Exception as e:
+        logger.error(f"Error clearing pipeline: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear pipeline: {str(e)}"
         )

@@ -2,9 +2,30 @@
 
 [![Tests](https://github.com/fabrice-guiot/photo-admin/actions/workflows/test.yml/badge.svg)](https://github.com/fabrice-guiot/photo-admin/actions/workflows/test.yml)
 
-Photo Administration toolbox - Python utility for analyzing photo collections
+Photo Administration toolbox - A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
+
+## Overview
+
+photo-admin provides two main components:
+
+1. **CLI Tools** - Python utilities for photo collection analysis
+2. **Web Application** - Modern React/FastAPI application for remote collection management
+
+### CLI Tools
+
+- **PhotoStats** - Analyze photo collections for statistics, file pairing, and metadata extraction
+- **Photo Pairing** - Group related files by filename patterns, track camera usage, generate analytics
+- **Pipeline Validation** - Validate photo collections against user-defined processing workflows
+
+### Web Application
+
+A full-stack application for managing remote photo collections:
+- **Backend** (FastAPI) - RESTful API with PostgreSQL storage, encrypted credentials, job queuing
+- **Frontend** (React/TypeScript) - Modern, accessible UI with real-time progress updates
 
 ## Quick Start
+
+### CLI Tools
 
 ```bash
 # Clone the repository
@@ -14,294 +35,124 @@ cd photo-admin
 # Install dependencies
 pip install -r requirements.txt
 
-# Run PhotoStats (first run will prompt for configuration)
+# Run PhotoStats
 python photo_stats.py /path/to/your/photos
+
+# Run Photo Pairing
+python photo_pairing.py /path/to/photos
+
+# Run Pipeline Validation
+python pipeline_validation.py /path/to/photos
 ```
 
-> **Note:** HTML reports generated before December 2025 used a different styling format. For consistent, improved reports with the latest features, please regenerate reports using the current version of the tools.
+### Web Application
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+export PHOTO_ADMIN_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+export PHOTO_ADMIN_DB_URL="postgresql://user:pass@localhost:5432/photo_admin"
+alembic upgrade head
+uvicorn src.main:app --reload
+
+# Frontend (in a new terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md) for detailed setup instructions.
 
 ## Documentation
 
-- **[Installation Guide](docs/installation.md)** - Detailed installation instructions
-- **[Configuration Guide](docs/configuration.md)** - How to configure file types and settings
-- **[PhotoStats Tool](docs/photostats.md)** - Complete guide to using the PhotoStats tool
-- **[Photo Pairing Tool](docs/photo-pairing.md)** - Complete guide to using the Photo Pairing tool
-- **[Pipeline Validation Tool](docs/pipeline-validation.md)** - Complete guide to using the Pipeline Validation tool
+### User Guides
 
-## Tools
+- [Installation Guide](docs/installation.md) - Detailed installation instructions
+- [Configuration Guide](docs/configuration.md) - How to configure file types and settings
+- [PhotoStats Tool](docs/photostats.md) - Complete guide to using PhotoStats
+- [Photo Pairing Tool](docs/photo-pairing.md) - Complete guide to Photo Pairing
+- [Pipeline Validation Tool](docs/pipeline-validation.md) - Complete guide to Pipeline Validation
 
-### PhotoStats
+### Product Requirements
 
-PhotoStats analyzes photo collections and generates detailed HTML reports with statistics and charts.
+Product requirement documents are stored in [docs/prd/](docs/prd/) for feature planning and design decisions.
 
-**Features:**
-- Configurable file type support for any RAW or image format
-- Recursive folder scanning
-- File pairing analysis (images with/without XMP sidecars)
-- XMP metadata extraction
-- Interactive HTML reports with charts
+### Component Documentation
 
-**Quick Usage:**
+- **[Backend README](backend/README.md)** - API setup, database migrations, testing, and development guide
+- **[Frontend README](frontend/README.md)** - React app setup, component structure, and build configuration
 
-```bash
-python photo_stats.py /path/to/your/photos
-```
-
-See the [PhotoStats documentation](docs/photostats.md) for complete usage details.
-
-### Photo Pairing Tool
-
-The Photo Pairing Tool analyzes photo collections based on filename patterns to group related files, track camera usage, and generate comprehensive analytics reports.
-
-**Features:**
-- Filename validation with detailed error messages
-- Automatic file grouping by 8-character prefix (camera + counter)
-- Interactive prompts for camera and processing method information
-- Smart caching for instant report regeneration
-- Support for separate images and processing method tracking
-- Invalid filename detection with specific reasons
-- Interactive HTML reports with Chart.js visualizations
-
-**Filename Convention:**
+## Project Structure
 
 ```
-{CAMERA_ID}{COUNTER}[-{PROPERTY}]*{.extension}
-
-Examples:
-  AB3D0001.dng              # Basic photo
-  XYZW0035-HDR.tiff         # HDR processed
-  AB3D0001-2-HDR_BW.dng     # Separate image with processing
+photo-admin/
+├── photo_stats.py              # PhotoStats CLI tool
+├── photo_pairing.py            # Photo Pairing CLI tool
+├── pipeline_validation.py      # Pipeline Validation CLI tool
+├── utils/                      # Shared Python utilities
+├── templates/                  # Jinja2 HTML report templates
+├── config/                     # Configuration files
+├── backend/                    # FastAPI backend application
+├── frontend/                   # React frontend application
+├── docs/                       # Documentation
+│   ├── prd/                    # Product requirement documents
+│   └── ...                     # Tool documentation
+├── tests/                      # CLI tool tests
+├── requirements.txt            # Python dependencies
+└── CLAUDE.md                   # Development guidelines
 ```
 
-**Quick Usage:**
-
-```bash
-python3 photo_pairing.py /path/to/photos
-```
-
-The tool will:
-1. Scan folder and validate filenames
-2. Group related files (same photo, different formats)
-3. Prompt for camera/method info (first run only)
-4. Generate timestamped HTML report
-5. Save cache for fast future analysis
-
-See the [Photo Pairing documentation](docs/photo-pairing.md) for complete usage details.
-
-### Pipeline Validation Tool
-
-The Pipeline Validation Tool validates photo collections against user-defined processing workflows (pipelines). It integrates with the Photo Pairing Tool to analyze file groups and check if images have completed expected processing steps.
-
-**Features:**
-- Validate processing workflows against directed graph pipelines
-- Assess archival readiness across multiple termination endpoints
-- Detect incomplete processing (PARTIAL status)
-- Identify extra files (CONSISTENT-WITH-WARNING)
-- Interactive HTML reports with validation statistics
-- Smart caching for fast re-runs (10,000+ images in <60 seconds)
-- Support for complex workflows (loops, branching, pairing nodes)
-
-**Pipeline Concepts:**
-
-Pipelines are directed graphs with 6 node types:
-- **Capture**: Camera capture (starting point)
-- **File**: Expected files (`.CR3`, `.DNG`, `.TIF`, `.JPG`, `.XMP`)
-- **Process**: Processing steps that add suffixes (e.g., `-DxO_DeepPRIME_XD2s`, `-Edit`)
-- **Branching**: User decision points (archive now vs. continue processing)
-- **Pairing**: Merge multiple images (e.g., HDR from 3 bracketed exposures)
-- **Termination**: End states (e.g., "Black Box Archive", "Browsable Archive")
-
-**Validation Statuses:**
-- ✅ **CONSISTENT**: All expected files present, no extras (archival ready)
-- ⚠️ **CONSISTENT-WITH-WARNING**: All expected files present, extra files exist (archival ready)
-- ⏳ **PARTIAL**: Incomplete processing (missing expected files)
-- ❌ **INCONSISTENT**: No valid path match or critical files missing
-
-**Quick Usage:**
-
-```bash
-# Step 1: Run Photo Pairing Tool first (prerequisite)
-python3 photo_pairing.py /path/to/photos
-
-# Step 2: Define pipeline in config/config.yaml (see docs for examples)
-
-# Step 3: Validate against pipeline
-python3 pipeline_validation.py /path/to/photos
-
-# Step 4: Review HTML report
-open pipeline_validation_report_*.html
-```
-
-See the [Pipeline Validation documentation](docs/pipeline-validation.md) for complete usage details and pipeline configuration examples.
+For detailed project structure:
+- CLI tools and utilities: See this README
+- Backend structure: See [backend/README.md](backend/README.md)
+- Frontend structure: See [frontend/README.md](frontend/README.md)
 
 ## Development
 
 ### Running Tests
 
-This project includes a comprehensive test suite using pytest. To run the tests:
-
 ```bash
-# Install development dependencies
-pip install -r requirements.txt
-
-# Run all tests
-python -m pytest tests/
-
-# Run tests with verbose output
+# CLI tool tests
 python -m pytest tests/ -v
 
-# Run tests with coverage report
-pip install pytest-cov
-python -m pytest tests/ --cov=photo_stats --cov-report=html
+# Backend tests
+cd backend && python -m pytest tests/ -v
 
-# Run specific test class
-python -m pytest tests/test_photo_stats.py::TestFileScanningFunctionality -v
-
-# Run specific test
-python -m pytest tests/test_photo_stats.py::TestFileScanningFunctionality::test_scan_valid_folder -v
+# Frontend tests
+cd frontend && npm test
 ```
 
 ### Test Coverage
 
-The test suite includes 160 tests covering:
+The project has comprehensive test coverage:
+- **CLI Tools**: 160+ tests (PhotoStats, Photo Pairing, Pipeline Validation)
+- **Backend**: 300+ tests (unit + integration)
+- **Frontend**: Component and hook tests
 
-**PhotoStats (50 tests):**
-- Initialization and configuration
-- File scanning, filtering, and discovery
-- Statistics collection and aggregation
-- File pairing analysis (paired/orphaned files)
-- XMP metadata extraction
-- HTML report generation
-- Help text and CLI argument parsing
-- Utility functions and edge cases
+See [CLAUDE.md](CLAUDE.md) for development guidelines and coding standards.
 
-**Photo Pairing (43 tests):**
-- Filename validation and parsing
-- Property type detection
-- ImageGroup building and file grouping
-- Cache operations (save/load/validation)
-- Analytics calculations
-- HTML report generation
-- Help text and CLI argument parsing
-- Integration workflows (first-run, cached, stale cache)
+## Features
 
-**Pipeline Validation (51 tests):**
-- CLI interface and argument parsing
-- Signal handling (SIGINT/CTRL+C)
-- Prerequisite validation (Photo Pairing cache)
-- Pipeline configuration loading and validation
-- Photo Pairing integration
-- Path enumeration (simple, branching, loops)
-- File generation from pipeline nodes
-- Validation status classification (CONSISTENT/PARTIAL/INCONSISTENT/CONSISTENT-WITH-WARNING)
-- Custom pipelines (processing methods, pairing nodes)
-- Counter looping with suffixes
-- Caching (hash calculation, invalidation, reuse)
-- HTML report generation
-- Graph visualization and expected file examples
-- Pairing node Cartesian product logic
-- Process node branching for multiple methods
+### Remote Storage Support
 
-**Report Rendering (12 tests):**
-- ReportContext and dataclass structures
-- Template-based HTML generation
-- Visual consistency across tools
-- Atomic file writes
+- **AWS S3** - Native S3 bucket access
+- **Google Cloud Storage** - GCS bucket integration
+- **SMB/CIFS** - Network share access
 
-**Signal Handling (7 tests):**
-- SIGINT (CTRL+C) graceful interruption
-- Exit code 130 verification
-- User-friendly error messages
-- Atomic file write patterns
+### Security
 
-### Project Structure
+- Fernet encryption for stored credentials
+- Rate limiting on sensitive endpoints
+- Security headers (CSP, X-Frame-Options, etc.)
+- SQL injection prevention via SQLAlchemy ORM
 
-```
-photo-admin/
-├── photo_stats.py                  # PhotoStats tool
-├── photo_pairing.py                # Photo Pairing tool
-├── pipeline_validation.py          # Pipeline Validation tool
-├── CLAUDE.md                       # Claude Code development guidelines
-├── utils/                          # Shared utilities
-│   ├── __init__.py                 # Package init
-│   ├── config_manager.py           # Configuration management
-│   ├── filename_parser.py          # Filename validation and parsing
-│   ├── pipeline_processor.py       # Pipeline processing and validation logic
-│   └── report_renderer.py          # Jinja2-based HTML report generation
-├── templates/                      # HTML report templates
-│   ├── base.html.j2                # Base template with shared styling
-│   ├── photo_stats.html.j2         # PhotoStats report template
-│   ├── photo_pairing.html.j2       # Photo Pairing report template
-│   └── pipeline_validation.html.j2 # Pipeline Validation report template
-├── config/
-│   ├── README.md                   # Configuration guide
-│   ├── template-config.yaml        # Configuration template
-│   └── config.yaml                 # User configuration (gitignored)
-├── docs/                           # Documentation
-│   ├── installation.md             # Installation guide
-│   ├── configuration.md            # Configuration guide
-│   ├── photostats.md               # PhotoStats tool documentation
-│   ├── photo-pairing.md            # Photo Pairing tool documentation
-│   ├── pipeline-validation.md      # Pipeline Validation tool documentation
-│   └── prd/                        # Product Requirements Documents
-│       ├── 004-remote-photos-persistence.md # PRD for remote collections & DB
-│       ├── photo-pairing-tool.md   # Photo Pairing PRD
-│       └── pipeline-validation/    # Pipeline Validation PRD materials
-│           ├── README.md
-│           ├── spec.md
-│           ├── flowchart-to-config-mapping.md
-│           ├── node-architecture-analysis.md
-│           ├── photo_processing_pipeline_configuration_proposal.md
-│           ├── pipeline-config-example.yaml
-│           └── pipeline-config-deprecated.yaml
-├── specs/                          # Design specifications
-│   ├── 001-photo-pairing-tool/
-│   │   ├── spec.md                 # Technical specification
-│   │   ├── plan.md                 # Implementation plan
-│   │   ├── tasks.md                # Task breakdown
-│   │   ├── data-model.md           # Data model and structures
-│   │   ├── research.md             # Technical research
-│   │   ├── quickstart.md           # Quick start guide
-│   │   ├── checklists/
-│   │   │   └── requirements.md     # Requirements checklist
-│   │   └── contracts/
-│   │       └── filename-validation.md # Filename validation contracts
-│   ├── 002-html-report-consistency/
-│   │   ├── spec.md                 # HTML consistency specification
-│   │   ├── plan.md                 # Implementation plan
-│   │   ├── tasks.md                # Task breakdown
-│   │   ├── data-model.md           # Data model
-│   │   ├── research.md             # Technical research
-│   │   ├── quickstart.md           # Quick start guide
-│   │   └── checklists/
-│   │       └── requirements.md     # Requirements checklist
-│   └── 003-pipeline-validation/
-│       ├── spec.md                 # Pipeline validation specification
-│       ├── plan.md                 # Implementation plan
-│       ├── tasks.md                # Task breakdown
-│       ├── data-model.md           # Data model and structures
-│       ├── research.md             # Technical research and decisions
-│       ├── research-cache-hashing.md # Cache hashing research
-│       ├── quickstart.md           # Quick start guide and examples
-│       ├── checklists/
-│       │   └── requirements.md     # Requirements checklist
-│       └── contracts/
-│           ├── pipeline-config-schema.yaml # Pipeline config schema
-│           └── validation-result-schema.json # Validation result schema
-├── requirements.txt                # Python dependencies (PyYAML, Jinja2)
-├── pytest.ini                      # Pytest configuration
-├── .coveragerc                     # Coverage configuration
-├── tests/
-│   ├── __init__.py                 # Test package
-│   ├── conftest.py                 # Test fixtures and configuration
-│   ├── test_photo_stats.py         # PhotoStats test suite (50 tests)
-│   ├── test_photo_pairing.py       # Photo Pairing test suite (43 tests)
-│   ├── test_pipeline_validation.py # Pipeline Validation test suite (51 tests)
-│   ├── test_report_renderer.py     # Report renderer tests (12 tests)
-│   └── test_signal_handling.py     # Signal handling tests (7 tests)
-├── LICENSE                         # AGPL v3 license
-└── README.md                       # This file
-```
+### Performance
+
+- PostgreSQL with connection pooling
+- GIN indexes for JSONB queries
+- File listing cache with state-based TTL
+- Real-time progress via WebSocket
 
 ## License
 
@@ -311,9 +162,9 @@ See the [LICENSE](LICENSE) file for details.
 
 ### What this means:
 
-- ✅ You can use, modify, and distribute this software freely
-- ✅ If you run a modified version on a server, you must make the source code available to users
-- ✅ Any derivative works must also be licensed under AGPL v3
-- ✅ This ensures the software remains free and open for the community
+- You can use, modify, and distribute this software freely
+- If you run a modified version on a server, you must make the source code available to users
+- Any derivative works must also be licensed under AGPL v3
+- This ensures the software remains free and open for the community
 
 For more information, visit: https://www.gnu.org/licenses/agpl-3.0.html

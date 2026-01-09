@@ -11,13 +11,12 @@ import {
   Workflow,
   FolderOpen,
   Archive,
-  BarChart3,
-  Users,
   Plug,
   Settings,
   X,
   ChevronLeft,
   Pin,
+  ChartNoAxesCombined,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -61,13 +60,11 @@ export interface SidebarProps {
 
 const MENU_ITEMS: Omit<MenuItem, 'active'>[] = [
   { id: 'dashboard', icon: LayoutGrid, label: 'Dashboard', href: '/' },
-  { id: 'workflows', icon: Workflow, label: 'Workflows', href: '/workflows' },
   { id: 'collections', icon: FolderOpen, label: 'Collections', href: '/collections' },
-  { id: 'assets', icon: Archive, label: 'Assets', href: '/assets' },
-  { id: 'analytics', icon: BarChart3, label: 'Analytics', href: '/analytics' },
-  { id: 'team', icon: Users, label: 'Team', href: '/team' },
   { id: 'connectors', icon: Plug, label: 'Connectors', href: '/connectors' },
-  { id: 'settings', icon: Settings, label: 'Settings', href: '/settings' },
+  { id: 'pipelines', icon: Workflow, label: 'Pipelines', href: '/pipelines' },
+  { id: 'analytics', icon: ChartNoAxesCombined, label: 'Analytics', href: '/analytics' },
+  { id: 'config', icon: Settings, label: 'Config', href: '/config' },
 ]
 
 // ============================================================================

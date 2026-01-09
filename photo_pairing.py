@@ -18,6 +18,7 @@ by the Free Software Foundation, either version 3 of the License, or
 """
 
 import argparse
+import os
 import sys
 import signal
 import time
@@ -406,8 +407,15 @@ def calculate_analytics(imagegroups, camera_mappings, processing_methods):
 
     for group in imagegroups:
         camera_id = group['camera_id']
-        # Get camera info (v1.0: use first entry in list)
-        camera_info = camera_mappings.get(camera_id, [{}])[0] if camera_mappings.get(camera_id) else {}
+        # Get camera info - handle both array and object formats defensively
+        # Database may store as: dict, [dict], or [[dict]] depending on source
+        raw_camera_info = camera_mappings.get(camera_id)
+        camera_info = raw_camera_info
+        # Unwrap lists until we get a dict or None
+        while isinstance(camera_info, list):
+            camera_info = camera_info[0] if camera_info else None
+        if not isinstance(camera_info, dict):
+            camera_info = {}
 
         camera_usage[camera_id]['name'] = camera_info.get('name', f'Unknown Camera {camera_id}')
         camera_usage[camera_id]['serial_number'] = camera_info.get('serial_number', '')
@@ -703,13 +711,20 @@ def main():
     # Register signal handler for graceful Ctrl+C handling
     signal.signal(signal.SIGINT, signal_handler)
 
+    # Determine current configuration mode for help text
+    db_url = os.environ.get('PHOTO_ADMIN_DB_URL')
+    if db_url:
+        current_mode = "  ** CURRENT: Database mode (PHOTO_ADMIN_DB_URL is set) **"
+    else:
+        current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
+
     parser = argparse.ArgumentParser(
         description="""Photo Pairing - Analyze photo filename patterns and group related files.
 
 Validates filenames against naming conventions, tracks camera usage, identifies
 processing methods, and generates interactive HTML reports with comprehensive analytics.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 Examples:
   %(prog)s /path/to/photos
       Analyze folder and generate timestamped HTML report
@@ -729,16 +744,25 @@ How It Works:
   6. Generate interactive HTML report with analytics
 
 Configuration:
-  If no config file exists, the tool will search in this order:
-    1. config/config.yaml (current directory)
-    2. config.yaml (current directory)
-    3. ~/.photo_stats_config.yaml (home directory)
-    4. config/config.yaml (script directory)
+{current_mode}
 
-  To create a configuration file:
-    cp config/template-config.yaml config/config.yaml
+  Database Mode (when web UI is available):
+    Set PHOTO_ADMIN_DB_URL environment variable to use shared database config.
+    This enables configuration changes made in the web UI to be used by CLI tools.
+    New camera/method prompts will be saved to the database for web UI access.
+    Example: export PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
 
-  The tool will prompt interactively to create missing config on first run.
+  File Mode (standalone usage):
+    If PHOTO_ADMIN_DB_URL is not set, the tool searches for config files:
+      1. config/config.yaml (current directory)
+      2. config.yaml (current directory)
+      3. ~/.photo_stats_config.yaml (home directory)
+      4. config/config.yaml (script directory)
+
+    To create a configuration file:
+      cp config/template-config.yaml config/config.yaml
+
+    The tool will prompt interactively to create missing config on first run.
 
 Report Output:
   Default filename: photo_pairing_report_YYYY-MM-DD_HH-MM-SS.html
@@ -778,6 +802,7 @@ Report Output:
 
     # Load configuration
     config = PhotoAdminConfig()
+    print(f"Configuration: {config.config_source_description}")
 
     # Check for cached data
     print("Checking for cached analysis...")

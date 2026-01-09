@@ -44,6 +44,12 @@ export const collectionFormSchema = z
       .int('Cache TTL must be an integer')
       .positive('Cache TTL must be positive')
       .nullable()
+      .optional(),
+    pipeline_id: z
+      .number()
+      .int('Pipeline ID must be an integer')
+      .positive('Pipeline ID must be positive')
+      .nullable()
       .optional()
   })
   .refine(
@@ -100,6 +106,7 @@ export function getDefaultCollectionFormValues(type: CollectionType = 'local'): 
     state: 'live',
     location: '',
     connector_id: type === 'local' ? null : undefined,
-    cache_ttl: null
+    cache_ttl: null,
+    pipeline_id: null
   }
 }

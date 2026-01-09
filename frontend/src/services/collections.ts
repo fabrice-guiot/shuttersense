@@ -98,3 +98,25 @@ export const getCollectionStats = async (): Promise<CollectionStatsResponse> => 
   const response = await api.get<CollectionStatsResponse>('/collections/stats')
   return response.data
 }
+
+/**
+ * Assign a pipeline to a collection
+ * Stores the pipeline's current version as the pinned version
+ */
+export const assignPipeline = async (collectionId: number, pipelineId: number): Promise<Collection> => {
+  const response = await api.post<Collection>(
+    `/collections/${collectionId}/assign-pipeline`,
+    null,
+    { params: { pipeline_id: pipelineId } }
+  )
+  return response.data
+}
+
+/**
+ * Clear pipeline assignment from a collection
+ * Collection will use default pipeline at runtime
+ */
+export const clearPipeline = async (collectionId: number): Promise<Collection> => {
+  const response = await api.post<Collection>(`/collections/${collectionId}/clear-pipeline`)
+  return response.data
+}

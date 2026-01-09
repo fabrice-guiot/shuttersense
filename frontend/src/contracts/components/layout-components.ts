@@ -176,7 +176,7 @@ export interface UserProfile {
 
 /**
  * Default user profile (placeholder)
- * TODO: Replace with actual auth when implemented
+ * Note: Authentication is out of scope for v1.0 - single-user deployment assumed
  */
 export const DEFAULT_USER_PROFILE: UserProfile = {
   initials: 'JD',

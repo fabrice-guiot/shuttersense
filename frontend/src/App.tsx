@@ -11,10 +11,11 @@ import {
   Workflow,
   FolderOpen,
   Archive,
-  BarChart3,
+  ChartNoAxesCombined,
   Users,
   Plug,
   Settings,
+  GitBranch,
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
@@ -28,6 +29,9 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import TeamPage from './pages/TeamPage'
 import ConnectorsPage from './pages/ConnectorsPage'
 import SettingsPage from './pages/SettingsPage'
+import PipelinesPage from './pages/PipelinesPage'
+import PipelineEditorPage from './pages/PipelineEditorPage'
+import ConfigurationPage from './pages/ConfigurationPage'
 
 // ============================================================================
 // Route Configuration
@@ -69,7 +73,7 @@ const routes: RouteConfig[] = [
     path: '/analytics',
     element: <AnalyticsPage />,
     pageTitle: 'Analytics',
-    pageIcon: BarChart3,
+    pageIcon: ChartNoAxesCombined,
   },
   {
     path: '/team',
@@ -84,9 +88,21 @@ const routes: RouteConfig[] = [
     pageIcon: Plug,
   },
   {
+    path: '/pipelines',
+    element: <PipelinesPage />,
+    pageTitle: 'Pipelines',
+    pageIcon: GitBranch,
+  },
+  {
     path: '/settings',
     element: <SettingsPage />,
     pageTitle: 'Settings',
+    pageIcon: Settings,
+  },
+  {
+    path: '/config',
+    element: <ConfigurationPage />,
+    pageTitle: 'Configuration',
     pageIcon: Settings,
   },
 ]
@@ -110,6 +126,10 @@ function App() {
             }
           />
         ))}
+        {/* Pipeline editor routes - these pages include their own MainLayout */}
+        <Route path="/pipelines/new" element={<PipelineEditorPage />} />
+        <Route path="/pipelines/:id" element={<PipelineEditorPage />} />
+        <Route path="/pipelines/:id/edit" element={<PipelineEditorPage />} />
       </Routes>
     </BrowserRouter>
   )

@@ -25,10 +25,11 @@ _TEST_MASTER_KEY = Fernet.generate_key().decode('utf-8')
 os.environ['PHOTO_ADMIN_MASTER_KEY'] = _TEST_MASTER_KEY
 os.environ['PHOTO_ADMIN_DB_URL'] = 'sqlite:///:memory:'
 
-from backend.src.models import Base, Connector, Collection
+from backend.src.models import Base, Connector, Collection, AnalysisResult, Pipeline, Configuration
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.cache import FileListingCache
 from backend.src.utils.job_queue import JobQueue
+from backend.src.utils.websocket import ConnectionManager
 
 
 # ============================================================================
@@ -60,14 +61,19 @@ def test_db_engine():
 
 
 @pytest.fixture(scope='function')
-def test_db_session(test_db_engine):
-    """Create a test database session."""
-    TestingSessionLocal = sessionmaker(
+def test_session_factory(test_db_engine):
+    """Create a session factory bound to test database."""
+    return sessionmaker(
         autocommit=False,
         autoflush=False,
         bind=test_db_engine
     )
-    session = TestingSessionLocal()
+
+
+@pytest.fixture(scope='function')
+def test_db_session(test_session_factory):
+    """Create a test database session."""
+    session = test_session_factory()
     try:
         yield session
     finally:
@@ -95,6 +101,12 @@ def test_cache():
 def test_job_queue():
     """Create a JobQueue for testing."""
     return JobQueue()
+
+
+@pytest.fixture(scope='function')
+def test_websocket_manager():
+    """Create a ConnectionManager for testing."""
+    return ConnectionManager()
 
 
 # ============================================================================
@@ -306,7 +318,7 @@ def mock_smb_connection(mocker):
 # ============================================================================
 
 @pytest.fixture
-def test_client(test_db_session, test_cache, test_job_queue, test_encryptor):
+def test_client(test_db_session, test_session_factory, test_cache, test_job_queue, test_encryptor, test_websocket_manager):
     """Create a test client for FastAPI application."""
     from fastapi.testclient import TestClient
     from backend.src.main import app
@@ -327,6 +339,19 @@ def test_client(test_db_session, test_cache, test_job_queue, test_encryptor):
     def get_test_encryptor():
         return test_encryptor
 
+    def get_test_websocket_manager():
+        return test_websocket_manager
+
+    def get_test_tool_service():
+        """Create ToolService with test session factory for background tasks."""
+        from backend.src.services.tool_service import ToolService
+        return ToolService(
+            db=test_db_session,
+            websocket_manager=test_websocket_manager,
+            job_queue=test_job_queue,
+            session_factory=test_session_factory
+        )
+
     # Import and override dependencies
     from backend.src.db.database import get_db
     from backend.src.api.connectors import get_credential_encryptor as get_connector_encryptor
@@ -334,11 +359,14 @@ def test_client(test_db_session, test_cache, test_job_queue, test_encryptor):
         get_file_cache,
         get_credential_encryptor as get_collection_encryptor
     )
+    from backend.src.api.tools import get_websocket_manager, get_tool_service
 
     app.dependency_overrides[get_db] = get_test_db
     app.dependency_overrides[get_file_cache] = get_test_cache
     app.dependency_overrides[get_connector_encryptor] = get_test_encryptor
     app.dependency_overrides[get_collection_encryptor] = get_test_encryptor
+    app.dependency_overrides[get_websocket_manager] = get_test_websocket_manager
+    app.dependency_overrides[get_tool_service] = get_test_tool_service
 
     with TestClient(app) as client:
         yield client

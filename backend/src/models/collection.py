@@ -9,6 +9,7 @@ Design Rationale:
 - Accessibility Tracking: is_accessible flag with last_error for troubleshooting
 - Cache TTL: Configurable per collection or state-based defaults
 - Connector Foreign Key: RESTRICT delete to prevent orphaned collections
+- Pipeline Assignment: Optional pipeline+version for tool execution (SET NULL on delete)
 """
 
 import enum
@@ -62,6 +63,8 @@ class Collection(Base):
     Attributes:
         id: Primary key
         connector_id: Foreign key to Connector (NULL for local, required for remote)
+        pipeline_id: Foreign key to Pipeline (NULL = use default, SET NULL on delete)
+        pipeline_version: Pinned pipeline version (NULL if using current/default)
         name: User-friendly collection name (unique)
         type: Collection type (LOCAL, S3, GCS, SMB)
         location: Storage location path/URI
@@ -73,6 +76,7 @@ class Collection(Base):
         created_at: Creation timestamp
         updated_at: Last update timestamp
         connector: Related connector (many-to-one, NULL for local)
+        pipeline: Related pipeline (many-to-one, NULL = use default)
         analysis_results: Related analysis results (one-to-many, cascade delete)
 
     Location Format:
@@ -87,6 +91,8 @@ class Collection(Base):
         - state must be valid CollectionState
         - connector_id required for remote types, NULL for LOCAL
         - connector_id uses RESTRICT on delete
+        - pipeline_id uses SET NULL on delete
+        - pipeline_version must be set when pipeline_id is set
         - cache_ttl if provided must be positive integer
 
     Indexes:
@@ -95,6 +101,7 @@ class Collection(Base):
         - type (for filtering by type)
         - is_accessible (for filtering accessible collections)
         - connector_id (for foreign key lookups)
+        - pipeline_id (for foreign key lookups)
 
     Methods:
         get_effective_cache_ttl(): Returns user override or state-based default TTL
@@ -112,6 +119,15 @@ class Collection(Base):
         nullable=True,  # NULL for local collections, required for remote
         index=True
     )
+    pipeline_id = Column(
+        Integer,
+        ForeignKey("pipelines.id", ondelete="SET NULL"),
+        nullable=True,  # NULL = use default pipeline at runtime
+        index=True
+    )
+
+    # Pipeline version (pinned when explicitly assigned)
+    pipeline_version = Column(Integer, nullable=True)
 
     # Core fields
     name = Column(String(255), unique=True, nullable=False, index=True)
@@ -150,14 +166,13 @@ class Collection(Base):
 
     # Relationships
     connector = relationship("Connector", back_populates="collections")
-
-    # Note: analysis_results relationship will be added when AnalysisResult model is created
-    # analysis_results = relationship(
-    #     "AnalysisResult",
-    #     back_populates="collection",
-    #     cascade="all, delete-orphan",
-    #     lazy="dynamic"
-    # )
+    pipeline = relationship("Pipeline", back_populates="collections")
+    analysis_results = relationship(
+        "AnalysisResult",
+        back_populates="collection",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
 
     # Table-level constraints
     __table_args__ = (

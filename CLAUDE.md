@@ -1,30 +1,43 @@
 # photo-admin Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2025-12-25
+Auto-generated from all feature plans. Last updated: 2026-01-09
 
 ## Project Overview
 
-Photo Administration toolbox - Python utilities for analyzing photo collections.
+Photo Administration toolbox - A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
 
-### Tools
+### CLI Tools
 
 1. **PhotoStats** - Analyze photo collections for orphaned files and sidecar issues
 2. **Photo Pairing Tool** - Analyze filename patterns, group files, track camera usage
+3. **Pipeline Validation** - Validate collections against user-defined processing workflows
+
+### Web Application
+
+- **Backend** (FastAPI) - RESTful API with PostgreSQL storage, encrypted credentials, job queuing
+- **Frontend** (React/TypeScript) - Modern, accessible UI with real-time progress updates
 
 ## Active Technologies
-- Python 3.10+ (required for match/case syntax and modern type hinting) (003-pipeline-validation)
-- Python 3.10+ (backend), JavaScript ES6+ (frontend) (004-remote-photos-persistence)
-- PostgreSQL 12+ with JSONB columns (collections, configurations, pipelines, analysis_results, pipeline_history) (004-remote-photos-persistence)
-- TypeScript 5.x (migration from JavaScript ES6+), React 18.3.1 (005-ui-migration)
-- N/A (frontend only, uses existing PostgreSQL backend API) (005-ui-migration)
-- Python 3.10+ (backend), TypeScript 5.x (frontend) + FastAPI, SQLAlchemy (backend); React 18.3.1, Tailwind CSS, Lucide Icons (frontend) (006-ux-polish)
-- PostgreSQL 12+ with existing collections/connectors tables (006-ux-polish)
 
-- **Python 3.10+**
+### Core Stack
+- **Python 3.10+** - Backend and CLI tools (required for match/case syntax)
+- **TypeScript 5.x** - Frontend type safety
+- **React 18.3.1** - Frontend UI framework
+- **FastAPI** - Backend web framework with OpenAPI docs
+- **PostgreSQL 12+** - Primary database with JSONB columns
+
+### CLI Dependencies
 - **PyYAML** (>=6.0) - Configuration file handling
 - **Jinja2** (>=3.1.0) - HTML template rendering
-- **pytest** - Testing framework with 109 comprehensive tests
+- **pytest** - Testing framework
 - **Chart.js** - HTML report visualizations (via CDN)
+
+### Security Features (Phase 7)
+- **slowapi** - Rate limiting middleware
+- **Fernet encryption** - Encrypted credential storage
+- Security headers (CSP, X-Frame-Options, etc.)
+- SQL injection prevention via SQLAlchemy ORM
+- Credential access audit logging
 
 ## Project Structure
 
@@ -170,6 +183,19 @@ black .
 - **Testing**: Write tests alongside implementation (flexible TDD)
 
 ## Frontend Architecture
+
+### Design System (Required Reading)
+
+All frontend development MUST follow the Design System documentation at `frontend/docs/design-system.md`. Key requirements:
+
+- **Colors**: Use design tokens, never hardcoded colors
+- **Buttons**: Primary=default, Cancel=outline, Delete=destructive, Icons=ghost
+- **Status Colors**: success=positive, destructive=negative, muted=inactive, info=archived
+- **Domain Labels**: Import from centralized `@/contracts/domain-labels.ts`
+- **Error Handling**: Page errors at top, form errors above buttons, field errors via FormMessage
+- **Icons**: Use consistent domain icons (Collection=FolderOpen, Connector=Plug, etc.)
+
+See [Design System](frontend/docs/design-system.md) for complete guidelines.
 
 ### TopHeader KPI Pattern (Required for all pages)
 
@@ -323,9 +349,15 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
-- 006-ux-polish: Added Python 3.10+ (backend), TypeScript 5.x (frontend) + FastAPI, SQLAlchemy (backend); React 18.3.1, Tailwind CSS, Lucide Icons (frontend)
-- 005-ui-migration: Added TypeScript 5.x (migration from JavaScript ES6+), React 18.3.1
-- 004-remote-photos-persistence: Added Python 3.10+ (backend), JavaScript ES6+ (frontend)
+
+### Phase 7 Production-Ready Application (2026-01-09)
+- Rate limiting middleware using slowapi (10 req/min for tool execution)
+- Request size limits (10MB max for uploads)
+- Security headers middleware (CSP, X-Frame-Options, X-XSS-Protection, etc.)
+- GIN index for JSONB queries on analysis results
+- Credential access audit logging
+- Comprehensive security tests
+- Updated documentation (README files, CLAUDE.md)
 
 ### HTML Report Consistency & Tool Improvements (2025-12-25)
   - Created templates/base.html.j2 with shared styling and Chart.js theme

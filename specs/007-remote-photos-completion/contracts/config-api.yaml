@@ -1,0 +1,492 @@
+openapi: 3.0.3
+info:
+  title: Photo Admin Configuration API
+  description: API endpoints for configuration management (Phase 7)
+  version: 1.0.0
+
+paths:
+  /api/config:
+    get:
+      summary: Get all configuration
+      operationId: getAllConfig
+      tags:
+        - Configuration
+      parameters:
+        - name: category
+          in: query
+          description: Filter by category
+          schema:
+            type: string
+            enum: [extensions, cameras, processing_methods]
+      responses:
+        '200':
+          description: Configuration by category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationResponse'
+
+  /api/config/{category}:
+    get:
+      summary: Get configuration for a category
+      operationId: getCategoryConfig
+      tags:
+        - Configuration
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [extensions, cameras, processing_methods]
+      responses:
+        '200':
+          description: Category configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryConfigResponse'
+        '404':
+          description: Category not found
+
+    put:
+      summary: Update configuration for a category
+      operationId: updateCategoryConfig
+      tags:
+        - Configuration
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [extensions, cameras, processing_methods]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryConfigUpdateRequest'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryConfigResponse'
+        '400':
+          description: Validation error
+        '404':
+          description: Category not found
+
+  /api/config/{category}/{key}:
+    get:
+      summary: Get a specific configuration value
+      operationId: getConfigValue
+      tags:
+        - Configuration
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuration value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigValueResponse'
+        '404':
+          description: Configuration not found
+
+    put:
+      summary: Update a specific configuration value
+      operationId: updateConfigValue
+      tags:
+        - Configuration
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigValueUpdateRequest'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigValueResponse'
+        '400':
+          description: Validation error
+        '404':
+          description: Configuration not found
+
+    delete:
+      summary: Delete a configuration value
+      operationId: deleteConfigValue
+      tags:
+        - Configuration
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuration deleted
+        '404':
+          description: Configuration not found
+
+  /api/config/import:
+    post:
+      summary: Start YAML import with conflict detection
+      operationId: startImport
+      tags:
+        - Configuration
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Import session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportSessionResponse'
+        '400':
+          description: Invalid YAML file
+
+  /api/config/import/{session_id}:
+    get:
+      summary: Get import session status
+      operationId: getImportSession
+      tags:
+        - Configuration
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Import session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportSessionResponse'
+        '404':
+          description: Session not found or expired
+
+  /api/config/import/{session_id}/resolve:
+    post:
+      summary: Resolve conflicts and apply import
+      operationId: resolveImport
+      tags:
+        - Configuration
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConflictResolutionRequest'
+      responses:
+        '200':
+          description: Import applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResultResponse'
+        '400':
+          description: Unresolved conflicts remain
+        '404':
+          description: Session not found or expired
+
+  /api/config/import/{session_id}/cancel:
+    post:
+      summary: Cancel import session
+      operationId: cancelImport
+      tags:
+        - Configuration
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Import cancelled
+        '404':
+          description: Session not found
+
+  /api/config/export:
+    get:
+      summary: Export configuration as YAML
+      operationId: exportConfig
+      tags:
+        - Configuration
+      responses:
+        '200':
+          description: YAML configuration file
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="config.yaml"
+
+  /api/config/stats:
+    get:
+      summary: Get configuration statistics for KPIs
+      operationId: getConfigStats
+      tags:
+        - Configuration
+      responses:
+        '200':
+          description: Configuration statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigStatsResponse'
+
+components:
+  schemas:
+    ConfigurationResponse:
+      type: object
+      properties:
+        extensions:
+          $ref: '#/components/schemas/ExtensionsConfig'
+        cameras:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CameraConfig'
+        processing_methods:
+          type: object
+          additionalProperties:
+            type: string
+
+    ExtensionsConfig:
+      type: object
+      properties:
+        photo_extensions:
+          type: array
+          items:
+            type: string
+        metadata_extensions:
+          type: array
+          items:
+            type: string
+        require_sidecar:
+          type: array
+          items:
+            type: string
+
+    CameraConfig:
+      type: object
+      properties:
+        name:
+          type: string
+        serial_number:
+          type: string
+
+    CategoryConfigResponse:
+      type: object
+      properties:
+        category:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigItem'
+
+    ConfigItem:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: object
+        description:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [database, yaml_import]
+        updated_at:
+          type: string
+          format: date-time
+
+    CategoryConfigUpdateRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              value:
+                type: object
+              description:
+                type: string
+
+    ConfigValueResponse:
+      type: object
+      properties:
+        category:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+        description:
+          type: string
+          nullable: true
+        source:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    ConfigValueUpdateRequest:
+      type: object
+      properties:
+        value:
+          type: object
+        description:
+          type: string
+
+    ImportSessionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, resolved, applied, cancelled, expired]
+        expires_at:
+          type: string
+          format: date-time
+        file_name:
+          type: string
+        total_items:
+          type: integer
+        new_items:
+          type: integer
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigConflict'
+
+    ConfigConflict:
+      type: object
+      properties:
+        category:
+          type: string
+        key:
+          type: string
+        database_value:
+          type: object
+        yaml_value:
+          type: object
+        resolved:
+          type: boolean
+        resolution:
+          type: string
+          enum: [use_database, use_yaml]
+          nullable: true
+
+    ConflictResolutionRequest:
+      type: object
+      properties:
+        resolutions:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              key:
+                type: string
+              use_yaml:
+                type: boolean
+
+    ImportResultResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        items_imported:
+          type: integer
+        items_skipped:
+          type: integer
+        message:
+          type: string
+
+    ConfigStatsResponse:
+      type: object
+      properties:
+        total_items:
+          type: integer
+        cameras_configured:
+          type: integer
+        processing_methods_configured:
+          type: integer
+        last_import:
+          type: string
+          format: date-time
+          nullable: true
+        source_breakdown:
+          type: object
+          properties:
+            database:
+              type: integer
+            yaml_import:
+              type: integer

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 
-from backend.src.models import Collection, CollectionType, CollectionState, Connector
+from backend.src.models import Collection, CollectionType, CollectionState, Connector, Pipeline
 from backend.src.utils.formatting import format_storage_bytes
 from backend.src.utils.cache import FileListingCache
 from backend.src.utils.logging_config import get_logger
@@ -73,6 +73,7 @@ class CollectionService:
         location: str,
         state: CollectionState = CollectionState.LIVE,
         connector_id: Optional[int] = None,
+        pipeline_id: Optional[int] = None,
         cache_ttl: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Collection:
@@ -82,6 +83,7 @@ class CollectionService:
         Validates:
         - Local collections: directory exists and is accessible
         - Remote collections: connector exists and connection succeeds
+        - Pipeline assignment: pipeline exists and is active
 
         Args:
             name: User-friendly collection name (must be unique)
@@ -89,6 +91,7 @@ class CollectionService:
             location: Storage location path/URI
             state: Collection lifecycle state (default: LIVE)
             connector_id: Connector ID (required for remote types, None for LOCAL)
+            pipeline_id: Optional explicit pipeline assignment (NULL = use default)
             cache_ttl: Custom cache TTL override (seconds)
             metadata: Optional user-defined metadata
 
@@ -96,7 +99,7 @@ class CollectionService:
             Created Collection instance
 
         Raises:
-            ValueError: If validation fails (name exists, location invalid, connector missing)
+            ValueError: If validation fails (name exists, location invalid, connector missing, pipeline invalid)
             Exception: If database operation fails
 
         Example:
@@ -106,12 +109,13 @@ class CollectionService:
             ...     type=CollectionType.LOCAL,
             ...     location="/photos/2024"
             ... )
-            >>> # Remote collection
+            >>> # Remote collection with pipeline
             >>> collection = service.create_collection(
             ...     name="S3 Bucket",
             ...     type=CollectionType.S3,
             ...     location="my-bucket/photos",
-            ...     connector_id=1
+            ...     connector_id=1,
+            ...     pipeline_id=1
             ... )
         """
         # Validate connector requirement
@@ -120,6 +124,16 @@ class CollectionService:
 
         if type == CollectionType.LOCAL and connector_id:
             raise ValueError("Connector ID should not be provided for LOCAL collections")
+
+        # Validate pipeline if specified
+        pipeline_version = None
+        if pipeline_id is not None:
+            pipeline = self.db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+            if not pipeline:
+                raise ValueError(f"Pipeline with ID {pipeline_id} not found")
+            if not pipeline.is_active:
+                raise ValueError(f"Pipeline '{pipeline.name}' is not active. Only active pipelines can be assigned to collections.")
+            pipeline_version = pipeline.version
 
         # Test accessibility before creation
         is_accessible, last_error = self._test_accessibility(type, location, connector_id)
@@ -135,6 +149,8 @@ class CollectionService:
                 location=location,
                 state=state,
                 connector_id=connector_id,
+                pipeline_id=pipeline_id,
+                pipeline_version=pipeline_version,
                 cache_ttl=cache_ttl,
                 is_accessible=is_accessible,
                 last_error=last_error,
@@ -247,6 +263,7 @@ class CollectionService:
         name: Optional[str] = None,
         location: Optional[str] = None,
         state: Optional[CollectionState] = None,
+        pipeline_id: Optional[int] = None,
         cache_ttl: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Collection:
@@ -261,6 +278,7 @@ class CollectionService:
             name: New name (must be unique if changed)
             location: New location path/URI
             state: New lifecycle state
+            pipeline_id: New pipeline assignment (validates pipeline is active)
             cache_ttl: New cache TTL override
             metadata: New metadata
 
@@ -268,12 +286,14 @@ class CollectionService:
             Updated Collection instance
 
         Raises:
-            ValueError: If collection not found or name conflicts
+            ValueError: If collection not found, name conflicts, or pipeline invalid
             Exception: If database operation fails
 
         Example:
             >>> collection = service.update_collection(1, state=CollectionState.CLOSED)
             >>> # Cache invalidated due to state change
+            >>> collection = service.update_collection(1, pipeline_id=2)
+            >>> # Pipeline assignment updated with current version
         """
         collection = self.db.query(Collection).filter(Collection.id == collection_id).first()
 
@@ -296,6 +316,16 @@ class CollectionService:
             if state is not None and state != collection.state:
                 collection.state = state
                 state_changed = True
+
+            # Handle pipeline assignment
+            if pipeline_id is not None and pipeline_id != collection.pipeline_id:
+                pipeline = self.db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+                if not pipeline:
+                    raise ValueError(f"Pipeline with ID {pipeline_id} not found")
+                if not pipeline.is_active:
+                    raise ValueError(f"Pipeline '{pipeline.name}' is not active. Only active pipelines can be assigned to collections.")
+                collection.pipeline_id = pipeline_id
+                collection.pipeline_version = pipeline.version
 
             if cache_ttl is not None:
                 collection.cache_ttl = cache_ttl
@@ -378,16 +408,11 @@ class CollectionService:
             raise ValueError(f"Collection with ID {collection_id} not found")
 
         # Check for analysis results (cascade delete relationship exists)
-        # Note: analysis_results relationship will be available when AnalysisResult model is created
-        # For now, we'll implement the check structure
+        result_count = collection.analysis_results.count()
 
-        # TODO: Uncomment when AnalysisResult model is created
-        # result_count = collection.analysis_results.count()
-        result_count = 0  # Placeholder
-
-        # TODO: Check for active jobs in job queue
-        # job_count = count_active_jobs_for_collection(collection_id)
-        job_count = 0  # Placeholder
+        # Note: Job queue check would require dependency injection of JobQueue
+        # For now, we rely on cascade delete for results
+        job_count = 0
 
         if (result_count > 0 or job_count > 0) and not force:
             logger.warning(
@@ -420,6 +445,117 @@ class CollectionService:
         except Exception as e:
             self.db.rollback()
             logger.error(f"Failed to delete collection: {str(e)}", extra={"collection_id": collection_id})
+            raise
+
+    def assign_pipeline(self, collection_id: int, pipeline_id: int) -> Collection:
+        """
+        Assign a pipeline to a collection.
+
+        Validates that the pipeline exists and is active.
+        Stores the pipeline's current version as the pinned version.
+
+        Args:
+            collection_id: Collection ID to update
+            pipeline_id: Pipeline ID to assign
+
+        Returns:
+            Updated Collection instance
+
+        Raises:
+            ValueError: If collection or pipeline not found, or pipeline is not active
+
+        Example:
+            >>> collection = service.assign_pipeline(1, 2)
+            >>> print(f"Assigned pipeline v{collection.pipeline_version}")
+        """
+        collection = self.db.query(Collection).filter(Collection.id == collection_id).first()
+
+        if not collection:
+            raise ValueError(f"Collection with ID {collection_id} not found")
+
+        pipeline = self.db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+
+        if not pipeline:
+            raise ValueError(f"Pipeline with ID {pipeline_id} not found")
+
+        if not pipeline.is_active:
+            raise ValueError(f"Pipeline '{pipeline.name}' is not active. Only active pipelines can be assigned to collections.")
+
+        try:
+            collection.pipeline_id = pipeline_id
+            collection.pipeline_version = pipeline.version
+            self.db.commit()
+            self.db.refresh(collection)
+
+            logger.info(
+                f"Assigned pipeline to collection",
+                extra={
+                    "collection_id": collection_id,
+                    "collection_name": collection.name,
+                    "pipeline_id": pipeline_id,
+                    "pipeline_name": pipeline.name,
+                    "pipeline_version": pipeline.version
+                }
+            )
+
+            return collection
+
+        except Exception as e:
+            self.db.rollback()
+            logger.error(
+                f"Failed to assign pipeline to collection: {str(e)}",
+                extra={"collection_id": collection_id, "pipeline_id": pipeline_id}
+            )
+            raise
+
+    def clear_pipeline(self, collection_id: int) -> Collection:
+        """
+        Clear pipeline assignment from a collection.
+
+        After clearing, the collection will use the default pipeline at runtime.
+
+        Args:
+            collection_id: Collection ID to update
+
+        Returns:
+            Updated Collection instance
+
+        Raises:
+            ValueError: If collection not found
+
+        Example:
+            >>> collection = service.clear_pipeline(1)
+            >>> # Collection now uses default pipeline at runtime
+        """
+        collection = self.db.query(Collection).filter(Collection.id == collection_id).first()
+
+        if not collection:
+            raise ValueError(f"Collection with ID {collection_id} not found")
+
+        try:
+            old_pipeline_id = collection.pipeline_id
+            collection.pipeline_id = None
+            collection.pipeline_version = None
+            self.db.commit()
+            self.db.refresh(collection)
+
+            logger.info(
+                f"Cleared pipeline assignment from collection",
+                extra={
+                    "collection_id": collection_id,
+                    "collection_name": collection.name,
+                    "old_pipeline_id": old_pipeline_id
+                }
+            )
+
+            return collection
+
+        except Exception as e:
+            self.db.rollback()
+            logger.error(
+                f"Failed to clear pipeline from collection: {str(e)}",
+                extra={"collection_id": collection_id}
+            )
             raise
 
     def test_collection_accessibility(self, collection_id: int) -> tuple[bool, str, "Collection"]:

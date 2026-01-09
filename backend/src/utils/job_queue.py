@@ -49,9 +49,11 @@ class AnalysisJob:
 
     Attributes:
         id: Unique job identifier (UUID)
-        collection_id: ID of the collection being analyzed
+        collection_id: ID of the collection being analyzed (None for display_graph mode)
         tool: Analysis tool name ('photostats', 'photo_pairing', 'pipeline_validation')
         pipeline_id: Optional pipeline ID for Pipeline Validation tool
+        pipeline_version: Optional pipeline version used at execution time
+        mode: Optional execution mode for pipeline_validation ('collection' or 'display_graph')
         status: Current job status (JobStatus enum)
         created_at: Timestamp when job was created
         started_at: Timestamp when job started execution (None if not started)
@@ -63,11 +65,13 @@ class AnalysisJob:
     Task: T023 - AnalysisJob dataclass
     """
     id: str
-    collection_id: int
+    collection_id: Optional[int]  # Now optional for display_graph mode
     tool: str
     pipeline_id: Optional[int]
-    status: JobStatus
-    created_at: datetime
+    pipeline_version: Optional[int] = None
+    mode: Optional[str] = None  # 'collection' or 'display_graph' for pipeline_validation
+    status: JobStatus = JobStatus.QUEUED
+    created_at: datetime = field(default_factory=datetime.utcnow)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     progress: Dict[str, Any] = field(default_factory=dict)
@@ -86,6 +90,7 @@ class AnalysisJob:
             'collection_id': self.collection_id,
             'tool': self.tool,
             'pipeline_id': self.pipeline_id,
+            'mode': self.mode,
             'status': self.status.value,
             'created_at': self.created_at.isoformat(),
             'started_at': self.started_at.isoformat() if self.started_at else None,

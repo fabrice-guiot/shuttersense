@@ -23,11 +23,32 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import type { Collection, CollectionType } from '@/contracts/api/collection-api'
 import type { Connector } from '@/contracts/api/connector-api'
+import type { PipelineSummary } from '@/contracts/api/pipelines-api'
 import {
   collectionFormSchema,
   type CollectionFormData,
   isConnectorRequiredForType
 } from '@/types/schemas/collection'
+
+// ============================================================================
+// Beta Collection Types
+// ============================================================================
+
+// Collection types still in beta/QA - remove from this set once QA'd
+const BETA_COLLECTION_TYPES: Set<CollectionType> = new Set(['gcs', 'smb'])
+
+function isBetaCollectionType(type: CollectionType): boolean {
+  return BETA_COLLECTION_TYPES.has(type)
+}
+
+// Beta chip component for consistent styling
+function BetaChip() {
+  return (
+    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+      Beta
+    </span>
+  )
+}
 
 // ============================================================================
 // Component Props
@@ -36,6 +57,7 @@ import {
 export interface CollectionFormProps {
   collection?: Collection | null
   connectors: Connector[]
+  pipelines?: PipelineSummary[]
   onSubmit: (data: CollectionFormData) => Promise<void>
   onCancel: () => void
   onTestConnection?: (data: CollectionFormData) => Promise<{ success: boolean; message: string }>
@@ -77,6 +99,7 @@ function getStateDescription(state: string): string {
 export default function CollectionForm({
   collection,
   connectors,
+  pipelines = [],
   onSubmit,
   onCancel,
   onTestConnection,
@@ -98,9 +121,13 @@ export default function CollectionForm({
       state: collection?.state || 'live',
       location: collection?.location || '',
       connector_id: collection?.connector_id || null,
-      cache_ttl: collection?.cache_ttl || null
+      cache_ttl: collection?.cache_ttl || null,
+      pipeline_id: collection?.pipeline_id || null
     }
   })
+
+  // Get available active pipelines for selection
+  const availablePipelines = pipelines.filter((p) => p.is_active)
 
   const selectedType = form.watch('type')
   const requiresConnector = isConnectorRequiredForType(selectedType)
@@ -122,7 +149,8 @@ export default function CollectionForm({
         state: collection.state,
         location: collection.location,
         connector_id: collection.connector_id,
-        cache_ttl: collection.cache_ttl
+        cache_ttl: collection.cache_ttl,
+        pipeline_id: collection.pipeline_id
       })
     }
   }, [collection, form])
@@ -191,8 +219,18 @@ export default function CollectionForm({
                   <SelectContent>
                     <SelectItem value="local">Local Filesystem</SelectItem>
                     <SelectItem value="s3">Amazon S3</SelectItem>
-                    <SelectItem value="gcs">Google Cloud Storage</SelectItem>
-                    <SelectItem value="smb">SMB/CIFS</SelectItem>
+                    <SelectItem value="gcs">
+                      <span className="flex items-center gap-2">
+                        Google Cloud Storage
+                        {isBetaCollectionType('gcs') && <BetaChip />}
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="smb">
+                      <span className="flex items-center gap-2">
+                        SMB/CIFS
+                        {isBetaCollectionType('smb') && <BetaChip />}
+                      </span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 {isEdit && (
@@ -325,6 +363,50 @@ export default function CollectionForm({
                 </FormControl>
                 <FormDescription>
                   Custom cache TTL in seconds (overrides state-based default)
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Pipeline (Optional) */}
+          <FormField
+            control={form.control}
+            name="pipeline_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Pipeline (Optional)</FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(value === 'default' ? null : parseInt(value))}
+                  value={field.value?.toString() || 'default'}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Use default pipeline" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="default">Use default pipeline</SelectItem>
+                    {availablePipelines.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No active pipelines available
+                      </div>
+                    ) : (
+                      availablePipelines.map((pipeline) => (
+                        <SelectItem key={pipeline.id} value={pipeline.id.toString()}>
+                          <span className="flex items-center gap-2">
+                            {pipeline.name}
+                            {pipeline.is_default && (
+                              <span className="text-xs text-muted-foreground">(default)</span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Pin this collection to a specific pipeline, or use the default at runtime
                 </FormDescription>
                 <FormMessage />
               </FormItem>

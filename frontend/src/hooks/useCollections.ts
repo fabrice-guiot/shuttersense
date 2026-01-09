@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import * as collectionService from '../services/collections'
 import type {
   Collection,
@@ -39,6 +40,8 @@ interface UseCollectionsReturn {
   deleteCollection: (id: number, force?: boolean) => Promise<CollectionDeleteResponse | void>
   testCollection: (id: number) => Promise<CollectionTestResponse>
   refreshCollection: (id: number, confirm?: boolean) => Promise<any>
+  assignPipeline: (collectionId: number, pipelineId: number) => Promise<Collection>
+  clearPipeline: (collectionId: number) => Promise<Collection>
 }
 
 export const useCollections = (
@@ -93,10 +96,14 @@ export const useCollections = (
     try {
       const newCollection = await collectionService.createCollection(collectionData)
       setCollections(prev => [...prev, newCollection])
+      toast.success('Collection created successfully')
       return newCollection
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to create collection'
       setError(errorMessage)
+      toast.error('Failed to create collection', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -114,10 +121,14 @@ export const useCollections = (
       setCollections(prev =>
         prev.map(c => c.id === id ? updated : c)
       )
+      toast.success('Collection updated successfully')
       return updated
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to update collection'
       setError(errorMessage)
+      toast.error('Failed to update collection', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -138,9 +149,13 @@ export const useCollections = (
       }
       // No response means deleted successfully (status 204)
       setCollections(prev => prev.filter(c => c.id !== id))
+      toast.success('Collection deleted successfully')
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete collection'
       setError(errorMessage)
+      toast.error('Failed to delete collection', {
+        description: errorMessage
+      })
       throw err
     } finally {
       setLoading(false)
@@ -181,6 +196,58 @@ export const useCollections = (
       throw new Error(errorMessage)
     }
   }, [fetchCollections])
+
+  /**
+   * Assign a pipeline to a collection
+   * Stores the pipeline's current version as the pinned version
+   */
+  const assignPipeline = useCallback(async (collectionId: number, pipelineId: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const updated = await collectionService.assignPipeline(collectionId, pipelineId)
+      setCollections(prev =>
+        prev.map(c => c.id === collectionId ? updated : c)
+      )
+      toast.success('Pipeline assigned successfully')
+      return updated
+    } catch (err: any) {
+      const errorMessage = err.userMessage || 'Failed to assign pipeline'
+      setError(errorMessage)
+      toast.error('Failed to assign pipeline', {
+        description: errorMessage
+      })
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  /**
+   * Clear pipeline assignment from a collection
+   * Collection will use default pipeline at runtime
+   */
+  const clearPipeline = useCallback(async (collectionId: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const updated = await collectionService.clearPipeline(collectionId)
+      setCollections(prev =>
+        prev.map(c => c.id === collectionId ? updated : c)
+      )
+      toast.success('Pipeline assignment cleared')
+      return updated
+    } catch (err: any) {
+      const errorMessage = err.userMessage || 'Failed to clear pipeline'
+      setError(errorMessage)
+      toast.error('Failed to clear pipeline', {
+        description: errorMessage
+      })
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   // Debounced search effect
   useEffect(() => {
@@ -228,7 +295,9 @@ export const useCollections = (
     updateCollection,
     deleteCollection,
     testCollection,
-    refreshCollection
+    refreshCollection,
+    assignPipeline,
+    clearPipeline
   }
 }
 

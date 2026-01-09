@@ -7,6 +7,7 @@
 
 import { useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import { Toaster } from 'sonner'
 import { Sidebar } from './Sidebar'
 import { TopHeader } from './TopHeader'
 import { cn } from '@/lib/utils'
@@ -148,6 +149,13 @@ export function MainLayout({
       >
         {children}
       </MainLayoutInner>
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        expand={false}
+        duration={5000}
+      />
     </HeaderStatsProvider>
   )
 }

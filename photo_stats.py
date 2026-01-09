@@ -465,13 +465,20 @@ def main():
     # Register signal handler for graceful Ctrl+C handling
     signal.signal(signal.SIGINT, signal_handler)
 
+    # Determine current configuration mode for help text
+    db_url = os.environ.get('PHOTO_ADMIN_DB_URL')
+    if db_url:
+        current_mode = "  ** CURRENT: Database mode (PHOTO_ADMIN_DB_URL is set) **"
+    else:
+        current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
+
     parser = argparse.ArgumentParser(
         description="""PhotoStats - Analyze photo collections for orphaned files and sidecar issues.
 
 Scans folders containing DNG, TIFF, CR3, and XMP files, analyzes file pairing,
 and generates comprehensive HTML reports with statistics and visualizations.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 Examples:
   %(prog)s /path/to/photos
       Analyze folder and generate timestamped HTML report
@@ -483,14 +490,22 @@ Examples:
       Analyze using custom configuration file
 
 Configuration:
-  If no config file is specified, the tool will search in this order:
-    1. config/config.yaml (current directory)
-    2. config.yaml (current directory)
-    3. ~/.photo_stats_config.yaml (home directory)
-    4. config/config.yaml (script directory)
+{current_mode}
 
-  To create a configuration file:
-    cp config/template-config.yaml config/config.yaml
+  Database Mode (when web UI is available):
+    Set PHOTO_ADMIN_DB_URL environment variable to use shared database config.
+    This enables configuration changes made in the web UI to be used by CLI tools.
+    Example: export PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
+
+  File Mode (standalone usage):
+    If PHOTO_ADMIN_DB_URL is not set, the tool searches for config files:
+      1. config/config.yaml (current directory)
+      2. config.yaml (current directory)
+      3. ~/.photo_stats_config.yaml (home directory)
+      4. config/config.yaml (script directory)
+
+    To create a configuration file:
+      cp config/template-config.yaml config/config.yaml
 
 Report Output:
   Default filename: photo_stats_report_YYYY-MM-DD_HH-MM-SS.html
@@ -541,6 +556,7 @@ Report Output:
 
     try:
         stats_tool = PhotoStats(folder_path, config_path)
+        print(f"Configuration: {stats_tool.config_manager.config_source_description}")
         stats_tool.scan_folder()
 
         # Check for shutdown request before generating report

@@ -111,7 +111,7 @@ class ConnectorService:
 
             return connector
 
-        except IntegrityError as e:
+        except IntegrityError:
             self.db.rollback()
             logger.error(f"Connector name already exists: {name}")
             raise ValueError(f"Connector with name '{name}' already exists")
@@ -135,6 +135,7 @@ class ConnectorService:
         Note:
             If decrypt_credentials=True, decrypted credentials are added as
             connector.decrypted_credentials (not persisted to database)
+            SECURITY: Credential access is audit logged (T173)
 
         Example:
             >>> connector = service.get_connector(1, decrypt_credentials=True)
@@ -144,6 +145,17 @@ class ConnectorService:
         connector = self.db.query(Connector).filter(Connector.id == connector_id).first()
 
         if connector and decrypt_credentials:
+            # SECURITY AUDIT LOG (T173): Log credential decryption access
+            logger.info(
+                "SECURITY: Credential access - decrypting connector credentials",
+                extra={
+                    "connector_id": connector_id,
+                    "connector_name": connector.name,
+                    "connector_type": connector.type.value,
+                    "action": "credential_decrypt"
+                }
+            )
+
             # Decrypt credentials and attach to connector object
             decrypted_json = self.encryptor.decrypt(connector.credentials)
             connector.decrypted_credentials = json.loads(decrypted_json)
@@ -176,7 +188,7 @@ class ConnectorService:
             query = query.filter(Connector.type == type_filter)
 
         if active_only:
-            query = query.filter(Connector.is_active == True)
+            query = query.filter(Connector.is_active.is_(True))
 
         connectors = query.order_by(Connector.name).all()
 
@@ -249,7 +261,7 @@ class ConnectorService:
 
             return connector
 
-        except IntegrityError as e:
+        except IntegrityError:
             self.db.rollback()
             logger.error(f"Connector name conflict: {name}")
             raise ValueError(f"Connector with name '{name}' already exists")
@@ -284,7 +296,7 @@ class ConnectorService:
         collection_count = connector.collections.count()
         if collection_count > 0:
             logger.warning(
-                f"Cannot delete connector with referenced collections",
+                "Cannot delete connector with referenced collections",
                 extra={"connector_id": connector_id, "collection_count": collection_count}
             )
             raise ValueError(
@@ -308,6 +320,7 @@ class ConnectorService:
         Test connector connection using appropriate storage adapter.
 
         Updates connector's last_validated and last_error fields based on test result.
+        SECURITY: Credential access for connection test is audit logged (T173)
 
         Args:
             connector_id: Connector ID to test
@@ -325,6 +338,15 @@ class ConnectorService:
             >>> else:
             ...     print(f"Failed: {message}")
         """
+        # SECURITY AUDIT LOG (T173): Log connection test initiation
+        logger.info(
+            "SECURITY: Credential access - initiating connector test",
+            extra={
+                "connector_id": connector_id,
+                "action": "credential_test_initiate"
+            }
+        )
+
         connector = self.get_connector(connector_id, decrypt_credentials=True)
 
         if not connector:

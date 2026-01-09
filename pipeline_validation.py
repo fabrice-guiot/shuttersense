@@ -23,6 +23,7 @@ Version: 1.0.0
 """
 
 import argparse
+import os
 import sys
 import signal
 import json
@@ -305,10 +306,17 @@ def parse_arguments():
     Returns:
         argparse.Namespace: Parsed arguments
     """
+    # Determine current configuration mode for help text
+    db_url = os.environ.get('PHOTO_ADMIN_DB_URL')
+    if db_url:
+        current_mode = "  ** CURRENT: Database mode (PHOTO_ADMIN_DB_URL is set) **"
+    else:
+        current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
+
     parser = argparse.ArgumentParser(
         prog='pipeline_validation',
         description='Photo Processing Pipeline Validation Tool',
-        epilog="""
+        epilog=f"""
 Examples:
   # Validate photo collection against pipeline
   python3 pipeline_validation.py /Users/photographer/Photos/2025-01-15
@@ -322,11 +330,29 @@ Examples:
   # Show cache status without running validation
   python3 pipeline_validation.py /path/to/photos --cache-status
 
+Configuration:
+{current_mode}
+
+  Database Mode (when web UI is available):
+    Set PHOTO_ADMIN_DB_URL environment variable to use shared database config.
+    Uses the default pipeline defined in the web UI Pipelines page.
+    Example: export PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
+
+  File Mode (standalone usage):
+    If PHOTO_ADMIN_DB_URL is not set, uses config/config.yaml by default.
+    Use --config to specify a custom configuration file path.
+    Pipeline is defined in the processing_pipelines section of the config file.
+
 Workflow:
-  1. Run Photo Pairing Tool first: python3 photo_pairing.py <folder>
-  2. Define pipeline in config/config.yaml (processing_pipelines section)
-  3. Run pipeline validation: python3 pipeline_validation.py <folder>
-  4. Review HTML report: pipeline_validation_report_YYYY-MM-DD_HH-MM-SS.html
+  Database Mode:
+    1. Configure the default pipeline in the web UI Pipelines page
+    2. Run Photo Pairing Tool: python3 photo_pairing.py <folder>
+    3. Run pipeline validation: python3 pipeline_validation.py <folder>
+
+  File Mode:
+    1. Define pipeline in config/config.yaml (processing_pipelines section)
+    2. Run Photo Pairing Tool: python3 photo_pairing.py <folder>
+    3. Run pipeline validation: python3 pipeline_validation.py <folder>
 
 For more information, see docs/pipeline-validation.md
         """,
@@ -401,10 +427,11 @@ For more information, see docs/pipeline-validation.md
     args = parser.parse_args()
 
     # Validate arguments
-    # folder_path is optional when using --cache-status, --validate-config, or --display-graph with --validate-config
-    standalone_modes = args.cache_status or args.validate_config or (args.display_graph and args.validate_config)
+    # folder_path is optional when using --validate-config or --display-graph
+    # --cache-status requires folder_path to check cache files in that folder
+    standalone_modes = args.validate_config or args.display_graph
     if not standalone_modes and args.folder_path is None:
-        parser.error('folder_path is required unless using --cache-status, --validate-config, or --display-graph with --validate-config')
+        parser.error('folder_path is required (--validate-config and --display-graph can run without a folder)')
 
     if args.folder_path and not args.folder_path.exists():
         parser.error(f"Folder does not exist: {args.folder_path}")
@@ -903,6 +930,88 @@ def build_graph_visualization_table(pipeline: PipelineConfig, config: PhotoAdmin
     return section
 
 
+def build_display_graph_kpis(pipeline: PipelineConfig) -> tuple:
+    """
+    Build KPI cards for display-graph mode.
+
+    Calculates:
+    - Total paths enumerated
+    - Non-truncated paths (completed on real termination nodes)
+    - Non-truncated paths by termination type
+
+    Args:
+        pipeline: PipelineConfig object
+
+    Returns:
+        Tuple of (kpis list, stats dict for results_json)
+    """
+    from utils.report_renderer import KPICard
+
+    # Enumerate all paths
+    all_paths = enumerate_paths_with_pairing(pipeline)
+    total_paths = len(all_paths)
+
+    # Calculate non-truncated paths and by termination type
+    non_truncated_count = 0
+    non_truncated_by_termination = {}
+
+    for path in all_paths:
+        if not path:
+            continue
+
+        termination_node = path[-1]
+        is_truncated = termination_node.get('truncated', False)
+        term_type = termination_node.get('term_type', 'Unknown')
+
+        if not is_truncated:
+            non_truncated_count += 1
+            if term_type not in non_truncated_by_termination:
+                non_truncated_by_termination[term_type] = 0
+            non_truncated_by_termination[term_type] += 1
+
+    # Build KPI cards
+    kpis = [
+        KPICard(
+            title="Total Paths",
+            value=str(total_paths),
+            status="info",
+            icon="🔀",
+            tooltip="Total number of paths enumerated through the pipeline"
+        ),
+        KPICard(
+            title="Non-Truncated Paths",
+            value=str(non_truncated_count),
+            status="success" if non_truncated_count == total_paths else "warning",
+            unit=f"{(non_truncated_count/total_paths*100):.1f}%" if total_paths > 0 else "0%",
+            icon="✓",
+            tooltip="Paths that completed on real termination nodes (not truncated due to loops)"
+        ),
+    ]
+
+    # Add per-termination-type KPIs for non-truncated paths
+    for term_type, count in sorted(non_truncated_by_termination.items()):
+        kpis.append(
+            KPICard(
+                title=f"{term_type}",
+                value=str(count),
+                status="success",
+                unit=f"{(count/total_paths*100):.1f}%" if total_paths > 0 else "0%",
+                icon="📦",
+                tooltip=f"Non-truncated paths terminating at {term_type}"
+            )
+        )
+
+    # Build stats dict for results_json storage
+    stats = {
+        'total_paths': total_paths,
+        'non_truncated_paths': non_truncated_count,
+        'truncated_paths': total_paths - non_truncated_count,
+        'non_truncated_by_termination': non_truncated_by_termination
+    }
+
+    return kpis, stats
+
+
 def build_kpi_cards(validation_results: list) -> List:
     """
     Build KPI cards for executive summary statistics.
@@ -1280,19 +1389,20 @@ def build_report_context(
 
     scan_duration = (scan_end - scan_start).total_seconds()
 
-    # Build KPIs
-    kpis = build_kpi_cards(validation_results)
-
     # Build sections
     sections = []
 
-    # Add graph visualization section if requested
+    # Build KPIs - use display_graph KPIs if in that mode
     if display_graph and pipeline and config:
+        # Display-graph mode: use specialized KPIs
+        kpis, _ = build_display_graph_kpis(pipeline)
         graph_section = build_graph_visualization_table(pipeline, config)
         sections.append(graph_section)
-
-    sections.extend(build_chart_sections(validation_results))
-    sections.extend(build_table_sections(validation_results))
+    else:
+        # Normal validation mode: use standard KPIs
+        kpis = build_kpi_cards(validation_results)
+        sections.extend(build_chart_sections(validation_results))
+        sections.extend(build_table_sections(validation_results))
 
     return ReportContext(
         tool_name="Pipeline Validation Tool",
@@ -1385,10 +1495,8 @@ def main():
         print()
 
         # Load configuration
-        if args.verbose:
-            print("Loading configuration file...")
         config = PhotoAdminConfig(config_path=args.config)
-        print(f"Configuration file: {config.config_path}")
+        print(f"Configuration: {config.config_source_description}")
         print()
 
         # Validate pipeline configuration structure (YAML structure only)
@@ -1473,6 +1581,59 @@ def main():
             print()
             return 1
 
+    # Handle --display-graph mode without --validate-config (graph visualization only)
+    if args.display_graph and args.folder_path is None:
+        print("Graph Visualization Mode")
+        print("=" * 60)
+        print()
+
+        # Load configuration
+        config = PhotoAdminConfig(config_path=args.config)
+        print(f"Configuration: {config.config_source_description}")
+
+        # Load pipeline configuration
+        try:
+            pipeline = load_pipeline_config(config, pipeline_name='default', verbose=args.verbose)
+            print(f"  Loaded {len(pipeline.nodes)} pipeline nodes")
+            print(f"  Using pipeline: default")
+        except ValueError as e:
+            print(f"⚠ Error loading pipeline configuration:\n")
+            print(e)
+            print()
+            return 1
+        print()
+
+        print("Generating graph visualization report...")
+        scan_start = datetime.now()
+
+        # Enumerate paths to measure performance
+        _ = enumerate_paths_with_pairing(pipeline)
+
+        scan_end = datetime.now()
+
+        # Generate empty validation results (graph visualization only)
+        validation_results_dict = []
+
+        try:
+            report_path = generate_html_report(
+                validation_results=validation_results_dict,
+                output_dir=Path.cwd(),
+                scan_path="(graph visualization mode - no folder scanned)",
+                scan_start=scan_start,
+                scan_end=scan_end,
+                pipeline=pipeline,
+                config=config,
+                display_graph=True
+            )
+            print(f"  ✓ HTML report generated: {report_path}")
+            print()
+        except Exception as e:
+            print(f"  ⚠ Warning: HTML report generation failed: {e}")
+            print()
+            return 1
+
+        return 0
+
     # Normal validation mode - validate prerequisites
     if not validate_prerequisites(args):
         sys.exit(1)
@@ -1481,8 +1642,8 @@ def main():
     print()
 
     # Load configuration and data
-    print("Loading configuration...")
     config = PhotoAdminConfig(config_path=args.config)
+    print(f"Configuration: {config.config_source_description}")
 
     # Load pipeline configuration using PhotoAdminConfig (per constitution)
     try:

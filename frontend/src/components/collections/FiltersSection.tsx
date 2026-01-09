@@ -11,11 +11,28 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import type { FiltersSectionProps } from '@/contracts/components/collection-components'
+import type { CollectionType } from '@/contracts/api/collection-api'
 import {
   COLLECTION_STATE_FILTER_OPTIONS,
   COLLECTION_TYPE_FILTER_OPTIONS
 } from '@/contracts/components/collection-components'
 import { cn } from '@/lib/utils'
+
+// Collection types still in beta/QA - remove from this set once QA'd
+const BETA_COLLECTION_TYPES: Set<CollectionType> = new Set(['gcs', 'smb'])
+
+function isBetaCollectionType(type: CollectionType): boolean {
+  return BETA_COLLECTION_TYPES.has(type)
+}
+
+// Beta chip component for consistent styling
+function BetaChip() {
+  return (
+    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+      Beta
+    </span>
+  )
+}
 
 // Max length for search input (T031)
 const SEARCH_MAX_LENGTH = 100
@@ -113,7 +130,14 @@ export function FiltersSection({
             <SelectContent>
               {COLLECTION_TYPE_FILTER_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+                  {option.value !== 'ALL' && isBetaCollectionType(option.value as CollectionType) ? (
+                    <span className="flex items-center gap-2">
+                      {option.label}
+                      <BetaChip />
+                    </span>
+                  ) : (
+                    option.label
+                  )}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -1,0 +1,298 @@
+openapi: 3.0.3
+info:
+  title: Photo Admin Trends API
+  description: API endpoints for trend analysis (Phase 6)
+  version: 1.0.0
+
+paths:
+  /api/trends/photostats:
+    get:
+      summary: Get PhotoStats trends (orphaned files over time)
+      operationId: getPhotoStatsTrends
+      tags:
+        - Trends
+      parameters:
+        - name: collection_ids
+          in: query
+          description: Comma-separated collection IDs
+          schema:
+            type: string
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          description: Maximum data points per collection
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: PhotoStats trend data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoStatsTrendResponse'
+
+  /api/trends/photo-pairing:
+    get:
+      summary: Get Photo Pairing trends (camera usage over time)
+      operationId: getPhotoPairingTrends
+      tags:
+        - Trends
+      parameters:
+        - name: collection_ids
+          in: query
+          description: Comma-separated collection IDs
+          schema:
+            type: string
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Photo Pairing trend data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoPairingTrendResponse'
+
+  /api/trends/pipeline-validation:
+    get:
+      summary: Get Pipeline Validation trends (consistency over time)
+      operationId: getPipelineValidationTrends
+      tags:
+        - Trends
+      parameters:
+        - name: collection_ids
+          in: query
+          description: Comma-separated collection IDs
+          schema:
+            type: string
+        - name: pipeline_id
+          in: query
+          schema:
+            type: integer
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Pipeline Validation trend data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineValidationTrendResponse'
+
+  /api/trends/summary:
+    get:
+      summary: Get trend summary for dashboard
+      operationId: getTrendSummary
+      tags:
+        - Trends
+      parameters:
+        - name: collection_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Trend summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendSummaryResponse'
+
+components:
+  schemas:
+    PhotoStatsTrendResponse:
+      type: object
+      properties:
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionTrendData'
+
+    CollectionTrendData:
+      type: object
+      properties:
+        collection_id:
+          type: integer
+        collection_name:
+          type: string
+        data_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoStatsTrendPoint'
+
+    PhotoStatsTrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        result_id:
+          type: integer
+        orphaned_images_count:
+          type: integer
+        orphaned_xmp_count:
+          type: integer
+        total_files:
+          type: integer
+        total_size:
+          type: integer
+
+    PhotoPairingTrendResponse:
+      type: object
+      properties:
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoPairingCollectionTrend'
+
+    PhotoPairingCollectionTrend:
+      type: object
+      properties:
+        collection_id:
+          type: integer
+        collection_name:
+          type: string
+        cameras:
+          type: array
+          items:
+            type: string
+          description: List of camera IDs found
+        data_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoPairingTrendPoint'
+
+    PhotoPairingTrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        result_id:
+          type: integer
+        group_count:
+          type: integer
+        image_count:
+          type: integer
+        camera_usage:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Map of camera_id to image count
+
+    PipelineValidationTrendResponse:
+      type: object
+      properties:
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineValidationCollectionTrend'
+
+    PipelineValidationCollectionTrend:
+      type: object
+      properties:
+        collection_id:
+          type: integer
+        collection_name:
+          type: string
+        data_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineValidationTrendPoint'
+
+    PipelineValidationTrendPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        result_id:
+          type: integer
+        pipeline_id:
+          type: integer
+        pipeline_name:
+          type: string
+        consistent_count:
+          type: integer
+        partial_count:
+          type: integer
+        inconsistent_count:
+          type: integer
+        consistent_ratio:
+          type: number
+          format: float
+          description: Percentage of CONSISTENT status (0-100)
+        partial_ratio:
+          type: number
+          format: float
+        inconsistent_ratio:
+          type: number
+          format: float
+
+    TrendSummaryResponse:
+      type: object
+      properties:
+        collection_id:
+          type: integer
+          nullable: true
+        orphaned_trend:
+          type: string
+          enum: [improving, stable, degrading, insufficient_data]
+          description: Trend direction for orphaned files
+        consistency_trend:
+          type: string
+          enum: [improving, stable, degrading, insufficient_data]
+          description: Trend direction for consistency
+        last_photostats:
+          type: string
+          format: date-time
+          nullable: true
+        last_pipeline_validation:
+          type: string
+          format: date-time
+          nullable: true
+        data_points_available:
+          type: object
+          properties:
+            photostats:
+              type: integer
+            photo_pairing:
+              type: integer
+            pipeline_validation:
+              type: integer

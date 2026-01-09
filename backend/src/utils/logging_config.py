@@ -153,7 +153,7 @@ def configure_logging() -> Dict[str, logging.Logger]:
     log_dir = _get_log_dir() if is_prod else None
 
     # Logger names
-    logger_names = ["api", "services", "tools", "db"]
+    logger_names = ["api", "services", "tools", "db", "websocket"]
     loggers = {}
 
     for logger_name in logger_names:
@@ -197,7 +197,7 @@ def get_logger(name: str) -> logging.Logger:
     Get a configured logger by name.
 
     Args:
-        name: Logger name (api, services, tools, db)
+        name: Logger name (api, services, tools, db, websocket)
 
     Returns:
         Configured Logger instance
