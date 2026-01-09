@@ -17,6 +17,10 @@ smbprotocol>=1.14.0  # SMB/CIFS network shares
 pydantic>=2.9.0
 pydantic-settings>=2.6.0
 
+# UUID and External ID Support
+uuid7>=0.1.0  # UUIDv7 generation (RFC 9562)
+base32-crockford>=0.3.0  # Crockford's Base32 encoding
+
 # Encryption
 cryptography>=44.0.0
 

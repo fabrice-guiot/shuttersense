@@ -25,9 +25,9 @@
 
 **Purpose**: Install dependencies and configure project for UUID support
 
-- [ ] T001 Add `uuid7` and `base32-crockford` to backend/requirements.txt
-- [ ] T002 [P] Create mixins directory at backend/src/models/mixins/__init__.py
-- [ ] T003 [P] Create utils directory at frontend/src/utils/ (if not exists)
+- [x] T001 Add `uuid7` and `base32-crockford` to backend/requirements.txt
+- [x] T002 [P] Create mixins directory at backend/src/models/mixins/__init__.py
+- [x] T003 [P] Create utils directory at frontend/src/utils/ (if not exists)
 
 ---
 
