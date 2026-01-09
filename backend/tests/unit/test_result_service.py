@@ -30,6 +30,7 @@ class TestResultServiceList:
         """Create sample result."""
         result = Mock(spec=AnalysisResult)
         result.id = 1
+        result.external_id = "res_01hgw2bbg00000000000000001"
         result.collection_id = 1
         result.tool = "photostats"
         result.pipeline_id = None
@@ -119,6 +120,7 @@ class TestResultServiceGet:
         """Create sample result."""
         result = Mock(spec=AnalysisResult)
         result.id = 1
+        result.external_id = "res_01hgw2bbg00000000000000001"
         result.collection_id = 1
         result.tool = "photostats"
         result.pipeline_id = None

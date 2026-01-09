@@ -183,6 +183,7 @@ class ResultService:
 
             summaries.append(AnalysisResultSummary(
                 id=result.id,
+                external_id=result.external_id,
                 collection_id=result.collection_id,
                 collection_name=collection.name if collection else None,
                 tool=result.tool,
@@ -237,6 +238,7 @@ class ResultService:
 
         return AnalysisResultResponse(
             id=result.id,
+            external_id=result.external_id,
             collection_id=result.collection_id,
             collection_name=collection.name if collection else None,
             tool=result.tool,
