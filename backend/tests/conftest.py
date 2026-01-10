@@ -195,6 +195,7 @@ def sample_collection_data():
         location='/photos',
         state='live',
         connector_guid=None,  # API now uses connector_guid
+        connector_id=None,  # Legacy: accepts internal ID for test convenience
         cache_ttl=None,
         is_accessible=True,
         last_error=None,
@@ -215,6 +216,9 @@ def sample_collection_data():
         }
         if connector_guid:
             data['connector_guid'] = connector_guid
+        # Legacy support: connector_id passed through for model tests
+        if connector_id:
+            data['connector_id'] = connector_id
         return data
     return _create
 
@@ -222,17 +226,17 @@ def sample_collection_data():
 @pytest.fixture
 def sample_collection(test_db_session, sample_collection_data):
     """Factory for creating sample Collection models in the database."""
-    def _create(connector_guid=None, **kwargs):
+    def _create(connector_guid=None, connector_id=None, **kwargs):
         import json
         from backend.src.services.guid import GuidService
 
         # Handle connector_guid to connector_id translation for DB model
-        connector_id = None
-        if connector_guid:
+        resolved_connector_id = connector_id  # Direct ID takes precedence
+        if connector_guid and not connector_id:
             connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
             connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
             if connector:
-                connector_id = connector.id
+                resolved_connector_id = connector.id
 
         data = sample_collection_data(**kwargs)
 
@@ -241,7 +245,7 @@ def sample_collection(test_db_session, sample_collection_data):
             type=data['type'],
             location=data['location'],
             state=data['state'],
-            connector_id=connector_id,
+            connector_id=resolved_connector_id,
             cache_ttl=data['cache_ttl'],
             is_accessible=data['is_accessible'],
             last_error=data['last_error'],
