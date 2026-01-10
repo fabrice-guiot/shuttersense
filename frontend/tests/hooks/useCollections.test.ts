@@ -70,7 +70,7 @@ describe('useCollections', () => {
       type: 's3' as const,
       location: 'bucket/prefix',
       state: 'live' as const,
-      connector_guid: 'con_01hgw2bbg0000000000000001',
+      connector_guid: 'con_01hgw2bbg00000000000000001',
       cache_ttl: 3600,
     }
 
@@ -86,7 +86,7 @@ describe('useCollections', () => {
       (c) => c.name === 'New S3 Collection'
     )
     expect(created).toBeDefined()
-    expect(created?.connector_guid).toBe('con_01hgw2bbg0000000000000001')
+    expect(created?.connector_guid).toBe('con_01hgw2bbg00000000000000001')
   })
 
   it('should fail to create collection with invalid connector', async () => {
@@ -101,7 +101,7 @@ describe('useCollections', () => {
       type: 's3' as const,
       location: 'bucket/prefix',
       state: 'live' as const,
-      connector_guid: 'con_nonexistent00000000000', // Non-existent connector
+      connector_guid: 'con_01hgw2bbg00000000000000999', // Non-existent connector
       cache_ttl: null,
     }
 
@@ -169,7 +169,7 @@ describe('useCollections', () => {
     })
 
     // Collection GUID 2 has results (per mock handler)
-    const collectionGuid = 'col_01hgw2bbg0000000000000002'
+    const collectionGuid = 'col_01hgw2bbg00000000000000002'
 
     let response: any
 
@@ -195,7 +195,7 @@ describe('useCollections', () => {
     })
 
     const initialCount = result.current.collections.length
-    const collectionGuid = 'col_01hgw2bbg0000000000000002' // Has results
+    const collectionGuid = 'col_01hgw2bbg00000000000000002' // Has results
 
     await act(async () => {
       await result.current.deleteCollection(collectionGuid, true)

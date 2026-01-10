@@ -39,7 +39,7 @@ describe('useResults', () => {
 
     // Use setFilters which is the proper API for filtering
     act(() => {
-      result.current.setFilters({ collection_guid: 'col_01hgw2bbg0000000000000001' })
+      result.current.setFilters({ collection_guid: 'col_01hgw2bbg00000000000000001' })
     })
 
     // Wait for debounced fetch
@@ -48,7 +48,7 @@ describe('useResults', () => {
     }, { timeout: 1000 })
 
     // All returned results should be from collection 1
-    expect(result.current.results.every((r) => r.collection_guid === 'col_01hgw2bbg0000000000000001')).toBe(true)
+    expect(result.current.results.every((r) => r.collection_guid === 'col_01hgw2bbg00000000000000001')).toBe(true)
   })
 
   it('should fetch results with tool filter', async () => {
@@ -137,7 +137,7 @@ describe('useResults', () => {
 
     await act(async () => {
       try {
-        await result.current.deleteResult('res_nonexistent00000000000')
+        await result.current.deleteResult('res_01hgw2bbg00000000000000999')
         expect.fail('Should have thrown 404 error')
       } catch (error: any) {
         expect(error.response?.status).toBe(404)
@@ -196,7 +196,7 @@ describe('useResult', () => {
   })
 
   it('should fetch single result by GUID', async () => {
-    const { result } = renderHook(() => useResult('res_01hgw2bbg0000000000000001'))
+    const { result } = renderHook(() => useResult('res_01hgw2bbg00000000000000001'))
 
     // Initially loading
     expect(result.current.loading).toBe(true)
@@ -207,7 +207,7 @@ describe('useResult', () => {
     })
 
     expect(result.current.result).toBeDefined()
-    expect(result.current.result?.guid).toBe('res_01hgw2bbg0000000000000001')
+    expect(result.current.result?.guid).toBe('res_01hgw2bbg00000000000000001')
     expect(result.current.result?.tool).toBe('photostats')
     expect(result.current.result?.collection_name).toBe('Test Collection')
     expect(result.current.error).toBe(null)
@@ -224,7 +224,7 @@ describe('useResult', () => {
   })
 
   it('should handle non-existent result', async () => {
-    const { result } = renderHook(() => useResult('res_nonexistent00000000000'))
+    const { result } = renderHook(() => useResult('res_01hgw2bbg00000000000000999'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -235,7 +235,7 @@ describe('useResult', () => {
   })
 
   it('should refetch result', async () => {
-    const { result } = renderHook(() => useResult('res_01hgw2bbg0000000000000001'))
+    const { result } = renderHook(() => useResult('res_01hgw2bbg00000000000000001'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -245,11 +245,11 @@ describe('useResult', () => {
       await result.current.refetch()
     })
 
-    expect(result.current.result?.guid).toBe('res_01hgw2bbg0000000000000001')
+    expect(result.current.result?.guid).toBe('res_01hgw2bbg00000000000000001')
   })
 
   it('should include full result details including results data', async () => {
-    const { result } = renderHook(() => useResult('res_01hgw2bbg0000000000000001'))
+    const { result } = renderHook(() => useResult('res_01hgw2bbg00000000000000001'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)

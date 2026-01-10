@@ -28,7 +28,7 @@ let nextJobId = 1
 
 let pipelines: Pipeline[] = [
   {
-    guid: 'pip_01hgw2bbg0000000000000001',
+    guid: 'pip_01hgw2bbg00000000000000001',
     name: 'Standard RAW Workflow',
     description: 'RAW capture to processed TIFF export',
     nodes: [
@@ -51,7 +51,7 @@ let pipelines: Pipeline[] = [
     updated_at: '2025-01-01T09:00:00Z',
   },
   {
-    guid: 'pip_01hgw2bbg0000000000000002',
+    guid: 'pip_01hgw2bbg00000000000000002',
     name: 'HDR Workflow',
     description: 'HDR processing pipeline',
     nodes: [
@@ -74,7 +74,7 @@ let pipelines: Pipeline[] = [
     updated_at: '2025-01-01T11:00:00Z',
   },
   {
-    guid: 'pip_01hgw2bbg0000000000000003',
+    guid: 'pip_01hgw2bbg00000000000000003',
     name: 'Invalid Pipeline',
     description: 'Pipeline with validation errors',
     nodes: [
@@ -110,9 +110,9 @@ let pipelineHistory: PipelineHistoryEntry[] = [
 
 let results: AnalysisResult[] = [
   {
-    guid: 'res_01hgw2bbg0000000000000001',
-    external_id: 'res_01hgw2bbg0000000000000001',
-    collection_guid: 'col_01hgw2bbg0000000000000001',
+    guid: 'res_01hgw2bbg00000000000000001',
+    external_id: 'res_01hgw2bbg00000000000000001',
+    collection_guid: 'col_01hgw2bbg00000000000000001',
     collection_name: 'Test Collection',
     tool: 'photostats',
     pipeline_guid: null,
@@ -136,9 +136,9 @@ let results: AnalysisResult[] = [
     created_at: '2025-01-01T10:00:00Z',
   },
   {
-    guid: 'res_01hgw2bbg0000000000000002',
-    external_id: 'res_01hgw2bbg0000000000000002',
-    collection_guid: 'col_01hgw2bbg0000000000000001',
+    guid: 'res_01hgw2bbg00000000000000002',
+    external_id: 'res_01hgw2bbg00000000000000002',
+    collection_guid: 'col_01hgw2bbg00000000000000001',
     collection_name: 'Test Collection',
     tool: 'photo_pairing',
     pipeline_guid: null,
@@ -163,9 +163,9 @@ let results: AnalysisResult[] = [
     created_at: '2025-01-01T11:00:00Z',
   },
   {
-    guid: 'res_01hgw2bbg0000000000000003',
-    external_id: 'res_01hgw2bbg0000000000000003',
-    collection_guid: 'col_01hgw2bbg0000000000000002',
+    guid: 'res_01hgw2bbg00000000000000003',
+    external_id: 'res_01hgw2bbg00000000000000003',
+    collection_guid: 'col_01hgw2bbg00000000000000002',
     collection_name: 'Remote S3 Collection',
     tool: 'photostats',
     pipeline_guid: null,
@@ -189,12 +189,12 @@ let results: AnalysisResult[] = [
     created_at: '2025-01-01T12:00:00Z',
   },
   {
-    guid: 'res_01hgw2bbg0000000000000004',
-    external_id: 'res_01hgw2bbg0000000000000004',
-    collection_guid: 'col_01hgw2bbg0000000000000002',
+    guid: 'res_01hgw2bbg00000000000000004',
+    external_id: 'res_01hgw2bbg00000000000000004',
+    collection_guid: 'col_01hgw2bbg00000000000000002',
     collection_name: 'Remote S3 Collection',
     tool: 'pipeline_validation',
-    pipeline_guid: 'pip_01hgw2bbg0000000000000001',
+    pipeline_guid: 'pip_01hgw2bbg00000000000000001',
     pipeline_version: 1,
     pipeline_name: 'Standard RAW Workflow',
     status: 'COMPLETED',
@@ -215,7 +215,7 @@ let nextResultId = 5
 
 let connectors: Connector[] = [
   {
-    guid: 'con_01hgw2bbg0000000000000001',
+    guid: 'con_01hgw2bbg00000000000000001',
     name: 'Test S3 Connector',
     type: 's3',
     is_active: true,
@@ -225,7 +225,7 @@ let connectors: Connector[] = [
     updated_at: '2025-01-01T10:00:00Z',
   },
   {
-    guid: 'con_01hgw2bbg0000000000000002',
+    guid: 'con_01hgw2bbg00000000000000002',
     name: 'Test GCS Connector',
     type: 'gcs',
     is_active: false,
@@ -238,7 +238,7 @@ let connectors: Connector[] = [
 
 let collections: Collection[] = [
   {
-    guid: 'col_01hgw2bbg0000000000000001',
+    guid: 'col_01hgw2bbg00000000000000001',
     name: 'Test Collection',
     type: 'local',
     location: '/photos',
@@ -255,13 +255,13 @@ let collections: Collection[] = [
     updated_at: '2025-01-01T09:00:00Z',
   },
   {
-    guid: 'col_01hgw2bbg0000000000000002',
+    guid: 'col_01hgw2bbg00000000000000002',
     name: 'Remote S3 Collection',
     type: 's3',
     location: 'my-bucket/photos',
     state: 'closed',
-    connector_guid: 'con_01hgw2bbg0000000000000001',
-    pipeline_guid: 'pip_01hgw2bbg0000000000000001',
+    connector_guid: 'con_01hgw2bbg00000000000000001',
+    pipeline_guid: 'pip_01hgw2bbg00000000000000001',
     pipeline_version: 1,
     pipeline_name: 'Standard RAW Workflow',
     cache_ttl: 86400,
@@ -472,7 +472,7 @@ export const handlers = [
     // Simulate delete protection check (would normally check for results/jobs)
     if (!forceDelete) {
       // For testing, collection GUID 2 has results
-      if (guid === 'col_01hgw2bbg0000000000000002') {
+      if (guid === 'col_01hgw2bbg00000000000000002') {
         return HttpResponse.json(
           {
             has_results: true,
@@ -1658,7 +1658,7 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
 export function resetMockData(): void {
   pipelines = [
     {
-      guid: 'pip_01hgw2bbg0000000000000001',
+      guid: 'pip_01hgw2bbg00000000000000001',
       name: 'Standard RAW Workflow',
       description: 'RAW capture to processed TIFF export',
       nodes: [
@@ -1681,7 +1681,7 @@ export function resetMockData(): void {
       updated_at: '2025-01-01T09:00:00Z',
     },
     {
-      guid: 'pip_01hgw2bbg0000000000000002',
+      guid: 'pip_01hgw2bbg00000000000000002',
       name: 'HDR Workflow',
       description: 'HDR processing pipeline',
       nodes: [
@@ -1704,7 +1704,7 @@ export function resetMockData(): void {
       updated_at: '2025-01-01T11:00:00Z',
     },
     {
-      guid: 'pip_01hgw2bbg0000000000000003',
+      guid: 'pip_01hgw2bbg00000000000000003',
       name: 'Invalid Pipeline',
       description: 'Pipeline with validation errors',
       nodes: [
@@ -1738,7 +1738,7 @@ export function resetMockData(): void {
   ]
   connectors = [
     {
-      guid: 'con_01hgw2bbg0000000000000001',
+      guid: 'con_01hgw2bbg00000000000000001',
       name: 'Test S3 Connector',
       type: 's3',
       is_active: true,
@@ -1748,7 +1748,7 @@ export function resetMockData(): void {
       updated_at: '2025-01-01T10:00:00Z',
     },
     {
-      guid: 'con_01hgw2bbg0000000000000002',
+      guid: 'con_01hgw2bbg00000000000000002',
       name: 'Test GCS Connector',
       type: 'gcs',
       is_active: false,
@@ -1760,7 +1760,7 @@ export function resetMockData(): void {
   ]
   collections = [
     {
-      guid: 'col_01hgw2bbg0000000000000001',
+      guid: 'col_01hgw2bbg00000000000000001',
       name: 'Test Collection',
       type: 'local',
       location: '/photos',
@@ -1777,13 +1777,13 @@ export function resetMockData(): void {
       updated_at: '2025-01-01T09:00:00Z',
     },
     {
-      guid: 'col_01hgw2bbg0000000000000002',
+      guid: 'col_01hgw2bbg00000000000000002',
       name: 'Remote S3 Collection',
       type: 's3',
       location: 'my-bucket/photos',
       state: 'closed',
-      connector_guid: 'con_01hgw2bbg0000000000000001',
-      pipeline_guid: 'pip_01hgw2bbg0000000000000001',
+      connector_guid: 'con_01hgw2bbg00000000000000001',
+      pipeline_guid: 'pip_01hgw2bbg00000000000000001',
       pipeline_version: 1,
       pipeline_name: 'Standard RAW Workflow',
       cache_ttl: 86400,
@@ -1797,9 +1797,9 @@ export function resetMockData(): void {
   jobs = []
   results = [
     {
-      guid: 'res_01hgw2bbg0000000000000001',
-      external_id: 'res_01hgw2bbg0000000000000001',
-      collection_guid: 'col_01hgw2bbg0000000000000001',
+      guid: 'res_01hgw2bbg00000000000000001',
+      external_id: 'res_01hgw2bbg00000000000000001',
+      collection_guid: 'col_01hgw2bbg00000000000000001',
       collection_name: 'Test Collection',
       tool: 'photostats',
       pipeline_guid: null,
@@ -1823,9 +1823,9 @@ export function resetMockData(): void {
       created_at: '2025-01-01T10:00:00Z',
     },
     {
-      guid: 'res_01hgw2bbg0000000000000002',
-      external_id: 'res_01hgw2bbg0000000000000002',
-      collection_guid: 'col_01hgw2bbg0000000000000001',
+      guid: 'res_01hgw2bbg00000000000000002',
+      external_id: 'res_01hgw2bbg00000000000000002',
+      collection_guid: 'col_01hgw2bbg00000000000000001',
       collection_name: 'Test Collection',
       tool: 'photo_pairing',
       pipeline_guid: null,
@@ -1850,9 +1850,9 @@ export function resetMockData(): void {
       created_at: '2025-01-01T11:00:00Z',
     },
     {
-      guid: 'res_01hgw2bbg0000000000000003',
-      external_id: 'res_01hgw2bbg0000000000000003',
-      collection_guid: 'col_01hgw2bbg0000000000000002',
+      guid: 'res_01hgw2bbg00000000000000003',
+      external_id: 'res_01hgw2bbg00000000000000003',
+      collection_guid: 'col_01hgw2bbg00000000000000002',
       collection_name: 'Remote S3 Collection',
       tool: 'photostats',
       pipeline_guid: null,
@@ -1876,12 +1876,12 @@ export function resetMockData(): void {
       created_at: '2025-01-01T12:00:00Z',
     },
     {
-      guid: 'res_01hgw2bbg0000000000000004',
-      external_id: 'res_01hgw2bbg0000000000000004',
-      collection_guid: 'col_01hgw2bbg0000000000000002',
+      guid: 'res_01hgw2bbg00000000000000004',
+      external_id: 'res_01hgw2bbg00000000000000004',
+      collection_guid: 'col_01hgw2bbg00000000000000002',
       collection_name: 'Remote S3 Collection',
       tool: 'pipeline_validation',
-      pipeline_guid: 'pip_01hgw2bbg0000000000000001',
+      pipeline_guid: 'pip_01hgw2bbg00000000000000001',
       pipeline_version: 1,
       pipeline_name: 'Standard RAW Workflow',
       status: 'COMPLETED',

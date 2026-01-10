@@ -5,6 +5,7 @@
  */
 
 import api from './api'
+import { validateGuid } from '@/utils/guid'
 import type {
   AnalysisResult,
   ResultListResponse,
@@ -26,7 +27,8 @@ export const listResults = async (params: ResultListQueryParams = {}): Promise<R
  * @param guid - External ID (res_xxx format)
  */
 export const getResult = async (guid: string): Promise<AnalysisResult> => {
-  const response = await api.get<AnalysisResult>(`/results/${guid}`)
+  const validGuid = validateGuid(guid, 'res')
+  const response = await api.get<AnalysisResult>(`/results/${validGuid}`)
   return response.data
 }
 
@@ -35,7 +37,8 @@ export const getResult = async (guid: string): Promise<AnalysisResult> => {
  * @param guid - External ID (res_xxx format)
  */
 export const deleteResult = async (guid: string): Promise<ResultDeleteResponse> => {
-  const response = await api.delete<ResultDeleteResponse>(`/results/${guid}`)
+  const validGuid = validateGuid(guid, 'res')
+  const response = await api.delete<ResultDeleteResponse>(`/results/${validGuid}`)
   return response.data
 }
 
@@ -45,8 +48,9 @@ export const deleteResult = async (guid: string): Promise<ResultDeleteResponse> 
  * @param guid - External ID (res_xxx format)
  */
 export const getReportUrl = (guid: string): string => {
+  const validGuid = validateGuid(guid, 'res')
   const baseUrl = api.defaults.baseURL || 'http://localhost:8000/api'
-  return `${baseUrl}/results/${guid}/report`
+  return `${baseUrl}/results/${validGuid}/report`
 }
 
 /**
@@ -55,7 +59,8 @@ export const getReportUrl = (guid: string): string => {
  * @param guid - External ID (res_xxx format)
  */
 export const downloadReport = async (guid: string): Promise<{ blob: Blob; filename: string }> => {
-  const response = await api.get(`/results/${guid}/report`, {
+  const validGuid = validateGuid(guid, 'res')
+  const response = await api.get(`/results/${validGuid}/report`, {
     responseType: 'blob'
   })
 

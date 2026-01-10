@@ -210,3 +210,24 @@ export async function copyGuid(guid: string): Promise<void> {
     document.body.removeChild(textArea)
   }
 }
+
+/**
+ * Validates a GUID and returns it if valid, throws if invalid.
+ * Use this before using a GUID in API URLs to prevent URL injection.
+ *
+ * @param guid - The GUID to validate
+ * @param expectedPrefix - Optional prefix to validate against
+ * @returns The validated GUID
+ * @throws Error if GUID is invalid
+ *
+ * @example
+ * const validGuid = validateGuid(userInput, 'res')
+ * await api.get(`/results/${validGuid}`)
+ */
+export function validateGuid(guid: string, expectedPrefix?: EntityPrefix): string {
+  if (!isValidGuid(guid, expectedPrefix)) {
+    const prefixMsg = expectedPrefix ? ` with prefix '${expectedPrefix}'` : ''
+    throw new Error(`Invalid GUID format${prefixMsg}: ${guid}`)
+  }
+  return guid
+}

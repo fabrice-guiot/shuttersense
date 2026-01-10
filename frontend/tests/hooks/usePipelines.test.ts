@@ -120,7 +120,7 @@ describe('usePipelines', () => {
     })
 
     await act(async () => {
-      await result.current.updatePipeline('pip_01hgw2bbg0000000000000002', {
+      await result.current.updatePipeline('pip_01hgw2bbg00000000000000002', {
         description: 'Updated HDR description',
         change_summary: 'Updated description',
       })
@@ -131,7 +131,7 @@ describe('usePipelines', () => {
       await result.current.refetch()
     })
 
-    const updated = result.current.pipelines.find((p) => p.guid === 'pip_01hgw2bbg0000000000000002')
+    const updated = result.current.pipelines.find((p) => p.guid === 'pip_01hgw2bbg00000000000000002')
     expect(updated?.description).toBe('Updated HDR description')
   })
 
@@ -247,7 +247,7 @@ describe('usePipeline', () => {
   })
 
   it('should fetch single pipeline by GUID', async () => {
-    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg0000000000000001'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000001'))
 
     // Initially loading
     expect(result.current.loading).toBe(true)
@@ -258,7 +258,7 @@ describe('usePipeline', () => {
     })
 
     expect(result.current.pipeline).toBeDefined()
-    expect(result.current.pipeline?.guid).toBe('pip_01hgw2bbg0000000000000001')
+    expect(result.current.pipeline?.guid).toBe('pip_01hgw2bbg00000000000000001')
     expect(result.current.pipeline?.name).toBe('Standard RAW Workflow')
     expect(result.current.error).toBe(null)
   })
@@ -274,7 +274,7 @@ describe('usePipeline', () => {
   })
 
   it('should handle non-existent pipeline', async () => {
-    const { result } = renderHook(() => usePipeline('pip_nonexistent0000000000000'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000999'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -285,7 +285,7 @@ describe('usePipeline', () => {
   })
 
   it('should include full pipeline details including nodes and edges', async () => {
-    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg0000000000000001'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000001'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -297,7 +297,7 @@ describe('usePipeline', () => {
   })
 
   it('should validate a pipeline', async () => {
-    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg0000000000000001'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000001'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -311,7 +311,7 @@ describe('usePipeline', () => {
   })
 
   it('should get validation errors for invalid pipeline', async () => {
-    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg0000000000000003'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000003'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -325,7 +325,7 @@ describe('usePipeline', () => {
   })
 
   it('should preview filenames for valid pipeline', async () => {
-    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg0000000000000001'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000001'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -339,7 +339,7 @@ describe('usePipeline', () => {
   })
 
   it('should fail to preview invalid pipeline', async () => {
-    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg0000000000000003'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000003'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -356,7 +356,7 @@ describe('usePipeline', () => {
   })
 
   it('should get pipeline history', async () => {
-    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg0000000000000002'))
+    const { result } = renderHook(() => usePipeline('pip_01hgw2bbg00000000000000002'))
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
@@ -389,7 +389,7 @@ describe('usePipelineStats', () => {
     expect(result.current.stats).toBeDefined()
     expect(result.current.stats?.total_pipelines).toBe(3)
     expect(result.current.stats?.valid_pipelines).toBe(2)
-    expect(result.current.stats?.default_pipeline_guid).toBe('pip_01hgw2bbg0000000000000001')
+    expect(result.current.stats?.default_pipeline_guid).toBe('pip_01hgw2bbg00000000000000001')
     expect(result.current.stats?.active_pipeline_count).toBe(1)
     expect(result.current.error).toBe(null)
   })

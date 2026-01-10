@@ -28,7 +28,7 @@ describe('Tool Execution Integration', () => {
       let jobId: string
       await act(async () => {
         const job = await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000001',
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
         jobId = job.id
@@ -61,7 +61,7 @@ describe('Tool Execution Integration', () => {
       // Run a tool
       await act(async () => {
         await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000001',
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
       })
@@ -86,7 +86,7 @@ describe('Tool Execution Integration', () => {
       let jobId: string
       await act(async () => {
         const job = await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000001',
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
         jobId = job.id
@@ -135,14 +135,14 @@ describe('Tool Execution Integration', () => {
     })
 
     it('should get single result with full details', async () => {
-      const { result } = renderHook(() => useResult('res_01hgw2bbg0000000000000001'))
+      const { result } = renderHook(() => useResult('res_01hgw2bbg00000000000000001'))
 
       await waitFor(() => {
         expect(result.current.loading).toBe(false)
       })
 
       expect(result.current.result).toBeDefined()
-      expect(result.current.result?.guid).toBe('res_01hgw2bbg0000000000000001')
+      expect(result.current.result?.guid).toBe('res_01hgw2bbg00000000000000001')
       expect(result.current.result?.tool).toBe('photostats')
       expect(result.current.result?.results).toBeDefined()
       // Type narrow to PhotoStatsResults to access its properties
@@ -196,7 +196,7 @@ describe('Tool Execution Integration', () => {
       // Run first job
       await act(async () => {
         await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000001',
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
       })
@@ -205,7 +205,7 @@ describe('Tool Execution Integration', () => {
       await act(async () => {
         try {
           await toolsResult.current.runTool({
-            collection_guid: 'col_01hgw2bbg0000000000000001',
+            collection_guid: 'col_01hgw2bbg00000000000000001',
             tool: 'photostats'
           })
           expect.fail('Should have thrown conflict error')
@@ -216,7 +216,8 @@ describe('Tool Execution Integration', () => {
     })
 
     it('should handle non-existent result fetch', async () => {
-      const { result } = renderHook(() => useResult('res_nonexistent00000000000'))
+      // Use valid GUID format that doesn't exist in mock data
+      const { result } = renderHook(() => useResult('res_01hgw2bbg00000000000000999'))
 
       await waitFor(() => {
         expect(result.current.loading).toBe(false)
@@ -233,7 +234,8 @@ describe('Tool Execution Integration', () => {
 
       await act(async () => {
         try {
-          await result.current.deleteResult('res_nonexistent00000000000')
+          // Use valid GUID format that doesn't exist in mock data
+          await result.current.deleteResult('res_01hgw2bbg00000000000000999')
           expect.fail('Should have thrown 404 error')
         } catch (error: any) {
           expect(error.response?.status).toBe(404)
@@ -299,7 +301,7 @@ describe('Tool Execution Integration', () => {
       // Run PhotoStats
       await act(async () => {
         const job = await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000001',
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
         expect(job.tool).toBe('photostats')
@@ -308,7 +310,7 @@ describe('Tool Execution Integration', () => {
       // Run Photo Pairing (different tool, same collection - should succeed)
       await act(async () => {
         const job = await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000001',
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photo_pairing'
         })
         expect(job.tool).toBe('photo_pairing')
@@ -326,7 +328,7 @@ describe('Tool Execution Integration', () => {
       // Run PhotoStats on collection 1
       await act(async () => {
         const job = await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000001',
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
         expect(job.collection_id).toBeDefined()
@@ -335,7 +337,7 @@ describe('Tool Execution Integration', () => {
       // Run PhotoStats on collection 2 (same tool, different collection - should succeed)
       await act(async () => {
         const job = await toolsResult.current.runTool({
-          collection_guid: 'col_01hgw2bbg0000000000000002',
+          collection_guid: 'col_01hgw2bbg00000000000000002',
           tool: 'photostats'
         })
         expect(job.collection_id).toBeDefined()
