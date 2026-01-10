@@ -5,6 +5,7 @@
  */
 
 import api from './api'
+import { validateGuid } from '@/utils/guid'
 import type {
   Pipeline,
   PipelineSummary,
@@ -33,7 +34,8 @@ export const listPipelines = async (params: PipelineListQueryParams = {}): Promi
  * @param guid - External ID (pip_xxx format)
  */
 export const getPipeline = async (guid: string): Promise<Pipeline> => {
-  const response = await api.get<Pipeline>(`/pipelines/${guid}`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.get<Pipeline>(`/pipelines/${safeGuid}`)
   return response.data
 }
 
@@ -50,7 +52,8 @@ export const createPipeline = async (data: PipelineCreateRequest): Promise<Pipel
  * @param guid - External ID (pip_xxx format)
  */
 export const updatePipeline = async (guid: string, data: PipelineUpdateRequest): Promise<Pipeline> => {
-  const response = await api.put<Pipeline>(`/pipelines/${guid}`, data)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.put<Pipeline>(`/pipelines/${safeGuid}`, data)
   return response.data
 }
 
@@ -59,7 +62,8 @@ export const updatePipeline = async (guid: string, data: PipelineUpdateRequest):
  * @param guid - External ID (pip_xxx format)
  */
 export const deletePipeline = async (guid: string): Promise<PipelineDeleteResponse> => {
-  const response = await api.delete<PipelineDeleteResponse>(`/pipelines/${guid}`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.delete<PipelineDeleteResponse>(`/pipelines/${safeGuid}`)
   return response.data
 }
 
@@ -68,7 +72,8 @@ export const deletePipeline = async (guid: string): Promise<PipelineDeleteRespon
  * @param guid - External ID (pip_xxx format)
  */
 export const activatePipeline = async (guid: string): Promise<Pipeline> => {
-  const response = await api.post<Pipeline>(`/pipelines/${guid}/activate`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.post<Pipeline>(`/pipelines/${safeGuid}/activate`)
   return response.data
 }
 
@@ -77,7 +82,8 @@ export const activatePipeline = async (guid: string): Promise<Pipeline> => {
  * @param guid - External ID (pip_xxx format)
  */
 export const deactivatePipeline = async (guid: string): Promise<Pipeline> => {
-  const response = await api.post<Pipeline>(`/pipelines/${guid}/deactivate`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.post<Pipeline>(`/pipelines/${safeGuid}/deactivate`)
   return response.data
 }
 
@@ -86,7 +92,8 @@ export const deactivatePipeline = async (guid: string): Promise<Pipeline> => {
  * @param guid - External ID (pip_xxx format)
  */
 export const setDefaultPipeline = async (guid: string): Promise<Pipeline> => {
-  const response = await api.post<Pipeline>(`/pipelines/${guid}/set-default`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.post<Pipeline>(`/pipelines/${safeGuid}/set-default`)
   return response.data
 }
 
@@ -95,7 +102,8 @@ export const setDefaultPipeline = async (guid: string): Promise<Pipeline> => {
  * @param guid - External ID (pip_xxx format)
  */
 export const unsetDefaultPipeline = async (guid: string): Promise<Pipeline> => {
-  const response = await api.post<Pipeline>(`/pipelines/${guid}/unset-default`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.post<Pipeline>(`/pipelines/${safeGuid}/unset-default`)
   return response.data
 }
 
@@ -104,7 +112,8 @@ export const unsetDefaultPipeline = async (guid: string): Promise<Pipeline> => {
  * @param guid - External ID (pip_xxx format)
  */
 export const validatePipeline = async (guid: string): Promise<ValidationResult> => {
-  const response = await api.post<ValidationResult>(`/pipelines/${guid}/validate`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.post<ValidationResult>(`/pipelines/${safeGuid}/validate`)
   return response.data
 }
 
@@ -116,7 +125,8 @@ export const previewFilenames = async (
   guid: string,
   data: FilenamePreviewRequest = {}
 ): Promise<FilenamePreviewResponse> => {
-  const response = await api.post<FilenamePreviewResponse>(`/pipelines/${guid}/preview`, data)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.post<FilenamePreviewResponse>(`/pipelines/${safeGuid}/preview`, data)
   return response.data
 }
 
@@ -125,7 +135,8 @@ export const previewFilenames = async (
  * @param guid - External ID (pip_xxx format)
  */
 export const getPipelineHistory = async (guid: string): Promise<PipelineHistoryEntry[]> => {
-  const response = await api.get<PipelineHistoryEntry[]>(`/pipelines/${guid}/history`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.get<PipelineHistoryEntry[]>(`/pipelines/${safeGuid}/history`)
   return response.data
 }
 
@@ -134,7 +145,8 @@ export const getPipelineHistory = async (guid: string): Promise<PipelineHistoryE
  * @param guid - External ID (pip_xxx format)
  */
 export const getPipelineVersion = async (guid: string, version: number): Promise<Pipeline> => {
-  const response = await api.get<Pipeline>(`/pipelines/${guid}/versions/${version}`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.get<Pipeline>(`/pipelines/${safeGuid}/versions/${version}`)
   return response.data
 }
 
@@ -165,8 +177,10 @@ export const importPipeline = async (file: File): Promise<Pipeline> => {
  * @param guid - External ID (pip_xxx format)
  */
 export const getExportUrl = (guid: string): string => {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
   const baseUrl = api.defaults.baseURL || 'http://localhost:8000/api'
-  return `${baseUrl}/pipelines/${guid}/export`
+  return `${baseUrl}/pipelines/${safeGuid}/export`
 }
 
 /**
@@ -174,7 +188,9 @@ export const getExportUrl = (guid: string): string => {
  * @param guid - External ID (pip_xxx format)
  */
 export const downloadPipelineYaml = async (guid: string): Promise<{ blob: Blob; filename: string }> => {
-  const response = await api.get(`/pipelines/${guid}/export`, {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.get(`/pipelines/${safeGuid}/export`, {
     responseType: 'blob',
   })
 
@@ -200,7 +216,9 @@ export const downloadPipelineVersionYaml = async (
   guid: string,
   version: number
 ): Promise<{ blob: Blob; filename: string }> => {
-  const response = await api.get(`/pipelines/${guid}/versions/${version}/export`, {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const response = await api.get(`/pipelines/${safeGuid}/versions/${version}/export`, {
     responseType: 'blob',
   })
 

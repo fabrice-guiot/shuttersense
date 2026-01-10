@@ -27,8 +27,9 @@ export const listResults = async (params: ResultListQueryParams = {}): Promise<R
  * @param guid - External ID (res_xxx format)
  */
 export const getResult = async (guid: string): Promise<AnalysisResult> => {
-  const validGuid = validateGuid(guid, 'res')
-  const response = await api.get<AnalysisResult>(`/results/${validGuid}`)
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
+  const response = await api.get<AnalysisResult>(`/results/${safeGuid}`)
   return response.data
 }
 
@@ -37,8 +38,9 @@ export const getResult = async (guid: string): Promise<AnalysisResult> => {
  * @param guid - External ID (res_xxx format)
  */
 export const deleteResult = async (guid: string): Promise<ResultDeleteResponse> => {
-  const validGuid = validateGuid(guid, 'res')
-  const response = await api.delete<ResultDeleteResponse>(`/results/${validGuid}`)
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
+  const response = await api.delete<ResultDeleteResponse>(`/results/${safeGuid}`)
   return response.data
 }
 
@@ -48,9 +50,10 @@ export const deleteResult = async (guid: string): Promise<ResultDeleteResponse> 
  * @param guid - External ID (res_xxx format)
  */
 export const getReportUrl = (guid: string): string => {
-  const validGuid = validateGuid(guid, 'res')
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
   const baseUrl = api.defaults.baseURL || 'http://localhost:8000/api'
-  return `${baseUrl}/results/${validGuid}/report`
+  return `${baseUrl}/results/${safeGuid}/report`
 }
 
 /**
@@ -59,8 +62,9 @@ export const getReportUrl = (guid: string): string => {
  * @param guid - External ID (res_xxx format)
  */
 export const downloadReport = async (guid: string): Promise<{ blob: Blob; filename: string }> => {
-  const validGuid = validateGuid(guid, 'res')
-  const response = await api.get(`/results/${validGuid}/report`, {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
+  const response = await api.get(`/results/${safeGuid}/report`, {
     responseType: 'blob'
   })
 

@@ -139,7 +139,8 @@ describe('useTools', () => {
 
     await act(async () => {
       try {
-        await result.current.cancelJob('non-existent-job')
+        // Use valid GUID format that doesn't exist in mock data
+        await result.current.cancelJob('job_01hgw2bbg00000000000000999')
         expect.fail('Should have thrown 404 error')
       } catch (error: any) {
         expect(error.response?.status).toBe(404)

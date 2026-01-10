@@ -24,7 +24,16 @@ import type {
 
 // Mock data
 let jobs: JobResponse[] = []
-let nextJobId = 1
+let nextJobNum = 1
+
+// Helper to generate job GUIDs in proper format
+function generateJobGuid(): string {
+  const num = nextJobNum++
+  // Pad to 26 chars with the format job_01hgw2bbg0000000000000000X
+  // Base: 01hgw2bbg = 9 chars, then 17 zeros/digits to reach 26 total
+  const paddedNum = String(num).padStart(1, '0')
+  return `job_01hgw2bbg0000000000000000${paddedNum}`
+}
 
 let pipelines: Pipeline[] = [
   {
@@ -610,7 +619,7 @@ export const handlers = [
       }
 
       const newJob: JobResponse = {
-        id: `job-${nextJobId++}`,
+        id: generateJobGuid(),
         collection_id: null,
         tool: data.tool,
         pipeline_id: pipelineId,
@@ -681,7 +690,7 @@ export const handlers = [
     const pipelineId = pipeline ? pipelines.indexOf(pipeline) + 1 : null
 
     const newJob: JobResponse = {
-      id: `job-${nextJobId++}`,
+      id: generateJobGuid(),
       collection_id: collectionId,
       tool: data.tool,
       pipeline_id: pipelineId,
@@ -1900,7 +1909,7 @@ export function resetMockData(): void {
   ]
   nextConnectorId = 3
   nextCollectionId = 3
-  nextJobId = 1
+  nextJobNum = 1
   nextResultId = 5
   // Reset config data
   configData = {

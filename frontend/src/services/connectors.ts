@@ -5,6 +5,7 @@
  */
 
 import api from './api'
+import { validateGuid } from '@/utils/guid'
 import type {
   Connector,
   ConnectorCreateRequest,
@@ -31,7 +32,8 @@ export const listConnectors = async (filters: Record<string, any> = {}): Promise
  * @param guid - External ID (con_xxx format)
  */
 export const getConnector = async (guid: string): Promise<Connector> => {
-  const response = await api.get<Connector>(`/connectors/${guid}`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'con'))
+  const response = await api.get<Connector>(`/connectors/${safeGuid}`)
   return response.data
 }
 
@@ -48,7 +50,8 @@ export const createConnector = async (data: ConnectorCreateRequest): Promise<Con
  * @param guid - External ID (con_xxx format)
  */
 export const updateConnector = async (guid: string, data: ConnectorUpdateRequest): Promise<Connector> => {
-  const response = await api.put<Connector>(`/connectors/${guid}`, data)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'con'))
+  const response = await api.put<Connector>(`/connectors/${safeGuid}`, data)
   return response.data
 }
 
@@ -58,7 +61,8 @@ export const updateConnector = async (guid: string, data: ConnectorUpdateRequest
  * @throws Error 409 if collections reference this connector
  */
 export const deleteConnector = async (guid: string): Promise<void> => {
-  await api.delete(`/connectors/${guid}`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'con'))
+  await api.delete(`/connectors/${safeGuid}`)
 }
 
 /**
@@ -66,7 +70,8 @@ export const deleteConnector = async (guid: string): Promise<void> => {
  * @param guid - External ID (con_xxx format)
  */
 export const testConnector = async (guid: string): Promise<ConnectorTestResponse> => {
-  const response = await api.post<ConnectorTestResponse>(`/connectors/${guid}/test`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'con'))
+  const response = await api.post<ConnectorTestResponse>(`/connectors/${safeGuid}/test`)
   return response.data
 }
 

@@ -5,6 +5,7 @@
  */
 
 import api from './api'
+import { validateGuid } from '@/utils/guid'
 import type {
   Collection,
   CollectionCreateRequest,
@@ -36,7 +37,8 @@ export const listCollections = async (filters: CollectionListQueryParams = {}): 
  * @param guid - External ID (col_xxx format)
  */
 export const getCollection = async (guid: string): Promise<Collection> => {
-  const response = await api.get<Collection>(`/collections/${guid}`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'col'))
+  const response = await api.get<Collection>(`/collections/${safeGuid}`)
   return response.data
 }
 
@@ -53,7 +55,8 @@ export const createCollection = async (data: CollectionCreateRequest): Promise<C
  * @param guid - External ID (col_xxx format)
  */
 export const updateCollection = async (guid: string, data: CollectionUpdateRequest): Promise<Collection> => {
-  const response = await api.put<Collection>(`/collections/${guid}`, data)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'col'))
+  const response = await api.put<Collection>(`/collections/${safeGuid}`, data)
   return response.data
 }
 
@@ -67,8 +70,9 @@ export const deleteCollection = async (
   guid: string,
   force = false
 ): Promise<CollectionDeleteResponse | void> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'col'))
   const params = force ? { force_delete: force } : {}
-  const response = await api.delete<CollectionDeleteResponse>(`/collections/${guid}`, { params })
+  const response = await api.delete<CollectionDeleteResponse>(`/collections/${safeGuid}`, { params })
   // If status is 200, return the result/job info
   if (response.status === 200) {
     return response.data
@@ -81,7 +85,8 @@ export const deleteCollection = async (
  * @param guid - External ID (col_xxx format)
  */
 export const testCollection = async (guid: string): Promise<CollectionTestResponse> => {
-  const response = await api.post<CollectionTestResponse>(`/collections/${guid}/test`)
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'col'))
+  const response = await api.post<CollectionTestResponse>(`/collections/${safeGuid}/test`)
   return response.data
 }
 
@@ -90,8 +95,9 @@ export const testCollection = async (guid: string): Promise<CollectionTestRespon
  * @param guid - External ID (col_xxx format)
  */
 export const refreshCollection = async (guid: string, confirm = false): Promise<any> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'col'))
   const params = confirm ? { confirm: true } : {}
-  const response = await api.post(`/collections/${guid}/refresh`, null, { params })
+  const response = await api.post(`/collections/${safeGuid}/refresh`, null, { params })
   return response.data
 }
 
@@ -111,10 +117,12 @@ export const getCollectionStats = async (): Promise<CollectionStatsResponse> => 
  * @param pipelineGuid - Pipeline GUID (pip_xxx format)
  */
 export const assignPipeline = async (collectionGuid: string, pipelineGuid: string): Promise<Collection> => {
+  const safeColGuid = encodeURIComponent(validateGuid(collectionGuid, 'col'))
+  const safePipGuid = encodeURIComponent(validateGuid(pipelineGuid, 'pip'))
   const response = await api.post<Collection>(
-    `/collections/${collectionGuid}/assign-pipeline`,
+    `/collections/${safeColGuid}/assign-pipeline`,
     null,
-    { params: { pipeline_guid: pipelineGuid } }
+    { params: { pipeline_guid: safePipGuid } }
   )
   return response.data
 }
@@ -125,6 +133,7 @@ export const assignPipeline = async (collectionGuid: string, pipelineGuid: strin
  * @param collectionGuid - Collection GUID (col_xxx format)
  */
 export const clearPipeline = async (collectionGuid: string): Promise<Collection> => {
-  const response = await api.post<Collection>(`/collections/${collectionGuid}/clear-pipeline`)
+  const safeGuid = encodeURIComponent(validateGuid(collectionGuid, 'col'))
+  const response = await api.post<Collection>(`/collections/${safeGuid}/clear-pipeline`)
   return response.data
 }

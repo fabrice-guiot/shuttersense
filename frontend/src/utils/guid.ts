@@ -14,12 +14,14 @@
  *   - con: Connector
  *   - pip: Pipeline
  *   - res: AnalysisResult
+ *   - job: Job (in-memory entity)
+ *   - imp: Import (in-memory entity)
  */
 
 /**
  * Entity type prefixes
  */
-export type EntityPrefix = 'col' | 'con' | 'pip' | 'res'
+export type EntityPrefix = 'col' | 'con' | 'pip' | 'res' | 'job' | 'imp'
 
 /**
  * Entity type names mapped to prefixes
@@ -29,6 +31,8 @@ export const ENTITY_PREFIXES: Record<EntityPrefix, string> = {
   con: 'Connector',
   pip: 'Pipeline',
   res: 'AnalysisResult',
+  job: 'Job',
+  imp: 'Import',
 }
 
 /**
@@ -40,7 +44,7 @@ const CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
  * Regex pattern for validating GUIDs
  * Format: {3-char prefix}_{26-char Crockford Base32}
  */
-const GUID_PATTERN = /^(col|con|pip|res)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$/i
+const GUID_PATTERN = /^(col|con|pip|res|job|imp)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$/i
 
 /**
  * Validates if a string is a valid GUID.
