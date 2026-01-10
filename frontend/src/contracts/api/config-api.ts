@@ -110,7 +110,7 @@ export interface ConfigConflict {
 }
 
 export interface ImportSessionResponse {
-  /** Session identifier (UUID) */
+  /** Session identifier (GUID format: imp_xxx) */
   session_id: string
   /** Current session status */
   status: ImportSessionStatus
@@ -354,7 +354,7 @@ export const CATEGORY_DESCRIPTIONS: Record<ConfigCategory, string> = {
  * Get import session status
  *
  * Path Parameters:
- *   - session_id: string (UUID)
+ *   - session_id: string (GUID format: imp_xxx)
  *
  * Response: 200 ImportSessionResponse
  * Errors:
@@ -368,7 +368,7 @@ export const CATEGORY_DESCRIPTIONS: Record<ConfigCategory, string> = {
  * Resolve conflicts and apply import
  *
  * Path Parameters:
- *   - session_id: string (UUID)
+ *   - session_id: string (GUID format: imp_xxx)
  * Request Body: ConflictResolutionRequest
  *
  * Response: 200 ImportResultResponse
@@ -384,7 +384,7 @@ export const CATEGORY_DESCRIPTIONS: Record<ConfigCategory, string> = {
  * Cancel import session
  *
  * Path Parameters:
- *   - session_id: string (UUID)
+ *   - session_id: string (GUID format: imp_xxx)
  *
  * Response: 200 { message }
  * Errors:

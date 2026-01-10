@@ -187,7 +187,7 @@ class PipelineSummary(BaseModel):
 
     Contains essential information without full node/edge details.
     """
-    id: int = Field(..., description="Pipeline ID")
+    guid: str = Field(..., description="External identifier (pip_xxx)")
     name: str = Field(..., description="Pipeline name")
     description: Optional[str] = Field(None, description="Pipeline description")
     version: int = Field(..., description="Current version")
@@ -202,7 +202,7 @@ class PipelineSummary(BaseModel):
         "from_attributes": True,
         "json_schema_extra": {
             "example": {
-                "id": 1,
+                "guid": "pip_01hgw2bbg0000000000000002",
                 "name": "Standard RAW Workflow",
                 "description": "RAW capture to processed TIFF export",
                 "version": 3,
@@ -223,7 +223,7 @@ class PipelineResponse(BaseModel):
 
     Contains all information including nodes and edges.
     """
-    id: int = Field(..., description="Pipeline ID")
+    guid: str = Field(..., description="External identifier (pip_xxx)")
     name: str = Field(..., description="Pipeline name")
     description: Optional[str] = Field(None, description="Pipeline description")
     nodes: List[PipelineNode] = Field(..., description="Node definitions")
@@ -240,7 +240,7 @@ class PipelineResponse(BaseModel):
         "from_attributes": True,
         "json_schema_extra": {
             "example": {
-                "id": 1,
+                "guid": "pip_01hgw2bbg0000000000000002",
                 "name": "Standard RAW Workflow",
                 "description": "RAW capture to processed TIFF export",
                 "nodes": [
@@ -326,9 +326,10 @@ class FilenamePreviewResponse(BaseModel):
 class PipelineHistoryEntry(BaseModel):
     """
     Pipeline version history entry.
+
+    Version number serves as the identifier for history entries.
     """
-    id: int = Field(..., description="History entry ID")
-    version: int = Field(..., description="Version number")
+    version: int = Field(..., description="Version number (identifier)")
     change_summary: Optional[str] = Field(None, description="Summary of changes")
     changed_by: Optional[str] = Field(None, description="Who made the change")
     created_at: datetime = Field(..., description="When version was created")
@@ -337,7 +338,6 @@ class PipelineHistoryEntry(BaseModel):
         "from_attributes": True,
         "json_schema_extra": {
             "example": {
-                "id": 1,
                 "version": 2,
                 "change_summary": "Added HDR processing step",
                 "changed_by": None,
@@ -354,7 +354,7 @@ class PipelineStatsResponse(BaseModel):
     total_pipelines: int = Field(0, ge=0, description="Total pipeline count")
     valid_pipelines: int = Field(0, ge=0, description="Valid pipeline count")
     active_pipeline_count: int = Field(0, ge=0, description="Number of active pipelines")
-    default_pipeline_id: Optional[int] = Field(None, description="ID of default pipeline")
+    default_pipeline_guid: Optional[str] = Field(None, description="GUID of default pipeline (pip_xxx)")
     default_pipeline_name: Optional[str] = Field(None, description="Name of default pipeline")
 
     model_config = {
@@ -363,7 +363,7 @@ class PipelineStatsResponse(BaseModel):
                 "total_pipelines": 5,
                 "valid_pipelines": 4,
                 "active_pipeline_count": 3,
-                "default_pipeline_id": 1,
+                "default_pipeline_guid": "pip_01hgw2bbg0000000000000001",
                 "default_pipeline_name": "Standard RAW Workflow"
             }
         }
@@ -375,13 +375,13 @@ class DeleteResponse(BaseModel):
     Response after deleting a pipeline.
     """
     message: str = Field(..., description="Confirmation message")
-    deleted_id: int = Field(..., description="ID of deleted pipeline")
+    deleted_guid: str = Field(..., description="GUID of deleted pipeline (pip_xxx)")
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "message": "Pipeline deleted successfully",
-                "deleted_id": 1
+                "deleted_guid": "pip_01hgw2bbg0000000000000001"
             }
         }
     }

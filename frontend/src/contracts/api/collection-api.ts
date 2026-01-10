@@ -13,13 +13,13 @@ export type CollectionType = 'local' | 's3' | 'gcs' | 'smb'
 export type CollectionState = 'live' | 'closed' | 'archived'
 
 export interface Collection {
-  id: number
+  guid: string  // External identifier (col_xxx) for URL-safe references
   name: string
   type: CollectionType
   state: CollectionState
   location: string
-  connector_id: number | null  // null for LOCAL, required for remote
-  pipeline_id: number | null  // null = use default pipeline at runtime
+  connector_guid: string | null  // null for LOCAL, required for remote
+  pipeline_guid: string | null  // null = use default pipeline at runtime
   pipeline_version: number | null  // pinned version when explicitly assigned
   pipeline_name: string | null  // name of assigned pipeline
   is_accessible: boolean
@@ -39,8 +39,8 @@ export interface CollectionCreateRequest {
   type: CollectionType
   state: CollectionState
   location: string
-  connector_id: number | null
-  pipeline_id?: number | null  // Optional: assign specific pipeline
+  connector_guid: string | null  // null for LOCAL, required for remote
+  pipeline_guid?: string | null  // Optional: assign specific pipeline (pip_xxx)
   cache_ttl: number | null
 }
 
@@ -49,8 +49,8 @@ export interface CollectionUpdateRequest {
   type?: CollectionType
   state?: CollectionState
   location?: string
-  connector_id?: number | null
-  pipeline_id?: number | null  // Optional: update pipeline assignment
+  connector_guid?: string | null  // null for LOCAL, required for remote
+  pipeline_guid?: string | null  // Optional: update pipeline assignment (pip_xxx)
   cache_ttl?: number | null
 }
 
@@ -148,8 +148,8 @@ export interface CollectionDeleteConflictResponse {
  *
  * Request Body: CollectionCreateRequest
  * Validation Rules:
- *   - LOCAL type: connector_id MUST be null
- *   - Remote types (S3/GCS/SMB): connector_id MUST be >= 1
+ *   - LOCAL type: connector_guid MUST be null
+ *   - Remote types (S3/GCS/SMB): connector_guid MUST be provided (con_xxx format)
  *   - cache_ttl: optional, must be positive integer if provided
  *
  * Response: 201 CollectionDetailResponse
@@ -161,12 +161,12 @@ export interface CollectionDeleteConflictResponse {
  */
 
 /**
- * GET /api/collections/{id}
+ * GET /api/collections/{guid}
  *
- * Get collection by ID
+ * Get collection by GUID
  *
  * Path Parameters:
- *   - id: number (collection ID)
+ *   - guid: string (collection GUID, col_xxx format)
  *
  * Response: 200 CollectionDetailResponse
  * Errors:
@@ -175,12 +175,12 @@ export interface CollectionDeleteConflictResponse {
  */
 
 /**
- * PUT /api/collections/{id}
+ * PUT /api/collections/{guid}
  *
  * Update existing collection
  *
  * Path Parameters:
- *   - id: number (collection ID)
+ *   - guid: string (collection GUID, col_xxx format)
  * Request Body: CollectionUpdateRequest
  * Validation Rules: Same as POST /api/collections
  *
@@ -193,12 +193,12 @@ export interface CollectionDeleteConflictResponse {
  */
 
 /**
- * DELETE /api/collections/{id}
+ * DELETE /api/collections/{guid}
  *
  * Delete collection
  *
  * Path Parameters:
- *   - id: number (collection ID)
+ *   - guid: string (collection GUID, col_xxx format)
  *
  * Response: 200 CollectionDeleteResponse
  * Errors:
@@ -208,12 +208,12 @@ export interface CollectionDeleteConflictResponse {
  */
 
 /**
- * POST /api/collections/{id}/test
+ * POST /api/collections/{guid}/test
  *
  * Test collection accessibility
  *
  * Path Parameters:
- *   - id: number (collection ID)
+ *   - guid: string (collection GUID, col_xxx format)
  * Request Body: None
  *
  * Response: 200 CollectionTestResponse
@@ -290,19 +290,19 @@ export interface CollectionStatsResponse {
 // ============================================================================
 
 /**
- * POST /api/collections/{id}/assign-pipeline?pipeline_id={pipeline_id}
+ * POST /api/collections/{guid}/assign-pipeline?pipeline_guid={pipeline_guid}
  *
  * Assign a pipeline to a collection with version pinning
  *
  * Path Parameters:
- *   - id: number (collection ID)
+ *   - guid: string (collection GUID, col_xxx format)
  * Query Parameters:
- *   - pipeline_id: number (pipeline ID to assign)
+ *   - pipeline_guid: string (pipeline GUID to assign, pip_xxx format)
  *
  * The pipeline's current version will be stored as the pinned version.
  * The collection will use this specific version until manually reassigned.
  *
- * Response: 200 Collection (with pipeline_id, pipeline_version, pipeline_name set)
+ * Response: 200 Collection (with pipeline_guid, pipeline_version, pipeline_name set)
  * Errors:
  *   - 400: Pipeline is not active
  *   - 404: Collection or pipeline not found
@@ -310,16 +310,16 @@ export interface CollectionStatsResponse {
  */
 
 /**
- * POST /api/collections/{id}/clear-pipeline
+ * POST /api/collections/{guid}/clear-pipeline
  *
  * Clear pipeline assignment from a collection
  *
  * Path Parameters:
- *   - id: number (collection ID)
+ *   - guid: string (collection GUID, col_xxx format)
  *
  * After clearing, the collection will use the default pipeline at runtime.
  *
- * Response: 200 Collection (with pipeline_id, pipeline_version, pipeline_name set to null)
+ * Response: 200 Collection (with pipeline_guid, pipeline_version, pipeline_name set to null)
  * Errors:
  *   - 404: Collection not found
  *   - 500: Internal server error

@@ -33,12 +33,12 @@ interface UsePipelinesReturn {
   error: string | null
   fetchPipelines: (params?: PipelineListQueryParams) => Promise<void>
   createPipeline: (data: PipelineCreateRequest) => Promise<Pipeline>
-  updatePipeline: (pipelineId: number, data: PipelineUpdateRequest) => Promise<Pipeline>
-  deletePipeline: (pipelineId: number) => Promise<void>
-  activatePipeline: (pipelineId: number) => Promise<Pipeline>
-  deactivatePipeline: (pipelineId: number) => Promise<Pipeline>
-  setDefaultPipeline: (pipelineId: number) => Promise<Pipeline>
-  unsetDefaultPipeline: (pipelineId: number) => Promise<Pipeline>
+  updatePipeline: (guid: string, data: PipelineUpdateRequest) => Promise<Pipeline>
+  deletePipeline: (guid: string) => Promise<void>
+  activatePipeline: (guid: string) => Promise<Pipeline>
+  deactivatePipeline: (guid: string) => Promise<Pipeline>
+  setDefaultPipeline: (guid: string) => Promise<Pipeline>
+  unsetDefaultPipeline: (guid: string) => Promise<Pipeline>
   refetch: () => Promise<void>
 }
 
@@ -91,13 +91,13 @@ export const usePipelines = (options: UsePipelinesOptions = {}): UsePipelinesRet
    * Update an existing pipeline
    */
   const updatePipeline = useCallback(async (
-    pipelineId: number,
+    guid: string,
     data: PipelineUpdateRequest
   ): Promise<Pipeline> => {
     setLoading(true)
     setError(null)
     try {
-      const pipeline = await pipelinesService.updatePipeline(pipelineId, data)
+      const pipeline = await pipelinesService.updatePipeline(guid, data)
       return pipeline
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to update pipeline'
@@ -111,12 +111,12 @@ export const usePipelines = (options: UsePipelinesOptions = {}): UsePipelinesRet
   /**
    * Delete a pipeline
    */
-  const deletePipeline = useCallback(async (pipelineId: number) => {
+  const deletePipeline = useCallback(async (guid: string) => {
     setLoading(true)
     setError(null)
     try {
-      await pipelinesService.deletePipeline(pipelineId)
-      setPipelines((prev) => prev.filter((p) => p.id !== pipelineId))
+      await pipelinesService.deletePipeline(guid)
+      setPipelines((prev) => prev.filter((p) => p.guid !== guid))
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete pipeline'
       setError(errorMessage)
@@ -129,14 +129,14 @@ export const usePipelines = (options: UsePipelinesOptions = {}): UsePipelinesRet
   /**
    * Activate a pipeline (multiple can be active)
    */
-  const activatePipeline = useCallback(async (pipelineId: number): Promise<Pipeline> => {
+  const activatePipeline = useCallback(async (guid: string): Promise<Pipeline> => {
     setLoading(true)
     setError(null)
     try {
-      const pipeline = await pipelinesService.activatePipeline(pipelineId)
+      const pipeline = await pipelinesService.activatePipeline(guid)
       // Update local state to reflect activation (only this pipeline changes)
       setPipelines((prev) =>
-        prev.map((p) => (p.id === pipelineId ? { ...p, is_active: true } : p))
+        prev.map((p) => p.guid === guid ? { ...p, is_active: true } : p)
       )
       return pipeline
     } catch (err: any) {
@@ -151,14 +151,14 @@ export const usePipelines = (options: UsePipelinesOptions = {}): UsePipelinesRet
   /**
    * Deactivate a pipeline (also clears default status if it was default)
    */
-  const deactivatePipeline = useCallback(async (pipelineId: number): Promise<Pipeline> => {
+  const deactivatePipeline = useCallback(async (guid: string): Promise<Pipeline> => {
     setLoading(true)
     setError(null)
     try {
-      const pipeline = await pipelinesService.deactivatePipeline(pipelineId)
+      const pipeline = await pipelinesService.deactivatePipeline(guid)
       // Update local state to reflect deactivation (also clears default)
       setPipelines((prev) =>
-        prev.map((p) => (p.id === pipelineId ? { ...p, is_active: false, is_default: false } : p))
+        prev.map((p) => p.guid === guid ? { ...p, is_active: false, is_default: false } : p)
       )
       return pipeline
     } catch (err: any) {
@@ -173,17 +173,14 @@ export const usePipelines = (options: UsePipelinesOptions = {}): UsePipelinesRet
   /**
    * Set a pipeline as the default (only one can be default)
    */
-  const setDefaultPipeline = useCallback(async (pipelineId: number): Promise<Pipeline> => {
+  const setDefaultPipeline = useCallback(async (guid: string): Promise<Pipeline> => {
     setLoading(true)
     setError(null)
     try {
-      const pipeline = await pipelinesService.setDefaultPipeline(pipelineId)
+      const pipeline = await pipelinesService.setDefaultPipeline(guid)
       // Update local state - unset previous default, set new default
       setPipelines((prev) =>
-        prev.map((p) => ({
-          ...p,
-          is_default: p.id === pipelineId,
-        }))
+        prev.map((p) => ({ ...p, is_default: p.guid === guid }))
       )
       return pipeline
     } catch (err: any) {
@@ -198,14 +195,14 @@ export const usePipelines = (options: UsePipelinesOptions = {}): UsePipelinesRet
   /**
    * Remove default status from a pipeline
    */
-  const unsetDefaultPipeline = useCallback(async (pipelineId: number): Promise<Pipeline> => {
+  const unsetDefaultPipeline = useCallback(async (guid: string): Promise<Pipeline> => {
     setLoading(true)
     setError(null)
     try {
-      const pipeline = await pipelinesService.unsetDefaultPipeline(pipelineId)
+      const pipeline = await pipelinesService.unsetDefaultPipeline(guid)
       // Update local state to reflect removal of default status
       setPipelines((prev) =>
-        prev.map((p) => (p.id === pipelineId ? { ...p, is_default: false } : p))
+        prev.map((p) => p.guid === guid ? { ...p, is_default: false } : p)
       )
       return pipeline
     } catch (err: any) {
@@ -266,7 +263,7 @@ interface UsePipelineReturn {
   loadVersion: (version: number) => Promise<void>
 }
 
-export const usePipeline = (pipelineId: number | null): UsePipelineReturn => {
+export const usePipeline = (pipelineId: string | null): UsePipelineReturn => {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -420,22 +417,22 @@ export const usePipelineStats = (autoFetch = true): UsePipelineStatsReturn => {
 interface UsePipelineExportReturn {
   downloading: boolean
   error: string | null
-  downloadYaml: (pipelineId: number, version?: number) => Promise<void>
-  getExportUrl: (pipelineId: number) => string
+  downloadYaml: (guid: string, version?: number) => Promise<void>
+  getExportUrl: (guid: string) => string
 }
 
 export const usePipelineExport = (): UsePipelineExportReturn => {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const downloadYaml = useCallback(async (pipelineId: number, version?: number) => {
+  const downloadYaml = useCallback(async (guid: string, version?: number) => {
     setDownloading(true)
     setError(null)
     try {
       // Use version-specific download if version is provided
       const { blob, filename } = version !== undefined
-        ? await pipelinesService.downloadPipelineVersionYaml(pipelineId, version)
-        : await pipelinesService.downloadPipelineYaml(pipelineId)
+        ? await pipelinesService.downloadPipelineVersionYaml(guid, version)
+        : await pipelinesService.downloadPipelineYaml(guid)
 
       // Create download link
       const url = window.URL.createObjectURL(blob)
@@ -457,8 +454,8 @@ export const usePipelineExport = (): UsePipelineExportReturn => {
     }
   }, [])
 
-  const getExportUrl = useCallback((pipelineId: number) => {
-    return pipelinesService.getExportUrl(pipelineId)
+  const getExportUrl = useCallback((guid: string) => {
+    return pipelinesService.getExportUrl(guid)
   }, [])
 
   return {

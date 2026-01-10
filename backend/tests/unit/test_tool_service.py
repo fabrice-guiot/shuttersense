@@ -36,6 +36,7 @@ class TestToolServiceJobManagement:
         """Create mock collection."""
         collection = Mock(spec=Collection)
         collection.id = 1
+        collection.guid = "col_01hgw2bbg0000000000000001"  # GUID for API responses
         collection.name = "Test Collection"
         collection.location = "/path/to/photos"
         collection.type = CollectionType.LOCAL
@@ -50,6 +51,7 @@ class TestToolServiceJobManagement:
         """Create mock pipeline."""
         pipeline = Mock(spec=Pipeline)
         pipeline.id = 1
+        pipeline.guid = "pip_01hgw2bbg0000000000000001"  # GUID for API responses
         pipeline.name = "Test Pipeline"
         pipeline.nodes_json = [{"id": "capture", "type": "capture", "properties": {"sample_filename": "AB3D0001", "filename_regex": "([A-Z0-9]{4})([0-9]{4})", "camera_id_group": "1"}}]
         pipeline.edges_json = []
@@ -78,7 +80,8 @@ class TestToolServiceJobManagement:
         )
 
         assert job.id is not None
-        assert job.collection_id == 1
+        assert job.id.startswith("job_")  # GUID format
+        assert job.collection_guid == mock_collection.guid
         assert job.tool == ToolType.PHOTOSTATS
         assert job.status == JobStatus.QUEUED
 
@@ -232,7 +235,7 @@ class TestToolServiceJobManagement:
     def test_cancel_job_returns_none_for_unknown(self, mock_db, job_queue):
         """Test cancelling non-existent job returns None."""
         service = ToolService(db=mock_db, job_queue=job_queue)
-        result = service.cancel_job(uuid4())
+        result = service.cancel_job("job_01hgw2bbg0000000000000999")  # Non-existent GUID
         assert result is None
 
 
@@ -254,13 +257,28 @@ class TestToolServiceQueueStatus:
         """Create mock collection."""
         collection = Mock(spec=Collection)
         collection.id = 1
+        collection.guid = "col_01hgw2bbg0000000000000002"  # GUID for API responses
         collection.name = "Test"
         collection.location = "/test"
+        collection.is_accessible = True
+        collection.pipeline_id = None
         return collection
 
     def test_get_queue_status(self, mock_db, mock_collection, job_queue):
         """Test getting queue status."""
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_collection
+        # Set up mock to return collection first, then None for default pipeline query
+        def side_effect(model):
+            query_mock = Mock()
+            filter_mock = Mock()
+            if model == Collection:
+                filter_mock.first.return_value = mock_collection
+            else:
+                # Pipeline query returns None (no default pipeline)
+                filter_mock.first.return_value = None
+            query_mock.filter.return_value = filter_mock
+            return query_mock
+
+        mock_db.query.side_effect = side_effect
 
         service = ToolService(db=mock_db, job_queue=job_queue)
         service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
@@ -290,9 +308,11 @@ class TestJobAdapter:
         from backend.src.utils.job_queue import create_job_id
 
         job_id = create_job_id()
+        collection_guid = "col_01hgw2bbg0000000000000001"
         job = AnalysisJob(
             id=job_id,
             collection_id=1,
+            collection_guid=collection_guid,
             tool="photostats",
             pipeline_id=None,
             status=QueueJobStatus.QUEUED,
@@ -301,8 +321,8 @@ class TestJobAdapter:
 
         response = JobAdapter.to_response(job, position=1)
 
-        assert str(response.id) == job_id
-        assert response.collection_id == 1
+        assert response.id == job_id  # Now a GUID string
+        assert response.collection_guid == collection_guid
         assert response.tool == ToolType.PHOTOSTATS
         assert response.status == JobStatus.QUEUED
         assert response.position == 1

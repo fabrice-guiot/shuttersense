@@ -8,11 +8,11 @@ import type { AnalysisResultSummary } from '@/contracts/api/results-api'
 describe('ResultsTable', () => {
   const mockResults: AnalysisResultSummary[] = [
     {
-      id: 1,
-      collection_id: 1,
+      guid: 'res_01hgw2bbg0000000000000001',
+      collection_guid: 'col_01hgw2bbg0000000000000001',
       collection_name: 'Test Collection',
       tool: 'photostats',
-      pipeline_id: null,
+      pipeline_guid: null,
       pipeline_version: null,
       pipeline_name: null,
       status: 'COMPLETED',
@@ -24,11 +24,11 @@ describe('ResultsTable', () => {
       has_report: true
     },
     {
-      id: 2,
-      collection_id: 1,
+      guid: 'res_01hgw2bbg0000000000000002',
+      collection_guid: 'col_01hgw2bbg0000000000000001',
       collection_name: 'Test Collection',
       tool: 'photo_pairing',
-      pipeline_id: null,
+      pipeline_guid: null,
       pipeline_version: null,
       pipeline_name: null,
       status: 'COMPLETED',
@@ -40,11 +40,11 @@ describe('ResultsTable', () => {
       has_report: true
     },
     {
-      id: 3,
-      collection_id: 2,
+      guid: 'res_01hgw2bbg0000000000000003',
+      collection_guid: 'col_01hgw2bbg0000000000000002',
       collection_name: 'Remote Collection',
       tool: 'photostats',
-      pipeline_id: null,
+      pipeline_guid: null,
       pipeline_version: null,
       pipeline_name: null,
       status: 'FAILED',

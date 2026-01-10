@@ -36,12 +36,12 @@ interface UseCollectionsReturn {
   setFilters: (filters: CollectionListQueryParams) => void
   fetchCollections: (filters?: CollectionListQueryParams) => Promise<Collection[]>
   createCollection: (collectionData: CollectionCreateRequest) => Promise<Collection>
-  updateCollection: (id: number, updates: CollectionUpdateRequest) => Promise<Collection>
-  deleteCollection: (id: number, force?: boolean) => Promise<CollectionDeleteResponse | void>
-  testCollection: (id: number) => Promise<CollectionTestResponse>
-  refreshCollection: (id: number, confirm?: boolean) => Promise<any>
-  assignPipeline: (collectionId: number, pipelineId: number) => Promise<Collection>
-  clearPipeline: (collectionId: number) => Promise<Collection>
+  updateCollection: (guid: string, updates: CollectionUpdateRequest) => Promise<Collection>
+  deleteCollection: (guid: string, force?: boolean) => Promise<CollectionDeleteResponse | void>
+  testCollection: (guid: string) => Promise<CollectionTestResponse>
+  refreshCollection: (guid: string, confirm?: boolean) => Promise<any>
+  assignPipeline: (collectionGuid: string, pipelineGuid: string) => Promise<Collection>
+  clearPipeline: (collectionGuid: string) => Promise<Collection>
 }
 
 export const useCollections = (
@@ -113,13 +113,13 @@ export const useCollections = (
   /**
    * Update an existing collection
    */
-  const updateCollection = useCallback(async (id: number, updates: CollectionUpdateRequest) => {
+  const updateCollection = useCallback(async (guid: string, updates: CollectionUpdateRequest) => {
     setLoading(true)
     setError(null)
     try {
-      const updated = await collectionService.updateCollection(id, updates)
+      const updated = await collectionService.updateCollection(guid, updates)
       setCollections(prev =>
-        prev.map(c => c.id === id ? updated : c)
+        prev.map(c => c.guid === guid ? updated : c)
       )
       toast.success('Collection updated successfully')
       return updated
@@ -138,17 +138,17 @@ export const useCollections = (
   /**
    * Delete a collection
    */
-  const deleteCollection = useCallback(async (id: number, force = false) => {
+  const deleteCollection = useCallback(async (guid: string, force = false) => {
     setLoading(true)
     setError(null)
     try {
-      const response = await collectionService.deleteCollection(id, force)
+      const response = await collectionService.deleteCollection(guid, force)
       // If response exists, it means collection has results/jobs (status 200)
       if (response) {
         return response
       }
       // No response means deleted successfully (status 204)
-      setCollections(prev => prev.filter(c => c.id !== id))
+      setCollections(prev => prev.filter(c => c.guid !== guid))
       toast.success('Collection deleted successfully')
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete collection'
@@ -166,13 +166,13 @@ export const useCollections = (
    * Test collection accessibility
    * Updates local collection state with the returned updated collection
    */
-  const testCollection = useCallback(async (id: number) => {
+  const testCollection = useCallback(async (guid: string) => {
     try {
-      const result = await collectionService.testCollection(id)
+      const result = await collectionService.testCollection(guid)
       // Update local state with the updated collection from the response
       if (result.collection) {
         setCollections(prev =>
-          prev.map(c => c.id === id ? result.collection : c)
+          prev.map(c => c.guid === guid ? result.collection : c)
         )
       }
       return result
@@ -185,9 +185,9 @@ export const useCollections = (
   /**
    * Refresh collection cache
    */
-  const refreshCollection = useCallback(async (id: number, confirm = false) => {
+  const refreshCollection = useCallback(async (guid: string, confirm = false) => {
     try {
-      const result = await collectionService.refreshCollection(id, confirm)
+      const result = await collectionService.refreshCollection(guid, confirm)
       // Refresh the collection in local state
       await fetchCollections()
       return result
@@ -201,13 +201,13 @@ export const useCollections = (
    * Assign a pipeline to a collection
    * Stores the pipeline's current version as the pinned version
    */
-  const assignPipeline = useCallback(async (collectionId: number, pipelineId: number) => {
+  const assignPipeline = useCallback(async (collectionGuid: string, pipelineGuid: string) => {
     setLoading(true)
     setError(null)
     try {
-      const updated = await collectionService.assignPipeline(collectionId, pipelineId)
+      const updated = await collectionService.assignPipeline(collectionGuid, pipelineGuid)
       setCollections(prev =>
-        prev.map(c => c.id === collectionId ? updated : c)
+        prev.map(c => c.guid === collectionGuid ? updated : c)
       )
       toast.success('Pipeline assigned successfully')
       return updated
@@ -227,13 +227,13 @@ export const useCollections = (
    * Clear pipeline assignment from a collection
    * Collection will use default pipeline at runtime
    */
-  const clearPipeline = useCallback(async (collectionId: number) => {
+  const clearPipeline = useCallback(async (collectionGuid: string) => {
     setLoading(true)
     setError(null)
     try {
-      const updated = await collectionService.clearPipeline(collectionId)
+      const updated = await collectionService.clearPipeline(collectionGuid)
       setCollections(prev =>
-        prev.map(c => c.id === collectionId ? updated : c)
+        prev.map(c => c.guid === collectionGuid ? updated : c)
       )
       toast.success('Pipeline assignment cleared')
       return updated

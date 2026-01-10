@@ -40,7 +40,7 @@ interface UseResultsReturn {
   limit: number
   setLimit: (limit: number) => void
   fetchResults: (params?: ResultListQueryParams) => Promise<void>
-  deleteResult: (resultId: number) => Promise<void>
+  deleteResult: (identifier: string) => Promise<void>
   refetch: () => Promise<void>
 }
 
@@ -85,14 +85,14 @@ export const useResults = (options: UseResultsOptions = {}): UseResultsReturn =>
   }, [])
 
   /**
-   * Delete a result
+   * Delete a result by external ID
    */
-  const deleteResult = useCallback(async (resultId: number) => {
+  const deleteResult = useCallback(async (identifier: string) => {
     setLoading(true)
     setError(null)
     try {
-      await resultsService.deleteResult(resultId)
-      setResults(prev => prev.filter(r => r.id !== resultId))
+      await resultsService.deleteResult(identifier)
+      setResults(prev => prev.filter(r => r.guid !== identifier))
       setTotal(prev => Math.max(0, prev - 1))
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete result'
@@ -173,13 +173,13 @@ interface UseResultReturn {
   refetch: () => Promise<void>
 }
 
-export const useResult = (resultId: number | null): UseResultReturn => {
+export const useResult = (identifier: string | null): UseResultReturn => {
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refetch = useCallback(async () => {
-    if (!resultId) {
+    if (!identifier) {
       setResult(null)
       return
     }
@@ -187,7 +187,7 @@ export const useResult = (resultId: number | null): UseResultReturn => {
     setLoading(true)
     setError(null)
     try {
-      const data = await resultsService.getResult(resultId)
+      const data = await resultsService.getResult(identifier)
       setResult(data)
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to load result'
@@ -195,7 +195,7 @@ export const useResult = (resultId: number | null): UseResultReturn => {
     } finally {
       setLoading(false)
     }
-  }, [resultId])
+  }, [identifier])
 
   useEffect(() => {
     refetch()
@@ -255,19 +255,19 @@ export const useResultStats = (autoFetch = true): UseResultStatsReturn => {
 interface UseReportDownloadReturn {
   downloading: boolean
   error: string | null
-  downloadReport: (resultId: number) => Promise<void>
-  getReportUrl: (resultId: number) => string
+  downloadReport: (identifier: string) => Promise<void>
+  getReportUrl: (identifier: string) => string
 }
 
 export const useReportDownload = (): UseReportDownloadReturn => {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const downloadReport = useCallback(async (resultId: number) => {
+  const downloadReport = useCallback(async (identifier: string) => {
     setDownloading(true)
     setError(null)
     try {
-      const { blob, filename } = await resultsService.downloadReport(resultId)
+      const { blob, filename } = await resultsService.downloadReport(identifier)
 
       // Create download link
       const url = window.URL.createObjectURL(blob)
@@ -289,8 +289,8 @@ export const useReportDownload = (): UseReportDownloadReturn => {
     }
   }, [])
 
-  const getReportUrl = useCallback((resultId: number) => {
-    return resultsService.getReportUrl(resultId)
+  const getReportUrl = useCallback((identifier: string) => {
+    return resultsService.getReportUrl(identifier)
   }, [])
 
   return {

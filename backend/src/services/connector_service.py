@@ -23,6 +23,7 @@ from backend.src.models import Connector, ConnectorType
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
 from backend.src.services.remote import S3Adapter, GCSAdapter, SMBAdapter
+from backend.src.services.guid import GuidService
 
 
 logger = get_logger("services")
@@ -160,6 +161,42 @@ class ConnectorService:
             decrypted_json = self.encryptor.decrypt(connector.credentials)
             connector.decrypted_credentials = json.loads(decrypted_json)
 
+        return connector
+
+    def get_by_guid(
+        self, guid: str, decrypt_credentials: bool = False
+    ) -> Optional[Connector]:
+        """
+        Get connector by GUID.
+
+        Args:
+            guid: Connector GUID (e.g., "con_01hgw...")
+            decrypt_credentials: If True, decrypt and attach credentials
+
+        Returns:
+            Connector instance or None if not found
+
+        Raises:
+            ValueError: If GUID format is invalid or prefix doesn't match "con"
+
+        Example:
+            >>> connector = service.get_by_guid("con_01hgw2bbg...")
+        """
+        uuid_value = GuidService.parse_identifier(guid, expected_prefix="con")
+        connector = self.db.query(Connector).filter(Connector.uuid == uuid_value).first()
+        if connector and decrypt_credentials:
+            # SECURITY AUDIT LOG: Log credential decryption access
+            logger.info(
+                "SECURITY: Credential access - decrypting connector credentials",
+                extra={
+                    "connector_guid": guid,
+                    "connector_name": connector.name,
+                    "connector_type": connector.type.value,
+                    "action": "credential_decrypt"
+                }
+            )
+            decrypted_json = self.encryptor.decrypt(connector.credentials)
+            connector.decrypted_credentials = json.loads(decrypted_json)
         return connector
 
     def list_connectors(

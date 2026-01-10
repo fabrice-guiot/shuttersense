@@ -783,16 +783,22 @@ class TestSingletonPattern:
 class TestHelperFunctions:
     """Tests for helper functions."""
 
-    def test_create_job_id_returns_uuid(self):
-        """Test create_job_id returns a valid UUID string."""
+    def test_create_job_id_returns_guid(self):
+        """Test create_job_id returns a valid GUID string in job_xxx format."""
         job_id = create_job_id()
 
         # Should be a string
         assert isinstance(job_id, str)
 
-        # Should be a valid UUID4
-        uuid_obj = uuid.UUID(job_id)
-        assert uuid_obj.version == 4
+        # Should be a GUID with job_ prefix
+        assert job_id.startswith("job_")
+
+        # Should have correct length (4 char prefix + 26 char base32)
+        assert len(job_id) == 30
+
+        # Should be valid Crockford Base32 after prefix
+        from backend.src.services.guid import GuidService
+        assert GuidService.validate_guid(job_id, "job")
 
     def test_create_job_id_unique(self):
         """Test create_job_id generates unique IDs."""

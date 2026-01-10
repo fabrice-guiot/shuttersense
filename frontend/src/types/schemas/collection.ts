@@ -34,10 +34,9 @@ export const collectionFormSchema = z
       .string()
       .min(1, 'Location is required')
       .max(500, 'Location must be less than 500 characters'),
-    connector_id: z
-      .number()
-      .int('Connector ID must be an integer')
-      .positive('Connector ID must be positive')
+    connector_guid: z
+      .string()
+      .min(1, 'Connector is required')
       .nullable(),
     cache_ttl: z
       .number()
@@ -45,37 +44,35 @@ export const collectionFormSchema = z
       .positive('Cache TTL must be positive')
       .nullable()
       .optional(),
-    pipeline_id: z
-      .number()
-      .int('Pipeline ID must be an integer')
-      .positive('Pipeline ID must be positive')
+    pipeline_guid: z
+      .string()
       .nullable()
       .optional()
   })
   .refine(
     (data) => {
-      // local type must have null connector_id
+      // local type must have null connector_guid
       if (data.type === 'local') {
-        return data.connector_id === null
+        return data.connector_guid === null
       }
       return true
     },
     {
       message: 'Local collections cannot have a connector',
-      path: ['connector_id']
+      path: ['connector_guid']
     }
   )
   .refine(
     (data) => {
-      // Remote types (s3, gcs, smb) must have non-null connector_id
+      // Remote types (s3, gcs, smb) must have non-null connector_guid
       if (data.type !== 'local') {
-        return data.connector_id !== null && data.connector_id > 0
+        return data.connector_guid !== null && data.connector_guid.length > 0
       }
       return true
     },
     {
       message: 'Remote collections require a connector',
-      path: ['connector_id']
+      path: ['connector_guid']
     }
   )
 
@@ -105,8 +102,8 @@ export function getDefaultCollectionFormValues(type: CollectionType = 'local'): 
     type,
     state: 'live',
     location: '',
-    connector_id: type === 'local' ? null : undefined,
+    connector_guid: type === 'local' ? null : undefined,
     cache_ttl: null,
-    pipeline_id: null
+    pipeline_guid: null
   }
 }

@@ -235,7 +235,7 @@ export function ConnectorList({
                 </TableRow>
               ) : (
                 filteredConnectors.map((connector) => (
-                  <TableRow key={connector.id}>
+                  <TableRow key={connector.guid}>
                     <TableCell className="font-medium">{connector.name}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

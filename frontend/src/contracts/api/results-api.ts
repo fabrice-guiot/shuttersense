@@ -66,8 +66,8 @@ export interface PipelineValidationResults {
 export interface DisplayGraphResults {
   /** Pipeline name */
   pipeline_name: string
-  /** Pipeline ID */
-  pipeline_id: number
+  /** Pipeline GUID */
+  pipeline_guid: string
   /** Pipeline version */
   pipeline_version: number
   /** Total number of paths in pipeline */
@@ -108,13 +108,13 @@ export type ToolResults = (PhotoStatsResults | PhotoPairingResults | PipelineVal
 // ============================================================================
 
 export interface AnalysisResultSummary {
-  id: number
-  /** Collection ID (null for display_graph mode) */
-  collection_id: number | null
+  guid: string  // External identifier (res_xxx)
+  /** Collection GUID (null for display_graph mode) */
+  collection_guid: string | null
   /** Collection name (null for display_graph mode) */
   collection_name: string | null
   tool: ToolType
-  pipeline_id: number | null  // null for PhotoStats/PhotoPairing
+  pipeline_guid: string | null  // null for PhotoStats/PhotoPairing
   pipeline_version: number | null  // version used at execution time
   pipeline_name: string | null  // name of pipeline used
   status: ResultStatus
@@ -127,13 +127,15 @@ export interface AnalysisResultSummary {
 }
 
 export interface AnalysisResult {
-  id: number
-  /** Collection ID (null for display_graph mode) */
-  collection_id: number | null
+  guid: string  // External identifier (res_xxx)
+  /** External ID (res_xxx format) for URL access */
+  external_id: string
+  /** Collection GUID (null for display_graph mode) */
+  collection_guid: string | null
   /** Collection name (null for display_graph mode) */
   collection_name: string | null
   tool: ToolType
-  pipeline_id: number | null  // null for PhotoStats/PhotoPairing
+  pipeline_guid: string | null  // null for PhotoStats/PhotoPairing
   pipeline_version: number | null  // version used at execution time
   pipeline_name: string | null  // name of pipeline used
   status: ResultStatus
@@ -174,7 +176,7 @@ export interface ResultStatsResponse {
 
 export interface ResultDeleteResponse {
   message: string
-  deleted_id: number
+  deleted_guid: string
 }
 
 // ============================================================================
@@ -182,8 +184,8 @@ export interface ResultDeleteResponse {
 // ============================================================================
 
 export interface ResultListQueryParams {
-  /** Filter by collection */
-  collection_id?: number
+  /** Filter by collection GUID (col_xxx) */
+  collection_guid?: string
   /** Filter by tool type */
   tool?: ToolType
   /** Filter by status */
@@ -220,7 +222,7 @@ export interface ResultsErrorResponse {
  * 'ALL' is a UI-only value, not sent to backend
  */
 export interface ResultFilters {
-  collection_id: number | null
+  collection_guid: string | null
   tool: ToolType | 'ALL' | ''
   status: ResultStatus | 'ALL' | ''
   from_date: string
@@ -233,8 +235,8 @@ export interface ResultFilters {
 export function toApiQueryParams(filters: ResultFilters): ResultListQueryParams {
   const params: ResultListQueryParams = {}
 
-  if (filters.collection_id) {
-    params.collection_id = filters.collection_id
+  if (filters.collection_guid) {
+    params.collection_guid = filters.collection_guid
   }
 
   if (filters.tool && filters.tool !== 'ALL') {
@@ -274,12 +276,12 @@ export function toApiQueryParams(filters: ResultFilters): ResultListQueryParams 
  */
 
 /**
- * GET /api/results/{result_id}
+ * GET /api/results/{guid}
  *
  * Get analysis result details
  *
  * Path Parameters:
- *   - result_id: number
+ *   - guid: string (result GUID, res_xxx format)
  *
  * Response: 200 AnalysisResult
  * Errors:
@@ -288,12 +290,12 @@ export function toApiQueryParams(filters: ResultFilters): ResultListQueryParams 
  */
 
 /**
- * DELETE /api/results/{result_id}
+ * DELETE /api/results/{guid}
  *
  * Delete an analysis result
  *
  * Path Parameters:
- *   - result_id: number
+ *   - guid: string (result GUID, res_xxx format)
  *
  * Response: 200 ResultDeleteResponse
  * Errors:
@@ -302,12 +304,12 @@ export function toApiQueryParams(filters: ResultFilters): ResultListQueryParams 
  */
 
 /**
- * GET /api/results/{result_id}/report
+ * GET /api/results/{guid}/report
  *
  * Download HTML report
  *
  * Path Parameters:
- *   - result_id: number
+ *   - guid: string (result GUID, res_xxx format)
  *
  * Response: 200 HTML file with Content-Disposition header
  * Errors:

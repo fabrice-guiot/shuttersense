@@ -15,6 +15,7 @@ Design:
 - Query parameter validation
 - Response models for type safety
 - Credentials never exposed in responses
+- All endpoints use GUID format (con_xxx) for identifiers
 """
 
 from typing import List, Optional
@@ -246,62 +247,75 @@ async def create_connector(
 
 
 @router.get(
-    "/{connector_id}",
+    "/{guid}",
     response_model=ConnectorResponse,
     summary="Get connector",
-    description="Get a single connector by ID (credentials not included)"
+    description="Get a single connector by GUID (e.g., con_01hgw...)"
 )
 async def get_connector(
-    connector_id: int,
+    guid: str,
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorResponse:
     """
-    Get connector by ID.
+    Get connector by GUID.
 
     Path Parameters:
-        connector_id: Connector ID
+        guid: Connector GUID (con_xxx format)
 
     Returns:
         ConnectorResponse with connector details (credentials encrypted, not returned)
 
     Raises:
+        400 Bad Request: If GUID format is invalid or prefix mismatch
         404 Not Found: If connector doesn't exist
 
     Example:
-        GET /api/connectors/1
+        GET /api/connectors/con_01hgw2bbg0000000000000000
     """
-    connector = connector_service.get_connector(connector_id, decrypt_credentials=False)
+    try:
+        connector = connector_service.get_by_guid(guid)
 
-    if not connector:
-        logger.warning(f"Connector not found: {connector_id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Connector with ID {connector_id} not found"
+        if not connector:
+            logger.warning(f"Connector not found: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        logger.info(
+            f"Retrieved connector: {connector.name}",
+            extra={"guid": guid}
         )
 
-    logger.info(f"Retrieved connector: {connector.name}", extra={"connector_id": connector_id})
+        return ConnectorResponse.model_validate(connector)
 
-    return ConnectorResponse.model_validate(connector)
+    except ValueError as e:
+        # Invalid GUID format or prefix mismatch
+        logger.warning(f"Invalid connector GUID: {guid} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.put(
-    "/{connector_id}",
+    "/{guid}",
     response_model=ConnectorResponse,
     summary="Update connector",
     description="Update connector properties (credentials will be re-encrypted if provided)"
 )
 async def update_connector(
-    connector_id: int,
+    guid: str,
     connector_update: ConnectorUpdate,
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorResponse:
     """
-    Update connector properties.
+    Update connector properties by GUID.
 
     Only provided fields will be updated. If credentials are provided, they will be re-encrypted.
 
     Path Parameters:
-        connector_id: Connector ID
+        guid: Connector GUID (con_xxx format)
 
     Request Body:
         ConnectorUpdate schema with optional fields
@@ -310,20 +324,30 @@ async def update_connector(
         ConnectorResponse with updated connector
 
     Raises:
+        400 Bad Request: If GUID format is invalid or prefix mismatch
         404 Not Found: If connector doesn't exist
         409 Conflict: If name conflicts with existing connector
-        400 Bad Request: If validation fails
 
     Example:
-        PUT /api/connectors/1
+        PUT /api/connectors/con_01hgw2bbg0000000000000000
         {
           "name": "Updated AWS Account",
           "is_active": false
         }
     """
     try:
+        # Get connector by GUID
+        connector = connector_service.get_by_guid(guid)
+
+        if not connector:
+            logger.warning(f"Connector not found for update: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
         updated_connector = connector_service.update_connector(
-            connector_id=connector_id,
+            connector_id=connector.id,
             name=connector_update.name,
             credentials=connector_update.credentials,
             metadata=connector_update.metadata,
@@ -332,18 +356,18 @@ async def update_connector(
 
         logger.info(
             f"Updated connector: {updated_connector.name}",
-            extra={"connector_id": connector_id}
+            extra={"guid": guid}
         )
 
         return ConnectorResponse.model_validate(updated_connector)
 
     except ValueError as e:
         error_msg = str(e)
-        # Not found
-        if "not found" in error_msg:
-            logger.warning(f"Connector not found for update: {connector_id}")
+        # Invalid GUID format or prefix mismatch
+        if "prefix mismatch" in error_msg.lower() or "Invalid identifier" in error_msg or "Numeric IDs" in error_msg:
+            logger.warning(f"Invalid GUID: {guid} - {error_msg}")
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_msg
             )
         # Name conflict
@@ -361,6 +385,9 @@ async def update_connector(
                 detail=error_msg
             )
 
+    except HTTPException:
+        raise
+
     except Exception as e:
         logger.error(f"Error updating connector: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -370,33 +397,34 @@ async def update_connector(
 
 
 @router.delete(
-    "/{connector_id}",
+    "/{guid}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete connector",
     description="Delete connector (protected: cannot delete if collections reference it)"
 )
 async def delete_connector(
-    connector_id: int,
+    guid: str,
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> None:
     """
-    Delete connector.
+    Delete connector by GUID.
 
     PROTECTED OPERATION: Cannot delete if any collections reference this connector.
     This prevents orphaned collections and ensures data integrity.
 
     Path Parameters:
-        connector_id: Connector ID
+        guid: Connector GUID (con_xxx format)
 
     Returns:
         204 No Content on success
 
     Raises:
+        400 Bad Request: If GUID format is invalid or prefix mismatch
         404 Not Found: If connector doesn't exist
         409 Conflict: If collections reference this connector
 
     Example:
-        DELETE /api/connectors/1
+        DELETE /api/connectors/con_01hgw2bbg0000000000000000
 
         Success (no collections): 204 No Content
         Error (has collections): 409 Conflict with message:
@@ -404,25 +432,42 @@ async def delete_connector(
          Delete or reassign collections first."
     """
     try:
-        connector_service.delete_connector(connector_id)
+        # Get connector by GUID
+        connector = connector_service.get_by_guid(guid)
+
+        if not connector:
+            logger.warning(f"Connector not found for deletion: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        connector_service.delete_connector(connector.id)
 
         logger.info(
             f"Deleted connector",
-            extra={"connector_id": connector_id}
+            extra={"guid": guid}
         )
 
     except ValueError as e:
         error_msg = str(e)
+        # Invalid GUID format or prefix mismatch
+        if "prefix mismatch" in error_msg.lower() or "Invalid identifier" in error_msg or "Numeric IDs" in error_msg:
+            logger.warning(f"Invalid GUID: {guid} - {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
         # Not found
-        if "not found" in error_msg:
-            logger.warning(f"Connector not found for deletion: {connector_id}")
+        elif "not found" in error_msg:
+            logger.warning(f"Connector not found for deletion: {guid}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=error_msg
             )
         # Has collections (RESTRICT constraint)
         elif "collection(s) reference it" in error_msg:
-            logger.warning(f"Cannot delete connector with collections: {connector_id}")
+            logger.warning(f"Cannot delete connector with collections: {guid}")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=error_msg
@@ -435,6 +480,9 @@ async def delete_connector(
                 detail=error_msg
             )
 
+    except HTTPException:
+        raise
+
     except Exception as e:
         logger.error(f"Error deleting connector: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -444,13 +492,13 @@ async def delete_connector(
 
 
 @router.post(
-    "/{connector_id}/test",
+    "/{guid}/test",
     response_model=ConnectorTestResponse,
     summary="Test connector connection",
     description="Test connector connection and update last_validated/last_error fields"
 )
 async def test_connector(
-    connector_id: int,
+    guid: str,
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorTestResponse:
     """
@@ -460,16 +508,17 @@ async def test_connector(
     connector.last_validated and connector.last_error fields based on the result.
 
     Path Parameters:
-        connector_id: Connector ID
+        guid: Connector GUID (con_xxx format)
 
     Returns:
         ConnectorTestResponse with success status and message
 
     Raises:
+        400 Bad Request: If GUID format is invalid or prefix mismatch
         404 Not Found: If connector doesn't exist
 
     Example:
-        POST /api/connectors/1/test
+        POST /api/connectors/con_01hgw2bbg0000000000000000/test
 
         Success Response:
         {
@@ -484,23 +533,44 @@ async def test_connector(
         }
     """
     try:
-        success, message = connector_service.test_connector(connector_id)
+        # Get connector by GUID
+        connector = connector_service.get_by_guid(guid)
+
+        if not connector:
+            logger.warning(f"Connector not found for test: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        success, message = connector_service.test_connector(connector.id)
 
         logger.info(
             f"Tested connector connection",
-            extra={"connector_id": connector_id, "success": success}
+            extra={"guid": guid, "success": success}
         )
 
         return ConnectorTestResponse(success=success, message=message)
 
     except ValueError as e:
+        error_msg = str(e)
+        # Invalid GUID format or prefix mismatch
+        if "prefix mismatch" in error_msg.lower() or "Invalid identifier" in error_msg or "Numeric IDs" in error_msg:
+            logger.warning(f"Invalid GUID: {guid} - {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
         # Not found
-        if "not found" in str(e):
-            logger.warning(f"Connector not found for test: {connector_id}")
+        if "not found" in error_msg:
+            logger.warning(f"Connector not found for test: {guid}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e)
+                detail=error_msg
             )
+        raise
+
+    except HTTPException:
         raise
 
     except Exception as e:

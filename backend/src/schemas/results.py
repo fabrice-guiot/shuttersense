@@ -43,7 +43,7 @@ class ResultsQueryParams(BaseModel):
 
     All parameters are optional for flexible filtering.
     """
-    collection_id: Optional[int] = Field(None, gt=0, description="Filter by collection")
+    collection_guid: Optional[str] = Field(None, description="Filter by collection GUID (col_xxx)")
     tool: Optional[str] = Field(None, description="Filter by tool type")
     status: Optional[ResultStatus] = Field(None, description="Filter by status")
     from_date: Optional[date] = Field(None, description="Filter from date")
@@ -65,11 +65,11 @@ class AnalysisResultSummary(BaseModel):
     Contains essential information without full result details.
     For pipeline-only results (display_graph mode), collection fields are null.
     """
-    id: int = Field(..., description="Result ID")
-    collection_id: Optional[int] = Field(None, description="Collection ID (null for display_graph)")
+    guid: str = Field(..., description="External identifier (res_xxx)")
+    collection_guid: Optional[str] = Field(None, description="Collection GUID (col_xxx, null for display_graph)")
     collection_name: Optional[str] = Field(None, description="Collection name (null for display_graph)")
     tool: str = Field(..., description="Tool that produced this result")
-    pipeline_id: Optional[int] = Field(None, description="Pipeline ID if applicable")
+    pipeline_guid: Optional[str] = Field(None, description="Pipeline GUID (pip_xxx) if applicable")
     pipeline_version: Optional[int] = Field(None, description="Pipeline version used")
     pipeline_name: Optional[str] = Field(None, description="Pipeline name if applicable")
     status: str = Field(..., description="Result status")
@@ -85,11 +85,11 @@ class AnalysisResultSummary(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "id": 1,
-                    "collection_id": 1,
+                    "guid": "res_01hgw2bbg0000000000000003",
+                    "collection_guid": "col_01hgw2bbg0000000000000001",
                     "collection_name": "Vacation 2024",
                     "tool": "pipeline_validation",
-                    "pipeline_id": 1,
+                    "pipeline_guid": "pip_01hgw2bbg0000000000000002",
                     "pipeline_version": 3,
                     "pipeline_name": "Standard RAW Workflow",
                     "status": "COMPLETED",
@@ -101,11 +101,11 @@ class AnalysisResultSummary(BaseModel):
                     "has_report": True
                 },
                 {
-                    "id": 2,
-                    "collection_id": None,
+                    "guid": "res_01hgw2bbg0000000000000004",
+                    "collection_guid": None,
                     "collection_name": None,
                     "tool": "pipeline_validation",
-                    "pipeline_id": 1,
+                    "pipeline_guid": "pip_01hgw2bbg0000000000000002",
                     "pipeline_version": 3,
                     "pipeline_name": "Standard RAW Workflow",
                     "status": "COMPLETED",
@@ -173,11 +173,11 @@ class AnalysisResultResponse(BaseModel):
     Contains all result information including tool-specific results.
     For pipeline-only results (display_graph mode), collection fields are null.
     """
-    id: int = Field(..., description="Result ID")
-    collection_id: Optional[int] = Field(None, description="Collection ID (null for display_graph)")
+    guid: str = Field(..., description="External identifier (res_xxx)")
+    collection_guid: Optional[str] = Field(None, description="Collection GUID (col_xxx, null for display_graph)")
     collection_name: Optional[str] = Field(None, description="Collection name (null for display_graph)")
     tool: str = Field(..., description="Tool that produced this result")
-    pipeline_id: Optional[int] = Field(None, description="Pipeline ID if applicable")
+    pipeline_guid: Optional[str] = Field(None, description="Pipeline GUID (pip_xxx) if applicable")
     pipeline_version: Optional[int] = Field(None, description="Pipeline version used at execution time")
     pipeline_name: Optional[str] = Field(None, description="Pipeline name if applicable")
     status: str = Field(..., description="Result status")
@@ -195,11 +195,11 @@ class AnalysisResultResponse(BaseModel):
         "from_attributes": True,
         "json_schema_extra": {
             "example": {
-                "id": 1,
-                "collection_id": 1,
+                "guid": "res_01hgw2bbg0000000000000003",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
                 "collection_name": "Vacation 2024",
                 "tool": "pipeline_validation",
-                "pipeline_id": 1,
+                "pipeline_guid": "pip_01hgw2bbg0000000000000002",
                 "pipeline_version": 3,
                 "pipeline_name": "Standard RAW Workflow",
                 "status": "COMPLETED",
@@ -250,13 +250,13 @@ class ResultStatsResponse(BaseModel):
 class DeleteResponse(BaseModel):
     """Response after deleting a result."""
     message: str = Field(..., description="Confirmation message")
-    deleted_id: int = Field(..., description="ID of deleted result")
+    deleted_guid: str = Field(..., description="GUID of deleted result (res_xxx)")
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "message": "Result deleted successfully",
-                "deleted_id": 1
+                "deleted_guid": "res_01hgw2bbg0000000000000003"
             }
         }
     }

@@ -8,7 +8,7 @@ import type { Connector } from '@/contracts/api/connector-api'
 describe('ConnectorList', () => {
   const mockConnectors: Connector[] = [
     {
-      id: 1,
+      guid: 'con_01hgw2bbg00000000000000001',
       name: 'S3 Connector',
       type: 's3',
       is_active: true,
@@ -17,7 +17,7 @@ describe('ConnectorList', () => {
       updated_at: '2025-01-01T10:00:00Z',
     },
     {
-      id: 2,
+      guid: 'con_01hgw2bbg00000000000000002',
       name: 'GCS Connector',
       type: 'gcs',
       is_active: false,
@@ -26,7 +26,7 @@ describe('ConnectorList', () => {
       updated_at: '2025-01-01T09:00:00Z',
     },
     {
-      id: 3,
+      guid: 'con_01hgw2bbg00000000000000003',
       name: 'SMB Connector',
       type: 'smb',
       is_active: true,

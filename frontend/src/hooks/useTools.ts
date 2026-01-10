@@ -40,7 +40,7 @@ interface UseToolsReturn {
   wsConnected: boolean
   fetchJobs: (params?: JobListQueryParams) => Promise<Job[]>
   runTool: (request: ToolRunRequest) => Promise<Job>
-  runAllTools: (collectionId: number) => Promise<RunAllToolsResponse>
+  runAllTools: (collectionGuid: string) => Promise<RunAllToolsResponse>
   cancelJob: (jobId: string) => Promise<Job>
   getJob: (jobId: string) => Promise<Job>
 }
@@ -86,7 +86,16 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     setError(null)
     try {
       const job = await toolsService.runTool(request)
-      setJobs(prev => [job, ...prev])
+      // Check if job already exists (WebSocket may have added it first due to race condition)
+      setJobs(prev => {
+        const existingIndex = prev.findIndex(j => j.id === job.id)
+        if (existingIndex >= 0) {
+          // Job already exists (from WebSocket), update it with API response
+          // Keep the existing job since WebSocket may have more up-to-date status
+          return prev
+        }
+        return [job, ...prev]
+      })
       toast.success('Tool started successfully', {
         description: `Job ${job.id.slice(0, 8)} is now running`
       })
@@ -106,14 +115,18 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
   /**
    * Run all analysis tools on a collection
    */
-  const runAllTools = useCallback(async (collectionId: number) => {
+  const runAllTools = useCallback(async (collectionGuid: string) => {
     setLoading(true)
     setError(null)
     try {
-      const result = await toolsService.runAllTools(collectionId)
-      // Add new jobs to state
+      const result = await toolsService.runAllTools(collectionGuid)
+      // Add new jobs to state, checking for duplicates (WebSocket race condition)
       if (result.jobs.length > 0) {
-        setJobs(prev => [...result.jobs, ...prev])
+        setJobs(prev => {
+          const existingIds = new Set(prev.map(j => j.id))
+          const newJobs = result.jobs.filter(job => !existingIds.has(job.id))
+          return [...newJobs, ...prev]
+        })
       }
       toast.success('Analysis started', {
         description: result.message
@@ -316,7 +329,7 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
 
 interface UseJobProgressOptions {
   onProgress?: (progress: ProgressData) => void
-  onStatusChange?: (status: JobStatus, resultId?: number, errorMessage?: string) => void
+  onStatusChange?: (status: JobStatus, resultGuid?: string, errorMessage?: string) => void
   onError?: (error: string) => void
 }
 
@@ -367,7 +380,7 @@ export const useJobProgress = (
           onProgress?.(message.data)
         } else if (message.type === 'status') {
           setStatus(message.status)
-          onStatusChange?.(message.status, message.result_id, message.error_message)
+          onStatusChange?.(message.status, message.result_guid, message.error_message)
         } else if (message.type === 'closed') {
           ws.close()
         }

@@ -49,9 +49,11 @@ class AnalysisJob:
 
     Attributes:
         id: Unique job identifier (UUID)
-        collection_id: ID of the collection being analyzed (None for display_graph mode)
+        collection_id: Internal ID of the collection being analyzed (None for display_graph mode)
+        collection_guid: External GUID of the collection (col_xxx format, None for display_graph mode)
         tool: Analysis tool name ('photostats', 'photo_pairing', 'pipeline_validation')
-        pipeline_id: Optional pipeline ID for Pipeline Validation tool
+        pipeline_id: Internal pipeline ID for Pipeline Validation tool
+        pipeline_guid: External pipeline GUID (pip_xxx format)
         pipeline_version: Optional pipeline version used at execution time
         mode: Optional execution mode for pipeline_validation ('collection' or 'display_graph')
         status: Current job status (JobStatus enum)
@@ -60,14 +62,17 @@ class AnalysisJob:
         completed_at: Timestamp when job completed (None if not finished)
         progress: Progress metadata dict (e.g., {files_scanned: 100, stage: "scanning"})
         error_message: Error message if job failed (None if successful)
-        result_id: ID of the analysis result in database (None until completed)
+        result_id: Internal ID of the analysis result in database (None until completed)
+        result_guid: External GUID of the analysis result (res_xxx format, None until completed)
 
     Task: T023 - AnalysisJob dataclass
     """
     id: str
-    collection_id: Optional[int]  # Now optional for display_graph mode
+    collection_id: Optional[int]  # Internal ID, optional for display_graph mode
     tool: str
-    pipeline_id: Optional[int]
+    pipeline_id: Optional[int]  # Internal ID
+    collection_guid: Optional[str] = None  # External GUID (col_xxx)
+    pipeline_guid: Optional[str] = None  # External GUID (pip_xxx)
     pipeline_version: Optional[int] = None
     mode: Optional[str] = None  # 'collection' or 'display_graph' for pipeline_validation
     status: JobStatus = JobStatus.QUEUED
@@ -76,7 +81,8 @@ class AnalysisJob:
     completed_at: Optional[datetime] = None
     progress: Dict[str, Any] = field(default_factory=dict)
     error_message: Optional[str] = None
-    result_id: Optional[int] = None
+    result_id: Optional[int] = None  # Internal ID
+    result_guid: Optional[str] = None  # External GUID (res_xxx)
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -475,14 +481,18 @@ def init_job_queue() -> JobQueue:
 
 def create_job_id() -> str:
     """
-    Generate a unique job ID.
+    Generate a unique job ID in GUID format.
+
+    Uses UUIDv7 (time-ordered) with Crockford Base32 encoding
+    and 'job_' prefix for consistency with other entity GUIDs.
 
     Returns:
-        str: UUID4 string
+        str: Job GUID (e.g., 'job_01hgw2bbg0000000000000001')
 
     Example:
         >>> job_id = create_job_id()
         >>> print(job_id)
-        '550e8400-e29b-41d4-a716-446655440000'
+        'job_01hgw2bbg0000000000000001'
     """
-    return str(uuid.uuid4())
+    from backend.src.services.guid import GuidService
+    return GuidService.generate_guid("job")

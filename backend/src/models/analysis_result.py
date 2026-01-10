@@ -22,9 +22,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base, ResultStatus
+from backend.src.models.mixins import GuidMixin
 
 
-class AnalysisResult(Base):
+class AnalysisResult(Base, GuidMixin):
     """
     Analysis result model.
 
@@ -33,6 +34,8 @@ class AnalysisResult(Base):
 
     Attributes:
         id: Primary key
+        uuid: UUIDv7 for external identification (inherited from GuidMixin)
+        guid: GUID string property (res_xxx, inherited from GuidMixin)
         collection_id: Foreign key to Collection (CASCADE on delete, nullable for display-graph mode)
         tool: Tool name ('photostats', 'photo_pairing', 'pipeline_validation')
         pipeline_id: Foreign key to Pipeline (SET NULL on delete)
@@ -60,6 +63,7 @@ class AnalysisResult(Base):
         - results_json must be valid JSON
 
     Indexes:
+        - uuid (unique, for GUID lookups)
         - idx_results_collection: collection_id
         - idx_results_tool: tool
         - idx_results_created: created_at DESC
@@ -67,6 +71,9 @@ class AnalysisResult(Base):
     """
 
     __tablename__ = "analysis_results"
+
+    # GUID prefix for AnalysisResult entities
+    GUID_PREFIX = "res"
 
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)

@@ -120,9 +120,9 @@ export default function CollectionForm({
       type: collection?.type || 'local',
       state: collection?.state || 'live',
       location: collection?.location || '',
-      connector_id: collection?.connector_id || null,
+      connector_guid: collection?.connector_guid || null,
       cache_ttl: collection?.cache_ttl || null,
-      pipeline_id: collection?.pipeline_id || null
+      pipeline_guid: collection?.pipeline_guid || null
     }
   })
 
@@ -133,10 +133,10 @@ export default function CollectionForm({
   const requiresConnector = isConnectorRequiredForType(selectedType)
   const availableConnectors = getConnectorsForType(connectors, selectedType)
 
-  // Reset connector_id when switching to local type
+  // Reset connector_guid when switching to local type
   useEffect(() => {
     if (selectedType === 'local') {
-      form.setValue('connector_id', null)
+      form.setValue('connector_guid', null)
     }
   }, [selectedType, form])
 
@@ -148,9 +148,9 @@ export default function CollectionForm({
         type: collection.type,
         state: collection.state,
         location: collection.location,
-        connector_id: collection.connector_id,
+        connector_guid: collection.connector_guid,
         cache_ttl: collection.cache_ttl,
-        pipeline_id: collection.pipeline_id
+        pipeline_guid: collection.pipeline_guid
       })
     }
   }, [collection, form])
@@ -247,13 +247,13 @@ export default function CollectionForm({
           {requiresConnector && (
             <FormField
               control={form.control}
-              name="connector_id"
+              name="connector_guid"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Connector</FormLabel>
                   <Select
-                    onValueChange={(value) => field.onChange(parseInt(value))}
-                    value={field.value?.toString() || ''}
+                    onValueChange={(value) => field.onChange(value)}
+                    value={field.value || ''}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -267,7 +267,7 @@ export default function CollectionForm({
                         </div>
                       ) : (
                         availableConnectors.map((connector) => (
-                          <SelectItem key={connector.id} value={connector.id.toString()}>
+                          <SelectItem key={connector.guid} value={connector.guid}>
                             {connector.name}
                           </SelectItem>
                         ))
@@ -372,13 +372,13 @@ export default function CollectionForm({
           {/* Pipeline (Optional) */}
           <FormField
             control={form.control}
-            name="pipeline_id"
+            name="pipeline_guid"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Pipeline (Optional)</FormLabel>
                 <Select
-                  onValueChange={(value) => field.onChange(value === 'default' ? null : parseInt(value))}
-                  value={field.value?.toString() || 'default'}
+                  onValueChange={(value) => field.onChange(value === 'default' ? null : value)}
+                  value={field.value || 'default'}
                 >
                   <FormControl>
                     <SelectTrigger>
@@ -393,7 +393,7 @@ export default function CollectionForm({
                       </div>
                     ) : (
                       availablePipelines.map((pipeline) => (
-                        <SelectItem key={pipeline.id} value={pipeline.id.toString()}>
+                        <SelectItem key={pipeline.guid} value={pipeline.guid}>
                           <span className="flex items-center gap-2">
                             {pipeline.name}
                             {pipeline.is_default && (

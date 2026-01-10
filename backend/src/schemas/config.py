@@ -17,7 +17,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field
-from uuid import UUID
 
 
 class ConfigCategory(str, Enum):
@@ -250,7 +249,7 @@ class ImportSessionResponse(BaseModel):
     """
     Import session details with conflicts.
     """
-    session_id: str = Field(..., description="Session UUID")
+    session_id: str = Field(..., description="Session GUID (imp_xxx format)")
     status: str = Field(..., description="Session status")
     expires_at: datetime = Field(..., description="Session expiration time")
     file_name: Optional[str] = Field(None, description="Original filename")
@@ -264,7 +263,7 @@ class ImportSessionResponse(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "session_id": "550e8400-e29b-41d4-a716-446655440000",
+                "session_id": "imp_01hgw2bbg0000000000000001",
                 "status": "pending",
                 "expires_at": "2024-01-15T11:30:00Z",
                 "file_name": "config.yaml",

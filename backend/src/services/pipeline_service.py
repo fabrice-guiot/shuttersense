@@ -33,6 +33,7 @@ from backend.src.schemas.pipelines import (
     PipelineHistoryEntry, PipelineStatsResponse, PipelineNode, PipelineEdge
 )
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError as ServiceValidationError
+from backend.src.services.guid import GuidService
 from backend.src.utils.logging_config import get_logger
 
 
@@ -133,6 +134,29 @@ class PipelineService:
             NotFoundError: If pipeline doesn't exist
         """
         pipeline = self._get_pipeline(pipeline_id)
+        return self._to_response(pipeline)
+
+    def get_by_guid(self, guid: str) -> PipelineResponse:
+        """
+        Get pipeline by GUID.
+
+        Args:
+            guid: Pipeline GUID (e.g., "pip_01hgw2bbg...")
+
+        Returns:
+            Pipeline response
+
+        Raises:
+            ValueError: If GUID format is invalid or prefix doesn't match "pip"
+            NotFoundError: If pipeline doesn't exist
+
+        Example:
+            >>> pipeline = service.get_by_guid("pip_01hgw2bbg...")
+        """
+        uuid_value = GuidService.parse_identifier(guid, expected_prefix="pip")
+        pipeline = self.db.query(Pipeline).filter(Pipeline.uuid == uuid_value).first()
+        if not pipeline:
+            raise NotFoundError("Pipeline", guid)
         return self._to_response(pipeline)
 
     def list(
@@ -240,7 +264,7 @@ class PipelineService:
         logger.info(f"Updated pipeline {pipeline_id} to version {pipeline.version}")
         return self._to_response(pipeline)
 
-    def delete(self, pipeline_id: int) -> int:
+    def delete(self, pipeline_id: int) -> str:
         """
         Delete a pipeline.
 
@@ -248,7 +272,7 @@ class PipelineService:
             pipeline_id: Pipeline ID to delete
 
         Returns:
-            ID of deleted pipeline
+            GUID of deleted pipeline
 
         Raises:
             NotFoundError: If pipeline doesn't exist
@@ -261,11 +285,12 @@ class PipelineService:
         if pipeline.is_active:
             raise ConflictError("Cannot delete active pipeline. Deactivate it first.")
 
+        deleted_guid = pipeline.guid
         self.db.delete(pipeline)
         self.db.commit()
 
-        logger.info(f"Deleted pipeline {pipeline_id}")
-        return pipeline_id
+        logger.info(f"Deleted pipeline {deleted_guid}")
+        return deleted_guid
 
     # =========================================================================
     # Validation
@@ -697,7 +722,6 @@ class PipelineService:
 
         return [
             PipelineHistoryEntry(
-                id=h.id,
                 version=h.version,
                 change_summary=h.change_summary,
                 changed_by=h.changed_by,
@@ -741,7 +765,7 @@ class PipelineService:
         edges = history_entry.edges_json or []
 
         return PipelineResponse(
-            id=pipeline.id,
+            guid=pipeline.guid,
             name=pipeline.name,
             description=pipeline.description,
             nodes=[PipelineNode(**n) for n in nodes],
@@ -902,7 +926,7 @@ class PipelineService:
             total_pipelines=total,
             valid_pipelines=valid,
             active_pipeline_count=active_count,
-            default_pipeline_id=default.id if default else None,
+            default_pipeline_guid=default.guid if default else None,
             default_pipeline_name=default.name if default else None
         )
 
@@ -926,6 +950,26 @@ class PipelineService:
         pipeline = self.db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
         if not pipeline:
             raise NotFoundError("Pipeline", pipeline_id)
+        return pipeline
+
+    def _get_pipeline_by_guid(self, guid: str) -> Pipeline:
+        """
+        Get pipeline by GUID.
+
+        Args:
+            guid: Pipeline GUID (e.g., "pip_01hgw...")
+
+        Returns:
+            Pipeline model
+
+        Raises:
+            ValueError: If GUID format is invalid or prefix doesn't match "pip"
+            NotFoundError: If pipeline doesn't exist
+        """
+        uuid_value = GuidService.parse_identifier(guid, expected_prefix="pip")
+        pipeline = self.db.query(Pipeline).filter(Pipeline.uuid == uuid_value).first()
+        if not pipeline:
+            raise NotFoundError("Pipeline", guid)
         return pipeline
 
     def _convert_edges_to_json(
@@ -977,7 +1021,7 @@ class PipelineService:
         ]
 
         return PipelineResponse(
-            id=pipeline.id,
+            guid=pipeline.guid,
             name=pipeline.name,
             description=pipeline.description,
             nodes=nodes,
@@ -1002,7 +1046,7 @@ class PipelineService:
             Pipeline summary schema
         """
         return PipelineSummary(
-            id=pipeline.id,
+            guid=pipeline.guid,
             name=pipeline.name,
             description=pipeline.description,
             version=pipeline.version,

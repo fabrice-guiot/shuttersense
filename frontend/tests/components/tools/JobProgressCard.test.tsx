@@ -26,9 +26,9 @@ describe('JobProgressCard', () => {
 
   const baseJob: Job = {
     id: 'job-1',
-    collection_id: 1,
+    collection_guid: 'col_01hgw2bbg0000000000000001',
     tool: 'photostats',
-    pipeline_id: null,
+    pipeline_guid: null,
     mode: null,
     status: 'queued',
     position: 1,
@@ -36,7 +36,7 @@ describe('JobProgressCard', () => {
     started_at: null,
     completed_at: null,
     progress: null,
-    result_id: null,
+    result_guid: null,
     error_message: null
   }
 
@@ -145,7 +145,7 @@ describe('JobProgressCard', () => {
       status: 'completed',
       started_at: '2025-01-01T10:01:00Z',
       completed_at: '2025-01-01T10:05:00Z',
-      result_id: 123,
+      result_guid: 'res_01hgw2bbg0000000000000123',
       position: null
     }
 
@@ -169,7 +169,7 @@ describe('JobProgressCard', () => {
       status: 'completed',
       started_at: '2025-01-01T10:01:00Z',
       completed_at: '2025-01-01T10:05:00Z',
-      result_id: 123,
+      result_guid: 'res_01hgw2bbg0000000000000123',
       position: null
     }
 
@@ -183,7 +183,7 @@ describe('JobProgressCard', () => {
 
     await user.click(screen.getByRole('button', { name: /View Result/i }))
 
-    expect(mockOnViewResult).toHaveBeenCalledWith(123)
+    expect(mockOnViewResult).toHaveBeenCalledWith('res_01hgw2bbg0000000000000123')
   })
 
   it('should render failed job with error message', () => {
@@ -264,7 +264,7 @@ describe('JobProgressCard', () => {
     expect(screen.getByText('Photo Pairing')).toBeInTheDocument()
   })
 
-  it('should display collection ID', () => {
+  it('should display collection GUID', () => {
     render(
       <JobProgressCard
         job={baseJob}
@@ -274,7 +274,7 @@ describe('JobProgressCard', () => {
     )
 
     expect(screen.getByText('Collection:')).toBeInTheDocument()
-    expect(screen.getByText('ID 1')).toBeInTheDocument()
+    expect(screen.getByText('col_01hgw2bbg0000000000000001')).toBeInTheDocument()
   })
 
   it('should display created timestamp', () => {
@@ -316,7 +316,7 @@ describe('JobProgressCard', () => {
       status: 'completed',
       started_at: '2025-01-01T10:01:00Z',
       completed_at: '2025-01-01T10:05:00Z',
-      result_id: 123,
+      result_guid: 'res_01hgw2bbg0000000000000123',
       position: null
     }
 

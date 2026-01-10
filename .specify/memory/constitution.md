@@ -1,29 +1,37 @@
 <!--
-SYNC IMPACT REPORT (Constitution v1.2.0 - Frontend UI Standards)
+SYNC IMPACT REPORT (Constitution v1.3.0 - Global Unique Identifiers)
 
-Version change: 1.1.1 → 1.2.0 (MINOR)
+Version change: 1.2.0 → 1.3.0 (MINOR)
 Modified principles:
-  - Added new section: Frontend UI Standards
+  - Added new Core Principle: IV. Global Unique Identifiers (GUIDs)
 
 Added requirements:
-  - All frontend pages MUST display relevant KPIs in the TopHeader stats area
-  - Pages MUST use HeaderStatsContext to dynamically set their KPIs
-  - KPIs MUST be fetched from dedicated /stats API endpoints
-  - Stats MUST clear on page unmount to prevent stale data
+  - All entities MUST use GUIDs as their primary external identifier
+  - GUIDs MUST use format: {prefix}_{26-char Crockford Base32 UUIDv7}
+  - API responses MUST use .guid property, never expose internal numeric IDs
+  - Path parameters MUST use {guid} for entity endpoints
+  - Foreign key references MUST use _guid suffix (e.g., collection_guid)
+  - New database entities MUST implement GuidMixin
 
 Rationale:
-  - Issue #37 implementation revealed need for consistent KPI display pattern
-  - Initial implementation incorrectly placed KPIs in page content instead of topbar
-  - Establishing pattern ensures consistent UX across all future pages
-  - TopHeader stats area provides persistent, non-intrusive KPI visibility
+  - Issue #42 established GUID pattern for all entities
+  - GUIDs provide URL-safe, globally unique identifiers
+  - Entity prefixes enable type identification from ID alone
+  - UUIDv7 provides time-ordering for database efficiency
+  - Separating internal IDs from external GUIDs improves security
 
 Impact:
-  - All new frontend pages MUST implement KPI stats in topbar
-  - Backend endpoints for new domains SHOULD include a /stats endpoint
-  - Code reviews MUST verify KPI implementation follows this pattern
+  - All new database entities MUST add GuidMixin
+  - All new API endpoints MUST use GUIDs in paths and responses
+  - Code reviews MUST verify GUID implementation follows this pattern
+  - Frontend components MUST use .guid for entity references
 
 Templates requiring updates:
-  ✅ No template changes needed - this is a frontend coding standard
+  ✅ No template changes needed - this is a coding standard
+
+Previous Amendment (v1.2.0 - Frontend UI Standards):
+  - Added new section: Frontend UI Standards
+  - TopHeader KPI display pattern requirements
 
 Previous Amendment (v1.1.1 - Cross-Platform Encoding Standard):
   - Shared Infrastructure Standards: Added Cross-Platform File Encoding requirement
@@ -56,6 +64,35 @@ Analysis tools MUST generate interactive HTML reports with visualizations and cl
 All tools MUST provide `--help` and `-h` options that display comprehensive usage information without performing operations. All tools MUST handle CTRL+C (SIGINT) gracefully with user-friendly messages and appropriate exit codes (130).
 
 **Rationale**: Users deserve clear, visual insights into their photo collections. Simplicity reduces maintenance burden and makes the codebase accessible to contributors. Good observability enables users to understand what's happening and troubleshoot issues effectively. Standard CLI conventions (help flags, interruption handling) create professional user experiences and meet established user expectations.
+
+### IV. Global Unique Identifiers (GUIDs)
+
+All entities in presentation layers (APIs, URLs, UI) MUST be identified exclusively by Global Unique Identifiers (GUIDs). Internal numeric IDs are for database operations only and MUST NOT be exposed externally.
+
+**GUID Format**: `{prefix}_{26-char Crockford Base32}`
+
+Example: `col_01hgw2bbg0000000000000001`
+
+**Entity Prefixes** (Implemented):
+
+| Entity | Prefix | Storage | Example |
+|--------|--------|---------|---------|
+| Collection | `col_` | Database | `col_01hgw2bbg...` |
+| Connector | `con_` | Database | `con_01hgw2bbg...` |
+| Pipeline | `pip_` | Database | `pip_01hgw2bbg...` |
+| Result | `res_` | Database | `res_01hgw2bbg...` |
+| Job | `job_` | In-memory | `job_01hgw2bbg...` |
+| ImportSession | `imp_` | In-memory | `imp_01hgw2bbg...` |
+
+**Implementation Requirements**:
+- Database entities MUST use `GuidMixin` from `backend/src/models/mixins/guid.py`
+- In-memory entities MUST use `GuidService.generate_guid(prefix)` from `backend/src/services/guid.py`
+- API responses MUST use `.guid` property (never expose `.id`)
+- Path parameters MUST use `{guid}` for entity endpoints
+- Foreign key references in responses MUST use `_guid` suffix (e.g., `collection_guid`, `pipeline_guid`)
+- Frontend utilities in `frontend/src/utils/guid.ts` for validation and prefix extraction
+
+**Rationale**: GUIDs provide URL-safe, globally unique identifiers that can be safely shared, bookmarked, and used in external integrations. Entity prefixes enable immediate type identification from the ID alone. UUIDv7 provides time-ordering for database efficiency. Separating internal numeric IDs from external GUIDs improves security by not exposing database structure.
 
 ## Shared Infrastructure Standards
 
@@ -129,4 +166,4 @@ useEffect(() => {
 - Repeated exceptions to a principle suggest it needs revision
 - Project direction or scope changes significantly
 
-**Version**: 1.2.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-03
+**Version**: 1.3.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-10

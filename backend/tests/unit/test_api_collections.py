@@ -56,7 +56,7 @@ class TestCollectionAPICreate:
             name="S3 Photos",
             type="s3",
             location="s3://bucket/photos",
-            connector_id=connector.id
+            connector_guid=connector.guid
         )
 
         response = test_client.post("/api/collections", json=data)
@@ -65,7 +65,7 @@ class TestCollectionAPICreate:
         json_data = response.json()
         assert json_data["name"] == "S3 Photos"
         assert json_data["type"] == "s3"
-        assert json_data["connector_id"] == connector.id
+        assert json_data["connector"]["guid"] == connector.guid
 
     def test_create_collection_duplicate_name(self, test_client, sample_collection):
         """Should return 409 for duplicate name"""
@@ -125,7 +125,7 @@ class TestCollectionAPIList:
             connector = sample_connector(name="S3 Test", type="s3")
 
             sample_collection(name="Local", type="local", location=temp_dir)
-            sample_collection(name="S3", type="s3", location="s3://bucket", connector_id=connector.id)
+            sample_collection(name="S3", type="s3", location="s3://bucket", connector_guid=connector.guid)
 
             response = test_client.get("/api/collections?type=local")
 
@@ -156,30 +156,31 @@ class TestCollectionAPIList:
 
 
 class TestCollectionAPIGet:
-    """Tests for GET /api/collections/{id}"""
+    """Tests for GET /api/collections/{guid}"""
 
-    def test_get_collection_by_id(self, test_client, sample_collection):
-        """Should return collection by ID"""
+    def test_get_collection_by_guid(self, test_client, sample_collection):
+        """Should return collection by GUID"""
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(name="Test Collection", type="local", location=temp_dir)
 
-            response = test_client.get(f"/api/collections/{collection.id}")
+            response = test_client.get(f"/api/collections/{collection.guid}")
 
             assert response.status_code == 200
             json_data = response.json()
-            assert json_data["id"] == collection.id
+            assert json_data["guid"] == collection.guid
             assert json_data["name"] == "Test Collection"
+            assert "id" not in json_data
 
     def test_get_collection_not_found(self, test_client):
         """Should return 404 if collection not found"""
-        response = test_client.get("/api/collections/999")
+        response = test_client.get("/api/collections/col_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
 
 class TestCollectionAPIUpdate:
-    """Tests for PUT /api/collections/{id}"""
+    """Tests for PUT /api/collections/{guid}"""
 
     def test_update_collection_name(self, test_client, sample_collection):
         """Should update collection name"""
@@ -187,7 +188,7 @@ class TestCollectionAPIUpdate:
             collection = sample_collection(name="Original", type="local", location=temp_dir)
 
             response = test_client.put(
-                f"/api/collections/{collection.id}",
+                f"/api/collections/{collection.guid}",
                 json={"name": "Updated"}
             )
 
@@ -201,7 +202,7 @@ class TestCollectionAPIUpdate:
             collection = sample_collection(name="Test", type="local", location=temp_dir, state="live")
 
             response = test_client.put(
-                f"/api/collections/{collection.id}",
+                f"/api/collections/{collection.guid}",
                 json={"state": "archived"}
             )
 
@@ -212,7 +213,7 @@ class TestCollectionAPIUpdate:
     def test_update_collection_not_found(self, test_client):
         """Should return 404 if collection not found"""
         response = test_client.put(
-            "/api/collections/999",
+            "/api/collections/col_01hgw2bbg00000000000000000",
             json={"name": "Updated"}
         )
 
@@ -232,7 +233,7 @@ class TestCollectionAPIUpdate:
 
             # Update to an invalid location
             response = test_client.put(
-                f"/api/collections/{collection.id}",
+                f"/api/collections/{collection.guid}",
                 json={"location": "/nonexistent/invalid/path"}
             )
 
@@ -259,7 +260,7 @@ class TestCollectionAPIUpdate:
 
             # Update to a valid location
             response = test_client.put(
-                f"/api/collections/{collection.id}",
+                f"/api/collections/{collection.guid}",
                 json={"location": temp_dir2}
             )
 
@@ -280,12 +281,12 @@ class TestCollectionAPIDelete:
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(name="To Delete", type="local", location=temp_dir)
 
-            response = test_client.delete(f"/api/collections/{collection.id}")
+            response = test_client.delete(f"/api/collections/{collection.guid}")
 
             assert response.status_code == 204
 
             # Verify deletion
-            get_response = test_client.get(f"/api/collections/{collection.id}")
+            get_response = test_client.get(f"/api/collections/{collection.guid}")
             assert get_response.status_code == 404
 
     @pytest.mark.skip(reason="has_analysis_results and has_active_jobs are TODO placeholders")
@@ -301,27 +302,27 @@ class TestCollectionAPIDelete:
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(name="Force Delete", type="local", location=temp_dir)
 
-            response = test_client.delete(f"/api/collections/{collection.id}?force=true")
+            response = test_client.delete(f"/api/collections/{collection.guid}?force=true")
 
             assert response.status_code == 204
 
     def test_delete_collection_not_found(self, test_client):
         """Should return 404 if collection not found"""
-        response = test_client.delete("/api/collections/999")
+        response = test_client.delete("/api/collections/col_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
 
 class TestCollectionAPITestAccessibility:
-    """Tests for POST /api/collections/{id}/test - T104x"""
+    """Tests for POST /api/collections/{guid}/test - T104x"""
 
     def test_test_local_collection_accessible(self, test_client, sample_collection):
         """Should test local collection accessibility - T104x"""
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(name="Test", type="local", location=temp_dir)
 
-            response = test_client.post(f"/api/collections/{collection.id}/test")
+            response = test_client.post(f"/api/collections/{collection.guid}/test")
 
             assert response.status_code == 200
             json_data = response.json()
@@ -329,7 +330,7 @@ class TestCollectionAPITestAccessibility:
             assert "accessible" in json_data["message"].lower()
             # Verify updated collection is returned
             assert "collection" in json_data
-            assert json_data["collection"]["id"] == collection.id
+            assert json_data["collection"]["guid"] == collection.guid
             assert json_data["collection"]["is_accessible"] is True
             assert json_data["collection"]["last_error"] is None
 
@@ -343,7 +344,7 @@ class TestCollectionAPITestAccessibility:
             last_error="Directory not found"
         )
 
-        response = test_client.post(f"/api/collections/{collection.id}/test")
+        response = test_client.post(f"/api/collections/{collection.guid}/test")
 
         assert response.status_code == 200
         json_data = response.json()
@@ -351,7 +352,7 @@ class TestCollectionAPITestAccessibility:
         assert "not accessible" in json_data["message"].lower() or "not found" in json_data["message"].lower()
         # Verify updated collection is returned with error
         assert "collection" in json_data
-        assert json_data["collection"]["id"] == collection.id
+        assert json_data["collection"]["guid"] == collection.guid
         assert json_data["collection"]["is_accessible"] is False
         assert json_data["collection"]["last_error"] is not None
 
@@ -362,32 +363,32 @@ class TestCollectionAPITestAccessibility:
             name="S3 Collection",
             type="s3",
             location="s3://bucket",
-            connector_id=connector.id
+            connector_guid=connector.guid
         )
 
         # Mock successful adapter test
         mock_adapter = mocker.patch('backend.src.services.connector_service.S3Adapter')
         mock_adapter.return_value.test_connection.return_value = (True, "Connected")
 
-        response = test_client.post(f"/api/collections/{collection.id}/test")
+        response = test_client.post(f"/api/collections/{collection.guid}/test")
 
         assert response.status_code == 200
         json_data = response.json()
         assert json_data["success"] is True
         # Verify updated collection is returned
         assert "collection" in json_data
-        assert json_data["collection"]["id"] == collection.id
+        assert json_data["collection"]["guid"] == collection.guid
 
     def test_test_collection_not_found(self, test_client):
         """Should return 404 if collection not found"""
-        response = test_client.post("/api/collections/999/test")
+        response = test_client.post("/api/collections/col_01hgw2bbg00000000000000000/test")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
 
 class TestCollectionAPIRefreshCache:
-    """Tests for POST /api/collections/{id}/refresh - T104x"""
+    """Tests for POST /api/collections/{guid}/refresh - T104x"""
 
     def test_refresh_cache_small_collection(self, test_client, sample_collection):
         """Should refresh cache for small collection - T104x"""
@@ -399,7 +400,7 @@ class TestCollectionAPIRefreshCache:
 
             collection = sample_collection(name="Small", type="local", location=temp_dir)
 
-            response = test_client.post(f"/api/collections/{collection.id}/refresh")
+            response = test_client.post(f"/api/collections/{collection.guid}/refresh")
 
             assert response.status_code == 200
             json_data = response.json()
@@ -417,7 +418,7 @@ class TestCollectionAPIRefreshCache:
                 return_value=[f"photo{i}.jpg" for i in range(150000)]
             )
 
-            response = test_client.post(f"/api/collections/{collection.id}/refresh?threshold=100000")
+            response = test_client.post(f"/api/collections/{collection.guid}/refresh?threshold=100000")
 
             assert response.status_code == 400
             assert "confirm" in response.json()["detail"].lower() or "threshold" in response.json()["detail"].lower()
@@ -434,7 +435,7 @@ class TestCollectionAPIRefreshCache:
             )
 
             response = test_client.post(
-                f"/api/collections/{collection.id}/refresh?confirm=true&threshold=100000"
+                f"/api/collections/{collection.guid}/refresh?confirm=true&threshold=100000"
             )
 
             assert response.status_code == 200
@@ -454,7 +455,7 @@ class TestCollectionAPIRefreshCache:
             )
 
             # Should fail with threshold=50K
-            response = test_client.post(f"/api/collections/{collection.id}/refresh?threshold=50000")
+            response = test_client.post(f"/api/collections/{collection.guid}/refresh?threshold=50000")
 
             assert response.status_code == 400
 
@@ -470,7 +471,7 @@ class TestCollectionAPIRefreshCache:
             # Pre-populate cache with old data (using test_cache which is used by test_client)
             test_cache.set(collection.id, ["old_file.jpg"], ttl_seconds=3600)
 
-            response = test_client.post(f"/api/collections/{collection.id}/refresh")
+            response = test_client.post(f"/api/collections/{collection.guid}/refresh")
 
             assert response.status_code == 200
             json_data = response.json()
@@ -483,7 +484,7 @@ class TestCollectionAPIRefreshCache:
 
     def test_refresh_cache_not_found(self, test_client):
         """Should return 404 if collection not found"""
-        response = test_client.post("/api/collections/999/refresh")
+        response = test_client.post("/api/collections/col_01hgw2bbg00000000000000000/refresh")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
@@ -648,7 +649,7 @@ class TestCollectionAPISearch:
              tempfile.TemporaryDirectory() as temp_dir2:
             connector = sample_connector(name="S3 Test", type="s3")
             sample_collection(name="Vacation Local", type="local", location=temp_dir1, state="live")
-            sample_collection(name="Vacation S3", type="s3", location="s3://bucket", connector_id=connector.id, state="live")
+            sample_collection(name="Vacation S3", type="s3", location="s3://bucket", connector_guid=connector.guid, state="live")
             sample_collection(name="Vacation Archived", type="local", location=temp_dir2, state="archived")
 
             # Search + state filter

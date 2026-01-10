@@ -50,6 +50,7 @@ import type {
   ValidationResult,
 } from '@/contracts/api/pipelines-api'
 import { NODE_TYPE_DEFINITIONS } from '@/contracts/api/pipelines-api'
+import { GuidBadge } from '@/components/GuidBadge'
 import { cn } from '@/lib/utils'
 
 // ============================================================================
@@ -626,7 +627,8 @@ export const PipelineEditorPage: React.FC = () => {
   const isNew = id === 'new'
   const isEditMode = isNew || location.pathname.endsWith('/edit')
   const isViewMode = !isEditMode && id && id !== 'new'
-  const pipelineId = !isNew && id ? Number(id) : null
+  // Use string identifier directly (supports both numeric IDs and external IDs like pip_xxx)
+  const pipelineId = !isNew && id ? id : null
 
   // Hooks
   const {
@@ -901,6 +903,9 @@ export const PipelineEditorPage: React.FC = () => {
                     <p className="text-muted-foreground mt-1">{pipeline.description}</p>
                   )}
                   <div className="flex items-center gap-2 mt-3">
+                    {pipeline.guid && (
+                      <GuidBadge guid={pipeline.guid} />
+                    )}
                     {pipeline.is_active && !isHistoricalVersion && (
                       <Badge variant="default" className="gap-1">
                         <Zap className="h-3 w-3" />
@@ -1100,7 +1105,12 @@ export const PipelineEditorPage: React.FC = () => {
         {/* Basic Info */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Pipeline Details</CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle>Pipeline Details</CardTitle>
+              {pipeline?.guid && (
+                <GuidBadge guid={pipeline.guid} />
+              )}
+            </div>
             {/* Real-time validity indicator */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Status:</span>

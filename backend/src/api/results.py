@@ -59,7 +59,7 @@ def get_result_service(db: Session = Depends(get_db)) -> ResultService:
     summary="List analysis results"
 )
 def list_results(
-    collection_id: Optional[int] = Query(None, gt=0, description="Filter by collection"),
+    collection_guid: Optional[str] = Query(None, description="Filter by collection GUID (col_xxx)"),
     tool: Optional[str] = Query(None, description="Filter by tool type"),
     status: Optional[ResultStatus] = Query(None, description="Filter by status"),
     from_date: Optional[date] = Query(None, description="Filter from date"),
@@ -77,7 +77,7 @@ def list_results(
     Returns paginated results sorted by the specified field.
 
     Args:
-        collection_id: Filter by collection ID
+        collection_guid: Filter by collection GUID (col_xxx format)
         tool: Filter by tool type (photostats, photo_pairing, pipeline_validation)
         status: Filter by result status (COMPLETED, FAILED, CANCELLED)
         from_date: Filter from date (inclusive)
@@ -90,24 +90,30 @@ def list_results(
     Returns:
         Paginated list of result summaries
     """
-    items, total = service.list_results(
-        collection_id=collection_id,
-        tool=tool,
-        status=status,
-        from_date=from_date,
-        to_date=to_date,
-        limit=limit,
-        offset=offset,
-        sort_by=sort_by,
-        sort_order=sort_order
-    )
+    try:
+        items, total = service.list_results(
+            collection_guid=collection_guid,
+            tool=tool,
+            status=status,
+            from_date=from_date,
+            to_date=to_date,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
 
-    return ResultListResponse(
-        items=items,
-        total=total,
-        limit=limit,
-        offset=offset
-    )
+        return ResultListResponse(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.get(
@@ -135,107 +141,148 @@ def get_stats(
 # ============================================================================
 
 @router.get(
-    "/{result_id}",
+    "/{guid}",
     response_model=AnalysisResultResponse,
     summary="Get result details"
 )
 def get_result(
-    result_id: int,
+    guid: str,
     service: ResultService = Depends(get_result_service)
 ) -> AnalysisResultResponse:
     """
-    Get full details for an analysis result.
-
-    Includes tool-specific results data and collection/pipeline names.
+    Get full details for an analysis result by GUID.
 
     Args:
-        result_id: Result ID
+        guid: Result GUID (res_xxx format)
 
     Returns:
-        Full result details
+        Full result details including tool-specific data
 
     Raises:
+        400: Invalid GUID format or prefix mismatch
         404: Result not found
     """
     try:
-        return service.get_result(result_id)
+        result = service.get_result_by_guid(guid)
+
+        if not result:
+            logger.warning(f"Result not found: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Result not found: {guid}"
+            )
+
+        return service.get_result(result.id)
+
+    except ValueError as e:
+        logger.warning(f"Invalid result GUID: {guid} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except NotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Result {result_id} not found"
+            detail=f"Result {guid} not found"
         )
 
 
 @router.delete(
-    "/{result_id}",
+    "/{guid}",
     response_model=DeleteResponse,
     summary="Delete a result"
 )
 def delete_result(
-    result_id: int,
+    guid: str,
     service: ResultService = Depends(get_result_service)
 ) -> DeleteResponse:
     """
-    Delete an analysis result.
+    Delete an analysis result by GUID.
 
     Permanently removes the result and its HTML report.
 
     Args:
-        result_id: Result ID to delete
+        guid: Result GUID (res_xxx format)
 
     Returns:
-        Confirmation with deleted ID
+        Confirmation with deleted GUID
 
     Raises:
+        400: Invalid GUID format or prefix mismatch
         404: Result not found
     """
     try:
-        deleted_id = service.delete_result(result_id)
-        logger.info(f"Result {result_id} deleted")
+        result = service.get_result_by_guid(guid)
+
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Result not found: {guid}"
+            )
+
+        deleted_guid = service.delete_result(result.id)
+        logger.info(f"Result {guid} deleted")
         return DeleteResponse(
             message="Result deleted successfully",
-            deleted_id=deleted_id
+            deleted_guid=deleted_guid
+        )
+
+    except ValueError as e:
+        logger.warning(f"Invalid result GUID: {guid} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
         )
     except NotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Result {result_id} not found"
+            detail=f"Result {guid} not found"
         )
 
 
 @router.get(
-    "/{result_id}/report",
+    "/{guid}/report",
     summary="Download HTML report",
     responses={
         200: {
             "description": "HTML report file",
             "content": {"text/html": {"schema": {"type": "string"}}}
         },
+        400: {"description": "Invalid GUID format"},
         404: {"description": "Result or report not found"}
     }
 )
 def download_report(
-    result_id: int,
+    guid: str,
     service: ResultService = Depends(get_result_service)
 ) -> Response:
     """
-    Download HTML report for a result.
+    Download HTML report for a result by GUID.
 
     Returns the pre-rendered HTML report as a downloadable file.
     Filename follows CLI tool conventions:
     {tool}_report_{collection_name}_{collection_id}_{timestamp}.html
 
     Args:
-        result_id: Result ID
+        guid: Result GUID (res_xxx format)
 
     Returns:
         HTML report with download headers
 
     Raises:
+        400: Invalid GUID format or prefix mismatch
         404: Result not found or no report available
     """
     try:
-        report_data = service.get_report_with_metadata(result_id)
+        result = service.get_result_by_guid(guid)
+
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Result not found: {guid}"
+            )
+
+        report_data = service.get_report_with_metadata(result.id)
 
         # Generate filename following CLI tool conventions
         # Format: {tool}_report_{collection_name}_{collection_id}_{timestamp}.html
@@ -252,6 +299,13 @@ def download_report(
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"'
             }
+        )
+
+    except ValueError as e:
+        logger.warning(f"Invalid result GUID: {guid} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
         )
     except NotFoundError as e:
         raise HTTPException(

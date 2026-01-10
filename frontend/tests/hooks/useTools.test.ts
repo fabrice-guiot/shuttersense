@@ -38,12 +38,12 @@ describe('useTools', () => {
 
     await act(async () => {
       const job = await result.current.runTool({
-        collection_id: 1,
+        collection_guid: 'col_01hgw2bbg00000000000000001',
         tool: 'photostats'
       })
 
       expect(job.id).toBeDefined()
-      expect(job.collection_id).toBe(1)
+      expect(job.collection_id).toBeDefined()
       expect(job.tool).toBe('photostats')
       expect(job.status).toBe('queued')
     })
@@ -58,7 +58,7 @@ describe('useTools', () => {
 
     await act(async () => {
       const job = await result.current.runTool({
-        collection_id: 1,
+        collection_guid: 'col_01hgw2bbg00000000000000001',
         tool: 'photo_pairing'
       })
 
@@ -77,7 +77,7 @@ describe('useTools', () => {
       try {
         // Non-existent collection will return 400
         await result.current.runTool({
-          collection_id: 999,
+          collection_guid: 'col_01hgw2bbg00000000000000999',
           tool: 'photostats'
         })
         expect.fail('Should have thrown error')
@@ -93,7 +93,7 @@ describe('useTools', () => {
     // Run first job
     await act(async () => {
       await result.current.runTool({
-        collection_id: 1,
+        collection_guid: 'col_01hgw2bbg00000000000000001',
         tool: 'photostats'
       })
     })
@@ -102,7 +102,7 @@ describe('useTools', () => {
     await act(async () => {
       try {
         await result.current.runTool({
-          collection_id: 1,
+          collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
         expect.fail('Should have thrown conflict error')
@@ -119,7 +119,7 @@ describe('useTools', () => {
     let jobId: string
     await act(async () => {
       const job = await result.current.runTool({
-        collection_id: 1,
+        collection_guid: 'col_01hgw2bbg00000000000000001',
         tool: 'photostats'
       })
       jobId = job.id
@@ -139,7 +139,8 @@ describe('useTools', () => {
 
     await act(async () => {
       try {
-        await result.current.cancelJob('non-existent-job')
+        // Use valid GUID format that doesn't exist in mock data
+        await result.current.cancelJob('job_01hgw2bbg00000000000000999')
         expect.fail('Should have thrown 404 error')
       } catch (error: any) {
         expect(error.response?.status).toBe(404)
@@ -154,7 +155,7 @@ describe('useTools', () => {
     let jobId: string
     await act(async () => {
       const job = await result.current.runTool({
-        collection_id: 1,
+        collection_guid: 'col_01hgw2bbg00000000000000001',
         tool: 'photostats'
       })
       jobId = job.id
@@ -174,7 +175,7 @@ describe('useTools', () => {
     // Create a job first
     await act(async () => {
       await result.current.runTool({
-        collection_id: 1,
+        collection_guid: 'col_01hgw2bbg00000000000000001',
         tool: 'photostats'
       })
     })

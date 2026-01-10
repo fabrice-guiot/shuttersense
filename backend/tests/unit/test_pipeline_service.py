@@ -80,7 +80,8 @@ class TestPipelineServiceCRUD:
             edges=sample_edges
         )
 
-        assert result.id is not None
+        assert result.guid is not None
+        assert result.guid.startswith("pip_")
         assert result.name == "New Pipeline"
         assert result.description == "New description"
         assert result.version == 1
@@ -105,7 +106,7 @@ class TestPipelineServiceCRUD:
 
         result = pipeline_service.get(pipeline.id)
 
-        assert result.id == pipeline.id
+        assert result.guid == pipeline.guid
         assert result.name == "Get Test"
 
     def test_get_pipeline_not_found(self, pipeline_service):
@@ -183,10 +184,11 @@ class TestPipelineServiceCRUD:
         """Test deleting a pipeline."""
         pipeline = sample_pipeline(name="Delete Test")
         pipeline_id = pipeline.id
+        pipeline_guid = pipeline.guid
 
         result = pipeline_service.delete(pipeline_id)
 
-        assert result == pipeline_id
+        assert result == pipeline_guid
 
         # Verify deleted
         deleted = test_db_session.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
@@ -660,7 +662,7 @@ class TestPipelineServiceStats:
         assert result.total_pipelines == 0
         assert result.valid_pipelines == 0
         assert result.active_pipeline_count == 0
-        assert result.default_pipeline_id is None
+        assert result.default_pipeline_guid is None
         assert result.default_pipeline_name is None
 
     def test_get_stats_with_data(self, pipeline_service, sample_pipeline, test_db_session):
@@ -679,5 +681,5 @@ class TestPipelineServiceStats:
         assert result.total_pipelines >= 4
         assert result.valid_pipelines >= 3
         assert result.active_pipeline_count >= 2
-        assert result.default_pipeline_id is not None
+        assert result.default_pipeline_guid is not None
         assert result.default_pipeline_name == "Valid Active Default"

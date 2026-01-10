@@ -5,6 +5,7 @@
  */
 
 import api from './api'
+import { validateGuid } from '@/utils/guid'
 import type {
   AnalysisResult,
   ResultListResponse,
@@ -23,42 +24,54 @@ export const listResults = async (params: ResultListQueryParams = {}): Promise<R
 
 /**
  * Get analysis result details
+ * @param guid - External ID (res_xxx format)
  */
-export const getResult = async (resultId: number): Promise<AnalysisResult> => {
-  const response = await api.get<AnalysisResult>(`/results/${resultId}`)
+export const getResult = async (guid: string): Promise<AnalysisResult> => {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
+  const response = await api.get<AnalysisResult>(`/results/${safeGuid}`)
   return response.data
 }
 
 /**
  * Delete an analysis result
+ * @param guid - External ID (res_xxx format)
  */
-export const deleteResult = async (resultId: number): Promise<ResultDeleteResponse> => {
-  const response = await api.delete<ResultDeleteResponse>(`/results/${resultId}`)
+export const deleteResult = async (guid: string): Promise<ResultDeleteResponse> => {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
+  const response = await api.delete<ResultDeleteResponse>(`/results/${safeGuid}`)
   return response.data
 }
 
 /**
  * Get URL for downloading HTML report
  * Returns the full URL that can be used for downloading
+ * @param guid - External ID (res_xxx format)
  */
-export const getReportUrl = (resultId: number): string => {
+export const getReportUrl = (guid: string): string => {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
   const baseUrl = api.defaults.baseURL || 'http://localhost:8000/api'
-  return `${baseUrl}/results/${resultId}/report`
+  return `${baseUrl}/results/${safeGuid}/report`
 }
 
 /**
  * Download HTML report as blob with filename from Content-Disposition header
  * Returns both the blob and the server-provided filename
+ * @param guid - External ID (res_xxx format)
  */
-export const downloadReport = async (resultId: number): Promise<{ blob: Blob; filename: string }> => {
-  const response = await api.get(`/results/${resultId}/report`, {
+export const downloadReport = async (guid: string): Promise<{ blob: Blob; filename: string }> => {
+  // Validate GUID format and encode for URL safety
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'res'))
+  const response = await api.get(`/results/${safeGuid}/report`, {
     responseType: 'blob'
   })
 
   // Extract filename from Content-Disposition header
   // Format: attachment; filename="photostats_report_collection_1_2024-01-15_10-30-00.html"
   const contentDisposition = response.headers['content-disposition']
-  let filename = `report_${resultId}.html` // Fallback
+  let filename = `report_${guid}.html` // Fallback
 
   if (contentDisposition) {
     const filenameMatch = contentDisposition.match(/filename="?([^";\n]+)"?/)

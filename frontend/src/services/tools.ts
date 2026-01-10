@@ -5,6 +5,7 @@
  */
 
 import api from './api'
+import { validateGuid } from '@/utils/guid'
 import type {
   ToolRunRequest,
   Job,
@@ -33,7 +34,9 @@ export const listJobs = async (params: JobListQueryParams = {}): Promise<Job[]> 
  * Get job status and details
  */
 export const getJob = async (jobId: string): Promise<Job> => {
-  const response = await api.get<Job>(`/tools/jobs/${jobId}`)
+  // Job IDs use 'job' prefix
+  const safeJobId = encodeURIComponent(validateGuid(jobId, 'job'))
+  const response = await api.get<Job>(`/tools/jobs/${safeJobId}`)
   return response.data
 }
 
@@ -41,7 +44,9 @@ export const getJob = async (jobId: string): Promise<Job> => {
  * Cancel a queued job
  */
 export const cancelJob = async (jobId: string): Promise<Job> => {
-  const response = await api.post<Job>(`/tools/jobs/${jobId}/cancel`)
+  // Job IDs use 'job' prefix
+  const safeJobId = encodeURIComponent(validateGuid(jobId, 'job'))
+  const response = await api.post<Job>(`/tools/jobs/${safeJobId}/cancel`)
   return response.data
 }
 
@@ -58,10 +63,12 @@ export const getQueueStatus = async (): Promise<QueueStatusResponse> => {
  * Returns the WebSocket URL for the given job
  */
 export const getJobWebSocketUrl = (jobId: string): string => {
+  // Job IDs use 'job' prefix
+  const safeJobId = encodeURIComponent(validateGuid(jobId, 'job'))
   const baseUrl = api.defaults.baseURL || 'http://localhost:8000/api'
   // Convert HTTP URL to WebSocket URL
   const wsUrl = baseUrl.replace(/^http/, 'ws')
-  return `${wsUrl}/tools/ws/jobs/${jobId}`
+  return `${wsUrl}/tools/ws/jobs/${safeJobId}`
 }
 
 /**
@@ -78,8 +85,10 @@ export const getGlobalJobsWebSocketUrl = (): string => {
 /**
  * Run all analysis tools on a collection
  * Queues photostats and photo_pairing tools for execution
+ * @param collectionGuid - External ID (col_xxx format)
  */
-export const runAllTools = async (collectionId: number): Promise<RunAllToolsResponse> => {
-  const response = await api.post<RunAllToolsResponse>(`/tools/run-all/${collectionId}`)
+export const runAllTools = async (collectionGuid: string): Promise<RunAllToolsResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(collectionGuid, 'col'))
+  const response = await api.post<RunAllToolsResponse>(`/tools/run-all/${safeGuid}`)
   return response.data
 }

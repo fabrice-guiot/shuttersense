@@ -30,6 +30,7 @@ class TestResultServiceList:
         """Create sample result."""
         result = Mock(spec=AnalysisResult)
         result.id = 1
+        result.guid = "res_01hgw2bbg00000000000000001"
         result.collection_id = 1
         result.tool = "photostats"
         result.pipeline_id = None
@@ -52,6 +53,7 @@ class TestResultServiceList:
         """Create sample collection."""
         collection = Mock(spec=Collection)
         collection.id = 1
+        collection.guid = "col_01hgw2bbg00000000000000001"
         collection.name = "Test Collection"
         return collection
 
@@ -92,7 +94,7 @@ class TestResultServiceList:
 
         service = ResultService(db=mock_db)
         items, total = service.list_results(
-            collection_id=1,
+            collection_guid="col_01hgw2bbg00000000000000001",
             tool="photostats",
             status=ResultStatus.COMPLETED,
             from_date=date.today(),
@@ -119,6 +121,7 @@ class TestResultServiceGet:
         """Create sample result."""
         result = Mock(spec=AnalysisResult)
         result.id = 1
+        result.guid = "res_01hgw2bbg00000000000000001"
         result.collection_id = 1
         result.tool = "photostats"
         result.pipeline_id = None
@@ -140,6 +143,7 @@ class TestResultServiceGet:
         """Test getting result details."""
         collection = Mock()
         collection.name = "Test Collection"
+        collection.guid = "col_01hgw2bbg00000000000000001"
 
         # Setup query to return result for first call, collection for second
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -151,7 +155,7 @@ class TestResultServiceGet:
         service = ResultService(db=mock_db)
         result = service.get_result(1)
 
-        assert result.id == 1
+        assert result.guid == sample_result.guid
         assert result.tool == "photostats"
         assert result.collection_name == "Test Collection"
 
@@ -176,12 +180,13 @@ class TestResultServiceDelete:
         """Test deleting a result."""
         result = Mock()
         result.id = 1
+        result.guid = "res_01hgw2bbg00000000000000001"
         mock_db.query.return_value.filter.return_value.first.return_value = result
 
         service = ResultService(db=mock_db)
-        deleted_id = service.delete_result(1)
+        deleted_guid = service.delete_result(1)
 
-        assert deleted_id == 1
+        assert deleted_guid == result.guid
         mock_db.delete.assert_called_once_with(result)
         mock_db.commit.assert_called_once()
 

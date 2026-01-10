@@ -67,16 +67,16 @@ describe('useConnectors', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    const connectorId = result.current.connectors[0].id
+    const connectorGuid = result.current.connectors[0].guid
 
     await act(async () => {
-      await result.current.updateConnector(connectorId, {
+      await result.current.updateConnector(connectorGuid, {
         name: 'Updated Connector Name',
       })
     })
 
     await waitFor(() => {
-      const updated = result.current.connectors.find((c) => c.id === connectorId)
+      const updated = result.current.connectors.find((c) => c.guid === connectorGuid)
       expect(updated?.name).toBe('Updated Connector Name')
     })
   })
@@ -89,17 +89,17 @@ describe('useConnectors', () => {
     })
 
     const initialCount = result.current.connectors.length
-    const connectorId = result.current.connectors[1].id // GCS connector (not referenced)
+    const connectorGuid = result.current.connectors[1].guid // GCS connector (not referenced)
 
     await act(async () => {
-      await result.current.deleteConnector(connectorId)
+      await result.current.deleteConnector(connectorGuid)
     })
 
     await waitFor(() => {
       expect(result.current.connectors).toHaveLength(initialCount - 1)
     })
 
-    const deleted = result.current.connectors.find((c) => c.id === connectorId)
+    const deleted = result.current.connectors.find((c) => c.guid === connectorGuid)
     expect(deleted).toBeUndefined()
   })
 
@@ -111,11 +111,11 @@ describe('useConnectors', () => {
     })
 
     // Connector ID 1 is referenced by collection ID 2
-    const connectorId = result.current.connectors[0].id
+    const connectorGuid = result.current.connectors[0].guid
 
     await act(async () => {
       try {
-        await result.current.deleteConnector(connectorId)
+        await result.current.deleteConnector(connectorGuid)
         // Should throw, fail if it doesn't
         expect.fail('Should have thrown 409 error')
       } catch (error: any) {
@@ -126,7 +126,7 @@ describe('useConnectors', () => {
 
     // Connector should still exist
     await waitFor(() => {
-      const connector = result.current.connectors.find((c) => c.id === connectorId)
+      const connector = result.current.connectors.find((c) => c.guid === connectorGuid)
       expect(connector).toBeDefined()
     })
   })
@@ -138,12 +138,12 @@ describe('useConnectors', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    const connectorId = result.current.connectors[0].id
+    const connectorGuid = result.current.connectors[0].guid
 
     let response: { success: boolean; message: string } | undefined
 
     await act(async () => {
-      response = await result.current.testConnector(connectorId)
+      response = await result.current.testConnector(connectorGuid)
       expect(response.success).toBe(true)
       expect(response.message).toBe('Connection successful')
     })
@@ -154,7 +154,7 @@ describe('useConnectors', () => {
     })
 
     await waitFor(() => {
-      const tested = result.current.connectors.find((c) => c.id === connectorId)
+      const tested = result.current.connectors.find((c) => c.guid === connectorGuid)
       expect(tested?.last_validated).toBeTruthy()
     })
   })

@@ -6,7 +6,6 @@ that can be translated to appropriate HTTP responses.
 """
 
 from typing import Optional
-from uuid import UUID
 
 
 class ServiceError(Exception):
@@ -29,11 +28,11 @@ class ConflictError(ServiceError):
     def __init__(
         self,
         message: str,
-        existing_job_id: Optional[UUID] = None,
+        existing_job_id: Optional[str] = None,
         position: Optional[int] = None
     ):
         self.message = message
-        self.existing_job_id = existing_job_id
+        self.existing_job_id = existing_job_id  # GUID format: job_xxx
         self.position = position
         super().__init__(message)
 

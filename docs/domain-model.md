@@ -1,7 +1,7 @@
 # Photo-Admin Domain Model
 
-**Version:** 1.0.0
-**Last Updated:** 2026-01-07
+**Version:** 1.1.0
+**Last Updated:** 2026-01-10
 **Status:** Living Document
 
 ---
@@ -56,39 +56,49 @@ The domain model is divided into two categories:
 
 ## Technical Standards
 
-### Universal Identifiers (Issue #42)
+### Global Unique Identifiers (GUIDs) (Issue #42)
 
-All user-facing entities MUST implement Universal Unique Identifiers following these specifications:
+All user-facing entities MUST use Global Unique Identifiers (GUIDs) as their **primary external identifier** in all presentation layers (APIs, URLs, UI). Numeric IDs are internal-only.
 
 | Aspect | Specification |
 |--------|---------------|
 | **UUID Version** | UUIDv7 (time-ordered for database efficiency) |
-| **External Format** | Crockford's Base32 with entity-type prefixes |
-| **Internal Storage** | Binary UUID (16 bytes) for foreign keys |
-| **Database PKs** | Auto-increment integers for internal joins |
+| **GUID Format** | Crockford's Base32 with entity-type prefix |
+| **Property Name** | `.guid` on all models and API responses |
+| **Database Storage** | Binary UUID (16 bytes) indexed column |
+| **Database PKs** | Auto-increment integers (internal joins only) |
 
-**Prefix Convention:**
+**GUID Format:** `{prefix}_{26-char Crockford Base32}`
 
-| Entity Type | Prefix | Example External ID |
-|-------------|--------|---------------------|
-| Collection | `col_` | `col_01HGW2BBG0000000000000000` |
-| Connector | `con_` | `con_01HGW2BBG0000000000000001` |
-| Pipeline | `pip_` | `pip_01HGW2BBG0000000000000002` |
-| Event | `evt_` | `evt_01HGW2BBG0000000000000003` |
-| User | `usr_` | `usr_01HGW2BBG0000000000000004` |
-| Team | `tea_` | `tea_01HGW2BBG0000000000000005` |
-| Camera | `cam_` | `cam_01HGW2BBG0000000000000006` |
-| Album | `alb_` | `alb_01HGW2BBG0000000000000007` |
-| Image | `img_` | `img_01HGW2BBG0000000000000008` |
-| File | `fil_` | `fil_01HGW2BBG0000000000000009` |
-| Workflow | `wfl_` | `wfl_01HGW2BBG000000000000000A` |
-| Location | `loc_` | `loc_01HGW2BBG000000000000000B` |
-| Organizer | `org_` | `org_01HGW2BBG000000000000000C` |
-| Performer | `prf_` | `prf_01HGW2BBG000000000000000D` |
-| Result | `res_` | `res_01HGW2BBG000000000000000E` |
-| Agent | `agt_` | `agt_01HGW2BBG000000000000000F` |
+Example: `col_01hgw2bbg0000000000000001`
 
-**Implementation Reference:** [puidv7-js](https://github.com/puidv7/puidv7-js)
+**Entity Prefixes:**
+
+| Entity Type | Prefix | Example GUID | Status |
+|-------------|--------|--------------|--------|
+| Collection | `col_` | `col_01hgw2bbg0000000000000000` | Implemented |
+| Connector | `con_` | `con_01hgw2bbg0000000000000001` | Implemented |
+| Pipeline | `pip_` | `pip_01hgw2bbg0000000000000002` | Implemented |
+| Result | `res_` | `res_01hgw2bbg0000000000000003` | Implemented |
+| Job | `job_` | `job_01hgw2bbg0000000000000004` | Implemented (in-memory) |
+| ImportSession | `imp_` | `imp_01hgw2bbg0000000000000005` | Implemented (in-memory) |
+| Event | `evt_` | `evt_01hgw2bbg0000000000000006` | Planned |
+| User | `usr_` | `usr_01hgw2bbg0000000000000007` | Planned |
+| Team | `tea_` | `tea_01hgw2bbg0000000000000008` | Planned |
+| Camera | `cam_` | `cam_01hgw2bbg0000000000000009` | Planned |
+| Album | `alb_` | `alb_01hgw2bbg000000000000000a` | Planned |
+| Image | `img_` | `img_01hgw2bbg000000000000000b` | Planned |
+| File | `fil_` | `fil_01hgw2bbg000000000000000c` | Planned |
+| Workflow | `wfl_` | `wfl_01hgw2bbg000000000000000d` | Planned |
+| Location | `loc_` | `loc_01hgw2bbg000000000000000e` | Planned |
+| Organizer | `org_` | `org_01hgw2bbg000000000000000f` | Planned |
+| Performer | `prf_` | `prf_01hgw2bbg0000000000000010` | Planned |
+| Agent | `agt_` | `agt_01hgw2bbg0000000000000011` | Planned |
+
+**Key Implementation Files:**
+- `backend/src/services/guid.py` - GuidService for generation, encoding, validation
+- `backend/src/models/mixins/external_id.py` - ExternalIdMixin for database entities
+- `frontend/src/utils/guid.ts` - Frontend GUID utilities
 
 ### Multi-Tenancy Model
 
@@ -150,6 +160,7 @@ The application implements team-based data isolation:
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
 | `connector_id` | Integer | FK(connectors.id), nullable | Reference to remote connector |
 | `pipeline_id` | Integer | FK(pipelines.id), nullable | Assigned pipeline (SET NULL on delete) |
 | `pipeline_version` | Integer | nullable | Pinned pipeline version |
@@ -166,6 +177,8 @@ The application implements team-based data isolation:
 | `image_count` | Integer | nullable | Number of images after grouping |
 | `created_at` | DateTime | not null | Creation timestamp |
 | `updated_at` | DateTime | not null, auto-update | Last modification timestamp |
+
+**GUID Property:** `.guid` returns `col_{crockford_base32}` format (e.g., `col_01hgw2bbg0000000000000001`)
 
 **State-Based Cache TTL Defaults:**
 
@@ -226,6 +239,7 @@ Collections contain **Files**, not Images directly. A Collection is a storage lo
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
 | `name` | String(255) | unique, not null | User-friendly name |
 | `type` | Enum | not null | `S3`, `GCS`, `SMB` |
 | `credentials` | Text | not null | Encrypted JSON credentials |
@@ -235,6 +249,8 @@ Collections contain **Files**, not Images directly. A Collection is a storage lo
 | `last_error` | Text | nullable | Last connection error |
 | `created_at` | DateTime | not null | Creation timestamp |
 | `updated_at` | DateTime | not null, auto-update | Last modification timestamp |
+
+**GUID Property:** `.guid` returns `con_{crockford_base32}` format (e.g., `con_01hgw2bbg0000000000000001`)
 
 **Credentials Format (Decrypted JSON):**
 
@@ -278,6 +294,7 @@ Collections contain **Files**, not Images directly. A Collection is a storage lo
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
 | `name` | String(255) | unique, not null | Display name |
 | `description` | Text | nullable | Purpose/usage description |
 | `nodes_json` | JSONB | not null | Node definitions array |
@@ -289,6 +306,8 @@ Collections contain **Files**, not Images directly. A Collection is a storage lo
 | `validation_errors` | JSONB | nullable | Validation error messages |
 | `created_at` | DateTime | not null | Creation timestamp |
 | `updated_at` | DateTime | not null, auto-update | Last modification timestamp |
+
+**GUID Property:** `.guid` returns `pip_{crockford_base32}` format (e.g., `pip_01hgw2bbg0000000000000001`)
 
 **Node Types:**
 
@@ -364,6 +383,7 @@ AnalysisResult is a **polymorphic results store** designed to capture the output
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
 | `collection_id` | Integer | FK(collections.id), nullable | Target collection |
 | `tool` | String(50) | not null | Tool name |
 | `pipeline_id` | Integer | FK(pipelines.id), nullable | Pipeline used |
@@ -378,6 +398,8 @@ AnalysisResult is a **polymorphic results store** designed to capture the output
 | `files_scanned` | Integer | nullable | Files processed count |
 | `issues_found` | Integer | nullable | Issues detected count |
 | `created_at` | DateTime | not null | Record creation timestamp |
+
+**GUID Property:** `.guid` returns `res_{crockford_base32}` format (e.g., `res_01hgw2bbg0000000000000001`)
 
 **Current Tool Types:**
 
@@ -1482,6 +1504,7 @@ GET    /api/{entity}s/stats    - KPI statistics for TopHeader
 | **Collection** | Physical storage location containing Files |
 | **Connector** | Authentication credentials for remote storage |
 | **File** | Physical artifact persisting an Image in a specific format |
+| **GUID** | Global Unique Identifier: `{prefix}_{crockford_base32}` format used in APIs, URLs, and UI |
 | **Image** | Logical representation of a photograph (may have multiple Files) |
 | **Image Group** | Set of Files representing the same Image across Collections |
 | **Pipeline** | Directed graph defining expected photo processing workflow (blueprint) |

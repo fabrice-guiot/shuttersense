@@ -17,8 +17,6 @@ Design:
 
 import asyncio
 from typing import List, Optional
-from uuid import UUID
-
 from fastapi import (
     APIRouter, Depends, HTTPException, Query, Request, WebSocket,
     WebSocketDisconnect, status
@@ -33,8 +31,12 @@ from backend.src.schemas.tools import (
     QueueStatusResponse, ConflictResponse, RunAllToolsResponse
 )
 from backend.src.services.tool_service import ToolService
+from backend.src.services.collection_service import CollectionService
+from backend.src.services.connector_service import ConnectorService
+from backend.src.services.guid import GuidService
 from backend.src.services.exceptions import ConflictError, CollectionNotAccessibleError
 from backend.src.utils.websocket import ConnectionManager, get_connection_manager
+from backend.src.utils.cache import FileListingCache
 from backend.src.utils.logging_config import get_logger
 
 
@@ -63,6 +65,32 @@ def get_encryptor(request: Request):
     return request.app.state.credential_encryptor
 
 
+def get_file_cache(request: Request) -> FileListingCache:
+    """Get file listing cache from application state."""
+    return request.app.state.file_cache
+
+
+def get_connector_service(
+    db: Session = Depends(get_db),
+    encryptor = Depends(get_encryptor)
+) -> ConnectorService:
+    """Create ConnectorService instance with dependencies."""
+    return ConnectorService(db=db, encryptor=encryptor)
+
+
+def get_collection_service(
+    db: Session = Depends(get_db),
+    file_cache: FileListingCache = Depends(get_file_cache),
+    connector_service: ConnectorService = Depends(get_connector_service)
+) -> CollectionService:
+    """Create CollectionService instance with dependencies."""
+    return CollectionService(
+        db=db,
+        file_cache=file_cache,
+        connector_service=connector_service
+    )
+
+
 def get_tool_service(
     db: Session = Depends(get_db),
     ws_manager: ConnectionManager = Depends(get_websocket_manager),
@@ -83,7 +111,7 @@ def get_tool_service(
     summary="Start tool execution",
     responses={
         202: {"description": "Job accepted and queued"},
-        400: {"description": "Invalid request"},
+        400: {"description": "Invalid request or GUID format"},
         409: {"description": "Tool already running on collection", "model": ConflictResponse},
         429: {"description": "Too many requests - rate limit exceeded"},
     }
@@ -92,7 +120,8 @@ def get_tool_service(
 async def run_tool(
     request: Request,  # Required for rate limiter - must be named 'request'
     tool_request: ToolRunRequest = ...,  # Body parameter renamed to avoid conflict
-    service: ToolService = Depends(get_tool_service)
+    service: ToolService = Depends(get_tool_service),
+    collection_service: CollectionService = Depends(get_collection_service)
 ) -> JobResponse:
     """
     Start a tool execution.
@@ -101,8 +130,8 @@ async def run_tool(
     Returns immediately with job details; use WebSocket or
     polling to monitor progress.
 
-    For most tools, collection_id is required. For pipeline_validation
-    in display_graph mode, pipeline_id is required instead.
+    For most tools, collection_guid is required. For pipeline_validation
+    in display_graph mode, pipeline_guid is required instead.
 
     Args:
         tool_request: Tool run request with tool, and mode-specific parameters
@@ -111,16 +140,56 @@ async def run_tool(
         Created job details
 
     Raises:
-        400: Invalid request (missing required fields, invalid tool)
+        400: Invalid request (missing required fields, invalid tool, invalid GUID)
         409: Tool already running on this collection/pipeline
     """
     import asyncio
+    from backend.src.models import Pipeline
 
     try:
+        # Resolve collection_guid to internal ID if provided
+        collection_id = None
+        if tool_request.collection_guid:
+            try:
+                GuidService.parse_identifier(tool_request.collection_guid, expected_prefix="col")
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(e)
+                )
+            collection = collection_service.get_by_guid(tool_request.collection_guid)
+            if not collection:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Collection {tool_request.collection_guid} not found"
+                )
+            collection_id = collection.id
+
+        # Resolve pipeline_guid to internal ID if provided
+        pipeline_id = None
+        if tool_request.pipeline_guid:
+            try:
+                pipeline_uuid = GuidService.parse_identifier(tool_request.pipeline_guid, expected_prefix="pip")
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(e)
+                )
+            # Look up pipeline by external_id
+            from sqlalchemy.orm import Session
+            db: Session = collection_service.db
+            pipeline = db.query(Pipeline).filter(Pipeline.external_id == pipeline_uuid).first()
+            if not pipeline:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Pipeline {tool_request.pipeline_guid} not found"
+                )
+            pipeline_id = pipeline.id
+
         job = service.run_tool(
             tool=tool_request.tool,
-            collection_id=tool_request.collection_id,
-            pipeline_id=tool_request.pipeline_id,
+            collection_id=collection_id,
+            pipeline_id=pipeline_id,
             mode=tool_request.mode
         )
 
@@ -130,9 +199,9 @@ async def run_tool(
 
         # Log appropriately based on mode
         if tool_request.mode == ToolMode.DISPLAY_GRAPH:
-            logger.info(f"Job {job.id} queued: {tool_request.tool.value} (display_graph) on pipeline {tool_request.pipeline_id}")
+            logger.info(f"Job {job.id} queued: {tool_request.tool.value} (display_graph) on pipeline {tool_request.pipeline_guid}")
         else:
-            logger.info(f"Job {job.id} queued: {tool_request.tool.value} on collection {tool_request.collection_id}")
+            logger.info(f"Job {job.id} queued: {tool_request.tool.value} on collection {tool_request.collection_guid}")
         return job
 
     except CollectionNotAccessibleError as e:
@@ -140,7 +209,7 @@ async def run_tool(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "message": e.message,
-                "collection_id": e.collection_id,
+                "collection_guid": tool_request.collection_guid,
                 "collection_name": e.collection_name
             }
         )
@@ -161,12 +230,13 @@ async def run_tool(
 
 
 @router.post(
-    "/run-all/{collection_id}",
+    "/run-all/{collection_guid}",
     response_model=RunAllToolsResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Run all analysis tools on a collection",
     responses={
         202: {"description": "Jobs accepted and queued"},
+        400: {"description": "Invalid GUID format"},
         404: {"description": "Collection not found"},
         422: {"description": "Collection not accessible"},
         429: {"description": "Too many requests - rate limit exceeded"},
@@ -175,8 +245,9 @@ async def run_tool(
 @limiter.limit("5/minute")  # Rate limit: 5 run-all requests per minute (T168)
 async def run_all_tools(
     request: Request,  # Required for rate limiter
-    collection_id: int,
-    service: ToolService = Depends(get_tool_service)
+    collection_guid: str,
+    service: ToolService = Depends(get_tool_service),
+    collection_service: CollectionService = Depends(get_collection_service)
 ) -> RunAllToolsResponse:
     """
     Run all available analysis tools on a collection.
@@ -188,11 +259,31 @@ async def run_all_tools(
     Tools already running on the collection are skipped.
 
     Args:
-        collection_id: ID of the collection to analyze
+        collection_guid: GUID of the collection to analyze (col_xxx format)
 
     Returns:
         List of created jobs and any skipped tools
     """
+    # Resolve GUID to collection
+    try:
+        collection_uuid = GuidService.parse_identifier(
+            collection_guid, expected_prefix="col"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    collection = collection_service.get_by_guid(collection_guid)
+    if not collection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {collection_guid} not found"
+        )
+
+    collection_id = collection.id  # Internal ID for tool service
+
     # Tools to run (pipeline_validation uses default pipeline)
     tools_to_run = [ToolType.PHOTOSTATS, ToolType.PHOTO_PAIRING, ToolType.PIPELINE_VALIDATION]
 
@@ -206,27 +297,27 @@ async def run_all_tools(
                 collection_id=collection_id
             )
             created_jobs.append(job)
-            logger.info(f"Job {job.id} queued: {tool.value} on collection {collection_id}")
+            logger.info(f"Job {job.id} queued: {tool.value} on collection {collection_guid}")
         except CollectionNotAccessibleError as e:
             # If collection is not accessible, fail immediately
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "message": f"Cannot run tools: {e.message}",
-                    "collection_id": e.collection_id,
+                    "collection_guid": collection_guid,
                     "collection_name": e.collection_name
                 }
             )
         except ConflictError:
             # Tool already running - skip it
             skipped_tools.append(tool.value)
-            logger.info(f"Skipped {tool.value} on collection {collection_id}: already running")
+            logger.info(f"Skipped {tool.value} on collection {collection_guid}: already running")
         except ValueError as e:
             error_msg = str(e)
             # For pipeline_validation, skip if no default pipeline is configured
             if tool == ToolType.PIPELINE_VALIDATION and "default pipeline" in error_msg.lower():
                 skipped_tools.append(tool.value)
-                logger.info(f"Skipped {tool.value} on collection {collection_id}: no default pipeline configured")
+                logger.info(f"Skipped {tool.value} on collection {collection_guid}: no default pipeline configured")
             elif "not found" in error_msg.lower() and "collection" in error_msg.lower():
                 # Collection not found - fail immediately
                 raise HTTPException(
@@ -236,7 +327,7 @@ async def run_all_tools(
             else:
                 # Other ValueError - skip this tool but continue
                 skipped_tools.append(tool.value)
-                logger.warning(f"Skipped {tool.value} on collection {collection_id}: {error_msg}")
+                logger.warning(f"Skipped {tool.value} on collection {collection_guid}: {error_msg}")
 
     # Start processing queue in background (only if we created jobs)
     if created_jobs:
@@ -271,9 +362,10 @@ async def run_all_tools(
 )
 def list_jobs(
     status: Optional[JobStatus] = Query(None, description="Filter by status"),
-    collection_id: Optional[int] = Query(None, description="Filter by collection"),
+    collection_guid: Optional[str] = Query(None, description="Filter by collection GUID (col_xxx format)"),
     tool: Optional[ToolType] = Query(None, description="Filter by tool"),
-    service: ToolService = Depends(get_tool_service)
+    service: ToolService = Depends(get_tool_service),
+    collection_service: CollectionService = Depends(get_collection_service)
 ) -> List[JobResponse]:
     """
     List all jobs with optional filtering.
@@ -282,12 +374,26 @@ def list_jobs(
 
     Args:
         status: Filter by job status (queued, running, completed, failed, cancelled)
-        collection_id: Filter by collection ID
+        collection_guid: Filter by collection GUID (col_xxx format)
         tool: Filter by tool type
 
     Returns:
         List of job details
     """
+    # Resolve collection GUID to internal ID if provided
+    collection_id = None
+    if collection_guid:
+        try:
+            GuidService.parse_identifier(collection_guid, expected_prefix="col")
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        collection = collection_service.get_by_guid(collection_guid)
+        if collection:
+            collection_id = collection.id
+
     jobs = service.list_jobs(
         status=status,
         collection_id=collection_id,
@@ -302,7 +408,7 @@ def list_jobs(
     summary="Get job details"
 )
 def get_job(
-    job_id: UUID,
+    job_id: str,
     service: ToolService = Depends(get_tool_service)
 ) -> JobResponse:
     """
@@ -332,7 +438,7 @@ def get_job(
     summary="Cancel a queued job"
 )
 def cancel_job(
-    job_id: UUID,
+    job_id: str,
     service: ToolService = Depends(get_tool_service)
 ) -> JobResponse:
     """
@@ -437,7 +543,7 @@ async def global_jobs_websocket(
 @router.websocket("/ws/jobs/{job_id}")
 async def job_progress_websocket(
     websocket: WebSocket,
-    job_id: UUID,
+    job_id: str,
     db: Session = Depends(get_db)
 ):
     """
@@ -460,7 +566,7 @@ async def job_progress_websocket(
     """
     manager = get_connection_manager()
 
-    await manager.connect(str(job_id), websocket)
+    await manager.connect(job_id, websocket)
     logger.info(f"WebSocket connected for job {job_id}")
 
     try:
@@ -484,4 +590,4 @@ async def job_progress_websocket(
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for job {job_id}")
     finally:
-        manager.disconnect(str(job_id), websocket)
+        manager.disconnect(job_id, websocket)

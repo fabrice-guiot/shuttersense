@@ -91,8 +91,8 @@ export function RunToolDialog({
   // Form state - Tool selection comes first
   const [selectedTool, setSelectedTool] = useState<ToolType | null>(null)
   const [selectedMode, setSelectedMode] = useState<ToolMode | null>(null)
-  const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null)
-  const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null)
+  const [selectedCollectionGuid, setSelectedCollectionGuid] = useState<string | null>(null)
+  const [selectedPipelineGuid, setSelectedPipelineGuid] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,18 +103,18 @@ export function RunToolDialog({
       if (preSelectedPipelineId) {
         setSelectedTool('pipeline_validation')
         setSelectedMode(preSelectedMode ?? 'display_graph')
-        setSelectedPipelineId(preSelectedPipelineId)
-        setSelectedCollectionId(null)
+        setSelectedPipelineGuid(preSelectedPipelineId?.toString() ?? null)
+        setSelectedCollectionGuid(null)
       } else if (preSelectedCollectionId) {
         setSelectedTool(null)
         setSelectedMode(null)
-        setSelectedCollectionId(preSelectedCollectionId)
-        setSelectedPipelineId(null)
+        setSelectedCollectionGuid(preSelectedCollectionId?.toString() ?? null)
+        setSelectedPipelineGuid(null)
       } else {
         setSelectedTool(null)
         setSelectedMode(null)
-        setSelectedCollectionId(null)
-        setSelectedPipelineId(null)
+        setSelectedCollectionGuid(null)
+        setSelectedPipelineGuid(null)
       }
       setError(null)
     }
@@ -139,9 +139,9 @@ export function RunToolDialog({
     setError(null)
 
     if (mode === 'display_graph') {
-      setSelectedCollectionId(null)
+      setSelectedCollectionGuid(null)
     } else {
-      setSelectedPipelineId(null)
+      setSelectedPipelineGuid(null)
     }
   }
 
@@ -154,20 +154,20 @@ export function RunToolDialog({
     // Validate based on tool and mode
     if (selectedTool === 'pipeline_validation') {
       if (selectedMode === 'display_graph') {
-        if (!selectedPipelineId) {
+        if (!selectedPipelineGuid) {
           setError('Please select a pipeline')
           return
         }
       } else {
         // Collection mode
-        if (!selectedCollectionId) {
+        if (!selectedCollectionGuid) {
           setError('Please select a collection')
           return
         }
       }
     } else {
       // PhotoStats and Photo Pairing require collection
-      if (!selectedCollectionId) {
+      if (!selectedCollectionGuid) {
         setError('Please select a collection')
         return
       }
@@ -183,9 +183,9 @@ export function RunToolDialog({
 
       if (selectedTool === 'pipeline_validation' && selectedMode === 'display_graph') {
         request.mode = 'display_graph'
-        request.pipeline_id = selectedPipelineId!
+        request.pipeline_guid = selectedPipelineGuid!
       } else {
-        request.collection_id = selectedCollectionId!
+        request.collection_guid = selectedCollectionGuid!
         if (selectedTool === 'pipeline_validation') {
           request.mode = 'collection'
         }
@@ -223,8 +223,8 @@ export function RunToolDialog({
 
   // Determine if Run button should be enabled
   const canRun = selectedTool && (
-    (showPipelineSelector && selectedPipelineId) ||
-    (showCollectionSelector && selectedCollectionId)
+    (showPipelineSelector && selectedPipelineGuid) ||
+    (showCollectionSelector && selectedCollectionGuid)
   )
 
   return (
@@ -306,8 +306,8 @@ export function RunToolDialog({
                 </Alert>
               )}
               <Select
-                value={selectedCollectionId?.toString() ?? ''}
-                onValueChange={(value) => setSelectedCollectionId(parseInt(value, 10))}
+                value={selectedCollectionGuid ?? ''}
+                onValueChange={(value) => setSelectedCollectionGuid(value)}
                 disabled={accessibleCollections.length === 0}
               >
                 <SelectTrigger id="collection">
@@ -319,7 +319,7 @@ export function RunToolDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {accessibleCollections.map((collection) => (
-                    <SelectItem key={collection.id} value={collection.id.toString()}>
+                    <SelectItem key={collection.guid} value={collection.guid}>
                       {collection.name}
                     </SelectItem>
                   ))}
@@ -341,8 +341,8 @@ export function RunToolDialog({
                 </Alert>
               )}
               <Select
-                value={selectedPipelineId?.toString() ?? ''}
-                onValueChange={(value) => setSelectedPipelineId(parseInt(value, 10))}
+                value={selectedPipelineGuid ?? ''}
+                onValueChange={(value) => setSelectedPipelineGuid(value)}
                 disabled={validPipelines.length === 0}
               >
                 <SelectTrigger id="pipeline">
@@ -354,7 +354,7 @@ export function RunToolDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {validPipelines.map((pipeline) => (
-                    <SelectItem key={pipeline.id} value={pipeline.id.toString()}>
+                    <SelectItem key={pipeline.guid} value={pipeline.guid}>
                       {pipeline.name} (v{pipeline.version})
                     </SelectItem>
                   ))}

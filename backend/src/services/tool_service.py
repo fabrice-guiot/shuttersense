@@ -17,7 +17,6 @@ Design:
 import asyncio
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -75,11 +74,11 @@ class JobAdapter:
         mode = ToolMode(job.mode) if job.mode else None
 
         return JobResponse(
-            id=UUID(job.id),
-            collection_id=job.collection_id,
+            id=job.id,
+            collection_guid=job.collection_guid,
             tool=ToolType(job.tool),
             mode=mode,
-            pipeline_id=job.pipeline_id,
+            pipeline_guid=job.pipeline_guid,
             status=_convert_status(job.status),
             position=position,
             created_at=job.created_at,
@@ -87,7 +86,7 @@ class JobAdapter:
             completed_at=job.completed_at,
             progress=progress,
             error_message=job.error_message,
-            result_id=job.result_id,
+            result_guid=job.result_guid,
         )
 
 
@@ -194,25 +193,37 @@ class ToolService:
             from backend.src.services.exceptions import ConflictError
             raise ConflictError(
                 message=f"Tool {tool.value} is already running on collection {collection_id}",
-                existing_job_id=UUID(existing.id),
+                existing_job_id=existing.id,
                 position=self._queue.get_position(existing.id)
             )
 
         # Determine mode string for job
         mode_str = mode.value if mode else None
 
+        # Get collection GUID from model property
+        collection_guid = collection.guid
+
+        # Get pipeline GUID if we have a pipeline
+        pipeline_guid = None
+        if resolved_pipeline_id:
+            pipeline = self.db.query(Pipeline).filter(Pipeline.id == resolved_pipeline_id).first()
+            if pipeline:
+                pipeline_guid = pipeline.guid
+
         # Create new job
         job = AnalysisJob(
             id=create_job_id(),
             collection_id=collection_id,
+            collection_guid=collection_guid,
             tool=tool.value,
             pipeline_id=resolved_pipeline_id,
+            pipeline_guid=pipeline_guid,
             pipeline_version=pipeline_version,
             mode=mode_str,
         )
         position = self._queue.enqueue(job)
 
-        logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_id}")
+        logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_guid}")
         return JobAdapter.to_response(job, position)
 
     def _run_display_graph_tool(self, pipeline_id: Optional[int]) -> JobResponse:
@@ -255,38 +266,43 @@ class ToolService:
                     from backend.src.services.exceptions import ConflictError
                     raise ConflictError(
                         message=f"Pipeline validation (display_graph) is already running for pipeline {pipeline_id}",
-                        existing_job_id=UUID(job.id),
+                        existing_job_id=job.id,
                         position=self._queue.get_position(job.id)
                     )
+
+        # Get pipeline GUID from model property
+        pipeline_guid = pipeline.guid
 
         # Create job without collection_id
         job = AnalysisJob(
             id=create_job_id(),
             collection_id=None,  # No collection for display_graph mode
+            collection_guid=None,
             tool=ToolType.PIPELINE_VALIDATION.value,
             pipeline_id=pipeline.id,
+            pipeline_guid=pipeline_guid,
             pipeline_version=pipeline.version,
             mode=ToolMode.DISPLAY_GRAPH.value,
         )
         position = self._queue.enqueue(job)
 
-        logger.info(f"Job {job.id} queued for pipeline_validation (display_graph) on pipeline {pipeline_id}")
+        logger.info(f"Job {job.id} queued for pipeline_validation (display_graph) on pipeline {pipeline_guid}")
         return JobAdapter.to_response(job, position)
 
-    def get_job(self, job_id: UUID) -> Optional[JobResponse]:
+    def get_job(self, job_id: str) -> Optional[JobResponse]:
         """
-        Get job by ID.
+        Get job by ID (GUID format: job_xxx).
 
         Args:
-            job_id: Job identifier
+            job_id: Job identifier in GUID format
 
         Returns:
             Job response if found, None otherwise
         """
-        job = self._queue.get_job(str(job_id))
+        job = self._queue.get_job(job_id)
         if not job:
             return None
-        position = self._queue.get_position(str(job_id))
+        position = self._queue.get_position(job_id)
         return JobAdapter.to_response(job, position)
 
     def list_jobs(
@@ -333,7 +349,7 @@ class ToolService:
         # Sort by created_at descending
         return sorted(all_jobs, key=lambda j: j.created_at, reverse=True)
 
-    def cancel_job(self, job_id: UUID) -> Optional[JobResponse]:
+    def cancel_job(self, job_id: str) -> Optional[JobResponse]:
         """
         Cancel a queued job.
 
@@ -341,7 +357,7 @@ class ToolService:
         interrupted safely.
 
         Args:
-            job_id: Job identifier
+            job_id: Job identifier in GUID format (job_xxx)
 
         Returns:
             Cancelled job response if found and cancellable, None otherwise
@@ -349,7 +365,7 @@ class ToolService:
         Raises:
             ValueError: If job is running and cannot be cancelled
         """
-        job = self._queue.get_job(str(job_id))
+        job = self._queue.get_job(job_id)
         if not job:
             return None
 
@@ -360,12 +376,12 @@ class ToolService:
             return JobAdapter.to_response(job)  # Already completed/failed/cancelled
 
         try:
-            self._queue.cancel(str(job_id))
+            self._queue.cancel(job_id)
         except ValueError:
             pass  # Job may have already been processed
 
         # Refetch to get updated status
-        job = self._queue.get_job(str(job_id))
+        job = self._queue.get_job(job_id)
         logger.info(f"Job {job_id} cancelled")
         return JobAdapter.to_response(job) if job else None
 
@@ -452,6 +468,8 @@ class ToolService:
                 job.status = QueueJobStatus.COMPLETED
                 job.completed_at = datetime.utcnow()
                 job.result_id = result.id
+                # Set result GUID from model property
+                job.result_guid = result.guid
 
                 # Update collection statistics (best effort, don't fail job if this fails)
                 # Skip for display_graph mode (no collection)
@@ -473,7 +491,8 @@ class ToolService:
                 try:
                     failed_result = self._store_failed_result(job, str(e), db)
                     job.result_id = failed_result.id
-                    logger.info(f"Stored failed result {failed_result.id} for job {job.id}")
+                    job.result_guid = failed_result.guid
+                    logger.info(f"Stored failed result {failed_result.guid} for job {job.id}")
                 except Exception as store_error:
                     logger.error(f"Failed to store error result for job {job.id}: {store_error}")
 
@@ -501,7 +520,8 @@ class ToolService:
             try:
                 failed_result = self._store_failed_result(job, str(outer_error), db)
                 job.result_id = failed_result.id
-                logger.info(f"Stored failed result {failed_result.id} for job {job.id} (outer exception)")
+                job.result_guid = failed_result.guid
+                logger.info(f"Stored failed result {failed_result.guid} for job {job.id} (outer exception)")
             except Exception as store_error:
                 logger.error(f"Failed to store error result for job {job.id}: {store_error}")
 
@@ -2716,7 +2736,7 @@ class ToolService:
                 "status": job.status.value,
                 "progress": job.progress,  # Already a dict
                 "error_message": job.error_message,
-                "result_id": job.result_id,
+                "result_guid": job.result_guid,
             }
 
             # Broadcast to job-specific channel

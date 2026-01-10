@@ -9,7 +9,7 @@ Provides data validation and serialization for:
 
 Design:
 - Strict enum validation for tool types and job status
-- UUID format for job IDs
+- GUID format for job IDs (job_xxx with Crockford Base32 encoding)
 - Optional fields with sensible defaults
 - DateTime serialization for API responses
 """
@@ -17,7 +17,6 @@ Design:
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any
-from uuid import UUID
 from pydantic import BaseModel, Field
 
 
@@ -53,35 +52,35 @@ class ToolRunRequest(BaseModel):
 
     Fields:
         tool: Tool to run (required)
-        collection_id: ID of the collection to analyze (required for collection mode)
-        pipeline_id: Pipeline ID (required for display_graph mode)
+        collection_guid: GUID of the collection to analyze (required for collection mode)
+        pipeline_guid: Pipeline GUID (required for display_graph mode)
         mode: Execution mode for pipeline_validation (optional, defaults to collection)
 
     Mode-specific requirements:
-        - PhotoStats/Photo Pairing: collection_id required, mode ignored
-        - Pipeline Validation (collection): collection_id required, pipeline resolved from collection
-        - Pipeline Validation (display_graph): pipeline_id required, no collection needed
+        - PhotoStats/Photo Pairing: collection_guid required, mode ignored
+        - Pipeline Validation (collection): collection_guid required, pipeline resolved from collection
+        - Pipeline Validation (display_graph): pipeline_guid required, no collection needed
 
     Example (PhotoStats):
-        >>> request = ToolRunRequest(collection_id=1, tool=ToolType.PHOTOSTATS)
+        >>> request = ToolRunRequest(collection_guid="col_xxx", tool=ToolType.PHOTOSTATS)
 
     Example (Pipeline Validation - display_graph):
         >>> request = ToolRunRequest(
         ...     tool=ToolType.PIPELINE_VALIDATION,
         ...     mode=ToolMode.DISPLAY_GRAPH,
-        ...     pipeline_id=1
+        ...     pipeline_guid="pip_xxx"
         ... )
     """
     tool: ToolType = Field(..., description="Tool to run")
-    collection_id: Optional[int] = Field(
+    collection_guid: Optional[str] = Field(
         None,
-        gt=0,
-        description="ID of the collection to analyze (required for collection mode)"
+        pattern=r"^col_[0-9a-hjkmnp-tv-z]{26}$",
+        description="GUID of the collection to analyze (col_xxx format, required for collection mode)"
     )
-    pipeline_id: Optional[int] = Field(
+    pipeline_guid: Optional[str] = Field(
         None,
-        gt=0,
-        description="Pipeline ID (required for display_graph mode)"
+        pattern=r"^pip_[0-9a-hjkmnp-tv-z]{26}$",
+        description="Pipeline GUID (pip_xxx format, required for display_graph mode)"
     )
     mode: Optional[ToolMode] = Field(
         None,
@@ -93,12 +92,12 @@ class ToolRunRequest(BaseModel):
             "examples": [
                 {
                     "tool": "photostats",
-                    "collection_id": 1
+                    "collection_guid": "col_01hgw2bbg0000000000000001"
                 },
                 {
                     "tool": "pipeline_validation",
                     "mode": "display_graph",
-                    "pipeline_id": 1
+                    "pipeline_guid": "pip_01hgw2bbg0000000000000001"
                 }
             ]
         }
@@ -132,13 +131,13 @@ class JobResponse(BaseModel):
     Job status response.
 
     Contains full job state including progress for running jobs
-    and result_id for completed jobs.
+    and result_guid for completed jobs.
     """
-    id: UUID = Field(..., description="Unique job identifier")
-    collection_id: Optional[int] = Field(None, description="Collection being analyzed (null for display_graph)")
+    id: str = Field(..., description="Unique job identifier (job_xxx GUID format)")
+    collection_guid: Optional[str] = Field(None, description="Collection GUID being analyzed (null for display_graph)")
     tool: ToolType = Field(..., description="Tool being run")
     mode: Optional[ToolMode] = Field(None, description="Execution mode (for pipeline_validation)")
-    pipeline_id: Optional[int] = Field(None, description="Pipeline ID if applicable")
+    pipeline_guid: Optional[str] = Field(None, description="Pipeline GUID if applicable")
     status: JobStatus = Field(..., description="Current job status")
     position: Optional[int] = Field(None, ge=1, description="Queue position if queued")
     created_at: datetime = Field(..., description="Job creation time")
@@ -146,14 +145,14 @@ class JobResponse(BaseModel):
     completed_at: Optional[datetime] = Field(None, description="Execution end time")
     progress: Optional[ProgressData] = Field(None, description="Progress data if running")
     error_message: Optional[str] = Field(None, description="Error details if failed")
-    result_id: Optional[int] = Field(None, description="Analysis result ID when completed")
+    result_guid: Optional[str] = Field(None, description="Analysis result GUID when completed")
 
     model_config = {
         "from_attributes": True,
         "json_schema_extra": {
             "example": {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
-                "collection_id": 1,
+                "id": "job_01hgw2bbg0000000000000001",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
                 "tool": "photostats",
                 "status": "running",
                 "created_at": "2024-01-15T10:30:00Z",
@@ -181,7 +180,7 @@ class QueueStatusResponse(BaseModel):
     completed_count: int = Field(0, ge=0, description="Completed jobs")
     failed_count: int = Field(0, ge=0, description="Failed jobs")
     cancelled_count: int = Field(0, ge=0, description="Cancelled jobs")
-    current_job_id: Optional[UUID] = Field(None, description="Currently running job ID")
+    current_job_id: Optional[str] = Field(None, description="Currently running job ID (job_xxx GUID format)")
 
     model_config = {
         "json_schema_extra": {
@@ -191,7 +190,7 @@ class QueueStatusResponse(BaseModel):
                 "completed_count": 10,
                 "failed_count": 1,
                 "cancelled_count": 0,
-                "current_job_id": "550e8400-e29b-41d4-a716-446655440000"
+                "current_job_id": "job_01hgw2bbg0000000000000001"
             }
         }
     }
@@ -202,14 +201,14 @@ class ConflictResponse(BaseModel):
     Response when a tool is already running on a collection.
     """
     message: str = Field(..., description="Conflict description")
-    existing_job_id: UUID = Field(..., description="ID of the existing job")
+    existing_job_id: str = Field(..., description="ID of the existing job (job_xxx GUID format)")
     position: Optional[int] = Field(None, description="Queue position of existing job")
 
     model_config = {
         "json_schema_extra": {
             "example": {
-                "message": "Tool photostats is already running on collection 1",
-                "existing_job_id": "550e8400-e29b-41d4-a716-446655440000",
+                "message": "Tool photostats is already running on collection col_01hgw2bbg0000000000000001",
+                "existing_job_id": "job_01hgw2bbg0000000000000001",
                 "position": None
             }
         }
@@ -233,7 +232,7 @@ class RunAllToolsResponse(BaseModel):
                 "jobs": [
                     {
                         "id": "550e8400-e29b-41d4-a716-446655440000",
-                        "collection_id": 1,
+                        "collection_guid": "col_01hgw2bbg0000000000000001",
                         "tool": "photostats",
                         "status": "queued",
                         "position": 1,

@@ -27,6 +27,7 @@ from backend.src.schemas.results import (
     ResultStatsResponse, ResultListResponse
 )
 from backend.src.services.exceptions import NotFoundError
+from backend.src.services.guid import GuidService
 from backend.src.utils.logging_config import get_logger
 
 
@@ -34,6 +35,42 @@ logger = get_logger("services")
 
 # Maximum items to include in API responses for large arrays
 RESULT_ITEMS_LIMIT = 20
+
+
+def sanitize_results(results: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Remove internal IDs from results for API presentation.
+
+    Internal IDs (like pipeline_id) are stored in the database for join queries
+    but should not be exposed in the API response. The corresponding GUIDs are
+    available at the top level of the response.
+
+    Args:
+        results: Tool-specific results dictionary
+
+    Returns:
+        Results with internal IDs removed
+    """
+    if not results:
+        return results
+
+    result_copy = dict(results)
+
+    # Fields containing internal IDs that should not be exposed in API
+    internal_id_fields = ['pipeline_id', 'collection_id', 'connector_id']
+
+    # Remove from top level
+    for field in internal_id_fields:
+        result_copy.pop(field, None)
+
+    # Also check nested 'results' object (pipeline_validation stores data there)
+    if 'results' in result_copy and isinstance(result_copy['results'], dict):
+        nested_results = dict(result_copy['results'])
+        for field in internal_id_fields:
+            nested_results.pop(field, None)
+        result_copy['results'] = nested_results
+
+    return result_copy
 
 
 def truncate_results(results: Dict[str, Any], limit: int = RESULT_ITEMS_LIMIT) -> Dict[str, Any]:
@@ -104,7 +141,7 @@ class ResultService:
 
     def list_results(
         self,
-        collection_id: Optional[int] = None,
+        collection_guid: Optional[str] = None,
         tool: Optional[str] = None,
         status: Optional[ResultStatus] = None,
         from_date: Optional[date] = None,
@@ -118,7 +155,7 @@ class ResultService:
         List analysis results with filtering and pagination.
 
         Args:
-            collection_id: Filter by collection ID
+            collection_guid: Filter by collection GUID (col_xxx)
             tool: Filter by tool type
             status: Filter by result status
             from_date: Filter from date (inclusive)
@@ -137,8 +174,15 @@ class ResultService:
         )
 
         # Apply filters
-        if collection_id:
-            query = query.filter(AnalysisResult.collection_id == collection_id)
+        if collection_guid:
+            # Resolve collection GUID to internal ID
+            collection_uuid = GuidService.parse_identifier(collection_guid, expected_prefix="col")
+            collection = self.db.query(Collection).filter(Collection.uuid == collection_uuid).first()
+            if collection:
+                query = query.filter(AnalysisResult.collection_id == collection.id)
+            else:
+                # Collection not found - return empty results
+                return [], 0
         if tool:
             query = query.filter(AnalysisResult.tool == tool)
         if status:
@@ -173,22 +217,21 @@ class ResultService:
                 Collection.id == result.collection_id
             ).first()
 
-            # Get pipeline name if applicable
-            pipeline_name = None
+            # Get pipeline info if applicable
+            pipeline = None
             if result.pipeline_id:
                 pipeline = self.db.query(Pipeline).filter(
                     Pipeline.id == result.pipeline_id
                 ).first()
-                pipeline_name = pipeline.name if pipeline else None
 
             summaries.append(AnalysisResultSummary(
-                id=result.id,
-                collection_id=result.collection_id,
+                guid=result.guid,
+                collection_guid=collection.guid if collection else None,
                 collection_name=collection.name if collection else None,
                 tool=result.tool,
-                pipeline_id=result.pipeline_id,
+                pipeline_guid=pipeline.guid if pipeline else None,
                 pipeline_version=result.pipeline_version,
-                pipeline_name=pipeline_name,
+                pipeline_name=pipeline.name if pipeline else None,
                 status=result.status.value if result.status else "UNKNOWN",
                 started_at=result.started_at,
                 completed_at=result.completed_at,
@@ -199,6 +242,25 @@ class ResultService:
             ))
 
         return summaries, total
+
+    def get_result_by_guid(self, guid: str) -> Optional[AnalysisResult]:
+        """
+        Get result by GUID.
+
+        Args:
+            guid: Result GUID (e.g., "res_01hgw...")
+
+        Returns:
+            AnalysisResult instance or None if not found
+
+        Raises:
+            ValueError: If GUID format is invalid or prefix doesn't match "res"
+
+        Example:
+            >>> result = service.get_result_by_guid("res_01hgw2bbg...")
+        """
+        uuid_value = GuidService.parse_identifier(guid, expected_prefix="res")
+        return self.db.query(AnalysisResult).filter(AnalysisResult.uuid == uuid_value).first()
 
     def get_result(self, result_id: int) -> AnalysisResultResponse:
         """
@@ -232,15 +294,16 @@ class ResultService:
                 Pipeline.id == result.pipeline_id
             ).first()
 
-        # Truncate large arrays in results to prevent API response bloat
-        truncated_results = truncate_results(result.results_json or {})
+        # Process results: truncate large arrays and remove internal IDs
+        processed_results = truncate_results(result.results_json or {})
+        processed_results = sanitize_results(processed_results)
 
         return AnalysisResultResponse(
-            id=result.id,
-            collection_id=result.collection_id,
+            guid=result.guid,
+            collection_guid=collection.guid if collection else None,
             collection_name=collection.name if collection else None,
             tool=result.tool,
-            pipeline_id=result.pipeline_id,
+            pipeline_guid=pipeline.guid if pipeline else None,
             pipeline_version=result.pipeline_version,
             pipeline_name=pipeline.name if pipeline else None,
             status=result.status.value if result.status else "UNKNOWN",
@@ -251,11 +314,11 @@ class ResultService:
             issues_found=result.issues_found,
             error_message=result.error_message,
             has_report=result.has_report,
-            results=truncated_results,
+            results=processed_results,
             created_at=result.created_at,
         )
 
-    def delete_result(self, result_id: int) -> int:
+    def delete_result(self, result_id: int) -> str:
         """
         Delete an analysis result.
 
@@ -263,7 +326,7 @@ class ResultService:
             result_id: Result ID to delete
 
         Returns:
-            ID of deleted result
+            GUID of deleted result
 
         Raises:
             NotFoundError: If result doesn't exist
@@ -275,11 +338,12 @@ class ResultService:
         if not result:
             raise NotFoundError("Result", result_id)
 
+        deleted_guid = result.guid
         self.db.delete(result)
         self.db.commit()
 
-        logger.info(f"Deleted result {result_id}")
-        return result_id
+        logger.info(f"Deleted result {deleted_guid}")
+        return deleted_guid
 
     def get_report(self, result_id: int) -> Optional[str]:
         """

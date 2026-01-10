@@ -150,7 +150,7 @@ export function CollectionList({
           </TableHeader>
           <TableBody>
             {tabCollections.map((collection) => (
-              <TableRow key={collection.id}>
+              <TableRow key={collection.guid}>
                 <TableCell className="font-medium">{collection.name}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">

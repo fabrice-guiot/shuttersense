@@ -80,7 +80,7 @@ export const PipelinesPage: React.FC = () => {
         const pipeline = await importYaml(file)
         await refetch()
         await refetchStats()
-        navigate(`/pipelines/${pipeline.id}`)
+        navigate(`/pipelines/${pipeline.guid}`)
       } catch (err: any) {
         setActionError(err.userMessage || 'Failed to import pipeline')
       } finally {
@@ -96,14 +96,14 @@ export const PipelinesPage: React.FC = () => {
 
   const handleEdit = useCallback(
     (pipeline: PipelineSummary) => {
-      navigate(`/pipelines/${pipeline.id}/edit`)
+      navigate(`/pipelines/${pipeline.guid}/edit`)
     },
     [navigate]
   )
 
   const handleView = useCallback(
     (pipeline: PipelineSummary) => {
-      navigate(`/pipelines/${pipeline.id}`)
+      navigate(`/pipelines/${pipeline.guid}`)
     },
     [navigate]
   )
@@ -118,7 +118,7 @@ export const PipelinesPage: React.FC = () => {
     try {
       setActionLoading(true)
       setActionError(null)
-      await deletePipeline(confirmDelete.id)
+      await deletePipeline(confirmDelete.guid)
       await refetchStats()
       setConfirmDelete(null)
     } catch (err: any) {
@@ -138,7 +138,7 @@ export const PipelinesPage: React.FC = () => {
     try {
       setActionLoading(true)
       setActionError(null)
-      await activatePipeline(confirmActivate.id)
+      await activatePipeline(confirmActivate.guid)
       await refetchStats()
       setConfirmActivate(null)
     } catch (err: any) {
@@ -158,7 +158,7 @@ export const PipelinesPage: React.FC = () => {
     try {
       setActionLoading(true)
       setActionError(null)
-      await deactivatePipeline(confirmDeactivate.id)
+      await deactivatePipeline(confirmDeactivate.guid)
       await refetchStats()
       setConfirmDeactivate(null)
     } catch (err: any) {
@@ -178,7 +178,7 @@ export const PipelinesPage: React.FC = () => {
     try {
       setActionLoading(true)
       setActionError(null)
-      await setDefaultPipeline(confirmSetDefault.id)
+      await setDefaultPipeline(confirmSetDefault.guid)
       await refetchStats()
       setConfirmSetDefault(null)
     } catch (err: any) {
@@ -198,7 +198,7 @@ export const PipelinesPage: React.FC = () => {
     try {
       setActionLoading(true)
       setActionError(null)
-      await unsetDefaultPipeline(confirmUnsetDefault.id)
+      await unsetDefaultPipeline(confirmUnsetDefault.guid)
       await refetchStats()
       setConfirmUnsetDefault(null)
     } catch (err: any) {
@@ -211,7 +211,7 @@ export const PipelinesPage: React.FC = () => {
   const handleExport = useCallback(
     async (pipeline: PipelineSummary) => {
       try {
-        await downloadYaml(pipeline.id)
+        await downloadYaml(pipeline.guid)
       } catch (err: any) {
         setActionError(err.userMessage || 'Failed to export pipeline')
       }
@@ -227,7 +227,7 @@ export const PipelinesPage: React.FC = () => {
         await runTool({
           tool: 'pipeline_validation',
           mode: 'display_graph',
-          pipeline_id: pipeline.id,
+          pipeline_guid: pipeline.guid,
         })
       } catch (err: any) {
         setActionError(err.userMessage || 'Failed to start pipeline validation')
@@ -400,7 +400,7 @@ export const PipelinesPage: React.FC = () => {
             <p className="text-gray-600 mb-4">
               Setting <strong>{confirmSetDefault.name}</strong> as default will
               use it for all pipeline validation tool runs.
-              {stats?.default_pipeline_name && stats.default_pipeline_id !== confirmSetDefault.id && (
+              {stats?.default_pipeline_name && stats.default_pipeline_guid !== confirmSetDefault.guid && (
                 <span className="block mt-2 text-amber-600">
                   <strong>Note:</strong> The current default pipeline "{stats.default_pipeline_name}"
                   will lose its default status.

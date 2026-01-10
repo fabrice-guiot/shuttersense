@@ -186,30 +186,31 @@ class TestCreatePipelineEndpoint:
 
 
 class TestGetPipelineEndpoint:
-    """Tests for GET /api/pipelines/{pipeline_id} endpoint."""
+    """Tests for GET /api/pipelines/{guid} endpoint."""
 
     def test_get_pipeline_success(self, test_client, sample_pipeline):
         """Test getting pipeline details."""
         pipeline = sample_pipeline(name="Get Test Pipeline")
 
-        response = test_client.get(f"/api/pipelines/{pipeline.id}")
+        response = test_client.get(f"/api/pipelines/{pipeline.guid}")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["id"] == pipeline.id
+        assert data["guid"] == pipeline.guid
         assert data["name"] == "Get Test Pipeline"
         assert "nodes" in data
         assert "edges" in data
+        assert "id" not in data
 
     def test_get_pipeline_not_found(self, test_client):
         """Test 404 for non-existent pipeline."""
-        response = test_client.get("/api/pipelines/99999")
+        response = test_client.get("/api/pipelines/pip_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
 
 
 class TestUpdatePipelineEndpoint:
-    """Tests for PUT /api/pipelines/{pipeline_id} endpoint."""
+    """Tests for PUT /api/pipelines/{guid} endpoint."""
 
     def test_update_pipeline_success(self, test_client, sample_pipeline):
         """Test updating a pipeline."""
@@ -219,7 +220,7 @@ class TestUpdatePipelineEndpoint:
             "description": "Updated description",
             "change_summary": "Updated the description"
         }
-        response = test_client.put(f"/api/pipelines/{pipeline.id}", json=update_data)
+        response = test_client.put(f"/api/pipelines/{pipeline.guid}", json=update_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -244,7 +245,7 @@ class TestUpdatePipelineEndpoint:
             ],
             "change_summary": "Added XMP sidecar node"
         }
-        response = test_client.put(f"/api/pipelines/{pipeline.id}", json=update_data)
+        response = test_client.put(f"/api/pipelines/{pipeline.guid}", json=update_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -253,31 +254,31 @@ class TestUpdatePipelineEndpoint:
     def test_update_pipeline_not_found(self, test_client):
         """Test 404 when updating non-existent pipeline."""
         update_data = {"description": "New description"}
-        response = test_client.put("/api/pipelines/99999", json=update_data)
+        response = test_client.put("/api/pipelines/pip_01hgw2bbg00000000000000000", json=update_data)
 
         assert response.status_code == 404
 
 
 class TestDeletePipelineEndpoint:
-    """Tests for DELETE /api/pipelines/{pipeline_id} endpoint."""
+    """Tests for DELETE /api/pipelines/{guid} endpoint."""
 
     def test_delete_pipeline_success(self, test_client, sample_pipeline):
         """Test deleting a pipeline."""
         pipeline = sample_pipeline(name="Delete Test")
 
-        response = test_client.delete(f"/api/pipelines/{pipeline.id}")
+        response = test_client.delete(f"/api/pipelines/{pipeline.guid}")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["deleted_id"] == pipeline.id
+        assert data["deleted_guid"] == pipeline.guid
 
         # Verify deletion
-        get_response = test_client.get(f"/api/pipelines/{pipeline.id}")
+        get_response = test_client.get(f"/api/pipelines/{pipeline.guid}")
         assert get_response.status_code == 404
 
     def test_delete_pipeline_not_found(self, test_client):
         """Test 404 when deleting non-existent pipeline."""
-        response = test_client.delete("/api/pipelines/99999")
+        response = test_client.delete("/api/pipelines/pip_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
 
@@ -285,19 +286,19 @@ class TestDeletePipelineEndpoint:
         """Test 409 when deleting active pipeline."""
         pipeline = sample_pipeline(name="Active Delete Test", is_active=True)
 
-        response = test_client.delete(f"/api/pipelines/{pipeline.id}")
+        response = test_client.delete(f"/api/pipelines/{pipeline.guid}")
 
         assert response.status_code == 409
 
 
 class TestActivatePipelineEndpoint:
-    """Tests for POST /api/pipelines/{pipeline_id}/activate endpoint."""
+    """Tests for POST /api/pipelines/{guid}/activate endpoint."""
 
     def test_activate_pipeline_success(self, test_client, sample_pipeline):
         """Test activating a valid pipeline."""
         pipeline = sample_pipeline(name="Activate Test", is_valid=True)
 
-        response = test_client.post(f"/api/pipelines/{pipeline.id}/activate")
+        response = test_client.post(f"/api/pipelines/{pipeline.guid}/activate")
 
         assert response.status_code == 200
         data = response.json()
@@ -308,39 +309,39 @@ class TestActivatePipelineEndpoint:
         pipeline1 = sample_pipeline(name="First Active", is_active=True, is_valid=True)
         pipeline2 = sample_pipeline(name="Second Active", is_active=False, is_valid=True)
 
-        response = test_client.post(f"/api/pipelines/{pipeline2.id}/activate")
+        response = test_client.post(f"/api/pipelines/{pipeline2.guid}/activate")
 
         assert response.status_code == 200
         data = response.json()
         assert data["is_active"] is True
 
         # Check that first pipeline is STILL active (multiple can be active)
-        get_response = test_client.get(f"/api/pipelines/{pipeline1.id}")
+        get_response = test_client.get(f"/api/pipelines/{pipeline1.guid}")
         assert get_response.json()["is_active"] is True
 
     def test_activate_invalid_pipeline(self, test_client, sample_pipeline):
         """Test 400 when activating invalid pipeline."""
         pipeline = sample_pipeline(name="Invalid Test", is_valid=False)
 
-        response = test_client.post(f"/api/pipelines/{pipeline.id}/activate")
+        response = test_client.post(f"/api/pipelines/{pipeline.guid}/activate")
 
         assert response.status_code == 400
 
     def test_activate_pipeline_not_found(self, test_client):
         """Test 404 when activating non-existent pipeline."""
-        response = test_client.post("/api/pipelines/99999/activate")
+        response = test_client.post("/api/pipelines/pip_01hgw2bbg00000000000000000/activate")
 
         assert response.status_code == 404
 
 
 class TestDeactivatePipelineEndpoint:
-    """Tests for POST /api/pipelines/{pipeline_id}/deactivate endpoint."""
+    """Tests for POST /api/pipelines/{guid}/deactivate endpoint."""
 
     def test_deactivate_pipeline_success(self, test_client, sample_pipeline):
         """Test deactivating a pipeline."""
         pipeline = sample_pipeline(name="Deactivate Test", is_active=True)
 
-        response = test_client.post(f"/api/pipelines/{pipeline.id}/deactivate")
+        response = test_client.post(f"/api/pipelines/{pipeline.guid}/deactivate")
 
         assert response.status_code == 200
         data = response.json()
@@ -348,19 +349,19 @@ class TestDeactivatePipelineEndpoint:
 
     def test_deactivate_pipeline_not_found(self, test_client):
         """Test 404 when deactivating non-existent pipeline."""
-        response = test_client.post("/api/pipelines/99999/deactivate")
+        response = test_client.post("/api/pipelines/pip_01hgw2bbg00000000000000000/deactivate")
 
         assert response.status_code == 404
 
 
 class TestValidatePipelineEndpoint:
-    """Tests for POST /api/pipelines/{pipeline_id}/validate endpoint."""
+    """Tests for POST /api/pipelines/{guid}/validate endpoint."""
 
     def test_validate_pipeline_success(self, test_client, sample_pipeline):
         """Test validating a valid pipeline."""
         pipeline = sample_pipeline(name="Validate Test")
 
-        response = test_client.post(f"/api/pipelines/{pipeline.id}/validate")
+        response = test_client.post(f"/api/pipelines/{pipeline.guid}/validate")
 
         assert response.status_code == 200
         data = response.json()
@@ -369,19 +370,19 @@ class TestValidatePipelineEndpoint:
 
     def test_validate_pipeline_not_found(self, test_client):
         """Test 404 when validating non-existent pipeline."""
-        response = test_client.post("/api/pipelines/99999/validate")
+        response = test_client.post("/api/pipelines/pip_01hgw2bbg00000000000000000/validate")
 
         assert response.status_code == 404
 
 
 class TestPreviewPipelineEndpoint:
-    """Tests for POST /api/pipelines/{pipeline_id}/preview endpoint."""
+    """Tests for POST /api/pipelines/{guid}/preview endpoint."""
 
     def test_preview_pipeline_success(self, test_client, sample_pipeline):
         """Test previewing filenames for a pipeline uses sample_filename from Capture node."""
         pipeline = sample_pipeline(name="Preview Test", is_valid=True)
 
-        response = test_client.post(f"/api/pipelines/{pipeline.id}/preview")
+        response = test_client.post(f"/api/pipelines/{pipeline.guid}/preview")
 
         assert response.status_code == 200
         data = response.json()
@@ -394,7 +395,7 @@ class TestPreviewPipelineEndpoint:
         """Test preview returns expected file list with extensions."""
         pipeline = sample_pipeline(name="Preview Files Test", is_valid=True)
 
-        response = test_client.post(f"/api/pipelines/{pipeline.id}/preview")
+        response = test_client.post(f"/api/pipelines/{pipeline.guid}/preview")
 
         assert response.status_code == 200
         data = response.json()
@@ -404,25 +405,25 @@ class TestPreviewPipelineEndpoint:
         """Test 400 when previewing invalid pipeline."""
         pipeline = sample_pipeline(name="Invalid Preview Test", is_valid=False)
 
-        response = test_client.post(f"/api/pipelines/{pipeline.id}/preview")
+        response = test_client.post(f"/api/pipelines/{pipeline.guid}/preview")
 
         assert response.status_code == 400
 
     def test_preview_pipeline_not_found(self, test_client):
         """Test 404 when previewing non-existent pipeline."""
-        response = test_client.post("/api/pipelines/99999/preview")
+        response = test_client.post("/api/pipelines/pip_01hgw2bbg00000000000000000/preview")
 
         assert response.status_code == 404
 
 
 class TestPipelineHistoryEndpoint:
-    """Tests for GET /api/pipelines/{pipeline_id}/history endpoint."""
+    """Tests for GET /api/pipelines/{guid}/history endpoint."""
 
     def test_get_history_empty(self, test_client, sample_pipeline):
         """Test getting history for pipeline with no history."""
         pipeline = sample_pipeline(name="No History Test")
 
-        response = test_client.get(f"/api/pipelines/{pipeline.id}/history")
+        response = test_client.get(f"/api/pipelines/{pipeline.guid}/history")
 
         assert response.status_code == 200
         data = response.json()
@@ -443,7 +444,7 @@ class TestPipelineHistoryEndpoint:
         test_db_session.add(history_entry)
         test_db_session.commit()
 
-        response = test_client.get(f"/api/pipelines/{pipeline.id}/history")
+        response = test_client.get(f"/api/pipelines/{pipeline.guid}/history")
 
         assert response.status_code == 200
         data = response.json()
@@ -452,7 +453,7 @@ class TestPipelineHistoryEndpoint:
 
     def test_get_history_not_found(self, test_client):
         """Test 404 when getting history for non-existent pipeline."""
-        response = test_client.get("/api/pipelines/99999/history")
+        response = test_client.get("/api/pipelines/pip_01hgw2bbg00000000000000000/history")
 
         assert response.status_code == 404
 
@@ -503,13 +504,13 @@ edges:
 
 
 class TestExportPipelineEndpoint:
-    """Tests for GET /api/pipelines/{pipeline_id}/export endpoint."""
+    """Tests for GET /api/pipelines/{guid}/export endpoint."""
 
     def test_export_pipeline_success(self, test_client, sample_pipeline):
         """Test exporting pipeline as YAML."""
         pipeline = sample_pipeline(name="Export Test")
 
-        response = test_client.get(f"/api/pipelines/{pipeline.id}/export")
+        response = test_client.get(f"/api/pipelines/{pipeline.guid}/export")
 
         assert response.status_code == 200
         assert "application/x-yaml" in response.headers["content-type"]
@@ -517,7 +518,7 @@ class TestExportPipelineEndpoint:
 
     def test_export_pipeline_not_found(self, test_client):
         """Test 404 when exporting non-existent pipeline."""
-        response = test_client.get("/api/pipelines/99999/export")
+        response = test_client.get("/api/pipelines/pip_01hgw2bbg00000000000000000/export")
 
         assert response.status_code == 404
 
@@ -534,7 +535,7 @@ class TestPipelineStatsEndpoint:
         assert data["total_pipelines"] == 0
         assert data["valid_pipelines"] == 0
         assert data["active_pipeline_count"] == 0
-        assert data["default_pipeline_id"] is None
+        assert data["default_pipeline_guid"] is None
         assert data["default_pipeline_name"] is None
 
     def test_get_stats_with_data(self, test_client, sample_pipeline):

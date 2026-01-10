@@ -51,7 +51,7 @@ export interface ValidationError {
 // ============================================================================
 
 export interface PipelineSummary {
-  id: number
+  guid: string  // External identifier (pip_xxx)
   name: string
   description: string | null
   version: number
@@ -64,7 +64,7 @@ export interface PipelineSummary {
 }
 
 export interface Pipeline {
-  id: number
+  guid: string  // External identifier (pip_xxx)
   name: string
   description: string | null
   nodes: PipelineNode[]
@@ -128,7 +128,6 @@ export interface FilenamePreviewResponse {
 }
 
 export interface PipelineHistoryEntry {
-  id: number
   version: number
   change_summary: string | null
   changed_by: string | null
@@ -142,15 +141,15 @@ export interface PipelineStatsResponse {
   valid_pipelines: number
   /** Number of active pipelines */
   active_pipeline_count: number
-  /** ID of the default pipeline (null if none) */
-  default_pipeline_id: number | null
+  /** GUID of the default pipeline (null if none) */
+  default_pipeline_guid: string | null
   /** Name of the default pipeline (null if none) */
   default_pipeline_name: string | null
 }
 
 export interface PipelineDeleteResponse {
   message: string
-  deleted_id: number
+  deleted_guid: string
 }
 
 // ============================================================================
@@ -335,12 +334,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * GET /api/pipelines/{pipeline_id}
+ * GET /api/pipelines/{guid}
  *
  * Get pipeline details
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 Pipeline
  * Errors:
@@ -349,12 +348,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * PUT /api/pipelines/{pipeline_id}
+ * PUT /api/pipelines/{guid}
  *
  * Update pipeline
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  * Request Body: PipelineUpdateRequest
  *
  * Response: 200 Pipeline
@@ -365,14 +364,14 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * DELETE /api/pipelines/{pipeline_id}
+ * DELETE /api/pipelines/{guid}
  *
  * Delete pipeline
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
- * Response: 200 { message, deleted_id }
+ * Response: 200 { message, deleted_guid }
  * Errors:
  *   - 404: Pipeline not found
  *   - 409: Cannot delete active pipeline
@@ -380,12 +379,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * POST /api/pipelines/{pipeline_id}/activate
+ * POST /api/pipelines/{guid}/activate
  *
  * Activate pipeline for validation
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 Pipeline
  * Errors:
@@ -395,12 +394,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * POST /api/pipelines/{pipeline_id}/deactivate
+ * POST /api/pipelines/{guid}/deactivate
  *
  * Deactivate pipeline. If the pipeline is the default, it also loses default status.
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 Pipeline
  * Errors:
@@ -409,14 +408,14 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * POST /api/pipelines/{pipeline_id}/set-default
+ * POST /api/pipelines/{guid}/set-default
  *
  * Set a pipeline as the default for tool execution.
  * Only one pipeline can be default at a time.
  * The pipeline must be active to be set as default.
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 Pipeline
  * Errors:
@@ -426,12 +425,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * POST /api/pipelines/{pipeline_id}/unset-default
+ * POST /api/pipelines/{guid}/unset-default
  *
  * Remove default status from a pipeline.
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 Pipeline
  * Errors:
@@ -440,12 +439,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * POST /api/pipelines/{pipeline_id}/validate
+ * POST /api/pipelines/{guid}/validate
  *
  * Validate pipeline structure
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 ValidationResult
  * Errors:
@@ -454,12 +453,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * POST /api/pipelines/{pipeline_id}/preview
+ * POST /api/pipelines/{guid}/preview
  *
  * Preview expected filenames for pipeline
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  * Request Body: FilenamePreviewRequest
  *
  * Response: 200 FilenamePreviewResponse
@@ -470,12 +469,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * GET /api/pipelines/{pipeline_id}/history
+ * GET /api/pipelines/{guid}/history
  *
  * Get pipeline version history
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 PipelineHistoryEntry[]
  * Errors:
@@ -497,12 +496,12 @@ export type TerminationType = typeof TERMINATION_TYPES[number]
  */
 
 /**
- * GET /api/pipelines/{pipeline_id}/export
+ * GET /api/pipelines/{guid}/export
  *
  * Export pipeline as YAML
  *
  * Path Parameters:
- *   - pipeline_id: number
+ *   - guid: string (pipeline GUID, pip_xxx format)
  *
  * Response: 200 YAML file with Content-Disposition header
  * Errors:

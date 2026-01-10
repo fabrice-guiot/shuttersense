@@ -13,6 +13,7 @@ export type ConnectorType = 's3' | 'gcs' | 'smb'
 
 export interface Connector {
   id: number
+  guid: string  // External identifier (con_xxx)
   name: string
   type: ConnectorType
   is_active: boolean

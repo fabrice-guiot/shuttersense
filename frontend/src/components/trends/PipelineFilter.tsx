@@ -24,16 +24,16 @@ interface VersionOption {
 
 interface PipelineFilterProps {
   pipelines: PipelineSummary[]
-  selectedPipelineId: number | null
+  selectedPipelineGuid: string | null
   selectedPipelineVersion: number | null
-  onPipelineChange: (pipelineId: number | null) => void
+  onPipelineChange: (pipelineGuid: string | null) => void
   onVersionChange: (version: number | null) => void
   className?: string
 }
 
 export function PipelineFilter({
   pipelines,
-  selectedPipelineId,
+  selectedPipelineGuid,
   selectedPipelineVersion,
   onPipelineChange,
   onVersionChange,
@@ -44,8 +44,8 @@ export function PipelineFilter({
 
   // Get the selected pipeline to access its current version
   const selectedPipeline = useMemo(() => {
-    return pipelines.find((p) => p.id === selectedPipelineId) ?? null
-  }, [pipelines, selectedPipelineId])
+    return pipelines.find((p) => p.guid === selectedPipelineGuid) ?? null
+  }, [pipelines, selectedPipelineGuid])
 
   // Build version options: current version + history versions
   const versionOptions = useMemo((): VersionOption[] => {
@@ -78,10 +78,10 @@ export function PipelineFilter({
   }, [selectedPipeline, historyVersions])
 
   // Fetch history versions when pipeline changes
-  const fetchVersions = useCallback(async (pipelineId: number) => {
+  const fetchVersions = useCallback(async (pipelineGuid: string) => {
     setLoadingVersions(true)
     try {
-      const history = await pipelinesService.getPipelineHistory(pipelineId)
+      const history = await pipelinesService.getPipelineHistory(pipelineGuid)
       setHistoryVersions(history)
     } catch (err) {
       console.error('Failed to load pipeline versions:', err)
@@ -92,19 +92,19 @@ export function PipelineFilter({
   }, [])
 
   useEffect(() => {
-    if (selectedPipelineId) {
-      fetchVersions(selectedPipelineId)
+    if (selectedPipelineGuid) {
+      fetchVersions(selectedPipelineGuid)
     } else {
       setHistoryVersions([])
     }
-  }, [selectedPipelineId, fetchVersions])
+  }, [selectedPipelineGuid, fetchVersions])
 
   const handlePipelineChange = (value: string) => {
     if (value === 'all') {
       onPipelineChange(null)
       onVersionChange(null)
     } else {
-      onPipelineChange(parseInt(value, 10))
+      onPipelineChange(value)
       onVersionChange(null) // Reset version when pipeline changes
     }
   }
@@ -123,7 +123,7 @@ export function PipelineFilter({
       <div className="space-y-2">
         <Label className="text-sm font-medium">Pipeline</Label>
         <Select
-          value={selectedPipelineId?.toString() ?? 'all'}
+          value={selectedPipelineGuid ?? 'all'}
           onValueChange={handlePipelineChange}
         >
           <SelectTrigger>
@@ -132,7 +132,7 @@ export function PipelineFilter({
           <SelectContent>
             <SelectItem value="all">All Pipelines</SelectItem>
             {pipelines.map((pipeline) => (
-              <SelectItem key={pipeline.id} value={pipeline.id.toString()}>
+              <SelectItem key={pipeline.guid} value={pipeline.guid}>
                 {pipeline.name}
                 {pipeline.is_default && ' (Default)'}
               </SelectItem>
@@ -142,7 +142,7 @@ export function PipelineFilter({
       </div>
 
       {/* Version Selector - only show when pipeline is selected */}
-      {selectedPipelineId && (
+      {selectedPipelineGuid && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">Version</Label>
           <Select

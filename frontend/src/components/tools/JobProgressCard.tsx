@@ -34,7 +34,7 @@ import { cn } from '@/lib/utils'
 interface JobProgressCardProps {
   job: Job
   onCancel?: (jobId: string) => void
-  onViewResult?: (resultId: number) => void
+  onViewResult?: (resultGuid: string) => void
   className?: string
 }
 
@@ -117,7 +117,7 @@ export function JobProgressCard({
   }
 
   const canCancel = currentStatus === 'queued'
-  const hasResult = currentStatus === 'completed' && job.result_id !== null
+  const hasResult = currentStatus === 'completed' && job.result_guid !== null
 
   return (
     <Card className={cn('relative', className)}>
@@ -195,7 +195,7 @@ export function JobProgressCard({
         {/* Job details */}
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="text-muted-foreground">Collection:</div>
-          <div className="font-medium">ID {job.collection_id}</div>
+          <div className="font-medium">{job.collection_guid || 'N/A'}</div>
 
           <div className="text-muted-foreground">Created:</div>
           <div>{formatDate(job.created_at)}</div>
@@ -221,7 +221,7 @@ export function JobProgressCard({
             variant="outline"
             size="sm"
             className="w-full"
-            onClick={() => onViewResult(job.result_id!)}
+            onClick={() => onViewResult(job.result_guid!)}
           >
             <CheckCircle className="mr-2 h-4 w-4" />
             View Result

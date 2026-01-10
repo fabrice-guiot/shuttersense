@@ -102,59 +102,60 @@ class TestListResultsEndpoint:
 
 
 class TestGetResultEndpoint:
-    """Tests for GET /api/results/{result_id} endpoint."""
+    """Tests for GET /api/results/{guid} endpoint."""
 
     def test_get_result_success(self, test_client, sample_result):
         """Test getting result details."""
         result = sample_result()
 
-        response = test_client.get(f"/api/results/{result.id}")
+        response = test_client.get(f"/api/results/{result.guid}")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["id"] == result.id
+        assert data["guid"] == result.guid
         assert data["tool"] == "photostats"
         assert "results" in data
+        assert "id" not in data
 
     def test_get_result_not_found(self, test_client):
         """Test 404 for non-existent result."""
-        response = test_client.get("/api/results/99999")
+        response = test_client.get("/api/results/res_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
 
 
 class TestDeleteResultEndpoint:
-    """Tests for DELETE /api/results/{result_id} endpoint."""
+    """Tests for DELETE /api/results/{guid} endpoint."""
 
     def test_delete_result_success(self, test_client, sample_result):
         """Test deleting a result."""
         result = sample_result()
 
-        response = test_client.delete(f"/api/results/{result.id}")
+        response = test_client.delete(f"/api/results/{result.guid}")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["deleted_id"] == result.id
+        assert data["deleted_guid"] == result.guid
 
         # Verify deletion
-        get_response = test_client.get(f"/api/results/{result.id}")
+        get_response = test_client.get(f"/api/results/{result.guid}")
         assert get_response.status_code == 404
 
     def test_delete_result_not_found(self, test_client):
         """Test 404 when deleting non-existent result."""
-        response = test_client.delete("/api/results/99999")
+        response = test_client.delete("/api/results/res_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
 
 
 class TestDownloadReportEndpoint:
-    """Tests for GET /api/results/{result_id}/report endpoint."""
+    """Tests for GET /api/results/{guid}/report endpoint."""
 
     def test_download_report_success(self, test_client, sample_result):
         """Test downloading HTML report."""
         result = sample_result(report_html="<html><body>Test Report</body></html>")
 
-        response = test_client.get(f"/api/results/{result.id}/report")
+        response = test_client.get(f"/api/results/{result.guid}/report")
 
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
@@ -164,7 +165,7 @@ class TestDownloadReportEndpoint:
         """Test 404 for result without report."""
         result = sample_result(report_html=None)
 
-        response = test_client.get(f"/api/results/{result.id}/report")
+        response = test_client.get(f"/api/results/{result.guid}/report")
 
         assert response.status_code == 404
 

@@ -251,7 +251,7 @@ class ConnectorResponse(BaseModel):
     Includes all connector fields except encrypted credentials.
 
     Fields:
-        id: Connector ID
+        guid: External identifier (con_xxx)
         name: Connector name
         type: ConnectorType
         metadata: User-defined metadata
@@ -264,7 +264,7 @@ class ConnectorResponse(BaseModel):
     Example:
         >>> response = ConnectorResponse.from_orm(connector_obj)
     """
-    id: int
+    guid: str = Field(..., description="External identifier (con_xxx)")
     name: str
     type: ConnectorType
     metadata: Optional[Dict[str, Any]] = None
@@ -298,7 +298,7 @@ class ConnectorResponse(BaseModel):
         "from_attributes": True,
         "json_schema_extra": {
             "example": {
-                "id": 1,
+                "guid": "con_01hgw2bbg0000000000000001",
                 "name": "Production AWS",
                 "type": "s3",
                 "metadata": {"team": "engineering"},
@@ -345,8 +345,8 @@ class CollectionCreate(BaseModel):
     Schema for creating a new collection.
 
     Validates:
-    - Remote collections (S3/GCS/SMB) require connector_id
-    - Local collections cannot have connector_id
+    - Remote collections (S3/GCS/SMB) require connector_guid
+    - Local collections cannot have connector_guid
     - Location format is reasonable
     - State defaults to LIVE
 
@@ -355,8 +355,8 @@ class CollectionCreate(BaseModel):
         type: Collection type (LOCAL, S3, GCS, SMB)
         location: File path or remote location
         state: Collection state (defaults to LIVE)
-        connector_id: Required for remote collections
-        pipeline_id: Explicit pipeline assignment (NULL = use default at runtime)
+        connector_guid: Required for remote collections (con_xxx format)
+        pipeline_guid: Explicit pipeline assignment (NULL = use default at runtime)
         cache_ttl: Override default cache TTL (seconds)
         metadata: User-defined metadata
 
@@ -365,7 +365,7 @@ class CollectionCreate(BaseModel):
         ...     name="Vacation 2024",
         ...     type=CollectionType.S3,
         ...     location="s3://my-bucket/photos/2024",
-        ...     connector_id=1,
+        ...     connector_guid="con_01hgw2bbg0000000000000001",
         ...     metadata={"year": 2024, "trip": "Hawaii"}
         ... )
     """
@@ -373,28 +373,25 @@ class CollectionCreate(BaseModel):
     type: CollectionType = Field(..., description="Collection type")
     location: str = Field(..., min_length=1, max_length=1024, description="File path or remote location")
     state: CollectionState = Field(default=CollectionState.LIVE, description="Collection state")
-    connector_id: Optional[int] = Field(default=None, description="Connector ID (required for remote)")
-    pipeline_id: Optional[int] = Field(default=None, description="Explicit pipeline assignment (NULL = use default)")
+    connector_guid: Optional[str] = Field(default=None, description="Connector GUID (con_xxx, required for remote)")
+    pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = use default)")
     cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800, description="Cache TTL in seconds (max 7 days)")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="User-defined metadata")
 
     @model_validator(mode='after')
     def validate_connector_requirement(self):
-        """Validate connector_id is provided for remote collections and absent for local."""
+        """Validate connector_guid is provided for remote collections and absent for local."""
         # Check collection type requirements first (more specific error messages)
 
-        # Local collections cannot have connector_id
+        # Local collections cannot have connector_guid
         if self.type == CollectionType.LOCAL:
-            if self.connector_id is not None:
-                raise ValueError("connector_id must be null for LOCAL collections")
+            if self.connector_guid is not None:
+                raise ValueError("connector_guid must be null for LOCAL collections")
 
-        # Remote collections require connector_id
+        # Remote collections require connector_guid
         if self.type in [CollectionType.S3, CollectionType.GCS, CollectionType.SMB]:
-            if self.connector_id is None:
-                raise ValueError(f"connector_id is required for {self.type.value} collections")
-            # Validate connector_id value for remote collections
-            if self.connector_id < 1:
-                raise ValueError(f"connector_id must be a positive integer (>= 1), got {self.connector_id}")
+            if self.connector_guid is None:
+                raise ValueError(f"connector_guid is required for {self.type.value} collections")
 
         return self
 
@@ -405,8 +402,8 @@ class CollectionCreate(BaseModel):
                 "type": "s3",
                 "location": "s3://my-bucket/photos/2024/vacation",
                 "state": "live",
-                "connector_id": 1,
-                "pipeline_id": 1,
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "pipeline_guid": "pip_01hgw2bbg0000000000000001",
                 "cache_ttl": 7200,
                 "metadata": {"year": 2024, "season": "summer", "location": "Hawaii"}
             }
@@ -424,14 +421,14 @@ class CollectionUpdate(BaseModel):
         name: New collection name
         location: New location path
         state: New state (LIVE, CLOSED, ARCHIVED)
-        pipeline_id: New pipeline assignment (set to explicit None to clear)
+        pipeline_guid: New pipeline assignment (pip_xxx, set to explicit None to clear)
         cache_ttl: New cache TTL override
         metadata: New metadata
 
     Note:
-        - Cannot change collection type or connector_id after creation
+        - Cannot change collection type or connector_guid after creation
         - Changing state invalidates cache (new TTL applies)
-        - Setting pipeline_id assigns a pipeline and pins the current version
+        - Setting pipeline_guid assigns a pipeline and pins the current version
         - Use clear_pipeline endpoint to explicitly remove assignment
 
     Example:
@@ -440,7 +437,7 @@ class CollectionUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     location: Optional[str] = Field(default=None, min_length=1, max_length=1024)
     state: Optional[CollectionState] = Field(default=None)
-    pipeline_id: Optional[int] = Field(default=None, description="Pipeline assignment (NULL = keep current)")
+    pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = keep current)")
     cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800)
     metadata: Optional[Dict[str, Any]] = Field(default=None)
 
@@ -448,7 +445,7 @@ class CollectionUpdate(BaseModel):
         "json_schema_extra": {
             "example": {
                 "state": "archived",
-                "pipeline_id": 2,
+                "pipeline_guid": "pip_01hgw2bbg0000000000000002",
                 "cache_ttl": 86400,
                 "metadata": {"archived_by": "admin", "reason": "project completed"}
             }
@@ -463,13 +460,12 @@ class CollectionResponse(BaseModel):
     Includes all collection fields, connector information, and pipeline assignment.
 
     Fields:
-        id: Collection ID
+        guid: External identifier (col_xxx)
         name: Collection name
         type: Collection type
         location: File path or remote location
         state: Collection state
-        connector_id: Connector ID (null for local)
-        pipeline_id: Explicit pipeline assignment (null = use default)
+        pipeline_guid: Pipeline GUID (pip_xxx, null = use default)
         pipeline_version: Pinned pipeline version (null if using default)
         pipeline_name: Name of assigned pipeline (null if using default)
         cache_ttl: Cache TTL override
@@ -478,18 +474,17 @@ class CollectionResponse(BaseModel):
         metadata: User-defined metadata
         created_at: Creation timestamp
         updated_at: Last update timestamp
-        connector: Optional connector details
+        connector: Optional connector details (with guid)
 
     Example:
         >>> response = CollectionResponse.from_orm(collection_obj)
     """
-    id: int
+    guid: str = Field(..., description="External identifier (col_xxx)")
     name: str
     type: CollectionType
     location: str
     state: CollectionState
-    connector_id: Optional[int]
-    pipeline_id: Optional[int] = None
+    pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx)")
     pipeline_version: Optional[int] = None
     pipeline_name: Optional[str] = None
     cache_ttl: Optional[int]
@@ -503,7 +498,7 @@ class CollectionResponse(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def deserialize_metadata_and_pipeline(cls, data):
-        """Deserialize metadata_json and extract pipeline_name from relationship."""
+        """Deserialize metadata_json and extract pipeline info from relationship."""
         if isinstance(data, dict):
             # Already a dict (from JSON API request)
             return data
@@ -518,8 +513,9 @@ class CollectionResponse(BaseModel):
                     data.metadata = None
             else:
                 data.metadata = None
-        # Extract pipeline_name from relationship
+        # Extract pipeline_guid and pipeline_name from relationship
         if hasattr(data, 'pipeline') and data.pipeline:
+            data.pipeline_guid = data.pipeline.guid
             data.pipeline_name = data.pipeline.name
         return data
 
@@ -527,13 +523,12 @@ class CollectionResponse(BaseModel):
         "from_attributes": True,
         "json_schema_extra": {
             "example": {
-                "id": 1,
+                "guid": "col_01hgw2bbg0000000000000000",
                 "name": "Vacation Photos 2024",
                 "type": "s3",
                 "location": "s3://my-bucket/photos/2024/vacation",
                 "state": "live",
-                "connector_id": 1,
-                "pipeline_id": 1,
+                "pipeline_guid": "pip_01hgw2bbg0000000000000001",
                 "pipeline_version": 3,
                 "pipeline_name": "Standard RAW Workflow",
                 "cache_ttl": 7200,
@@ -543,7 +538,7 @@ class CollectionResponse(BaseModel):
                 "created_at": "2025-12-20T08:00:00",
                 "updated_at": "2025-12-30T10:30:00",
                 "connector": {
-                    "id": 1,
+                    "guid": "con_01hgw2bbg0000000000000001",
                     "name": "Production AWS",
                     "type": "s3",
                     "is_active": True
@@ -625,15 +620,15 @@ class CollectionFilesResponse(BaseModel):
     Schema for collection file listing response.
 
     Fields:
-        collection_id: Collection ID
+        collection_guid: Collection GUID (col_xxx)
         files: List of file paths
         cached: Whether result came from cache
         file_count: Total file count
 
     Example:
-        >>> response = CollectionFilesResponse(collection_id=1, files=["photo1.jpg", "photo2.dng"], cached=True, file_count=2)
+        >>> response = CollectionFilesResponse(collection_guid="col_01hgw2bbg0000000000000000", files=["photo1.jpg", "photo2.dng"], cached=True, file_count=2)
     """
-    collection_id: int = Field(..., description="Collection ID")
+    collection_guid: str = Field(..., description="Collection GUID (col_xxx)")
     files: list[str] = Field(..., description="List of file paths")
     cached: bool = Field(..., description="Whether result is from cache")
     file_count: int = Field(..., ge=0, description="Total file count")
@@ -641,7 +636,7 @@ class CollectionFilesResponse(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "collection_id": 1,
+                "collection_guid": "col_01hgw2bbg0000000000000000",
                 "files": ["2024/vacation/IMG_001.jpg", "2024/vacation/IMG_002.dng"],
                 "cached": True,
                 "file_count": 2

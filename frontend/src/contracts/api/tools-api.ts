@@ -29,16 +29,16 @@ export interface ProgressData {
 }
 
 export interface Job {
-  /** Unique job identifier (UUID) */
+  /** Unique job identifier (GUID format: job_xxx) */
   id: string
   /** Collection being analyzed (null for display_graph mode) */
-  collection_id: number | null
+  collection_guid: string | null
   /** Tool being executed */
   tool: ToolType
   /** Execution mode for pipeline_validation */
   mode: ToolMode | null
-  /** Pipeline ID (for pipeline_validation only) */
-  pipeline_id: number | null
+  /** Pipeline GUID (for pipeline_validation only) */
+  pipeline_guid: string | null
   /** Current job status */
   status: JobStatus
   /** Position in queue (null if not queued) */
@@ -53,8 +53,8 @@ export interface Job {
   progress: ProgressData | null
   /** Error message if failed */
   error_message: string | null
-  /** Analysis result ID when completed */
-  result_id: number | null
+  /** Analysis result GUID when completed */
+  result_guid: string | null
 }
 
 // ============================================================================
@@ -64,10 +64,10 @@ export interface Job {
 export interface ToolRunRequest {
   /** Tool to execute */
   tool: ToolType
-  /** ID of the collection to analyze (required for collection mode) */
-  collection_id?: number
-  /** Pipeline ID (required for display_graph mode) */
-  pipeline_id?: number
+  /** GUID of the collection to analyze (required for collection mode) */
+  collection_guid?: string
+  /** Pipeline GUID (required for display_graph mode) */
+  pipeline_guid?: string
   /** Execution mode for pipeline_validation */
   mode?: ToolMode
 }
@@ -79,8 +79,8 @@ export interface ToolRunRequest {
 export interface JobListQueryParams {
   /** Filter by job status */
   status?: JobStatus
-  /** Filter by collection */
-  collection_id?: number
+  /** Filter by collection GUID (col_xxx format) */
+  collection_guid?: string
   /** Filter by tool type */
   tool?: ToolType
 }
@@ -149,7 +149,7 @@ export interface WebSocketProgressMessage {
 export interface WebSocketStatusMessage {
   type: 'status'
   status: JobStatus
-  result_id?: number
+  result_guid?: string
   error_message?: string
 }
 
@@ -203,7 +203,7 @@ export type WebSocketMessage =
  * Get job status and details
  *
  * Path Parameters:
- *   - job_id: string (UUID)
+ *   - job_id: string (GUID format: job_xxx)
  *
  * Response: 200 JobResponse
  * Errors:
@@ -217,7 +217,7 @@ export type WebSocketMessage =
  * Cancel a queued job
  *
  * Path Parameters:
- *   - job_id: string (UUID)
+ *   - job_id: string (GUID format: job_xxx)
  *
  * Response: 200 JobResponse (with status=cancelled)
  * Errors:
@@ -240,7 +240,7 @@ export type WebSocketMessage =
  * Connect to receive real-time progress updates for a job
  *
  * Path Parameters:
- *   - job_id: string (UUID)
+ *   - job_id: string (GUID format: job_xxx)
  *
  * Messages: WebSocketMessage
  *   - type: 'progress' - ProgressData updates

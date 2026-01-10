@@ -21,9 +21,9 @@ interface UseConnectorsReturn {
   error: string | null
   fetchConnectors: (filters?: Record<string, any>) => Promise<Connector[]>
   createConnector: (connectorData: ConnectorCreateRequest) => Promise<Connector>
-  updateConnector: (id: number, updates: ConnectorUpdateRequest) => Promise<Connector>
-  deleteConnector: (id: number) => Promise<void>
-  testConnector: (id: number) => Promise<ConnectorTestResponse>
+  updateConnector: (guid: string, updates: ConnectorUpdateRequest) => Promise<Connector>
+  deleteConnector: (guid: string) => Promise<void>
+  testConnector: (guid: string) => Promise<ConnectorTestResponse>
 }
 
 export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
@@ -76,13 +76,13 @@ export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
   /**
    * Update an existing connector
    */
-  const updateConnector = useCallback(async (id: number, updates: ConnectorUpdateRequest) => {
+  const updateConnector = useCallback(async (guid: string, updates: ConnectorUpdateRequest) => {
     setLoading(true)
     setError(null)
     try {
-      const updated = await connectorService.updateConnector(id, updates)
+      const updated = await connectorService.updateConnector(guid, updates)
       setConnectors(prev =>
-        prev.map(c => c.id === id ? updated : c)
+        prev.map(c => c.guid === guid ? updated : c)
       )
       toast.success('Connector updated successfully')
       return updated
@@ -101,12 +101,12 @@ export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
   /**
    * Delete a connector
    */
-  const deleteConnector = useCallback(async (id: number) => {
+  const deleteConnector = useCallback(async (guid: string) => {
     setLoading(true)
     setError(null)
     try {
-      await connectorService.deleteConnector(id)
-      setConnectors(prev => prev.filter(c => c.id !== id))
+      await connectorService.deleteConnector(guid)
+      setConnectors(prev => prev.filter(c => c.guid !== guid))
       toast.success('Connector deleted successfully')
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete connector'
@@ -123,9 +123,9 @@ export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
   /**
    * Test connector connection
    */
-  const testConnector = useCallback(async (id: number) => {
+  const testConnector = useCallback(async (guid: string) => {
     try {
-      const result = await connectorService.testConnector(id)
+      const result = await connectorService.testConnector(guid)
       return result
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Connection test failed'

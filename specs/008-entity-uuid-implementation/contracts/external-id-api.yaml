@@ -1,0 +1,422 @@
+openapi: 3.1.0
+info:
+  title: Photo-Admin External ID API
+  description: |
+    API contract for external ID (UUID) support in Photo-Admin entities.
+
+    External IDs are URL-safe, shareable identifiers in the format:
+    `{entity_prefix}_{crockford_base32_uuid}`
+
+    Example: `col_01HGW2BBG0000000000000000`
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api
+    description: Development server
+
+components:
+  schemas:
+    ExternalId:
+      type: string
+      pattern: '^(col|con|pip|res)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$'
+      description: |
+        External identifier composed of entity prefix and Crockford Base32 encoded UUIDv7.
+        Case-insensitive for input.
+      examples:
+        - col_01HGW2BBG0000000000000000
+        - con_01HGW2BBG0000000000000001
+        - pip_01HGW2BBG0000000000000002
+
+    EntityIdentifier:
+      oneOf:
+        - type: integer
+          description: Internal numeric ID (deprecated, for backward compatibility)
+          examples:
+            - 1
+            - 42
+        - $ref: '#/components/schemas/ExternalId'
+      description: |
+        Entity identifier - accepts either numeric internal ID (deprecated)
+        or external ID string. External IDs are preferred for new integrations.
+
+    # Collection schemas with external_id
+    CollectionResponse:
+      type: object
+      required:
+        - id
+        - external_id
+        - name
+        - type
+        - state
+        - location
+        - is_accessible
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          description: Internal numeric ID (for backward compatibility)
+        external_id:
+          $ref: '#/components/schemas/ExternalId'
+        name:
+          type: string
+          maxLength: 255
+        type:
+          type: string
+          enum: [local, s3, gcs, smb]
+        state:
+          type: string
+          enum: [live, closed, archived]
+        location:
+          type: string
+          maxLength: 1024
+        connector_id:
+          type: integer
+          nullable: true
+        pipeline_id:
+          type: integer
+          nullable: true
+        is_accessible:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # Connector schemas with external_id
+    ConnectorResponse:
+      type: object
+      required:
+        - id
+        - external_id
+        - name
+        - type
+        - is_active
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          description: Internal numeric ID (for backward compatibility)
+        external_id:
+          $ref: '#/components/schemas/ExternalId'
+        name:
+          type: string
+          maxLength: 255
+        type:
+          type: string
+          enum: [s3, gcs, smb]
+        is_active:
+          type: boolean
+        last_validated:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # Pipeline schemas with external_id
+    PipelineResponse:
+      type: object
+      required:
+        - id
+        - external_id
+        - name
+        - version
+        - is_active
+        - is_default
+        - is_valid
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          description: Internal numeric ID (for backward compatibility)
+        external_id:
+          $ref: '#/components/schemas/ExternalId'
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        nodes:
+          type: array
+          items:
+            type: object
+        edges:
+          type: array
+          items:
+            type: object
+        version:
+          type: integer
+        is_active:
+          type: boolean
+        is_default:
+          type: boolean
+        is_valid:
+          type: boolean
+        validation_errors:
+          type: array
+          items:
+            type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # AnalysisResult schemas with external_id
+    AnalysisResultResponse:
+      type: object
+      required:
+        - id
+        - external_id
+        - tool
+        - status
+        - started_at
+        - completed_at
+        - duration_seconds
+        - created_at
+      properties:
+        id:
+          type: integer
+          description: Internal numeric ID (for backward compatibility)
+        external_id:
+          $ref: '#/components/schemas/ExternalId'
+        collection_id:
+          type: integer
+          nullable: true
+        tool:
+          type: string
+          maxLength: 50
+        status:
+          type: string
+          enum: [completed, failed, cancelled]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+        files_scanned:
+          type: integer
+          nullable: true
+        issues_found:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # Error response
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Human-readable error message
+
+  parameters:
+    CollectionId:
+      name: collection_id
+      in: path
+      required: true
+      description: Collection identifier (external ID preferred, numeric ID for backward compatibility)
+      schema:
+        type: string
+      examples:
+        external_id:
+          value: col_01HGW2BBG0000000000000000
+          summary: External ID (preferred)
+        numeric_id:
+          value: "42"
+          summary: Numeric ID (deprecated)
+
+    ConnectorId:
+      name: connector_id
+      in: path
+      required: true
+      description: Connector identifier (external ID preferred, numeric ID for backward compatibility)
+      schema:
+        type: string
+      examples:
+        external_id:
+          value: con_01HGW2BBG0000000000000001
+          summary: External ID (preferred)
+        numeric_id:
+          value: "5"
+          summary: Numeric ID (deprecated)
+
+    PipelineId:
+      name: pipeline_id
+      in: path
+      required: true
+      description: Pipeline identifier (external ID preferred, numeric ID for backward compatibility)
+      schema:
+        type: string
+      examples:
+        external_id:
+          value: pip_01HGW2BBG0000000000000002
+          summary: External ID (preferred)
+        numeric_id:
+          value: "3"
+          summary: Numeric ID (deprecated)
+
+  headers:
+    X-Deprecation-Warning:
+      description: Warning for deprecated numeric ID usage
+      schema:
+        type: string
+        example: "Numeric IDs are deprecated. Use external_id instead."
+
+paths:
+  /collections:
+    get:
+      summary: List all collections
+      operationId: listCollections
+      responses:
+        '200':
+          description: List of collections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionResponse'
+    post:
+      summary: Create a new collection
+      operationId: createCollection
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+              example:
+                id: 42
+                external_id: col_01HGW2BBG0000000000000000
+                name: My Photos
+                type: local
+                state: live
+                location: /photos
+                is_accessible: true
+                created_at: "2026-01-09T12:00:00Z"
+                updated_at: "2026-01-09T12:00:00Z"
+
+  /collections/{collection_id}:
+    parameters:
+      - $ref: '#/components/parameters/CollectionId'
+    get:
+      summary: Get collection by ID
+      operationId: getCollection
+      responses:
+        '200':
+          description: Collection details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+          headers:
+            X-Deprecation-Warning:
+              $ref: '#/components/headers/X-Deprecation-Warning'
+        '400':
+          description: Invalid identifier format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Invalid identifier format. Expected col_* or numeric ID"
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Collection not found with ID: col_01HGW2BBG0000000000000000"
+    put:
+      summary: Update collection
+      operationId: updateCollection
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+    delete:
+      summary: Delete collection
+      operationId: deleteCollection
+      responses:
+        '204':
+          description: Collection deleted
+
+  /connectors/{connector_id}:
+    parameters:
+      - $ref: '#/components/parameters/ConnectorId'
+    get:
+      summary: Get connector by ID
+      operationId: getConnector
+      responses:
+        '200':
+          description: Connector details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorResponse'
+        '400':
+          description: Invalid identifier format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Connector not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pipelines/{pipeline_id}:
+    parameters:
+      - $ref: '#/components/parameters/PipelineId'
+    get:
+      summary: Get pipeline by ID
+      operationId: getPipeline
+      responses:
+        '200':
+          description: Pipeline details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineResponse'
+        '400':
+          description: Invalid identifier format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Pipeline not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

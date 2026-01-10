@@ -38,7 +38,7 @@ describe('useCollections', () => {
       type: 'local' as const,
       location: '/new/photos',
       state: 'live' as const,
-      connector_id: null,
+      connector_guid: null,
       cache_ttl: null,
     }
 
@@ -55,7 +55,7 @@ describe('useCollections', () => {
     )
     expect(created).toBeDefined()
     expect(created?.type).toBe('local')
-    expect(created?.connector_id).toBeNull()
+    expect(created?.connector_guid).toBeNull()
   })
 
   it('should create a remote collection with connector', async () => {
@@ -70,7 +70,7 @@ describe('useCollections', () => {
       type: 's3' as const,
       location: 'bucket/prefix',
       state: 'live' as const,
-      connector_id: 1,
+      connector_guid: 'con_01hgw2bbg00000000000000001',
       cache_ttl: 3600,
     }
 
@@ -86,7 +86,7 @@ describe('useCollections', () => {
       (c) => c.name === 'New S3 Collection'
     )
     expect(created).toBeDefined()
-    expect(created?.connector_id).toBe(1)
+    expect(created?.connector_guid).toBe('con_01hgw2bbg00000000000000001')
   })
 
   it('should fail to create collection with invalid connector', async () => {
@@ -101,7 +101,7 @@ describe('useCollections', () => {
       type: 's3' as const,
       location: 'bucket/prefix',
       state: 'live' as const,
-      connector_id: 999, // Non-existent connector
+      connector_guid: 'con_01hgw2bbg00000000000000999', // Non-existent connector
       cache_ttl: null,
     }
 
@@ -123,17 +123,17 @@ describe('useCollections', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    const collectionId = result.current.collections[0].id
+    const collectionGuid = result.current.collections[0].guid
 
     await act(async () => {
-      await result.current.updateCollection(collectionId, {
+      await result.current.updateCollection(collectionGuid, {
         name: 'Updated Collection Name',
         state: 'archived' as const,
       })
     })
 
     await waitFor(() => {
-      const updated = result.current.collections.find((c) => c.id === collectionId)
+      const updated = result.current.collections.find((c) => c.guid === collectionGuid)
       expect(updated?.name).toBe('Updated Collection Name')
       expect(updated?.state).toBe('archived')
     })
@@ -147,17 +147,17 @@ describe('useCollections', () => {
     })
 
     const initialCount = result.current.collections.length
-    const collectionId = result.current.collections[0].id // No results
+    const collectionGuid = result.current.collections[0].guid // No results
 
     await act(async () => {
-      await result.current.deleteCollection(collectionId, false)
+      await result.current.deleteCollection(collectionGuid, false)
     })
 
     await waitFor(() => {
       expect(result.current.collections).toHaveLength(initialCount - 1)
     })
 
-    const deleted = result.current.collections.find((c) => c.id === collectionId)
+    const deleted = result.current.collections.find((c) => c.guid === collectionGuid)
     expect(deleted).toBeUndefined()
   })
 
@@ -168,13 +168,13 @@ describe('useCollections', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    // Collection ID 2 has results (per mock handler)
-    const collectionId = 2
+    // Collection GUID 2 has results (per mock handler)
+    const collectionGuid = 'col_01hgw2bbg00000000000000002'
 
     let response: any
 
     await act(async () => {
-      response = await result.current.deleteCollection(collectionId, false)
+      response = await result.current.deleteCollection(collectionGuid, false)
       expect(response.has_results).toBe(true)
       expect(response.result_count).toBe(5)
       expect(response.has_jobs).toBe(false)
@@ -182,7 +182,7 @@ describe('useCollections', () => {
 
     // Collection should still exist
     await waitFor(() => {
-      const collection = result.current.collections.find((c) => c.id === collectionId)
+      const collection = result.current.collections.find((c) => c.guid === collectionGuid)
       expect(collection).toBeDefined()
     })
   })
@@ -195,17 +195,17 @@ describe('useCollections', () => {
     })
 
     const initialCount = result.current.collections.length
-    const collectionId = 2 // Has results
+    const collectionGuid = 'col_01hgw2bbg00000000000000002' // Has results
 
     await act(async () => {
-      await result.current.deleteCollection(collectionId, true)
+      await result.current.deleteCollection(collectionGuid, true)
     })
 
     await waitFor(() => {
       expect(result.current.collections).toHaveLength(initialCount - 1)
     })
 
-    const deleted = result.current.collections.find((c) => c.id === collectionId)
+    const deleted = result.current.collections.find((c) => c.guid === collectionGuid)
     expect(deleted).toBeUndefined()
   })
 
@@ -216,10 +216,10 @@ describe('useCollections', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    const collectionId = result.current.collections[0].id
+    const collectionGuid = result.current.collections[0].guid
 
     await act(async () => {
-      const response = await result.current.testCollection(collectionId)
+      const response = await result.current.testCollection(collectionGuid)
       expect(response.success).toBe(true)
       expect(response.message).toBe('Collection is accessible')
     })
@@ -232,10 +232,10 @@ describe('useCollections', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    const collectionId = result.current.collections[0].id
+    const collectionGuid = result.current.collections[0].guid
 
     await act(async () => {
-      const response = await result.current.refreshCollection(collectionId, false)
+      const response = await result.current.refreshCollection(collectionGuid, false)
       expect(response.message).toContain('Refresh initiated')
       expect(response.task_id).toBeTruthy()
     })
@@ -248,10 +248,10 @@ describe('useCollections', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    const collectionId = result.current.collections[0].id
+    const collectionGuid = result.current.collections[0].guid
 
     await act(async () => {
-      const response = await result.current.refreshCollection(collectionId, true)
+      const response = await result.current.refreshCollection(collectionGuid, true)
       expect(response.message).toContain('Force refresh initiated')
       expect(response.task_id).toBeTruthy()
     })

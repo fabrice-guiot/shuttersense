@@ -12,7 +12,7 @@
 export type ConnectorType = 's3' | 'gcs' | 'smb'
 
 export interface Connector {
-  id: number
+  guid: string  // External identifier (con_xxx) for URL-safe references
   name: string
   type: ConnectorType
   is_active: boolean
@@ -117,7 +117,7 @@ export interface ConnectorDeleteConflictResponse {
     code: 'CONNECTOR_IN_USE'
     details: {
       collection_count: number
-      collection_ids: number[]
+      collection_guids: string[]
     }
   }
 }
@@ -151,12 +151,12 @@ export interface ConnectorDeleteConflictResponse {
  */
 
 /**
- * GET /api/connectors/{id}
+ * GET /api/connectors/{guid}
  *
- * Get connector by ID
+ * Get connector by GUID
  *
  * Path Parameters:
- *   - id: number (connector ID)
+ *   - guid: string (connector GUID, con_xxx format)
  * Response: 200 ConnectorDetailResponse
  * Errors:
  *   - 404: Connector not found
@@ -164,12 +164,12 @@ export interface ConnectorDeleteConflictResponse {
  */
 
 /**
- * PUT /api/connectors/{id}
+ * PUT /api/connectors/{guid}
  *
  * Update existing connector
  *
  * Path Parameters:
- *   - id: number (connector ID)
+ *   - guid: string (connector GUID, con_xxx format)
  * Request Body: ConnectorUpdateRequest
  * Response: 200 ConnectorDetailResponse
  * Errors:
@@ -180,12 +180,12 @@ export interface ConnectorDeleteConflictResponse {
  */
 
 /**
- * DELETE /api/connectors/{id}
+ * DELETE /api/connectors/{guid}
  *
  * Delete connector
  *
  * Path Parameters:
- *   - id: number (connector ID)
+ *   - guid: string (connector GUID, con_xxx format)
  * Response: 200 ConnectorDeleteResponse
  * Errors:
  *   - 404: Connector not found
@@ -194,12 +194,12 @@ export interface ConnectorDeleteConflictResponse {
  */
 
 /**
- * POST /api/connectors/{id}/test
+ * POST /api/connectors/{guid}/test
  *
  * Test connector connection
  *
  * Path Parameters:
- *   - id: number (connector ID)
+ *   - guid: string (connector GUID, con_xxx format)
  * Request Body: None
  * Response: 200 ConnectorTestResponse
  * Errors:

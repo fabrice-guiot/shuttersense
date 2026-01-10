@@ -221,7 +221,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredPipelines.map((pipeline) => (
             <PipelineCard
-              key={pipeline.id}
+              key={pipeline.guid}
               pipeline={pipeline}
               onEdit={onEdit}
               onDelete={onDelete}

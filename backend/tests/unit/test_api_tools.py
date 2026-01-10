@@ -65,31 +65,33 @@ class TestRunToolEndpoint:
 
             response = test_client.post(
                 "/api/tools/run",
-                json={"collection_id": collection.id, "tool": "photostats"}
+                json={"collection_guid": collection.guid, "tool": "photostats"}
             )
 
             assert response.status_code == 202
             data = response.json()
-            assert data["collection_id"] == collection.id
+            assert data["collection_guid"] == collection.guid
             assert data["tool"] == "photostats"
             assert data["status"] == "queued"
             assert "id" in data
 
     def test_run_tool_invalid_collection(self, test_client):
         """Test error for non-existent collection."""
+        # Use a valid GUID format but non-existent collection
+        fake_guid = "col_00000000000000000000000001"
         response = test_client.post(
             "/api/tools/run",
-            json={"collection_id": 99999, "tool": "photostats"}
+            json={"collection_guid": fake_guid, "tool": "photostats"}
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
     def test_run_tool_invalid_tool_type(self, test_client):
         """Test error for invalid tool type."""
         response = test_client.post(
             "/api/tools/run",
-            json={"collection_id": 1, "tool": "invalid_tool"}
+            json={"collection_guid": "col_00000000000000000000000001", "tool": "invalid_tool"}
         )
 
         assert response.status_code == 422
@@ -105,7 +107,7 @@ class TestRunToolEndpoint:
 
             response = test_client.post(
                 "/api/tools/run",
-                json={"collection_id": collection.id, "tool": "pipeline_validation"}
+                json={"collection_guid": collection.guid, "tool": "pipeline_validation"}
             )
 
             assert response.status_code == 400
@@ -171,7 +173,7 @@ class TestQueueStatusEndpoint:
 
 
 class TestRunAllToolsEndpoint:
-    """Tests for POST /api/tools/run-all/{collection_id} endpoint."""
+    """Tests for POST /api/tools/run-all/{collection_guid} endpoint."""
 
     def test_run_all_tools_success(self, test_client, sample_collection):
         """Test successful run-all tools request queues available tools."""
@@ -182,7 +184,7 @@ class TestRunAllToolsEndpoint:
                 location=temp_dir
             )
 
-            response = test_client.post(f"/api/tools/run-all/{collection.id}")
+            response = test_client.post(f"/api/tools/run-all/{collection.guid}")
 
             assert response.status_code == 202
             data = response.json()
@@ -208,18 +210,20 @@ class TestRunAllToolsEndpoint:
         collection.is_accessible = False
         test_db_session.commit()
 
-        response = test_client.post(f"/api/tools/run-all/{collection.id}")
+        response = test_client.post(f"/api/tools/run-all/{collection.guid}")
 
         assert response.status_code == 422
         data = response.json()
         assert "Cannot run tools" in data["detail"]["message"]
-        assert data["detail"]["collection_id"] == collection.id
+        assert data["detail"]["collection_guid"] == collection.guid
 
     def test_run_all_tools_nonexistent_collection(self, test_client):
-        """Test run-all on non-existent collection returns 400."""
-        response = test_client.post("/api/tools/run-all/99999")
+        """Test run-all on non-existent collection returns 404."""
+        # Use a valid GUID format but non-existent collection
+        fake_guid = "col_00000000000000000000000001"
+        response = test_client.post(f"/api/tools/run-all/{fake_guid}")
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
     def test_run_all_tools_with_default_pipeline(self, test_client, sample_collection, sample_pipeline):
@@ -239,7 +243,7 @@ class TestRunAllToolsEndpoint:
                 is_valid=True
             )
 
-            response = test_client.post(f"/api/tools/run-all/{collection.id}")
+            response = test_client.post(f"/api/tools/run-all/{collection.guid}")
 
             assert response.status_code == 202
             data = response.json()

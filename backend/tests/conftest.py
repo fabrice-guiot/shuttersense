@@ -187,14 +187,15 @@ def sample_connector(test_db_session, test_encryptor, sample_connector_data):
 
 @pytest.fixture
 def sample_collection_data():
-    """Factory for creating sample collection data."""
+    """Factory for creating sample collection data for API requests."""
     def _create(
         name='Test Collection',
         collection_type='local',
         type=None,  # Allow 'type' as alias for consistency
         location='/photos',
         state='live',
-        connector_id=None,
+        connector_guid=None,  # API now uses connector_guid
+        connector_id=None,  # Legacy: accepts internal ID for test convenience
         cache_ttl=None,
         is_accessible=True,
         last_error=None,
@@ -203,25 +204,40 @@ def sample_collection_data():
         # Use 'type' if provided, otherwise use 'collection_type'
         actual_type = type if type is not None else collection_type
 
-        return {
+        data = {
             'name': name,
             'type': actual_type,
             'location': location,
             'state': state,
-            'connector_id': connector_id,
             'cache_ttl': cache_ttl,
             'is_accessible': is_accessible,
             'last_error': last_error,
             'metadata': metadata or {}
         }
+        if connector_guid:
+            data['connector_guid'] = connector_guid
+        # Legacy support: connector_id passed through for model tests
+        if connector_id:
+            data['connector_id'] = connector_id
+        return data
     return _create
 
 
 @pytest.fixture
 def sample_collection(test_db_session, sample_collection_data):
     """Factory for creating sample Collection models in the database."""
-    def _create(**kwargs):
+    def _create(connector_guid=None, connector_id=None, **kwargs):
         import json
+        from backend.src.services.guid import GuidService
+
+        # Handle connector_guid to connector_id translation for DB model
+        resolved_connector_id = connector_id  # Direct ID takes precedence
+        if connector_guid and not connector_id:
+            connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+            connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+            if connector:
+                resolved_connector_id = connector.id
+
         data = sample_collection_data(**kwargs)
 
         collection = Collection(
@@ -229,7 +245,7 @@ def sample_collection(test_db_session, sample_collection_data):
             type=data['type'],
             location=data['location'],
             state=data['state'],
-            connector_id=data['connector_id'],
+            connector_id=resolved_connector_id,
             cache_ttl=data['cache_ttl'],
             is_accessible=data['is_accessible'],
             last_error=data['last_error'],
@@ -239,6 +255,68 @@ def sample_collection(test_db_session, sample_collection_data):
         test_db_session.commit()
         test_db_session.refresh(collection)
         return collection
+    return _create
+
+
+@pytest.fixture
+def sample_pipeline_data():
+    """Factory for creating sample pipeline data."""
+    def _create(
+        name='Test Pipeline',
+        description='Test pipeline description',
+        nodes=None,
+        edges=None,
+        is_active=False,
+        is_default=False,
+        is_valid=True,
+    ):
+        if nodes is None:
+            nodes = [
+                {"id": "capture", "type": "capture", "properties": {
+                    "sample_filename": "AB3D0001",
+                    "filename_regex": "([A-Z0-9]{4})([0-9]{4})",
+                    "camera_id_group": "1"
+                }},
+                {"id": "raw", "type": "file", "properties": {"extension": ".dng"}},
+                {"id": "termination", "type": "termination", "properties": {}}
+            ]
+        if edges is None:
+            edges = [
+                {"from": "capture", "to": "raw"},
+                {"from": "raw", "to": "termination"}
+            ]
+        return {
+            'name': name,
+            'description': description,
+            'nodes': nodes,
+            'edges': edges,
+            'is_active': is_active,
+            'is_default': is_default,
+            'is_valid': is_valid,
+        }
+    return _create
+
+
+@pytest.fixture
+def sample_pipeline(test_db_session, sample_pipeline_data):
+    """Factory for creating sample Pipeline models in the database."""
+    def _create(**kwargs):
+        data = sample_pipeline_data(**kwargs)
+
+        pipeline = Pipeline(
+            name=data['name'],
+            description=data['description'],
+            nodes_json=data['nodes'],
+            edges_json=data['edges'],
+            version=1,
+            is_active=data['is_active'],
+            is_default=data['is_default'],
+            is_valid=data['is_valid'],
+        )
+        test_db_session.add(pipeline)
+        test_db_session.commit()
+        test_db_session.refresh(pipeline)
+        return pipeline
     return _create
 
 

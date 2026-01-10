@@ -42,7 +42,7 @@ interface ResultDetailPanelProps {
   result: AnalysisResult | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onDownloadReport?: (resultId: number) => void
+  onDownloadReport?: (identifier: string) => void
 }
 
 // Status display configuration
@@ -678,7 +678,7 @@ export function ResultDetailPanel({
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => onDownloadReport(result.id)}
+              onClick={() => onDownloadReport(result.guid)}
             >
               <Download className="mr-2 h-4 w-4" />
               Download HTML Report

@@ -26,6 +26,7 @@ from backend.src.utils.formatting import format_storage_bytes
 from backend.src.utils.cache import FileListingCache
 from backend.src.utils.logging_config import get_logger
 from backend.src.services.connector_service import ConnectorService
+from backend.src.services.guid import GuidService
 
 
 logger = get_logger("services")
@@ -198,6 +199,25 @@ class CollectionService:
             ...     print(f"Uses connector: {collection.connector.name}")
         """
         return self.db.query(Collection).filter(Collection.id == collection_id).first()
+
+    def get_by_guid(self, guid: str) -> Optional[Collection]:
+        """
+        Get collection by GUID.
+
+        Args:
+            guid: Collection GUID (e.g., "col_01hgw...")
+
+        Returns:
+            Collection instance or None if not found
+
+        Raises:
+            ValueError: If GUID format is invalid or prefix doesn't match "col"
+
+        Example:
+            >>> collection = service.get_by_guid("col_01hgw2bbg...")
+        """
+        uuid_value = GuidService.parse_identifier(guid, expected_prefix="col")
+        return self.db.query(Collection).filter(Collection.uuid == uuid_value).first()
 
     def list_collections(
         self,

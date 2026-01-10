@@ -16,7 +16,6 @@ Design:
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import yaml
-import uuid
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -26,6 +25,7 @@ from backend.src.schemas.config import (
     ConfigItemResponse, ConfigStatsResponse, ConfigConflict
 )
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
+from backend.src.services.guid import GuidService
 from backend.src.utils.logging_config import get_logger
 
 
@@ -402,8 +402,8 @@ class ConfigService:
         # Detect conflicts
         conflicts = self.detect_conflicts(data)
 
-        # Create session
-        session_id = str(uuid.uuid4())
+        # Create session with GUID format
+        session_id = GuidService.generate_guid("imp")
         expires_at = datetime.utcnow() + IMPORT_SESSION_TTL
 
         self._import_sessions[session_id] = {

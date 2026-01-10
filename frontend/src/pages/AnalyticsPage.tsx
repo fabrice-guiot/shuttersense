@@ -64,15 +64,15 @@ export default function AnalyticsPage() {
   // Dialog state
   const [runDialogOpen, setRunDialogOpen] = useState(false)
 
-  // Result detail state
-  const [selectedResultId, setSelectedResultId] = useState<number | null>(
-    urlResultId ? parseInt(urlResultId, 10) : null
+  // Result detail state - uses guid (e.g., res_xxx)
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(
+    urlResultId || null
   )
   const [detailOpen, setDetailOpen] = useState(!!urlResultId)
 
   // Trends filter state
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<number[]>([])
-  const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null)
+  const [selectedPipelineGuid, setSelectedPipelineGuid] = useState<string | null>(null)
   const [selectedPipelineVersion, setSelectedPipelineVersion] = useState<number | null>(null)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
@@ -182,14 +182,11 @@ export default function AnalyticsPage() {
   // Handle URL parameter for result ID (navigating from jobs)
   useEffect(() => {
     if (urlResultId) {
-      const id = parseInt(urlResultId, 10)
-      if (!isNaN(id)) {
-        setSelectedResultId(id)
-        setDetailOpen(true)
-        // Switch to reports tab when viewing a result
-        if (activeTab !== 'reports') {
-          setActiveTab('reports')
-        }
+      setSelectedResultId(urlResultId)
+      setDetailOpen(true)
+      // Switch to reports tab when viewing a result
+      if (activeTab !== 'reports') {
+        setActiveTab('reports')
       }
     }
   }, [urlResultId])
@@ -208,11 +205,11 @@ export default function AnalyticsPage() {
       photoPairingTrends.setFilters(trendFilters)
       pipelineValidationTrends.setFilters({
         ...trendFilters,
-        pipeline_id: selectedPipelineId ?? undefined,
+        pipeline_id: selectedPipelineGuid as unknown as number ?? undefined,
         pipeline_version: selectedPipelineVersion ?? undefined
       })
       displayGraphTrends.setFilters({
-        pipeline_ids: selectedPipelineId ? String(selectedPipelineId) : undefined,
+        pipeline_ids: selectedPipelineGuid ?? undefined,
         from_date: fromDate || undefined,
         to_date: toDate || undefined
       })
@@ -221,7 +218,7 @@ export default function AnalyticsPage() {
   }, [
     activeTab,
     selectedCollectionIds,
-    selectedPipelineId,
+    selectedPipelineGuid,
     selectedPipelineVersion,
     fromDate,
     toDate
@@ -283,19 +280,19 @@ export default function AnalyticsPage() {
     refetchQueueStatus()
   }
 
-  // View result from job card
-  const handleViewResult = (resultId: number) => {
-    setSelectedResultId(resultId)
+  // View result from job card (receives result_guid from job)
+  const handleViewResult = (resultGuid: string) => {
+    setSelectedResultId(resultGuid)
     setDetailOpen(true)
-    setSearchParams({ tab: 'reports', id: resultId.toString() })
+    setSearchParams({ tab: 'reports', id: resultGuid })
     setActiveTab('reports')
   }
 
   // View result from table
   const handleViewResultFromTable = (result: AnalysisResultSummary) => {
-    setSelectedResultId(result.id)
+    setSelectedResultId(result.guid)
     setDetailOpen(true)
-    setSearchParams({ tab: 'reports', id: result.id.toString() })
+    setSearchParams({ tab: 'reports', id: result.guid })
   }
 
   // Close detail panel
@@ -312,13 +309,13 @@ export default function AnalyticsPage() {
 
   // Delete result
   const handleDelete = async (result: AnalysisResultSummary) => {
-    await deleteResult(result.id)
+    await deleteResult(result.guid)
     refetchResultStats()
   }
 
   // Download report
   const handleDownloadReport = async (result: AnalysisResultSummary) => {
-    await downloadReport(result.id)
+    await downloadReport(result.guid)
   }
 
   // Results filter change
@@ -442,16 +439,16 @@ export default function AnalyticsPage() {
             />
             <PipelineFilter
               pipelines={pipelines}
-              selectedPipelineId={selectedPipelineId}
+              selectedPipelineGuid={selectedPipelineGuid}
               selectedPipelineVersion={selectedPipelineVersion}
-              onPipelineChange={setSelectedPipelineId}
+              onPipelineChange={setSelectedPipelineGuid}
               onVersionChange={setSelectedPipelineVersion}
             />
             <div className="md:col-span-2">
               <CollectionCompare
                 collections={collections
                   .filter((c) => c.is_accessible)
-                  .map((c) => ({ id: c.id, name: c.name }))}
+                  .map((c) => ({ id: c.guid as unknown as number, name: c.name }))}
                 selectedIds={selectedCollectionIds}
                 onSelectionChange={setSelectedCollectionIds}
                 maxSelections={5}

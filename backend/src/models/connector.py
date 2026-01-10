@@ -19,6 +19,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, Boolean, I
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
+from backend.src.models.mixins import GuidMixin
 
 
 class ConnectorType(enum.Enum):
@@ -35,7 +36,7 @@ class ConnectorType(enum.Enum):
     SMB = "smb"
 
 
-class Connector(Base):
+class Connector(Base, GuidMixin):
     """
     Remote storage connector model.
 
@@ -44,6 +45,8 @@ class Connector(Base):
 
     Attributes:
         id: Primary key
+        uuid: UUIDv7 for external identification (inherited from GuidMixin)
+        guid: GUID string property (con_xxx, inherited from GuidMixin)
         name: User-friendly name (e.g., "Personal AWS Account", "Work GCS Project")
         type: Connector type (S3, GCS, SMB)
         credentials: Encrypted JSON string containing authentication credentials
@@ -68,11 +71,15 @@ class Connector(Base):
 
     Indexes:
         - name (unique)
+        - uuid (unique, for GUID lookups)
         - type (for filtering by connector type)
         - is_active (for filtering active connectors)
     """
 
     __tablename__ = "connectors"
+
+    # GUID prefix for Connector entities
+    GUID_PREFIX = "con"
 
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)

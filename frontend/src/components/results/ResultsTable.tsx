@@ -230,7 +230,7 @@ export function ResultsTable({
             </TableHeader>
             <TableBody>
               {results.map((result) => (
-                <TableRow key={result.id}>
+                <TableRow key={result.guid}>
                   <TableCell className="font-medium">
                     {result.collection_name ?? (
                       <span className="text-muted-foreground italic">Pipeline only</span>

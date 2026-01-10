@@ -32,7 +32,8 @@ class TestConnectorAPICreate:
         assert json_data["type"] == "s3"
         assert json_data["is_active"] is True
         assert "credentials" not in json_data  # Credentials should not be returned
-        assert "id" in json_data
+        assert "guid" in json_data
+        assert "id" not in json_data  # Numeric ID no longer exposed
 
     def test_create_connector_with_metadata(self, test_client, sample_connector_data):
         """Should create connector with metadata"""
@@ -117,37 +118,38 @@ class TestConnectorAPIList:
 
 
 class TestConnectorAPIGet:
-    """Tests for GET /api/connectors/{id} - T104s"""
+    """Tests for GET /api/connectors/{guid} - T104s"""
 
-    def test_get_connector_by_id(self, test_client, sample_connector):
-        """Should return connector by ID"""
+    def test_get_connector_by_guid(self, test_client, sample_connector):
+        """Should return connector by GUID"""
         connector = sample_connector(name="Test Connector")
 
-        response = test_client.get(f"/api/connectors/{connector.id}")
+        response = test_client.get(f"/api/connectors/{connector.guid}")
 
         assert response.status_code == 200
         json_data = response.json()
-        assert json_data["id"] == connector.id
+        assert json_data["guid"] == connector.guid
         assert json_data["name"] == "Test Connector"
         assert "credentials" not in json_data
+        assert "id" not in json_data
 
     def test_get_connector_not_found(self, test_client):
         """Should return 404 if connector not found"""
-        response = test_client.get("/api/connectors/999")
+        response = test_client.get("/api/connectors/con_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
 
 class TestConnectorAPIUpdate:
-    """Tests for PUT /api/connectors/{id} - T104t"""
+    """Tests for PUT /api/connectors/{guid} - T104t"""
 
     def test_update_connector_name(self, test_client, sample_connector):
         """Should update connector name"""
         connector = sample_connector(name="Original Name")
 
         response = test_client.put(
-            f"/api/connectors/{connector.id}",
+            f"/api/connectors/{connector.guid}",
             json={"name": "Updated Name"}
         )
 
@@ -160,7 +162,7 @@ class TestConnectorAPIUpdate:
         connector = sample_connector(name="Test", metadata={"env": "dev"})
 
         response = test_client.put(
-            f"/api/connectors/{connector.id}",
+            f"/api/connectors/{connector.guid}",
             json={"metadata": {"env": "prod", "version": "2.0"}}
         )
 
@@ -175,7 +177,7 @@ class TestConnectorAPIUpdate:
         connector2 = sample_connector(name="Another Connector")
 
         response = test_client.put(
-            f"/api/connectors/{connector2.id}",
+            f"/api/connectors/{connector2.guid}",
             json={"name": "Existing Connector"}
         )
 
@@ -193,7 +195,7 @@ class TestConnectorAPIUpdate:
         }
 
         response = test_client.put(
-            f"/api/connectors/{connector.id}",
+            f"/api/connectors/{connector.guid}",
             json={"credentials": new_credentials}
         )
 
@@ -207,7 +209,7 @@ class TestConnectorAPIUpdate:
         connector = sample_connector(name="Test", is_active=True)
 
         response = test_client.put(
-            f"/api/connectors/{connector.id}",
+            f"/api/connectors/{connector.guid}",
             json={"is_active": False}
         )
 
@@ -218,7 +220,7 @@ class TestConnectorAPIUpdate:
     def test_update_connector_not_found(self, test_client):
         """Should return 404 if connector not found"""
         response = test_client.put(
-            "/api/connectors/999",
+            "/api/connectors/con_01hgw2bbg00000000000000000",
             json={"name": "Updated"}
         )
 
@@ -227,18 +229,18 @@ class TestConnectorAPIUpdate:
 
 
 class TestConnectorAPIDelete:
-    """Tests for DELETE /api/connectors/{id} - T104u"""
+    """Tests for DELETE /api/connectors/{guid} - T104u"""
 
     def test_delete_connector_success(self, test_client, sample_connector):
         """Should delete connector and return 204 - T104u"""
         connector = sample_connector(name="To Delete")
 
-        response = test_client.delete(f"/api/connectors/{connector.id}")
+        response = test_client.delete(f"/api/connectors/{connector.guid}")
 
         assert response.status_code == 204
 
         # Verify deletion
-        get_response = test_client.get(f"/api/connectors/{connector.id}")
+        get_response = test_client.get(f"/api/connectors/{connector.guid}")
         assert get_response.status_code == 404
 
     def test_delete_connector_with_collections(self, test_client, sample_connector, sample_collection):
@@ -247,10 +249,10 @@ class TestConnectorAPIDelete:
         sample_collection(
             name="Using Connector",
             type="s3",
-            connector_id=connector.id
+            connector_guid=connector.guid
         )
 
-        response = test_client.delete(f"/api/connectors/{connector.id}")
+        response = test_client.delete(f"/api/connectors/{connector.guid}")
 
         assert response.status_code == 409
         assert "collection(s) reference it" in response.json()["detail"]
@@ -258,11 +260,11 @@ class TestConnectorAPIDelete:
     def test_delete_connector_protection_message(self, test_client, sample_connector, sample_collection):
         """Should provide descriptive error message - T104u"""
         connector = sample_connector(name="Protected Connector")
-        sample_collection(name="Collection 1", type="s3", connector_id=connector.id)
-        sample_collection(name="Collection 2", type="s3", connector_id=connector.id)
-        sample_collection(name="Collection 3", type="s3", connector_id=connector.id)
+        sample_collection(name="Collection 1", type="s3", connector_guid=connector.guid)
+        sample_collection(name="Collection 2", type="s3", connector_guid=connector.guid)
+        sample_collection(name="Collection 3", type="s3", connector_guid=connector.guid)
 
-        response = test_client.delete(f"/api/connectors/{connector.id}")
+        response = test_client.delete(f"/api/connectors/{connector.guid}")
 
         assert response.status_code == 409
         detail = response.json()["detail"]
@@ -271,14 +273,14 @@ class TestConnectorAPIDelete:
 
     def test_delete_connector_not_found(self, test_client):
         """Should return 404 if connector not found"""
-        response = test_client.delete("/api/connectors/999")
+        response = test_client.delete("/api/connectors/con_01hgw2bbg00000000000000000")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
 
 class TestConnectorAPITestConnection:
-    """Tests for POST /api/connectors/{id}/test - T104v"""
+    """Tests for POST /api/connectors/{guid}/test - T104v"""
 
     def test_test_connector_s3_success(self, test_client, sample_connector, mocker):
         """Should test S3 connection successfully - T104v"""
@@ -288,7 +290,7 @@ class TestConnectorAPITestConnection:
         mock_adapter = mocker.patch('backend.src.services.connector_service.S3Adapter')
         mock_adapter.return_value.test_connection.return_value = (True, "Connected to S3 bucket")
 
-        response = test_client.post(f"/api/connectors/{connector.id}/test")
+        response = test_client.post(f"/api/connectors/{connector.guid}/test")
 
         assert response.status_code == 200
         json_data = response.json()
@@ -303,7 +305,7 @@ class TestConnectorAPITestConnection:
         mock_adapter = mocker.patch('backend.src.services.connector_service.GCSAdapter')
         mock_adapter.return_value.test_connection.return_value = (True, "Connected to GCS bucket")
 
-        response = test_client.post(f"/api/connectors/{connector.id}/test")
+        response = test_client.post(f"/api/connectors/{connector.guid}/test")
 
         assert response.status_code == 200
         json_data = response.json()
@@ -326,7 +328,7 @@ class TestConnectorAPITestConnection:
         mock_adapter = mocker.patch('backend.src.services.connector_service.SMBAdapter')
         mock_adapter.return_value.test_connection.return_value = (True, "Connected to SMB share")
 
-        response = test_client.post(f"/api/connectors/{connector.id}/test")
+        response = test_client.post(f"/api/connectors/{connector.guid}/test")
 
         assert response.status_code == 200
         json_data = response.json()
@@ -340,7 +342,7 @@ class TestConnectorAPITestConnection:
         mock_adapter = mocker.patch('backend.src.services.connector_service.S3Adapter')
         mock_adapter.return_value.test_connection.return_value = (False, "Authentication failed")
 
-        response = test_client.post(f"/api/connectors/{connector.id}/test")
+        response = test_client.post(f"/api/connectors/{connector.guid}/test")
 
         assert response.status_code == 200
         json_data = response.json()
@@ -358,12 +360,12 @@ class TestConnectorAPITestConnection:
         # Initial last_validated should be None
         assert connector.last_validated is None
 
-        response = test_client.post(f"/api/connectors/{connector.id}/test")
+        response = test_client.post(f"/api/connectors/{connector.guid}/test")
 
         assert response.status_code == 200
 
         # Verify last_validated was updated by checking connector again
-        get_response = test_client.get(f"/api/connectors/{connector.id}")
+        get_response = test_client.get(f"/api/connectors/{connector.guid}")
         json_data = get_response.json()
         assert json_data["last_validated"] is not None
         assert json_data["last_error"] is None
@@ -377,19 +379,19 @@ class TestConnectorAPITestConnection:
         error_msg = "Invalid credentials: Access denied"
         mock_adapter.return_value.test_connection.return_value = (False, error_msg)
 
-        response = test_client.post(f"/api/connectors/{connector.id}/test")
+        response = test_client.post(f"/api/connectors/{connector.guid}/test")
 
         assert response.status_code == 200
 
         # Verify last_error was updated
-        get_response = test_client.get(f"/api/connectors/{connector.id}")
+        get_response = test_client.get(f"/api/connectors/{connector.guid}")
         json_data = get_response.json()
         assert json_data["last_error"] == error_msg
         assert json_data["last_validated"] is None  # Should not update on failure
 
     def test_test_connector_not_found(self, test_client):
         """Should return 404 if connector not found"""
-        response = test_client.post("/api/connectors/999/test")
+        response = test_client.post("/api/connectors/con_01hgw2bbg00000000000000000/test")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
