@@ -21,6 +21,10 @@ pydantic-settings>=2.6.0
 uuid7>=0.1.0  # UUIDv7 generation (RFC 9562)
 base32-crockford>=0.3.0  # Crockford's Base32 encoding
 
+# Geocoding and Timezone
+geopy>=2.4.0  # Nominatim geocoding client with rate limiting
+timezonefinder>=6.0.0  # Offline timezone lookup from coordinates
+
 # Encryption
 cryptography>=44.0.0
 

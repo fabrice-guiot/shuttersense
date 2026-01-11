@@ -23,8 +23,8 @@
 
 **Purpose**: Project initialization, dependencies, and basic structure
 
-- [ ] T001 Install new backend dependencies: geopy>=2.4.0 and timezonefinder>=6.0.0 in backend/requirements.txt
-- [ ] T002 [P] Register new GUID prefixes (evt_, ser_, loc_, org_, prf_, cat_) in backend/src/services/guid.py
+- [x] T001 Install new backend dependencies: geopy>=2.4.0 and timezonefinder>=6.0.0 in backend/requirements.txt
+- [x] T002 [P] Register new GUID prefixes (evt_, ser_, loc_, org_, prf_, cat_) in backend/src/services/guid.py and frontend/src/utils/guid.ts
 
 ---
 

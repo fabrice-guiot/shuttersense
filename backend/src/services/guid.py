@@ -21,6 +21,12 @@ from uuid_extensions import uuid7
 #   con - Connector
 #   pip - Pipeline
 #   res - AnalysisResult
+#   evt - Event (calendar event)
+#   ser - EventSeries (multi-day event grouping)
+#   loc - Location (known locations)
+#   org - Organizer (event organizers)
+#   prf - Performer (event performers)
+#   cat - Category (event categories)
 # In-memory entities (transient):
 #   job - Tool execution job
 #   imp - Config import session
@@ -29,6 +35,12 @@ ENTITY_PREFIXES = {
     "con": "Connector",
     "pip": "Pipeline",
     "res": "AnalysisResult",
+    "evt": "Event",
+    "ser": "EventSeries",
+    "loc": "Location",
+    "org": "Organizer",
+    "prf": "Performer",
+    "cat": "Category",
     "job": "Job",
     "imp": "ImportSession",
 }
@@ -39,7 +51,7 @@ CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # Pattern for validating GUIDs
 # Format: {3-char prefix}_{26-char Crockford Base32}
 GUID_PATTERN = re.compile(
-    r"^(col|con|pip|res|job|imp)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|job|imp)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
     re.IGNORECASE
 )
 

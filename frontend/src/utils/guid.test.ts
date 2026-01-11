@@ -29,6 +29,15 @@ describe('isValidGuid', () => {
     expect(isValidGuid('res_01HGW2BBG00000000000000003')).toBe(true) // 26 chars after prefix
   })
 
+  test('validates calendar events GUIDs', () => {
+    expect(isValidGuid('evt_01234567890abcdefghjkmnpqr')).toBe(true)
+    expect(isValidGuid('ser_01234567890abcdefghjkmnpqr')).toBe(true)
+    expect(isValidGuid('loc_01234567890abcdefghjkmnpqr')).toBe(true)
+    expect(isValidGuid('org_01234567890abcdefghjkmnpqr')).toBe(true)
+    expect(isValidGuid('prf_01234567890abcdefghjkmnpqr')).toBe(true)
+    expect(isValidGuid('cat_01234567890abcdefghjkmnpqr')).toBe(true)
+  })
+
   test('validates case-insensitively', () => {
     expect(isValidGuid('COL_01234567890ABCDEFGHJKMNPQR')).toBe(true)
     expect(isValidGuid('Col_01234567890abcdefghjkmnpqr')).toBe(true)
@@ -71,6 +80,12 @@ describe('getEntityType', () => {
     expect(getEntityType('con_01234567890abcdefghjkmnpqr')).toBe('Connector')
     expect(getEntityType('pip_01234567890abcdefghjkmnpqr')).toBe('Pipeline')
     expect(getEntityType('res_01234567890abcdefghjkmnpqr')).toBe('AnalysisResult')
+    expect(getEntityType('evt_01234567890abcdefghjkmnpqr')).toBe('Event')
+    expect(getEntityType('ser_01234567890abcdefghjkmnpqr')).toBe('EventSeries')
+    expect(getEntityType('loc_01234567890abcdefghjkmnpqr')).toBe('Location')
+    expect(getEntityType('org_01234567890abcdefghjkmnpqr')).toBe('Organizer')
+    expect(getEntityType('prf_01234567890abcdefghjkmnpqr')).toBe('Performer')
+    expect(getEntityType('cat_01234567890abcdefghjkmnpqr')).toBe('Category')
   })
 
   test('returns null for invalid GUIDs', () => {
@@ -87,6 +102,12 @@ describe('getPrefix', () => {
     expect(getPrefix('con_01234567890abcdefghjkmnpqr')).toBe('con')
     expect(getPrefix('pip_01234567890abcdefghjkmnpqr')).toBe('pip')
     expect(getPrefix('res_01234567890abcdefghjkmnpqr')).toBe('res')
+    expect(getPrefix('evt_01234567890abcdefghjkmnpqr')).toBe('evt')
+    expect(getPrefix('ser_01234567890abcdefghjkmnpqr')).toBe('ser')
+    expect(getPrefix('loc_01234567890abcdefghjkmnpqr')).toBe('loc')
+    expect(getPrefix('org_01234567890abcdefghjkmnpqr')).toBe('org')
+    expect(getPrefix('prf_01234567890abcdefghjkmnpqr')).toBe('prf')
+    expect(getPrefix('cat_01234567890abcdefghjkmnpqr')).toBe('cat')
   })
 
   test('returns null for invalid GUIDs', () => {
@@ -180,5 +201,13 @@ describe('ENTITY_PREFIXES', () => {
     expect(ENTITY_PREFIXES.con).toBe('Connector')
     expect(ENTITY_PREFIXES.pip).toBe('Pipeline')
     expect(ENTITY_PREFIXES.res).toBe('AnalysisResult')
+    expect(ENTITY_PREFIXES.evt).toBe('Event')
+    expect(ENTITY_PREFIXES.ser).toBe('EventSeries')
+    expect(ENTITY_PREFIXES.loc).toBe('Location')
+    expect(ENTITY_PREFIXES.org).toBe('Organizer')
+    expect(ENTITY_PREFIXES.prf).toBe('Performer')
+    expect(ENTITY_PREFIXES.cat).toBe('Category')
+    expect(ENTITY_PREFIXES.job).toBe('Job')
+    expect(ENTITY_PREFIXES.imp).toBe('Import')
   })
 })
