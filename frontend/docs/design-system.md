@@ -572,7 +572,78 @@ Each domain object type should have a consistent icon:
 1. **Never use hardcoded colors** - Always use design tokens
 2. **Test in dark mode** - All components must be verified in dark mode
 3. **Use semantic color classes** - `text-foreground` not `text-white`
-4. **Contrast ratios** - Ensure sufficient contrast for accessibility
+4. **Contrast ratios** - Ensure WCAG AA compliance (4.5:1 for text, 3:1 for UI)
+
+### Scrollbar Styling
+
+Scrollbars are styled globally to match the dark theme. The styles are defined in `globals.css` and apply to all scrollable elements.
+
+**Design Tokens:**
+
+| Token | Purpose | Dark Mode |
+|-------|---------|-----------|
+| `--scrollbar-thumb` | Scrollbar handle | Muted gray |
+| `--scrollbar-thumb-hover` | Handle on hover | Lighter gray |
+| `--scrollbar-track` | Scrollbar track | Matches background |
+
+**Browser Support:**
+
+| Browser | Implementation | Notes |
+|---------|----------------|-------|
+| Chrome/Edge/Safari | WebKit pseudo-elements | Full styling (rounded corners, hover states) |
+| Firefox | Standard CSS properties | `scrollbar-color`, `scrollbar-width: thin` |
+
+**CSS Pattern (already implemented in globals.css):**
+
+```css
+/* Firefox */
+* {
+  scrollbar-color: hsl(var(--scrollbar-thumb)) hsl(var(--scrollbar-track));
+  scrollbar-width: thin;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: hsl(var(--scrollbar-track)); }
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--scrollbar-thumb));
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--scrollbar-thumb-hover));
+}
+```
+
+### Known Exceptions
+
+Some elements cannot be fully themed due to browser/OS limitations:
+
+| Element | Limitation | Mitigation |
+|---------|------------|------------|
+| **Native `<select>` dropdown** | OS-controlled appearance | Use shadcn/ui `Select` component instead |
+| **Date/time inputs** | Browser-native picker | Consider custom date picker for full theming |
+| **File input button** | Limited styling support | Use custom file upload UI |
+| **Color picker** | Browser-native | Consider custom color picker |
+| **Autocomplete dropdowns** | Browser-controlled | Disable or style where possible |
+
+**Acceptable Contextual Colors:**
+
+Some hardcoded colors are acceptable when they serve specific semantic purposes AND have proper dark mode variants:
+
+```tsx
+// ACCEPTABLE - Amber for "Beta" labels with dark mode variant
+<span className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+  Beta
+</span>
+
+// ACCEPTABLE - Amber for "Required" field indicators
+<span className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+  Required
+</span>
+
+// NOT ACCEPTABLE - Hardcoded without dark mode variant
+<span className="bg-green-500 text-white">Status</span>
+```
 
 ### Common Dark Theme Issues
 
@@ -671,4 +742,5 @@ Before submitting a PR for a new UI feature, verify:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1 | 2026-01-10 | Added scrollbar styling guidelines, known exceptions, error handling patterns (Issue #55) |
 | 1.0 | 2026-01-07 | Initial design system documentation |

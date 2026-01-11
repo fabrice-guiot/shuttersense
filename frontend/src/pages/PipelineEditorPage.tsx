@@ -361,7 +361,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Label className="text-xs">ID</Label>
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-destructive/15 text-destructive">
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                     Required
                   </span>
                 </div>
@@ -421,7 +421,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({
                   <div className="flex items-center gap-2">
                     <Label className="text-xs">{prop.label}</Label>
                     {prop.required ? (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-destructive/15 text-destructive">
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                         Required
                       </span>
                     ) : (
