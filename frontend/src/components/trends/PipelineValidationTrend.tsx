@@ -27,6 +27,7 @@ import {
 } from 'recharts'
 import { TrendChart, formatChartDate, formatChartPercent } from './TrendChart'
 import type { PipelineValidationTrendResponse } from '@/contracts/api/trends-api'
+import { formatDateTime } from '@/utils/dateFormat'
 
 // Fixed colors for aggregated mode series
 const SERIES_COLORS = {
@@ -150,7 +151,7 @@ export function PipelineValidationTrend({
             />
             <Tooltip
               formatter={(value: number, name: string) => [formatChartPercent(value), name]}
-              labelFormatter={(label: string) => new Date(label).toLocaleString()}
+              labelFormatter={(label: string) => formatDateTime(label)}
               contentStyle={{
                 backgroundColor: 'hsl(var(--popover))',
                 border: '1px solid hsl(var(--border))',
@@ -235,7 +236,7 @@ export function PipelineValidationTrend({
                 showRatios ? formatChartPercent(value) : value.toString(),
                 name.charAt(0).toUpperCase() + name.slice(1)
               ]}
-              labelFormatter={(label: string) => new Date(label).toLocaleString()}
+              labelFormatter={(label: string) => formatDateTime(label)}
               contentStyle={{
                 backgroundColor: 'hsl(var(--popover))',
                 border: '1px solid hsl(var(--border))',
@@ -309,7 +310,7 @@ export function PipelineValidationTrend({
               showRatios ? formatChartPercent(value) : value.toString(),
               name
             ]}
-            labelFormatter={(label: string) => new Date(label).toLocaleString()}
+            labelFormatter={(label: string) => formatDateTime(label)}
             contentStyle={{
               backgroundColor: 'hsl(var(--popover))',
               border: '1px solid hsl(var(--border))',

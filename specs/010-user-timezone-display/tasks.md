@@ -24,9 +24,9 @@
 
 **Purpose**: Create the centralized date formatting utility file and export structure
 
-- [ ] T001 Create date formatting utility file at `frontend/src/utils/dateFormat.ts` with empty module structure and JSDoc header
-- [ ] T002 Update `frontend/src/utils/index.ts` to export date formatting functions (formatDateTime, formatRelativeTime, formatDate, formatTime)
-- [ ] T003 Create test file at `frontend/tests/utils/dateFormat.test.ts` with test suite structure and Vitest imports
+- [x] T001 Create date formatting utility file at `frontend/src/utils/dateFormat.ts` with empty module structure and JSDoc header
+- [x] T002 Update `frontend/src/utils/index.ts` to export date formatting functions (formatDateTime, formatRelativeTime, formatDate, formatTime)
+- [x] T003 Create test file at `frontend/tests/utils/dateFormat.test.ts` with test suite structure and Vitest imports
 
 ---
 
@@ -36,10 +36,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Implement `parseDate()` helper function in `frontend/src/utils/dateFormat.ts` - parses ISO 8601 strings to Date objects, handles null/undefined/invalid inputs
-- [ ] T005 [P] Implement `hasIntlSupport()` detection function in `frontend/src/utils/dateFormat.ts` - checks for Intl.DateTimeFormat availability
-- [ ] T006 [P] Implement `hasRelativeTimeSupport()` detection function in `frontend/src/utils/dateFormat.ts` - checks for Intl.RelativeTimeFormat availability
-- [ ] T007 Write unit tests for parseDate() in `frontend/tests/utils/dateFormat.test.ts` - valid ISO strings, null, undefined, empty string, invalid strings
+- [x] T004 Implement `parseDate()` helper function in `frontend/src/utils/dateFormat.ts` - parses ISO 8601 strings to Date objects, handles null/undefined/invalid inputs
+- [x] T005 [P] Implement `hasIntlSupport()` detection function in `frontend/src/utils/dateFormat.ts` - checks for Intl.DateTimeFormat availability
+- [x] T006 [P] Implement `hasRelativeTimeSupport()` detection function in `frontend/src/utils/dateFormat.ts` - checks for Intl.RelativeTimeFormat availability
+- [x] T007 Write unit tests for parseDate() in `frontend/tests/utils/dateFormat.test.ts` - valid ISO strings, null, undefined, empty string, invalid strings
 
 **Checkpoint**: Foundation ready - date parsing and API detection working. User story implementation can now begin.
 
@@ -55,27 +55,27 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T008 [P] [US1] Write unit tests for `formatDateTime()` in `frontend/tests/utils/dateFormat.test.ts` - valid dates, custom options, fallback behavior
-- [ ] T009 [P] [US1] Write unit tests for `formatDate()` in `frontend/tests/utils/dateFormat.test.ts` - date-only formatting with various dateStyle options
-- [ ] T010 [P] [US1] Write unit tests for `formatTime()` in `frontend/tests/utils/dateFormat.test.ts` - time-only formatting with various timeStyle options
+- [x] T008 [P] [US1] Write unit tests for `formatDateTime()` in `frontend/tests/utils/dateFormat.test.ts` - valid dates, custom options, fallback behavior
+- [x] T009 [P] [US1] Write unit tests for `formatDate()` in `frontend/tests/utils/dateFormat.test.ts` - date-only formatting with various dateStyle options
+- [x] T010 [P] [US1] Write unit tests for `formatTime()` in `frontend/tests/utils/dateFormat.test.ts` - time-only formatting with various timeStyle options
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement `formatDateTime()` function in `frontend/src/utils/dateFormat.ts` - uses Intl.DateTimeFormat with dateStyle: 'medium', timeStyle: 'short' default
-- [ ] T012 [US1] Implement `formatDate()` function in `frontend/src/utils/dateFormat.ts` - date-only formatting with configurable dateStyle
-- [ ] T013 [US1] Implement `formatTime()` function in `frontend/src/utils/dateFormat.ts` - time-only formatting with configurable timeStyle
-- [ ] T014 [US1] Run US1 tests to verify all pass
+- [x] T011 [US1] Implement `formatDateTime()` function in `frontend/src/utils/dateFormat.ts` - uses Intl.DateTimeFormat with dateStyle: 'medium', timeStyle: 'short' default
+- [x] T012 [US1] Implement `formatDate()` function in `frontend/src/utils/dateFormat.ts` - date-only formatting with configurable dateStyle
+- [x] T013 [US1] Implement `formatTime()` function in `frontend/src/utils/dateFormat.ts` - time-only formatting with configurable timeStyle
+- [x] T014 [US1] Run US1 tests to verify all pass
 
 ### Component Migration for User Story 1
 
-- [ ] T015 [P] [US1] Migrate `frontend/src/components/connectors/ConnectorList.tsx` - replace inline formatDate() with imported formatDateTime()
-- [ ] T016 [P] [US1] Migrate `frontend/src/components/results/ResultsTable.tsx` - replace inline formatDate() with imported formatDateTime()
-- [ ] T017 [P] [US1] Migrate `frontend/src/components/results/ResultDetailPanel.tsx` - replace inline formatDate() with imported formatDateTime()
-- [ ] T018 [P] [US1] Migrate `frontend/src/components/pipelines/PipelineCard.tsx` - replace inline formatting with imported formatDate()
-- [ ] T019 [P] [US1] Migrate `frontend/src/components/tools/JobProgressCard.tsx` - replace inline formatDate() with imported formatDateTime()
-- [ ] T020 [P] [US1] Migrate `frontend/src/components/trends/TrendChart.tsx` - replace inline formatting with imported formatDate()
-- [ ] T021 [P] [US1] Migrate `frontend/src/components/trends/TrendSummaryCard.tsx` - replace inline formatting with imported formatDate()
-- [ ] T022 [P] [US1] Migrate `frontend/src/components/trends/PipelineValidationTrend.tsx` - replace inline formatting with imported formatDateTime()
+- [x] T015 [P] [US1] Migrate `frontend/src/components/connectors/ConnectorList.tsx` - replace inline formatDate() with imported formatDateTime()
+- [x] T016 [P] [US1] Migrate `frontend/src/components/results/ResultsTable.tsx` - replace inline formatDate() with imported formatDateTime()
+- [x] T017 [P] [US1] Migrate `frontend/src/components/results/ResultDetailPanel.tsx` - replace inline formatDate() with imported formatDateTime()
+- [x] T018 [P] [US1] Migrate `frontend/src/components/pipelines/PipelineCard.tsx` - replace inline formatting with imported formatDate()
+- [x] T019 [P] [US1] Migrate `frontend/src/components/tools/JobProgressCard.tsx` - replace inline formatDate() with imported formatDateTime()
+- [x] T020 [P] [US1] Migrate `frontend/src/components/trends/TrendChart.tsx` - replace inline formatting with imported formatDate()
+- [x] T021 [P] [US1] Migrate `frontend/src/components/trends/TrendSummaryCard.tsx` - replace inline formatting with imported formatDate()
+- [x] T022 [P] [US1] Migrate `frontend/src/components/trends/PipelineValidationTrend.tsx` - replace inline formatting with imported formatDateTime()
 
 **Checkpoint**: All timestamps display in local timezone with consistent formatting. User Story 1 is fully functional and testable independently.
 

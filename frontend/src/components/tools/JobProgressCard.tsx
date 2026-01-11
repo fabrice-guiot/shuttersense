@@ -26,6 +26,7 @@ import {
 import { useJobProgress } from '@/hooks/useTools'
 import type { Job, JobStatus, ProgressData } from '@/contracts/api/tools-api'
 import { cn } from '@/lib/utils'
+import { formatDateTime } from '@/utils/dateFormat'
 
 // ============================================================================
 // Types
@@ -111,9 +112,9 @@ export function JobProgressCard({
     return `${minutes}m ${remainingSeconds.toFixed(0)}s`
   }
 
-  const formatDate = (dateString: string | null): string => {
+  const formatJobDate = (dateString: string | null): string => {
     if (!dateString) return '-'
-    return new Date(dateString).toLocaleString()
+    return formatDateTime(dateString)
   }
 
   const canCancel = currentStatus === 'queued'
@@ -198,19 +199,19 @@ export function JobProgressCard({
           <div className="font-medium">{job.collection_guid || 'N/A'}</div>
 
           <div className="text-muted-foreground">Created:</div>
-          <div>{formatDate(job.created_at)}</div>
+          <div>{formatJobDate(job.created_at)}</div>
 
           {job.started_at && (
             <>
               <div className="text-muted-foreground">Started:</div>
-              <div>{formatDate(job.started_at)}</div>
+              <div>{formatJobDate(job.started_at)}</div>
             </>
           )}
 
           {job.completed_at && (
             <>
               <div className="text-muted-foreground">Completed:</div>
-              <div>{formatDate(job.completed_at)}</div>
+              <div>{formatJobDate(job.completed_at)}</div>
             </>
           )}
         </div>

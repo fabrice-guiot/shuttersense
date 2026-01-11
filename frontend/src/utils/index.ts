@@ -6,3 +6,4 @@
  */
 
 export * from './guid'
+export * from './dateFormat'

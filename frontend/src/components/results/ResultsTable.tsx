@@ -53,6 +53,7 @@ import type {
   ResultListQueryParams
 } from '@/contracts/api/results-api'
 import { cn } from '@/lib/utils'
+import { formatDateTime } from '@/utils/dateFormat'
 
 // ============================================================================
 // Types
@@ -152,9 +153,6 @@ export function ResultsTable({
     return `${minutes}m ${remainingSeconds.toFixed(0)}s`
   }
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleString()
-  }
 
   if (loading) {
     return (
@@ -261,7 +259,7 @@ export function ResultsTable({
                   <TableCell>{result.files_scanned ?? '-'}</TableCell>
                   <TableCell>{result.issues_found ?? '-'}</TableCell>
                   <TableCell>{formatDuration(result.duration_seconds)}</TableCell>
-                  <TableCell>{formatDate(result.completed_at)}</TableCell>
+                  <TableCell>{formatDateTime(result.completed_at)}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
                       <TooltipProvider>
