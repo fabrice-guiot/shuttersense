@@ -118,16 +118,16 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T029 [P] [US3] Write unit tests for null/undefined handling in `frontend/tests/utils/dateFormat.test.ts` - formatDateTime(null), formatDateTime(undefined), formatDateTime('')
-- [ ] T030 [P] [US3] Write unit tests for invalid date handling in `frontend/tests/utils/dateFormat.test.ts` - formatDateTime('invalid'), formatDateTime('2026-13-45')
+- [x] T029 [P] [US3] Write unit tests for null/undefined handling in `frontend/tests/utils/dateFormat.test.ts` - formatDateTime(null), formatDateTime(undefined), formatDateTime('')
+- [x] T030 [P] [US3] Write unit tests for invalid date handling in `frontend/tests/utils/dateFormat.test.ts` - formatDateTime('invalid'), formatDateTime('2026-13-45')
 
 ### Implementation for User Story 3
 
-- [ ] T031 [US3] Add null/undefined handling to `formatDateTime()` in `frontend/src/utils/dateFormat.ts` - return "Never" for falsy values
-- [ ] T032 [US3] Add invalid date handling to `formatDateTime()` in `frontend/src/utils/dateFormat.ts` - return "Invalid date" when Date.getTime() is NaN
-- [ ] T033 [US3] Add null/undefined/invalid handling to `formatRelativeTime()` in `frontend/src/utils/dateFormat.ts` - consistent with formatDateTime
-- [ ] T034 [US3] Add null/undefined/invalid handling to `formatDate()` and `formatTime()` in `frontend/src/utils/dateFormat.ts`
-- [ ] T035 [US3] Run US3 tests to verify all pass
+- [x] T031 [US3] Add null/undefined handling to `formatDateTime()` in `frontend/src/utils/dateFormat.ts` - return "Never" for falsy values
+- [x] T032 [US3] Add invalid date handling to `formatDateTime()` in `frontend/src/utils/dateFormat.ts` - return "Invalid date" when Date.getTime() is NaN
+- [x] T033 [US3] Add null/undefined/invalid handling to `formatRelativeTime()` in `frontend/src/utils/dateFormat.ts` - consistent with formatDateTime
+- [x] T034 [US3] Add null/undefined/invalid handling to `formatDate()` and `formatTime()` in `frontend/src/utils/dateFormat.ts`
+- [x] T035 [US3] Run US3 tests to verify all pass
 
 **Checkpoint**: All user stories are now independently functional. Null dates show "Never", invalid dates show "Invalid date".
 

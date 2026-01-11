@@ -493,21 +493,128 @@ describe('formatRelativeTime', () => {
 // ============================================================================
 
 describe('null/undefined handling', () => {
-  // T029: Tests for null/undefined handling will be added here
-  it.todo('formatDateTime should return "Never" for null')
-  it.todo('formatDateTime should return "Never" for undefined')
-  it.todo('formatDateTime should return "Never" for empty string')
-  it.todo('formatDate should return "Never" for null')
-  it.todo('formatTime should return "Never" for null')
-  it.todo('formatRelativeTime should return "Never" for null')
+  // T029: Tests for null/undefined handling
+
+  describe('formatDateTime', () => {
+    it('should return "Never" for null', () => {
+      expect(formatDateTime(null)).toBe('Never')
+    })
+
+    it('should return "Never" for undefined', () => {
+      expect(formatDateTime(undefined)).toBe('Never')
+    })
+
+    it('should return "Never" for empty string', () => {
+      expect(formatDateTime('')).toBe('Never')
+    })
+  })
+
+  describe('formatDate', () => {
+    it('should return "Never" for null', () => {
+      expect(formatDate(null)).toBe('Never')
+    })
+
+    it('should return "Never" for undefined', () => {
+      expect(formatDate(undefined)).toBe('Never')
+    })
+
+    it('should return "Never" for empty string', () => {
+      expect(formatDate('')).toBe('Never')
+    })
+  })
+
+  describe('formatTime', () => {
+    it('should return "Never" for null', () => {
+      expect(formatTime(null)).toBe('Never')
+    })
+
+    it('should return "Never" for undefined', () => {
+      expect(formatTime(undefined)).toBe('Never')
+    })
+
+    it('should return "Never" for empty string', () => {
+      expect(formatTime('')).toBe('Never')
+    })
+  })
+
+  describe('formatRelativeTime', () => {
+    it('should return "Never" for null', () => {
+      expect(formatRelativeTime(null)).toBe('Never')
+    })
+
+    it('should return "Never" for undefined', () => {
+      expect(formatRelativeTime(undefined)).toBe('Never')
+    })
+
+    it('should return "Never" for empty string', () => {
+      expect(formatRelativeTime('')).toBe('Never')
+    })
+  })
 })
 
 describe('invalid date handling', () => {
-  // T030: Tests for invalid date handling will be added here
-  it.todo('formatDateTime should return "Invalid date" for invalid string')
-  it.todo('formatDateTime should return "Invalid date" for impossible date')
-  it.todo('formatDate should return "Invalid date" for invalid string')
-  it.todo('formatRelativeTime should return "Invalid date" for invalid string')
+  // T030: Tests for invalid date handling
+
+  describe('formatDateTime', () => {
+    it('should return "Invalid date" for invalid string', () => {
+      expect(formatDateTime('not-a-date')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for impossible date', () => {
+      // Month 13 doesn't exist
+      expect(formatDateTime('2026-13-45T15:45:00')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for malformed timestamp', () => {
+      expect(formatDateTime('2026-01-07T25:99:00')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for random text', () => {
+      expect(formatDateTime('hello world')).toBe('Invalid date')
+    })
+  })
+
+  describe('formatDate', () => {
+    it('should return "Invalid date" for invalid string', () => {
+      expect(formatDate('not-a-date')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for impossible date', () => {
+      expect(formatDate('2026-13-45')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for random text', () => {
+      expect(formatDate('some random text')).toBe('Invalid date')
+    })
+  })
+
+  describe('formatTime', () => {
+    it('should return "Invalid date" for invalid string', () => {
+      expect(formatTime('not-a-date')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for impossible time', () => {
+      expect(formatTime('2026-01-07T25:99:00')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for random text', () => {
+      expect(formatTime('random text here')).toBe('Invalid date')
+    })
+  })
+
+  describe('formatRelativeTime', () => {
+    it('should return "Invalid date" for invalid string', () => {
+      expect(formatRelativeTime('not-a-date')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for impossible date', () => {
+      expect(formatRelativeTime('2026-13-45T15:45:00')).toBe('Invalid date')
+    })
+
+    it('should return "Invalid date" for random text', () => {
+      expect(formatRelativeTime('xyz123')).toBe('Invalid date')
+    })
+  })
 })
 
 // ============================================================================
