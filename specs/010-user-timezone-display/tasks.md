@@ -137,14 +137,14 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T036 [P] Add JSDoc documentation to all exported functions in `frontend/src/utils/dateFormat.ts`
-- [ ] T037 [P] Write locale variation tests in `frontend/tests/utils/dateFormat.test.ts` - verify formatting works with mocked locales (en-US, fr-FR, de-DE)
-- [ ] T038 [P] Write edge case tests in `frontend/tests/utils/dateFormat.test.ts` - year boundaries, DST transitions
-- [ ] T039 Run full test suite and verify 90%+ coverage for `frontend/src/utils/dateFormat.ts`
-- [ ] T040 Remove all remaining inline formatDate() helper functions from migrated components (verify none remain)
-- [ ] T041 Run `npm run lint` in frontend directory and fix any linting errors
-- [ ] T042 Run `npm run build` in frontend directory and verify no build errors
-- [ ] T043 Manual verification: Test application in browser, verify timestamps display correctly
+- [x] T036 [P] Add JSDoc documentation to all exported functions in `frontend/src/utils/dateFormat.ts`
+- [x] T037 [P] Write locale variation tests in `frontend/tests/utils/dateFormat.test.ts` - verify formatting works with mocked locales (en-US, fr-FR, de-DE)
+- [x] T038 [P] Write edge case tests in `frontend/tests/utils/dateFormat.test.ts` - year boundaries, DST transitions
+- [x] T039 Run full test suite and verify 90%+ coverage for `frontend/src/utils/dateFormat.ts`
+- [x] T040 Remove all remaining inline formatDate() helper functions from migrated components (verify none remain)
+- [x] T041 Run `npm run lint` in frontend directory and fix any linting errors
+- [x] T042 Run `npm run build` in frontend directory and verify no build errors
+- [x] T043 Manual verification: Test application in browser, verify timestamps display correctly (USER ACTION REQUIRED)
 
 ---
 

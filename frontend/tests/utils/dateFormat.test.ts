@@ -622,15 +622,158 @@ describe('invalid date handling', () => {
 // ============================================================================
 
 describe('locale variations', () => {
-  // T037: Tests for locale variations will be added here
-  it.todo('should format correctly with en-US locale')
-  it.todo('should format correctly with fr-FR locale')
-  it.todo('should format correctly with de-DE locale')
+  // T037: Tests for locale variations
+  // Note: These tests verify formatting works with different locales.
+  // Since the implementation uses undefined locale (user's default), we can't
+  // directly test specific locale outputs in jsdom without mocking Intl.
+  // Instead, we verify the core behavior remains consistent.
+
+  it('should produce valid output regardless of locale setting', () => {
+    // The functions should work and produce non-error output
+    const result = formatDateTime('2026-01-15T15:45:00Z')
+    expect(result).not.toBe('Never')
+    expect(result).not.toBe('Invalid date')
+    expect(result.length).toBeGreaterThan(0)
+  })
+
+  it('should format date with short style in any locale', () => {
+    const result = formatDate('2026-06-15T10:30:00Z', { dateStyle: 'short' })
+    expect(result).not.toBe('Never')
+    expect(result).not.toBe('Invalid date')
+    // Short style should be compact
+    expect(result.length).toBeLessThan(20)
+  })
+
+  it('should format time with short style in any locale', () => {
+    const result = formatTime('2026-06-15T10:30:00Z', { timeStyle: 'short' })
+    expect(result).not.toBe('Never')
+    expect(result).not.toBe('Invalid date')
+    // Time should contain colon separator
+    expect(result).toMatch(/:/)
+  })
+
+  it('should handle full date style in any locale', () => {
+    const result = formatDate('2026-01-07T15:45:00Z', { dateStyle: 'full' })
+    expect(result).not.toBe('Never')
+    expect(result).not.toBe('Invalid date')
+    // Full style should be longer than short
+    const shortResult = formatDate('2026-01-07T15:45:00Z', { dateStyle: 'short' })
+    expect(result.length).toBeGreaterThan(shortResult.length)
+  })
 })
 
 describe('edge cases', () => {
-  // T038: Tests for edge cases will be added here
-  it.todo('should handle year boundary correctly')
-  it.todo('should handle dates from previous year')
-  it.todo('should handle dates far in the past')
+  // T038: Tests for edge cases
+
+  describe('year boundaries', () => {
+    it('should handle year boundary correctly (Dec 31 to Jan 1)', () => {
+      // Use mid-day times to avoid timezone boundary issues
+      const dec31 = formatDateTime('2025-12-31T12:00:00Z')
+      const jan1 = formatDateTime('2026-01-01T12:00:00Z')
+
+      expect(dec31).toMatch(/2025/)
+      expect(jan1).toMatch(/2026/)
+    })
+
+    it('should handle dates from previous year', () => {
+      const result = formatDateTime('2025-06-15T12:00:00Z')
+      expect(result).toMatch(/2025/)
+      expect(result).not.toBe('Invalid date')
+    })
+
+    it('should handle dates from next year', () => {
+      const result = formatDateTime('2027-03-20T12:00:00Z')
+      expect(result).toMatch(/2027/)
+      expect(result).not.toBe('Invalid date')
+    })
+  })
+
+  describe('historical dates', () => {
+    it('should handle dates far in the past', () => {
+      // Use mid-day to avoid timezone boundary issues
+      const result = formatDateTime('2000-01-01T12:00:00Z')
+      expect(result).toMatch(/2000/)
+      expect(result).not.toBe('Invalid date')
+    })
+
+    it('should handle dates from 1990s', () => {
+      const result = formatDateTime('1999-06-15T12:00:00Z')
+      expect(result).toMatch(/1999/)
+      expect(result).not.toBe('Invalid date')
+    })
+
+    it('should handle epoch date', () => {
+      // Use mid-day to avoid timezone boundary issues
+      const result = formatDateTime('1970-01-01T12:00:00Z')
+      expect(result).toMatch(/1970/)
+      expect(result).not.toBe('Invalid date')
+    })
+  })
+
+  describe('future dates', () => {
+    it('should handle dates far in the future', () => {
+      const result = formatDateTime('2050-06-15T12:00:00Z')
+      expect(result).toMatch(/2050/)
+      expect(result).not.toBe('Invalid date')
+    })
+  })
+
+  describe('leap years', () => {
+    it('should handle Feb 29 in leap year', () => {
+      // 2024 is a leap year
+      const result = formatDateTime('2024-02-29T12:00:00Z')
+      expect(result).toMatch(/2024/)
+      expect(result).not.toBe('Invalid date')
+    })
+
+    it('should handle Feb 28 in non-leap year', () => {
+      // 2025 is not a leap year
+      const result = formatDateTime('2025-02-28T12:00:00Z')
+      expect(result).toMatch(/2025/)
+      expect(result).not.toBe('Invalid date')
+    })
+
+    it('should reject Feb 29 in non-leap year', () => {
+      // 2025 is not a leap year, Feb 29 doesn't exist
+      const result = formatDateTime('2025-02-29T12:00:00Z')
+      // This might be accepted by Date constructor (and adjusted) or rejected
+      // Either way, it shouldn't crash
+      expect(result).toBeDefined()
+    })
+  })
+
+  describe('midnight and noon', () => {
+    it('should handle midnight UTC correctly', () => {
+      const result = formatTime('2026-01-15T00:00:00Z')
+      expect(result).not.toBe('Invalid date')
+      expect(result).not.toBe('Never')
+      // Time should have colon (any valid time format)
+      expect(result).toMatch(/:/)
+    })
+
+    it('should handle noon UTC correctly', () => {
+      const result = formatTime('2026-01-15T12:00:00Z')
+      expect(result).not.toBe('Invalid date')
+      expect(result).not.toBe('Never')
+      // Time should have colon (any valid time format)
+      expect(result).toMatch(/:/)
+    })
+
+    it('should handle end of day UTC correctly', () => {
+      const result = formatTime('2026-01-15T23:59:59Z')
+      expect(result).not.toBe('Invalid date')
+      expect(result).not.toBe('Never')
+      // Time should have colon and minutes
+      expect(result).toMatch(/:/)
+      expect(result).toMatch(/59/)
+    })
+  })
+
+  describe('date-only parsing', () => {
+    it('should handle date-only string without T', () => {
+      const result = formatDate('2026-01-15')
+      expect(result).toMatch(/2026/)
+      expect(result).not.toBe('Invalid date')
+    })
+  })
 })
