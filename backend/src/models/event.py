@@ -123,6 +123,7 @@ class Event(Base, GuidMixin):
 
     Computed Properties:
         effective_title: Returns title or falls back to series.title
+        effective_description: Returns description or falls back to series.description
         effective_category_id: Returns category_id or falls back to series.category_id
         series_indicator: Returns "x/n" notation or None for standalone
 
@@ -255,6 +256,15 @@ class Event(Base, GuidMixin):
         if self.series:
             return self.series.title
         return ""
+
+    @property
+    def effective_description(self) -> Optional[str]:
+        """Get description, falling back to series description if part of a series."""
+        if self.description:
+            return self.description
+        if self.series:
+            return self.series.description
+        return None
 
     @property
     def effective_category_id(self) -> Optional[int]:

@@ -373,8 +373,8 @@ class EventService:
         """
         response = self.build_event_response(event)
 
-        # Add description
-        response["description"] = event.description
+        # Add description (effective, falls back to series description)
+        response["description"] = event.effective_description
 
         # Add location
         if event.location:
