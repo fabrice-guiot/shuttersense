@@ -34,8 +34,8 @@
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
 
-    /* Success colors - positive states */
-    --success: 142 76% 36%;
+    /* Success colors - positive states (darkened for WCAG AA contrast) */
+    --success: 142 71% 29%;
     --success-foreground: 0 0% 98%;
 
     /* Info colors - informational states */
@@ -101,8 +101,8 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    /* Success colors for light mode */
-    --success: 142 71% 45%;
+    /* Success colors for light mode (adjusted for WCAG AA contrast) */
+    --success: 142 71% 35%;
     --success-foreground: 0 0% 98%;
 
     /* Info colors for light mode */

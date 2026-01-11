@@ -58,7 +58,7 @@
 - [X] T007 [US1] Add WebKit scrollbar pseudo-elements (::-webkit-scrollbar, track, thumb, corner) to `frontend/src/globals.css`
 - [X] T008 [US1] Add scrollbar thumb hover state styles to `frontend/src/globals.css`
 - [X] T009 [US1] Verify scrollbar styling on main content area in `frontend/src/components/layout/MainLayout.tsx`
-- [ ] T010 [US1] Cross-browser visual test: Chrome, Firefox, Safari, Edge (manual verification)
+- [X] T010 [US1] Cross-browser visual test: Chrome, Firefox, Safari, Edge (manual verification)
 
 **Checkpoint**: Scrollbars should now blend with dark theme across all browsers
 
@@ -72,12 +72,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T011 [P] [US2] Update badge `success` variant to use token-based colors in `frontend/src/components/ui/badge.tsx`
-- [ ] T012 [P] [US2] Update badge `muted` variant to use `bg-muted text-muted-foreground` in `frontend/src/components/ui/badge.tsx`
-- [ ] T013 [P] [US2] Update badge `info` variant to use token-based colors in `frontend/src/components/ui/badge.tsx`
-- [ ] T014 [P] [US2] Add subtle background to alert `destructive` variant (`bg-destructive/10`) in `frontend/src/components/ui/alert.tsx`
-- [ ] T015 [US2] Audit and fix any remaining hardcoded colors in `frontend/src/components/ui/` directory
-- [ ] T016 [US2] Run final grep verification to confirm zero hardcoded color violations
+- [X] T011 [P] [US2] Update badge `success` variant to use token-based colors in `frontend/src/components/ui/badge.tsx`
+- [X] T012 [P] [US2] Update badge `muted` variant to use `bg-muted text-muted-foreground` in `frontend/src/components/ui/badge.tsx`
+- [X] T013 [P] [US2] Update badge `info` variant to use token-based colors in `frontend/src/components/ui/badge.tsx`
+- [X] T014 [P] [US2] Add subtle background to alert `destructive` variant (`bg-destructive/10`) in `frontend/src/components/ui/alert.tsx`
+- [X] T015 [US2] Audit and fix any remaining hardcoded colors in `frontend/src/components/ui/` directory
+- [X] T016 [US2] Run final grep verification to confirm zero hardcoded color violations
 
 **Checkpoint**: All components should now use design tokens exclusively
 
@@ -91,11 +91,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Run Lighthouse accessibility audit on main pages (Collections, Connectors, Dashboard)
-- [ ] T018 [US3] Document any contrast violations found and fix them in respective component files
-- [ ] T019 [P] [US3] Verify focus ring visibility on buttons in `frontend/src/components/ui/button.tsx`
-- [ ] T020 [P] [US3] Verify focus ring visibility on inputs in `frontend/src/components/ui/input.tsx`
-- [ ] T021 [US3] Re-run Lighthouse audit to confirm zero contrast violations
+- [X] T017 [US3] Run Lighthouse accessibility audit on main pages (Collections, Connectors, Dashboard)
+- [X] T018 [US3] Document any contrast violations found and fix them in respective component files
+- [X] T019 [P] [US3] Verify focus ring visibility on buttons in `frontend/src/components/ui/button.tsx`
+- [X] T020 [P] [US3] Verify focus ring visibility on inputs in `frontend/src/components/ui/input.tsx`
+- [X] T021 [US3] Re-run Lighthouse audit to confirm zero contrast violations
 
 **Checkpoint**: All text and UI elements should pass WCAG AA contrast requirements
 
