@@ -80,8 +80,8 @@ Analytics                 # Existing - already tabbed
   └── Runs (tab)
 Settings                  # NEW section - consolidates config
   ├── Categories (tab)    # NEW - event categories
-  ├── Connectors (tab)    # MOVE from top-level (future)
-  └── Config (tab)        # MOVE from top-level (future)
+  ├── Connectors (tab)    # MOVE from top-level
+  └── Config (tab)        # MOVE from top-level
 ```
 
 ### Implementation Notes
@@ -95,13 +95,21 @@ Settings                  # NEW section - consolidates config
 | Directory/Performers | `/directory?tab=performers` | Tab within DirectoryPage |
 | Settings | `/settings` | New tabbed page - SettingsPage.tsx |
 | Settings/Categories | `/settings?tab=categories` | Tab within SettingsPage |
+| Settings/Connectors | `/settings?tab=connectors` | MOVE existing ConnectorsPage content |
+| Settings/Config | `/settings?tab=config` | MOVE existing ConfigPage content |
 
-### Future Refactoring (Out of Scope)
+### Migration & Backward Compatibility
 
-The following moves are recommended but **not part of this feature**:
-- Move Connectors from `/connectors` to `/settings?tab=connectors`
-- Move Config from `/config` to `/settings?tab=config`
-- Future additions: Cameras, Equipment under Settings
+| Old Route | New Route | Action |
+|-----------|-----------|--------|
+| `/connectors` | `/settings?tab=connectors` | Redirect (React Router) |
+| `/config` | `/settings?tab=config` | Redirect (React Router) |
+
+The existing `ConnectorsPage.tsx` and `ConfigPage.tsx` content will be refactored into `ConnectorsTab.tsx` and `ConfigTab.tsx` components within the Settings page. Old routes will redirect to maintain any bookmarks.
+
+### Future Additions (Out of Scope)
+
+- Cameras, Equipment tabs under Settings
 
 ### Tab Pattern
 
@@ -196,7 +204,9 @@ frontend/
 │   │   │   ├── PerformersTab.tsx      # Performers list and management
 │   │   │   └── PerformerForm.tsx      # Create/edit performer dialog
 │   │   └── settings/
-│   │       └── CategoriesTab.tsx      # Categories list and management
+│   │       ├── CategoriesTab.tsx      # Categories list and management
+│   │       ├── ConnectorsTab.tsx      # REFACTOR from ConnectorsPage
+│   │       └── ConfigTab.tsx          # REFACTOR from ConfigPage
 │   ├── pages/
 │   │   ├── EventsPage.tsx             # Calendar page with TopHeader KPIs
 │   │   ├── DirectoryPage.tsx          # Tabbed: Locations | Organizers | Performers

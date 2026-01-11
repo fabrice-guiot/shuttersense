@@ -157,8 +157,10 @@ Directory                 # NEW - Tabbed page
   ├── Organizers (tab)
   └── Performers (tab)
 Analytics                 # Existing
-Settings                  # NEW - Tabbed page
-  └── Categories (tab)
+Settings                  # NEW - Consolidates config
+  ├── Categories (tab)    # NEW
+  ├── Connectors (tab)    # MOVED from top-level
+  └── Config (tab)        # MOVED from top-level
 ```
 
 ### Routes
@@ -170,8 +172,12 @@ Settings                  # NEW - Tabbed page
 | Directory/Locations | `/directory?tab=locations` | Manage known locations |
 | Directory/Organizers | `/directory?tab=organizers` | Manage event organizers |
 | Directory/Performers | `/directory?tab=performers` | Manage performers |
-| Settings | `/settings` | Tabbed settings page |
+| Settings | `/settings` | Consolidated settings page |
 | Settings/Categories | `/settings?tab=categories` | Manage event categories |
+| Settings/Connectors | `/settings?tab=connectors` | Manage storage connectors |
+| Settings/Config | `/settings?tab=config` | Application configuration |
+
+**Note**: Old routes `/connectors` and `/config` redirect to their new Settings tabs.
 
 ## Key Components
 
@@ -184,9 +190,11 @@ Settings                  # NEW - Tabbed page
 ### Frontend
 - `frontend/src/pages/EventsPage.tsx` - Calendar page with TopHeader KPIs
 - `frontend/src/pages/DirectoryPage.tsx` - Tabbed page (Locations | Organizers | Performers)
-- `frontend/src/pages/SettingsPage.tsx` - Tabbed settings (Categories + future tabs)
+- `frontend/src/pages/SettingsPage.tsx` - Consolidated settings (Categories | Connectors | Config)
 - `frontend/src/components/events/EventCalendar.tsx` - Month view calendar
 - `frontend/src/components/directory/LocationsTab.tsx` - Locations management
+- `frontend/src/components/settings/ConnectorsTab.tsx` - Refactored from ConnectorsPage
+- `frontend/src/components/settings/ConfigTab.tsx` - Refactored from ConfigPage
 - `frontend/src/hooks/useEvents.ts` - Events CRUD hook
 - `frontend/src/hooks/useEventStats.ts` - TopHeader KPIs
 
