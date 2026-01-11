@@ -25,7 +25,6 @@
 
 - [ ] T001 Install new backend dependencies: geopy>=2.4.0 and timezonefinder>=6.0.0 in backend/requirements.txt
 - [ ] T002 [P] Register new GUID prefixes (evt_, ser_, loc_, org_, prf_, cat_) in backend/src/services/guid.py
-- [ ] T003 [P] Create frontend TypeScript types for new entities in frontend/src/contracts/api/
 
 ---
 
@@ -51,7 +50,8 @@
 - [ ] T015 Create migration 006_create_events.py for events table
 - [ ] T016 Create EventPerformer junction model in backend/src/models/event_performer.py
 - [ ] T017 Create migration 007_create_event_performers.py for junction table
-- [ ] T018 Create migration 008_seed_default_categories.py for default categories (Airshow, Wildlife, Wedding, Sports, Portrait, Concert, Motorsports)
+- [ ] T017a Export all new models (Category, Location, Organizer, Performer, EventSeries, Event, EventPerformer) from backend/src/models/__init__.py
+- [ ] T018 Create migration 008_seed_default_categories.py using icons/colors from data-model.md "Default Category Seed Data" table
 
 ### Backend Services (Can be parallel after models exist)
 
@@ -63,14 +63,14 @@
 
 ### Navigation Structure (Frontend Foundation)
 
-- [ ] T022 Create SettingsPage.tsx with Tabs structure in frontend/src/pages/SettingsPage.tsx
+- [ ] T022 [P] Create SettingsPage.tsx with Tabs structure in frontend/src/pages/SettingsPage.tsx
 - [ ] T023 Refactor ConnectorsPage.tsx content into ConnectorsTab.tsx in frontend/src/components/settings/ConnectorsTab.tsx
 - [ ] T024 Refactor ConfigPage.tsx content into ConfigTab.tsx in frontend/src/components/settings/ConfigTab.tsx
-- [ ] T025 Create DirectoryPage.tsx with Tabs structure in frontend/src/pages/DirectoryPage.tsx
+- [ ] T025 [P] Create DirectoryPage.tsx with Tabs structure in frontend/src/pages/DirectoryPage.tsx
 - [ ] T026 Update sidebar navigation in frontend/src/components/layout/Sidebar.tsx (add Events, Directory, Settings; remove Connectors, Config)
 - [ ] T027 Add route redirects from /connectors to /settings?tab=connectors and /config to /settings?tab=config in frontend/src/App.tsx
 - [ ] T028 Update frontend router with new routes (/events, /directory, /settings) in frontend/src/App.tsx
-- [ ] T028a [P] Write integration tests for route redirects and navigation structure in frontend/tests/integration/routing.test.tsx
+- [ ] T028a [P] Write integration tests for route redirects, navigation structure, and tab URL sync (?tab= query params) in frontend/tests/integration/routing.test.tsx
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -88,6 +88,7 @@
 
 - [ ] T029 [US9] Implement Categories API endpoints in backend/src/api/categories.py (list, create, get, update, delete, reorder)
 - [ ] T030 [US9] Register categories router in backend/src/main.py
+- [ ] T030a [P] [US9] Write API integration tests for Categories endpoints in backend/tests/integration/test_categories_api.py
 - [ ] T031 [P] [US9] Create category API service in frontend/src/services/categories.ts
 - [ ] T032 [P] [US9] Create useCategories hook in frontend/src/hooks/useCategories.ts
 - [ ] T033 [US9] Create CategoriesTab component in frontend/src/components/settings/CategoriesTab.tsx
@@ -113,6 +114,7 @@
 - [ ] T039 [US1] Implement GET /api/events endpoint with date/category/status filters in backend/src/api/events.py
 - [ ] T040 [US1] Implement GET /api/events/{guid} endpoint in backend/src/api/events.py
 - [ ] T041 [US1] Register events router in backend/src/main.py
+- [ ] T041a [P] [US1] Write API integration tests for Events list/get endpoints in backend/tests/integration/test_events_api.py
 
 ### Frontend for User Story 1
 
@@ -147,6 +149,7 @@
 - [ ] T054 [US2] Implement POST /api/events endpoint in backend/src/api/events.py
 - [ ] T055 [US2] Implement PATCH /api/events/{guid} endpoint with scope parameter in backend/src/api/events.py
 - [ ] T056 [US2] Implement DELETE /api/events/{guid} endpoint with scope parameter in backend/src/api/events.py
+- [ ] T056a [P] [US2] Write API integration tests for Events create/update/delete in backend/tests/integration/test_events_api.py
 
 ### Frontend for User Story 2
 
@@ -218,6 +221,7 @@
 - [ ] T073 [US5] Implement POST /api/locations/geocode endpoint in backend/src/api/locations.py
 - [ ] T074 [US5] Implement Locations API endpoints (list, create, get, update, delete) in backend/src/api/locations.py
 - [ ] T075 [US5] Register locations router in backend/src/main.py
+- [ ] T075a [P] [US5] Write API integration tests for Locations endpoints in backend/tests/integration/test_locations_api.py
 
 ### Frontend for User Story 5
 
@@ -251,6 +255,7 @@
 - [ ] T086 [US6] Implement category matching validation in OrganizerService in backend/src/services/organizer_service.py
 - [ ] T087 [US6] Implement Organizers API endpoints (list, create, get, update, delete) in backend/src/api/organizers.py
 - [ ] T088 [US6] Register organizers router in backend/src/main.py
+- [ ] T088a [P] [US6] Write API integration tests for Organizers endpoints in backend/tests/integration/test_organizers_api.py
 
 ### Frontend for User Story 6
 
@@ -261,8 +266,10 @@
 - [ ] T092 [US6] Create OrganizersTab component in frontend/src/components/directory/OrganizersTab.tsx
 - [ ] T093 [US6] Create OrganizerForm dialog component in frontend/src/components/directory/OrganizerForm.tsx
 - [ ] T093a [P] [US6] Write component tests for OrganizerForm in frontend/tests/components/OrganizerForm.test.tsx
+- [ ] T093b [US6] Create OrganizerPicker component for EventForm in frontend/src/components/directory/OrganizerPicker.tsx
+- [ ] T093c [P] [US6] Write component tests for OrganizerPicker in frontend/tests/components/OrganizerPicker.test.tsx
 - [ ] T094 [US6] Wire OrganizersTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
-- [ ] T095 [US6] Add organizer selector to EventForm with ticket default application in frontend/src/components/events/EventForm.tsx
+- [ ] T095 [US6] Integrate OrganizerPicker into EventForm with ticket default application in frontend/src/components/events/EventForm.tsx
 
 **Checkpoint**: Organizers can be created and selected for events with default ticket settings
 
@@ -307,6 +314,7 @@
 - [ ] T106 [US8] Implement Performers API endpoints (list, create, get, update, delete, events) in backend/src/api/performers.py
 - [ ] T107 [US8] Implement Event performer endpoints (list, add, update, remove) in backend/src/api/events.py
 - [ ] T108 [US8] Register performers router in backend/src/main.py
+- [ ] T108a [P] [US8] Write API integration tests for Performers endpoints in backend/tests/integration/test_performers_api.py
 
 ### Frontend for User Story 8
 
@@ -352,9 +360,25 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T122 [P] Add loading states and error handling to all new pages
-- [ ] T123 [P] Ensure dark theme compliance for all new components per design system
-- [ ] T124 [P] Add keyboard navigation and accessibility to EventCalendar
+### Loading & Error States
+
+- [ ] T122a [P] Add loading states to EventsPage, DirectoryPage, SettingsPage
+- [ ] T122b [P] Add error boundaries and error toasts to new pages
+
+### Dark Theme Compliance
+
+- [ ] T123a [P] Verify EventCalendar, EventCard, EventForm dark theme colors
+- [ ] T123b [P] Verify LocationForm, OrganizerForm, PerformerForm dark theme colors
+- [ ] T123c [P] Verify LogisticsSection status colors work in dark mode
+
+### Accessibility
+
+- [ ] T124a [P] Add keyboard navigation to EventCalendar (arrow keys for date navigation)
+- [ ] T124b [P] Add ARIA labels to calendar events and status indicators
+- [ ] T124c [P] Test screen reader compatibility with EventDetails tooltip
+
+### Validation
+
 - [ ] T125 Verify category matching is enforced across all entity associations
 - [ ] T126 Run database migrations and verify schema integrity
 - [ ] T127 Run quickstart.md validation scenarios
@@ -398,10 +422,11 @@
 ### Parallel Opportunities
 
 - All Setup tasks marked [P] can run in parallel
-- All TypeScript types (T003, T042, T076, T084, T089, T102, T109) can be created in parallel
+- All TypeScript types (T042, T076, T089, T102, T109) can be created in parallel
 - All Pydantic schemas marked [P] can be created in parallel
 - Once Foundational phase completes, US5 (Locations), US6 (Organizers), US8 (Performers) backend can run parallel to US1
 - Frontend components within a story can often run in parallel
+- SettingsPage (T022) and DirectoryPage (T025) can be created in parallel
 
 ---
 
@@ -467,25 +492,26 @@ With multiple developers:
 
 | Metric | Count |
 |--------|-------|
-| **Total Tasks** | 148 |
-| **Setup Tasks** | 3 |
-| **Foundational Tasks** | 28 |
-| **US9 (Categories)** | 7 |
-| **US1 (Calendar View)** | 17 |
-| **US2 (Create/Edit Events)** | 14 |
+| **Total Tasks** | 162 |
+| **Setup Tasks** | 2 |
+| **Foundational Tasks** | 29 |
+| **US9 (Categories)** | 8 |
+| **US1 (Calendar View)** | 18 |
+| **US2 (Create/Edit Events)** | 15 |
 | **US3 (Timezone Input)** | 5 |
 | **US7 (KPIs)** | 5 |
-| **US5 (Locations)** | 18 |
-| **US6 (Organizers)** | 15 |
+| **US5 (Locations)** | 19 |
+| **US6 (Organizers)** | 18 |
 | **US4 (Logistics)** | 7 |
-| **US8 (Performers)** | 17 |
+| **US8 (Performers)** | 18 |
 | **US10 (Status Config)** | 6 |
-| **Polish Tasks** | 6 |
+| **Polish Tasks** | 11 |
 
-**Suggested MVP Scope**: Setup + Foundational + US9 (Categories) + US1 (Calendar View) + US2 (Create/Edit Events) = **69 tasks**
+**Suggested MVP Scope**: Setup + Foundational + US9 (Categories) + US1 (Calendar View) + US2 (Create/Edit Events) = **72 tasks**
 
-**Parallel Opportunities**: 49 tasks marked with [P] can be executed in parallel with other tasks in their phase
+**Parallel Opportunities**: 55+ tasks marked with [P] can be executed in parallel with other tasks in their phase
 
-**Test Coverage**: 21 test tasks included:
-- Backend (7): T019a, T020a, T038a, T053a, T071a, T085a, T103a
-- Frontend (14): T028a, T044a, T045a, T057a, T065a, T068a, T078a, T080a, T081a, T091a, T093a, T098a, T111a, T113a
+**Test Coverage**: 30 test tasks included:
+- Backend Unit (7): T019a, T020a, T038a, T053a, T071a, T085a, T103a
+- Backend Integration (6): T030a, T041a, T056a, T075a, T088a, T108a
+- Frontend (17): T028a, T044a, T045a, T057a, T065a, T068a, T078a, T080a, T081a, T091a, T093a, T093c, T098a, T111a, T113a, T124c (accessibility)

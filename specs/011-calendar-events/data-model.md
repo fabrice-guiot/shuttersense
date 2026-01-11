@@ -397,4 +397,22 @@ CREATE INDEX idx_categories_active ON categories(is_active, display_order) WHERE
 5. `005_create_event_series.py` - EventSeries table
 6. `006_create_events.py` - Events table with all FKs
 7. `007_create_event_performers.py` - Junction table
-8. `008_seed_default_categories.py` - Seed default categories (Airshow, Wedding, Wildlife, etc.)
+8. `008_seed_default_categories.py` - Seed default categories (see table below)
+
+---
+
+## Default Category Seed Data
+
+Migration `008_seed_default_categories.py` seeds the following categories:
+
+| Name | Icon | Color | Rationale |
+|------|------|-------|-----------|
+| Airshow | `plane` | `#3B82F6` (blue) | Aviation theme |
+| Wildlife | `bird` | `#22C55E` (green) | Nature theme |
+| Wedding | `heart` | `#EC4899` (pink) | Romance theme |
+| Sports | `trophy` | `#F97316` (orange) | Competition theme |
+| Portrait | `user` | `#8B5CF6` (purple) | People theme |
+| Concert | `music` | `#EF4444` (red) | Entertainment theme |
+| Motorsports | `car` | `#6B7280` (gray) | Racing theme |
+
+**Note**: All seeded categories have `is_active = true` and `display_order` set sequentially (0-6). Users may edit or delete seeded categories after initial setup.

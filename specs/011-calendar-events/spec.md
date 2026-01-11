@@ -41,7 +41,7 @@ As a photographer, I want to create and edit events so that I can maintain an ac
 3. **Given** the user selects an "All Day" event, **When** they submit the form, **Then** the event is created with start time at midnight and spans the full day
 4. **Given** the user selects a date range spanning multiple days, **When** they submit the form, **Then** the system creates a Series of individual session Events (one per day) with shared properties
 5. **Given** an event exists, **When** the user clicks on it and selects edit, **Then** they can modify all event properties and save changes
-6. **Given** the user is editing an event, **When** they change the attendance status, **Then** the calendar updates to reflect the new status with appropriate visual styling (Planned=Yellow, Skipped=Red, Attended=Green)
+6. **Given** the user is editing an event, **When** they change the attendance status, **Then** the calendar updates to reflect the new status with appropriate visual styling (Planned=Yellow, Attended=Green, Skipped=Red)
 
 ---
 
@@ -201,7 +201,7 @@ As a photographer, I want to configure the list of available event statuses so t
 - **FR-003**: System MUST allow users to input times in a selected timezone (defaulting to location timezone when available)
 - **FR-004**: System MUST display event times in the user's local timezone on the calendar
 - **FR-005**: System MUST support event statuses that are configurable in Settings (default: Future, Confirmed, Completed, Cancelled)
-- **FR-006**: System MUST support attendance values: Planned (Yellow), Skipped (Red), Attended (Green)
+- **FR-006**: System MUST support attendance values: Planned (Yellow), Attended (Green), Skipped (Red)
 - **FR-007**: System MUST create a Series of individual Events when user selects a multi-day date range
 - **FR-008**: System MUST display Series events with "x/n" notation (e.g., "1/3", "2/3", "3/3")
 - **FR-009**: System MUST share all properties across Series events except individual status and attendance
@@ -292,5 +292,5 @@ As a photographer, I want to configure the list of available event statuses so t
 
 - Timezone support infrastructure (Issue #56) is complete and available
 - The application will use an external geocoding service for address resolution (specific service to be determined during planning)
-- Default categories will be seeded (Airshow, Wildlife, Wedding, Sports, Portrait, etc.) but are user-configurable
+- Default categories will be seeded (Airshow, Wildlife, Wedding, Sports, Portrait, Concert, Motorsports) but are user-configurable
 - Event status list is configurable per user/team preference
