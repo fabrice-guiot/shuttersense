@@ -70,6 +70,7 @@
 - [ ] T026 Update sidebar navigation in frontend/src/components/layout/Sidebar.tsx (add Events, Directory, Settings; remove Connectors, Config)
 - [ ] T027 Add route redirects from /connectors to /settings?tab=connectors and /config to /settings?tab=config in frontend/src/App.tsx
 - [ ] T028 Update frontend router with new routes (/events, /directory, /settings) in frontend/src/App.tsx
+- [ ] T028a [P] Write integration tests for route redirects and navigation structure in frontend/tests/integration/routing.test.tsx
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -118,6 +119,7 @@
 - [ ] T042 [P] [US1] Create event TypeScript types in frontend/src/contracts/api/event-api.ts
 - [ ] T043 [P] [US1] Create events API service in frontend/src/services/events.ts
 - [ ] T044 [US1] Create useEvents hook for fetching events by date range in frontend/src/hooks/useEvents.ts
+- [ ] T044a [P] [US1] Write hook tests for useEvents in frontend/tests/hooks/useEvents.test.ts
 - [ ] T045 [US1] Create EventCalendar component (CSS Grid month view) in frontend/src/components/events/EventCalendar.tsx
 - [ ] T045a [P] [US1] Write component tests for EventCalendar in frontend/tests/components/EventCalendar.test.tsx
 - [ ] T046 [US1] Create EventCard component for calendar day display in frontend/src/components/events/EventCard.tsx
@@ -149,6 +151,7 @@
 ### Frontend for User Story 2
 
 - [ ] T057 [US2] Create EventForm component for create/edit in frontend/src/components/events/EventForm.tsx
+- [ ] T057a [P] [US2] Write component tests for EventForm in frontend/tests/components/EventForm.test.tsx
 - [ ] T058 [US2] Add create/update/delete mutations to useEvents hook in frontend/src/hooks/useEvents.ts
 - [ ] T059 [US2] Wire "New Event" button and form dialog into EventsPage in frontend/src/pages/EventsPage.tsx
 - [ ] T060 [US2] Implement edit mode in EventDetails/EventForm with single vs series scope selection in frontend/src/components/events/EventForm.tsx
@@ -173,6 +176,7 @@
 
 - [ ] T064 [US3] Add timezone selector to EventForm (populated from location) in frontend/src/components/events/EventForm.tsx
 - [ ] T065 [US3] Display event times with timezone context in EventCard and EventDetails in frontend/src/components/events/EventCard.tsx and frontend/src/components/events/EventDetails.tsx
+- [ ] T065a [P] [US3] Write component tests for timezone selector and display in frontend/tests/components/EventForm.test.tsx
 
 **Checkpoint**: Events can be created with specific timezones and times display correctly
 
@@ -192,6 +196,7 @@
 ### Frontend for User Story 7
 
 - [ ] T068 [US7] Create useEventStats hook in frontend/src/hooks/useEventStats.ts
+- [ ] T068a [P] [US7] Write hook tests for useEventStats in frontend/tests/hooks/useEventStats.test.ts
 - [ ] T069 [US7] Integrate useEventStats with HeaderStatsContext in EventsPage in frontend/src/pages/EventsPage.tsx
 
 **Checkpoint**: TopHeader KPIs display correctly on Events page
@@ -219,9 +224,12 @@
 - [ ] T076 [P] [US5] Create location TypeScript types in frontend/src/contracts/api/location-api.ts
 - [ ] T077 [P] [US5] Create locations API service in frontend/src/services/locations.ts
 - [ ] T078 [US5] Create useLocations hook in frontend/src/hooks/useLocations.ts
+- [ ] T078a [P] [US5] Write hook tests for useLocations in frontend/tests/hooks/useLocations.test.ts
 - [ ] T079 [US5] Create LocationsTab component in frontend/src/components/directory/LocationsTab.tsx
 - [ ] T080 [US5] Create LocationForm dialog component with geocoding in frontend/src/components/directory/LocationForm.tsx
+- [ ] T080a [P] [US5] Write component tests for LocationForm in frontend/tests/components/LocationForm.test.tsx
 - [ ] T081 [US5] Create LocationPicker component for EventForm in frontend/src/components/directory/LocationPicker.tsx
+- [ ] T081a [P] [US5] Write component tests for LocationPicker in frontend/tests/components/LocationPicker.test.tsx
 - [ ] T082 [US5] Wire LocationsTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
 - [ ] T083 [US5] Integrate LocationPicker into EventForm with timezone suggestion in frontend/src/components/events/EventForm.tsx
 
@@ -249,8 +257,10 @@
 - [ ] T089 [P] [US6] Create organizer TypeScript types in frontend/src/contracts/api/organizer-api.ts
 - [ ] T090 [P] [US6] Create organizers API service in frontend/src/services/organizers.ts
 - [ ] T091 [US6] Create useOrganizers hook in frontend/src/hooks/useOrganizers.ts
+- [ ] T091a [P] [US6] Write hook tests for useOrganizers in frontend/tests/hooks/useOrganizers.test.ts
 - [ ] T092 [US6] Create OrganizersTab component in frontend/src/components/directory/OrganizersTab.tsx
 - [ ] T093 [US6] Create OrganizerForm dialog component in frontend/src/components/directory/OrganizerForm.tsx
+- [ ] T093a [P] [US6] Write component tests for OrganizerForm in frontend/tests/components/OrganizerForm.test.tsx
 - [ ] T094 [US6] Wire OrganizersTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
 - [ ] T095 [US6] Add organizer selector to EventForm with ticket default application in frontend/src/components/events/EventForm.tsx
 
@@ -272,6 +282,7 @@
 ### Frontend for User Story 4
 
 - [ ] T098 [US4] Create LogisticsSection component with status dropdowns, color coding, and deadline_date picker in frontend/src/components/events/LogisticsSection.tsx
+- [ ] T098a [P] [US4] Write component tests for LogisticsSection in frontend/tests/components/LogisticsSection.test.tsx
 - [ ] T099 [US4] Integrate LogisticsSection into EventForm in frontend/src/components/events/EventForm.tsx
 - [ ] T100 [US4] Display logistics status indicators on EventCard in frontend/src/components/events/EventCard.tsx
 - [ ] T101 [US4] Display detailed logistics in EventDetails in frontend/src/components/events/EventDetails.tsx
@@ -302,8 +313,10 @@
 - [ ] T109 [P] [US8] Create performer TypeScript types in frontend/src/contracts/api/performer-api.ts
 - [ ] T110 [P] [US8] Create performers API service in frontend/src/services/performers.ts
 - [ ] T111 [US8] Create usePerformers hook in frontend/src/hooks/usePerformers.ts
+- [ ] T111a [P] [US8] Write hook tests for usePerformers in frontend/tests/hooks/usePerformers.test.ts
 - [ ] T112 [US8] Create PerformersTab component in frontend/src/components/directory/PerformersTab.tsx
 - [ ] T113 [US8] Create PerformerForm dialog component in frontend/src/components/directory/PerformerForm.tsx
+- [ ] T113a [P] [US8] Write component tests for PerformerForm in frontend/tests/components/PerformerForm.test.tsx
 - [ ] T114 [US8] Wire PerformersTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
 - [ ] T115 [US8] Add performer management section to EventForm/EventDetails in frontend/src/components/events/EventForm.tsx
 
@@ -454,23 +467,25 @@ With multiple developers:
 
 | Metric | Count |
 |--------|-------|
-| **Total Tasks** | 135 |
+| **Total Tasks** | 148 |
 | **Setup Tasks** | 3 |
-| **Foundational Tasks** | 27 |
+| **Foundational Tasks** | 28 |
 | **US9 (Categories)** | 7 |
-| **US1 (Calendar View)** | 16 |
-| **US2 (Create/Edit Events)** | 13 |
-| **US3 (Timezone Input)** | 4 |
-| **US7 (KPIs)** | 4 |
-| **US5 (Locations)** | 15 |
-| **US6 (Organizers)** | 13 |
-| **US4 (Logistics)** | 6 |
-| **US8 (Performers)** | 15 |
+| **US1 (Calendar View)** | 17 |
+| **US2 (Create/Edit Events)** | 14 |
+| **US3 (Timezone Input)** | 5 |
+| **US7 (KPIs)** | 5 |
+| **US5 (Locations)** | 18 |
+| **US6 (Organizers)** | 15 |
+| **US4 (Logistics)** | 7 |
+| **US8 (Performers)** | 17 |
 | **US10 (Status Config)** | 6 |
 | **Polish Tasks** | 6 |
 
-**Suggested MVP Scope**: Setup + Foundational + US9 (Categories) + US1 (Calendar View) + US2 (Create/Edit Events) = **66 tasks**
+**Suggested MVP Scope**: Setup + Foundational + US9 (Categories) + US1 (Calendar View) + US2 (Create/Edit Events) = **69 tasks**
 
-**Parallel Opportunities**: 36 tasks marked with [P] can be executed in parallel with other tasks in their phase
+**Parallel Opportunities**: 49 tasks marked with [P] can be executed in parallel with other tasks in their phase
 
-**Test Coverage**: 8 test tasks included (T019a, T020a, T038a, T045a, T053a, T071a, T085a, T103a)
+**Test Coverage**: 21 test tasks included:
+- Backend (7): T019a, T020a, T038a, T053a, T071a, T085a, T103a
+- Frontend (14): T028a, T044a, T045a, T057a, T065a, T068a, T078a, T080a, T081a, T091a, T093a, T098a, T111a, T113a
