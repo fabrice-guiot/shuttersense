@@ -10,8 +10,9 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, X, CalendarDays, Calendar } from 'lucide-react'
+import { Loader2, X, CalendarDays, Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Form,
   FormControl,
@@ -244,7 +245,7 @@ export const EventForm = ({
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              <Calendar className="h-4 w-4" />
+              <CalendarIcon className="h-4 w-4" />
               Single Event
             </button>
             <button
@@ -338,10 +339,10 @@ export const EventForm = ({
             <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
               Date
             </label>
-            <Input
-              type="date"
+            <DatePicker
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(date) => setSelectedDate(date || '')}
+              placeholder="Select event date"
             />
           </div>
         )}
@@ -358,12 +359,13 @@ export const EventForm = ({
 
             {/* Date Input */}
             <div className="flex gap-2">
-              <Input
-                type="date"
-                value={dateInput}
-                onChange={(e) => setDateInput(e.target.value)}
-                className="flex-1"
-              />
+              <div className="flex-1">
+                <DatePicker
+                  value={dateInput}
+                  onChange={(date) => setDateInput(date || '')}
+                  placeholder="Select a date to add"
+                />
+              </div>
               <Button
                 type="button"
                 variant="outline"
