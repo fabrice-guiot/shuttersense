@@ -19,9 +19,11 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
+import { ErrorBoundary } from './components/error'
 
 // Page components
 import DashboardPage from './pages/DashboardPage'
+import NotFoundPage from './pages/NotFoundPage'
 import WorkflowsPage from './pages/WorkflowsPage'
 import CollectionsPage from './pages/CollectionsPage'
 import AssetsPage from './pages/AssetsPage'
@@ -113,25 +115,29 @@ const routes: RouteConfig[] = [
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {routes.map(({ path, element, pageTitle, pageIcon }) => (
-          <Route
-            key={path}
-            path={path}
-            element={
-              <MainLayout pageTitle={pageTitle} pageIcon={pageIcon}>
-                {element}
-              </MainLayout>
-            }
-          />
-        ))}
-        {/* Pipeline editor routes - these pages include their own MainLayout */}
-        <Route path="/pipelines/new" element={<PipelineEditorPage />} />
-        <Route path="/pipelines/:id" element={<PipelineEditorPage />} />
-        <Route path="/pipelines/:id/edit" element={<PipelineEditorPage />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          {routes.map(({ path, element, pageTitle, pageIcon }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <MainLayout pageTitle={pageTitle} pageIcon={pageIcon}>
+                  {element}
+                </MainLayout>
+              }
+            />
+          ))}
+          {/* Pipeline editor routes - these pages include their own MainLayout */}
+          <Route path="/pipelines/new" element={<PipelineEditorPage />} />
+          <Route path="/pipelines/:id" element={<PipelineEditorPage />} />
+          <Route path="/pipelines/:id/edit" element={<PipelineEditorPage />} />
+          {/* Catch-all 404 route */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
 
