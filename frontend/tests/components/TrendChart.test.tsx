@@ -223,15 +223,19 @@ describe('BaseLineChart', () => {
 // ============================================================================
 
 describe('formatChartDate', () => {
-  it('should format date as "MMM d" format', () => {
+  it('should format date in short format', () => {
     // Use a date that's timezone-safe (mid-month)
     const result = formatChartDate('2025-01-15T12:00:00Z')
-    expect(result).toMatch(/Jan \d+/)
+    // Short format: "1/15/25" (US) or similar locale-dependent format
+    expect(result).toMatch(/1.*15|15.*1/) // Contains month and day
+    expect(result).toMatch(/25/) // Contains year
   })
 
   it('should handle ISO timestamp strings', () => {
     const result = formatChartDate('2025-06-15T10:30:00Z')
-    expect(result).toMatch(/Jun \d+/)
+    // Short format: "6/15/25" (US) or similar
+    expect(result).toMatch(/6.*15|15.*6/) // Contains month and day
+    expect(result).toMatch(/25/) // Contains year
   })
 })
 

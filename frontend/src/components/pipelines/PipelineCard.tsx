@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { formatDate } from '@/utils/dateFormat'
 
 interface PipelineCardProps {
   pipeline: PipelineSummary
@@ -60,13 +61,6 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
   onValidateGraph,
   isLoading = false,
 }) => {
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  }
 
   return (
     <Card

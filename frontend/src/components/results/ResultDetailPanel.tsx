@@ -33,6 +33,7 @@ import type {
   DisplayGraphResults
 } from '@/contracts/api/results-api'
 import { cn } from '@/lib/utils'
+import { formatRelativeTime } from '@/utils/dateFormat'
 
 // ============================================================================
 // Types
@@ -580,9 +581,6 @@ export function ResultDetailPanel({
     return `${minutes}m ${remainingSeconds.toFixed(0)}s`
   }
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleString()
-  }
 
   const renderToolResults = () => {
     switch (result.tool) {
@@ -654,11 +652,11 @@ export function ResultDetailPanel({
             </div>
             <div>
               <span className="text-muted-foreground">Started:</span>{' '}
-              <span className="font-medium">{formatDate(result.started_at)}</span>
+              <span className="font-medium">{formatRelativeTime(result.started_at)}</span>
             </div>
             <div>
               <span className="text-muted-foreground">Completed:</span>{' '}
-              <span className="font-medium">{formatDate(result.completed_at)}</span>
+              <span className="font-medium">{formatRelativeTime(result.completed_at)}</span>
             </div>
           </div>
 

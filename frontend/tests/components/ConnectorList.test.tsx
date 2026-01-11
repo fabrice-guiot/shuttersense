@@ -122,7 +122,9 @@ describe('ConnectorList', () => {
     )
 
     // All connectors should have created_at timestamps
-    const timestamps = screen.getAllByText(/\d{1,2}\/\d{1,2}\/\d{4}/)
+    // formatDateTime produces format like "Jan 15, 2024, 3:45 PM" or similar locale-dependent format
+    // Look for common patterns: month abbreviation with year, or date with time separator
+    const timestamps = screen.getAllByText(/\d{4}|AM|PM|:\d{2}/)
     expect(timestamps.length).toBeGreaterThan(0)
   })
 

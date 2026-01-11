@@ -35,6 +35,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import type { Connector, ConnectorType } from '@/contracts/api/connector-api'
 import { cn } from '@/lib/utils'
+import { formatDateTime } from '@/utils/dateFormat'
 
 // ============================================================================
 // Component Props
@@ -70,10 +71,6 @@ function isBetaConnectorType(type: ConnectorType): boolean {
   return BETA_CONNECTOR_TYPES.has(type)
 }
 
-function formatDate(dateString: string | null | undefined): string {
-  if (!dateString) return 'Never'
-  return new Date(dateString).toLocaleString()
-}
 
 // ============================================================================
 // Component
@@ -255,7 +252,7 @@ export function ConnectorList({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(connector.created_at)}
+                      {formatDateTime(connector.created_at)}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">

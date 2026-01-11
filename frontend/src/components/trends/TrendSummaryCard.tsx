@@ -8,6 +8,7 @@ import { TrendingUp, TrendingDown, Minus, AlertCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { TrendSummaryResponse, TrendDirection } from '@/contracts/api/trends-api'
 import { cn } from '@/lib/utils'
+import { formatDate } from '@/utils/dateFormat'
 
 interface TrendSummaryCardProps {
   summary: TrendSummaryResponse | null
@@ -149,18 +150,18 @@ export function TrendSummaryCard({ summary, loading = false, error = null }: Tre
           <div className="text-xs text-muted-foreground pt-2 border-t">
             {summary.last_photostats && (
               <div>
-                Last PhotoStats: {new Date(summary.last_photostats).toLocaleDateString()}
+                Last PhotoStats: {formatDate(summary.last_photostats)}
               </div>
             )}
             {summary.last_photo_pairing && (
               <div>
-                Last Photo Pairing: {new Date(summary.last_photo_pairing).toLocaleDateString()}
+                Last Photo Pairing: {formatDate(summary.last_photo_pairing)}
               </div>
             )}
             {summary.last_pipeline_validation && (
               <div>
                 Last Pipeline Val.:{' '}
-                {new Date(summary.last_pipeline_validation).toLocaleDateString()}
+                {formatDate(summary.last_pipeline_validation)}
               </div>
             )}
           </div>

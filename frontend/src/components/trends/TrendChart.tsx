@@ -16,6 +16,7 @@ import {
   Legend
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { formatDate, formatDateTime } from '@/utils/dateFormat'
 
 // Chart color palette using CSS variables for theme consistency
 export const CHART_COLORS = [
@@ -88,11 +89,7 @@ export function TrendChart({
  * Format date for chart X-axis labels
  */
 export function formatChartDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric'
-  })
+  return formatDate(dateStr, { dateStyle: 'short' })
 }
 
 /**
@@ -174,7 +171,7 @@ export function BaseLineChart({
         />
         <Tooltip
           formatter={tooltipFormatter}
-          labelFormatter={(label: string) => new Date(label).toLocaleString()}
+          labelFormatter={(label: string) => formatDateTime(label)}
           contentStyle={{
             backgroundColor: 'hsl(var(--popover))',
             border: '1px solid hsl(var(--border))',
