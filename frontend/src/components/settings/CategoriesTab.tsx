@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, GripVertical } from 'lucide-react'
+import { Plus, Edit, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -28,7 +28,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useCategories, useCategoryStats } from '@/hooks/useCategories'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
-import { CategoryForm } from './CategoryForm'
+import { CategoryForm, ICON_MAP } from './CategoryForm'
 import { GuidBadge } from '@/components/GuidBadge'
 import type { Category } from '@/contracts/api/category-api'
 import { cn } from '@/lib/utils'
@@ -45,20 +45,27 @@ interface CategoryIconProps {
 }
 
 function CategoryIcon({ icon, color, size = 'md' }: CategoryIconProps) {
-  const sizeClass = size === 'sm' ? 'h-4 w-4' : 'h-6 w-6'
+  const iconSizeClass = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'
   const containerSize = size === 'sm' ? 'h-6 w-6' : 'h-8 w-8'
 
-  // Use a colored circle with first letter of icon or a dot
+  // Look up the Lucide icon component
+  const IconComponent = icon ? ICON_MAP[icon] : null
+
   return (
     <div
       className={cn(
         containerSize,
-        'rounded-full flex items-center justify-center text-white font-medium',
+        'rounded-full flex items-center justify-center text-white',
         size === 'sm' ? 'text-xs' : 'text-sm'
       )}
       style={{ backgroundColor: color || '#6B7280' }}
     >
-      {icon ? icon.charAt(0).toUpperCase() : ''}
+      {IconComponent ? (
+        <IconComponent className={iconSizeClass} />
+      ) : icon ? (
+        // Fallback to first letter if icon name not in map
+        <span className="font-medium">{icon.charAt(0).toUpperCase()}</span>
+      ) : null}
     </div>
   )
 }
