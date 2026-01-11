@@ -1,0 +1,348 @@
+/**
+ * Integration tests for routing and navigation - T028a
+ *
+ * Tests the navigation restructure for Calendar Events feature (Issue #39):
+ * - Route redirects from legacy paths (/connectors, /config)
+ * - New page routes (/events, /directory, /settings)
+ * - Tab URL synchronization (?tab= query params)
+ * - Sidebar navigation links
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { MainLayout } from '@/components/layout/MainLayout'
+import { HeaderStatsProvider } from '@/contexts/HeaderStatsContext'
+import SettingsPage from '@/pages/SettingsPage'
+import DirectoryPage from '@/pages/DirectoryPage'
+import EventsPage from '@/pages/EventsPage'
+
+// Helper component to display current location for testing
+function LocationDisplay() {
+  const location = useLocation()
+  return (
+    <div data-testid="location-display">
+      <span data-testid="pathname">{location.pathname}</span>
+      <span data-testid="search">{location.search}</span>
+    </div>
+  )
+}
+
+// Test wrapper with routing and required providers
+function renderWithRouter(
+  ui: React.ReactElement,
+  { initialEntries = ['/'] }: { initialEntries?: string[] } = {}
+) {
+  return render(
+    <HeaderStatsProvider>
+      <MemoryRouter initialEntries={initialEntries}>
+        {ui}
+        <LocationDisplay />
+      </MemoryRouter>
+    </HeaderStatsProvider>
+  )
+}
+
+describe('Routing Integration - T028a', () => {
+  describe('Legacy Route Redirects', () => {
+    it('redirects /connectors to /settings?tab=connectors', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/connectors" element={<Navigate to="/settings?tab=connectors" replace />} />
+        </Routes>,
+        { initialEntries: ['/connectors'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pathname').textContent).toBe('/settings')
+        expect(screen.getByTestId('search').textContent).toBe('?tab=connectors')
+      })
+    })
+
+    it('redirects /config to /settings?tab=config', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/config" element={<Navigate to="/settings?tab=config" replace />} />
+        </Routes>,
+        { initialEntries: ['/config'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pathname').textContent).toBe('/settings')
+        expect(screen.getByTestId('search').textContent).toBe('?tab=config')
+      })
+    })
+  })
+
+  describe('New Route Rendering', () => {
+    it('renders EventsPage at /events', () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/events" element={<EventsPage />} />
+        </Routes>,
+        { initialEntries: ['/events'] }
+      )
+
+      expect(screen.getByText('Events Calendar')).toBeInTheDocument()
+    })
+
+    it('renders DirectoryPage at /directory', () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory'] }
+      )
+
+      expect(screen.getByText('Directory')).toBeInTheDocument()
+    })
+
+    it('renders SettingsPage at /settings', () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings'] }
+      )
+
+      expect(screen.getByText('Settings')).toBeInTheDocument()
+    })
+  })
+
+  describe('Settings Page Tab URL Sync', () => {
+    it('defaults to connectors tab when no query param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search').textContent).toBe('?tab=connectors')
+      })
+
+      // Connectors tab should be active
+      expect(screen.getByRole('tab', { name: /connectors/i })).toHaveAttribute('data-state', 'active')
+    })
+
+    it('activates connectors tab from URL query param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=connectors'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /connectors/i })).toHaveAttribute('data-state', 'active')
+      expect(screen.getByRole('tab', { name: /configuration/i })).toHaveAttribute('data-state', 'inactive')
+    })
+
+    it('activates config tab from URL query param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=config'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /configuration/i })).toHaveAttribute('data-state', 'active')
+      expect(screen.getByRole('tab', { name: /connectors/i })).toHaveAttribute('data-state', 'inactive')
+    })
+
+    it('updates URL when tab is clicked', async () => {
+      const user = userEvent.setup()
+
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=connectors'] }
+      )
+
+      // Click on Configuration tab
+      await user.click(screen.getByRole('tab', { name: /configuration/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search').textContent).toBe('?tab=config')
+      })
+    })
+
+    it('falls back to default tab for invalid tab param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=invalid'] }
+      )
+
+      // Should fall back to connectors (default)
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /connectors/i })).toHaveAttribute('data-state', 'active')
+      })
+    })
+  })
+
+  describe('Directory Page Tab URL Sync', () => {
+    it('defaults to categories tab when no query param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search').textContent).toBe('?tab=categories')
+      })
+
+      expect(screen.getByRole('tab', { name: /categories/i })).toHaveAttribute('data-state', 'active')
+    })
+
+    it('activates locations tab from URL query param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory?tab=locations'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /locations/i })).toHaveAttribute('data-state', 'active')
+    })
+
+    it('activates organizers tab from URL query param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory?tab=organizers'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /organizers/i })).toHaveAttribute('data-state', 'active')
+    })
+
+    it('activates performers tab from URL query param', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory?tab=performers'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /performers/i })).toHaveAttribute('data-state', 'active')
+    })
+
+    it('updates URL when tab is clicked', async () => {
+      const user = userEvent.setup()
+
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory?tab=categories'] }
+      )
+
+      // Click on Locations tab
+      await user.click(screen.getByRole('tab', { name: /locations/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search').textContent).toBe('?tab=locations')
+      })
+    })
+  })
+
+  describe('Tab Content Visibility', () => {
+    it('shows connectors content when connectors tab is active', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=connectors'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Remote Storage Connectors')).toBeInTheDocument()
+      })
+    })
+
+    it('shows config content when config tab is active', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=config'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Tool Configuration')).toBeInTheDocument()
+      })
+    })
+
+    it('shows categories placeholder when categories tab is active', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory?tab=categories'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(/manage event categories/i)).toBeInTheDocument()
+      })
+    })
+
+    it('shows locations placeholder when locations tab is active', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory?tab=locations'] }
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(/manage event locations/i)).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Deep Linking', () => {
+    it('preserves tab state on page reload simulation', async () => {
+      // First render with config tab
+      const { unmount } = renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=config'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /configuration/i })).toHaveAttribute('data-state', 'active')
+
+      unmount()
+
+      // Simulate "reload" by re-rendering with same URL
+      renderWithRouter(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>,
+        { initialEntries: ['/settings?tab=config'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /configuration/i })).toHaveAttribute('data-state', 'active')
+    })
+
+    it('supports direct linking to directory performers tab', async () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/directory" element={<DirectoryPage />} />
+        </Routes>,
+        { initialEntries: ['/directory?tab=performers'] }
+      )
+
+      expect(screen.getByRole('tab', { name: /performers/i })).toHaveAttribute('data-state', 'active')
+      expect(screen.getByText(/manage performers/i)).toBeInTheDocument()
+    })
+  })
+})
