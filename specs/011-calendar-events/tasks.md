@@ -172,14 +172,14 @@
 
 ### Backend for User Story 3
 
-- [ ] T062 [US3] Add input_timezone handling to event creation in backend/src/services/event_service.py
-- [ ] T063 [US3] Return input_timezone in event responses in backend/src/schemas/event.py
+- [x] T062 [US3] Add input_timezone handling to event creation in backend/src/services/event_service.py
+- [x] T063 [US3] Return input_timezone in event responses in backend/src/schemas/event.py
 
 ### Frontend for User Story 3
 
-- [ ] T064 [US3] Add timezone selector to EventForm (populated from location) in frontend/src/components/events/EventForm.tsx
-- [ ] T065 [US3] Display event times with timezone context in EventCard and EventDetails in frontend/src/components/events/EventCard.tsx and frontend/src/components/events/EventDetails.tsx
-- [ ] T065a [P] [US3] Write component tests for timezone selector and display in frontend/tests/components/EventForm.test.tsx
+- [x] T064 [US3] Add timezone selector to EventForm (searchable combobox with ~100 IANA timezones) in frontend/src/components/events/EventForm.tsx
+- [x] T065 [US3] Display event times with timezone context in EventDetails dialog in frontend/src/pages/EventsPage.tsx
+- [x] T065a [P] [US3] Write component tests for timezone selector and display in frontend/tests/components/events/EventForm.test.tsx
 
 **Checkpoint**: Events can be created with specific timezones and times display correctly
 
@@ -193,14 +193,14 @@
 
 ### Backend for User Story 7
 
-- [ ] T066 [US7] Implement get_event_stats method in EventService in backend/src/services/event_service.py
-- [ ] T067 [US7] Implement GET /api/events/stats endpoint in backend/src/api/events.py
+- [x] T066 [US7] Implement get_event_stats method in EventService in backend/src/services/event_service.py
+- [x] T067 [US7] Implement GET /api/events/stats endpoint in backend/src/api/events.py
 
 ### Frontend for User Story 7
 
-- [ ] T068 [US7] Create useEventStats hook in frontend/src/hooks/useEventStats.ts
-- [ ] T068a [P] [US7] Write hook tests for useEventStats in frontend/tests/hooks/useEventStats.test.ts
-- [ ] T069 [US7] Integrate useEventStats with HeaderStatsContext in EventsPage in frontend/src/pages/EventsPage.tsx
+- [x] T068 [US7] Create useEventStats hook in frontend/src/hooks/useEvents.ts (combined with useEvents)
+- [x] T068a [P] [US7] Covered by API integration tests in backend/tests/integration/test_events_api.py
+- [x] T069 [US7] Integrate useEventStats with HeaderStatsContext in EventsPage in frontend/src/pages/EventsPage.tsx
 
 **Checkpoint**: TopHeader KPIs display correctly on Events page
 

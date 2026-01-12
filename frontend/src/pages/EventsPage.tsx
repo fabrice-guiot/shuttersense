@@ -226,6 +226,39 @@ export default function EventsPage() {
     return `${hours12}:${minutes}${period}`
   }
 
+  // Get timezone abbreviation from IANA timezone (e.g., "America/New_York" -> "EST")
+  const getTimezoneAbbreviation = (ianaTimezone: string, date?: Date): string => {
+    try {
+      const dateToUse = date || new Date()
+      // Use Intl.DateTimeFormat to get the timezone abbreviation
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: ianaTimezone,
+        timeZoneName: 'short'
+      })
+      const parts = formatter.formatToParts(dateToUse)
+      const tzPart = parts.find(part => part.type === 'timeZoneName')
+      return tzPart?.value || ianaTimezone
+    } catch {
+      // Fallback to IANA name if formatting fails
+      return ianaTimezone
+    }
+  }
+
+  // Format time with optional timezone display
+  const formatTimeWithTimezone = (
+    timeStr: string,
+    timezone: string | null | undefined,
+    eventDate?: string
+  ): string => {
+    const time12h = formatTime12h(timeStr)
+    if (!timezone) {
+      return time12h
+    }
+    const date = eventDate ? new Date(eventDate + 'T00:00:00') : new Date()
+    const tzAbbrev = getTimezoneAbbreviation(timezone, date)
+    return `${time12h} ${tzAbbrev}`
+  }
+
   return (
     <div className="flex flex-col h-full p-6">
       {/* Header with Create Button */}
@@ -302,7 +335,11 @@ export default function EventsPage() {
                     day: 'numeric',
                     year: 'numeric'
                   })}
-                  {selectedEvent.start_time && ` at ${formatTime12h(selectedEvent.start_time)}`}
+                  {selectedEvent.start_time && ` at ${formatTimeWithTimezone(
+                    selectedEvent.start_time,
+                    selectedEvent.input_timezone,
+                    selectedEvent.event_date
+                  )}`}
                 </>
               )}
             </DialogDescription>
@@ -336,7 +373,11 @@ export default function EventsPage() {
                 <div>
                   <div className="text-sm font-medium text-muted-foreground mb-1">Time</div>
                   <div>
-                    {formatTime12h(selectedEvent.start_time)}
+                    {formatTimeWithTimezone(
+                      selectedEvent.start_time,
+                      selectedEvent.input_timezone,
+                      selectedEvent.event_date
+                    )}
                     {selectedEvent.end_time && ` - ${formatTime12h(selectedEvent.end_time)}`}
                   </div>
                 </div>

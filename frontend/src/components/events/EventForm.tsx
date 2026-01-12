@@ -33,6 +33,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { TimezoneCombobox } from '@/components/ui/timezone-combobox'
 import { cn } from '@/lib/utils'
 import type {
   EventDetail,
@@ -53,6 +54,7 @@ const eventFormSchema = z.object({
   start_time: z.string().optional(),
   end_time: z.string().optional(),
   is_all_day: z.boolean(),
+  input_timezone: z.string().optional(),
   status: z.enum(['future', 'confirmed', 'completed', 'cancelled']),
   attendance: z.enum(['planned', 'attended', 'skipped']),
 })
@@ -144,6 +146,7 @@ export const EventForm = ({
       start_time: '',
       end_time: '',
       is_all_day: false,
+      input_timezone: '',
       status: 'future',
       attendance: 'planned',
     }
@@ -159,6 +162,7 @@ export const EventForm = ({
         start_time: event.start_time?.slice(0, 5) || '', // HH:MM
         end_time: event.end_time?.slice(0, 5) || '', // HH:MM
         is_all_day: event.is_all_day,
+        input_timezone: event.input_timezone || '',
         status: event.status,
         attendance: event.attendance,
       })
@@ -181,6 +185,9 @@ export const EventForm = ({
 
   // Handle form submission
   const handleSubmit = async (values: EventFormValues) => {
+    // Normalize timezone value (empty string -> undefined/null)
+    const timezone = values.input_timezone || undefined
+
     if (mode === 'series' && !isEditMode) {
       // Series creation
       if (seriesDates.length < 2) {
@@ -195,6 +202,7 @@ export const EventForm = ({
         start_time: values.is_all_day ? undefined : (values.start_time || undefined),
         end_time: values.is_all_day ? undefined : (values.end_time || undefined),
         is_all_day: values.is_all_day,
+        input_timezone: values.is_all_day ? undefined : timezone,
         ticket_required: false,
         timeoff_required: false,
         travel_required: false,
@@ -215,6 +223,7 @@ export const EventForm = ({
         start_time: values.is_all_day ? null : (values.start_time || null),
         end_time: values.is_all_day ? null : (values.end_time || null),
         is_all_day: values.is_all_day,
+        input_timezone: values.is_all_day ? null : (timezone || null),
         status: values.status,
         attendance: values.attendance,
       }
@@ -434,35 +443,59 @@ export const EventForm = ({
 
         {/* Time Fields (hidden when all-day) */}
         {!isAllDay && (
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="start_time"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Start Time</FormLabel>
-                  <FormControl>
-                    <Input type="time" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="start_time"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start Time</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
+              <FormField
+                control={form.control}
+                name="end_time"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>End Time</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Timezone Selector */}
             <FormField
               control={form.control}
-              name="end_time"
+              name="input_timezone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>End Time</FormLabel>
+                  <FormLabel>Timezone</FormLabel>
                   <FormControl>
-                    <Input type="time" {...field} />
+                    <TimezoneCombobox
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      placeholder="Select timezone (optional)"
+                    />
                   </FormControl>
+                  <FormDescription>
+                    Timezone where the event takes place
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          </div>
+          </>
         )}
 
         {/* Status and Attendance */}
