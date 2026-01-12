@@ -30,7 +30,8 @@ class GeocodingResult:
 
     latitude: float
     longitude: float
-    formatted_address: Optional[str] = None
+    street_address: Optional[str] = None  # Just the street portion (house_number + road)
+    formatted_address: Optional[str] = None  # Full formatted address string
     city: Optional[str] = None
     state: Optional[str] = None
     country: Optional[str] = None
@@ -128,6 +129,7 @@ class GeocodingService:
             return GeocodingResult(
                 latitude=location.latitude,
                 longitude=location.longitude,
+                street_address=self._extract_street_address(raw_address),
                 formatted_address=location.address,
                 city=self._extract_city(raw_address),
                 state=raw_address.get("state"),
@@ -230,6 +232,7 @@ class GeocodingService:
             return GeocodingResult(
                 latitude=latitude,
                 longitude=longitude,
+                street_address=self._extract_street_address(raw_address),
                 formatted_address=location.address,
                 city=self._extract_city(raw_address),
                 state=raw_address.get("state"),
@@ -271,4 +274,25 @@ class GeocodingService:
         for key in city_keys:
             if key in raw_address:
                 return raw_address[key]
+        return None
+
+    def _extract_street_address(self, raw_address: dict) -> Optional[str]:
+        """
+        Extract street address from Nominatim address components.
+
+        Combines house_number and road to form the street address.
+
+        Args:
+            raw_address: Address dict from Nominatim response
+
+        Returns:
+            Street address (e.g., "123 Main Street") or None if not found
+        """
+        house_number = raw_address.get("house_number")
+        road = raw_address.get("road")
+
+        if road:
+            if house_number:
+                return f"{house_number} {road}"
+            return road
         return None

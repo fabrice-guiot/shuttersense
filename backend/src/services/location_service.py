@@ -463,7 +463,7 @@ class LocationService:
             return None
 
         return {
-            "address": result.formatted_address,
+            "address": result.street_address,  # Just the street portion, not full address
             "city": result.city,
             "state": result.state,
             "country": result.country,
