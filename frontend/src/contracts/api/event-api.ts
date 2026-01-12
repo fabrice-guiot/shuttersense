@@ -46,9 +46,13 @@ export interface OrganizerSummary {
   name: string
 }
 
+export type PerformerStatus = 'announced' | 'confirmed' | 'cancelled'
+
 export interface PerformerSummary {
-  guid: string           // Performer GUID (per_xxx)
+  guid: string           // Performer GUID (prf_xxx)
   name: string
+  instagram_handle: string | null
+  status: PerformerStatus
 }
 
 // ============================================================================

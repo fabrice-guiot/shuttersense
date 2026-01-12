@@ -321,27 +321,36 @@
 
 ### Backend for User Story 8
 
-- [ ] T102 [P] [US8] Create Pydantic schemas for Performer in backend/src/schemas/performer.py
-- [ ] T103 [US8] Implement PerformerService CRUD operations in backend/src/services/performer_service.py
-- [ ] T103a [P] [US8] Write unit tests for PerformerService in backend/tests/unit/test_performer_service.py
-- [ ] T104 [US8] Implement category matching validation in PerformerService in backend/src/services/performer_service.py
-- [ ] T105 [US8] Implement EventPerformer management in EventService in backend/src/services/event_service.py
-- [ ] T106 [US8] Implement Performers API endpoints (list, create, get, update, delete, events) in backend/src/api/performers.py
-- [ ] T107 [US8] Implement Event performer endpoints (list, add, update, remove) in backend/src/api/events.py
-- [ ] T108 [US8] Register performers router in backend/src/main.py
-- [ ] T108a [P] [US8] Write API integration tests for Performers endpoints in backend/tests/integration/test_performers_api.py
+- [x] T102 [P] [US8] Create Pydantic schemas for Performer in backend/src/schemas/performer.py
+- [x] T103 [US8] Implement PerformerService CRUD operations in backend/src/services/performer_service.py
+- [x] T103a [P] [US8] Write unit tests for PerformerService in backend/tests/unit/test_performer_service.py
+- [x] T104 [US8] Implement category matching validation in PerformerService in backend/src/services/performer_service.py
+- [x] T105 [US8] Implement EventPerformer management in EventService in backend/src/services/event_service.py
+- [x] T106 [US8] Implement Performers API endpoints (list, create, get, update, delete, events) in backend/src/api/performers.py
+- [x] T107 [US8] Implement Event performer endpoints (list, add, update, remove) in backend/src/api/events.py
+- [x] T108 [US8] Register performers router in backend/src/main.py
+- [x] T108a [P] [US8] Write API integration tests for Performers endpoints in backend/tests/integration/test_performers_api.py
 
 ### Frontend for User Story 8
 
-- [ ] T109 [P] [US8] Create performer TypeScript types in frontend/src/contracts/api/performer-api.ts
-- [ ] T110 [P] [US8] Create performers API service in frontend/src/services/performers.ts
-- [ ] T111 [US8] Create usePerformers hook in frontend/src/hooks/usePerformers.ts
-- [ ] T111a [P] [US8] Write hook tests for usePerformers in frontend/tests/hooks/usePerformers.test.ts
-- [ ] T112 [US8] Create PerformersTab component in frontend/src/components/directory/PerformersTab.tsx
-- [ ] T113 [US8] Create PerformerForm dialog component in frontend/src/components/directory/PerformerForm.tsx
-- [ ] T113a [P] [US8] Write component tests for PerformerForm in frontend/tests/components/PerformerForm.test.tsx
-- [ ] T114 [US8] Wire PerformersTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
-- [ ] T115 [US8] Add performer management section to EventForm/EventDetails in frontend/src/components/events/EventForm.tsx
+- [x] T109 [P] [US8] Create performer TypeScript types in frontend/src/contracts/api/performer-api.ts
+- [x] T110 [P] [US8] Create performers API service in frontend/src/services/performers.ts
+- [x] T111 [US8] Create usePerformers hook in frontend/src/hooks/usePerformers.ts
+- [x] T111a [P] [US8] Write hook tests for usePerformers in frontend/tests/hooks/usePerformers.test.ts (19 tests)
+- [x] T112 [US8] Create PerformersTab component in frontend/src/components/directory/PerformersTab.tsx
+- [x] T113 [US8] Create PerformerForm dialog component in frontend/src/components/directory/PerformerForm.tsx
+- [x] T113a [P] [US8] Write component tests for PerformerForm in frontend/tests/components/PerformerForm.test.tsx (22 tests)
+- [x] T114 [US8] Wire PerformersTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
+- [x] T115 [US8] Add performer management section to EventForm/EventDetails in frontend/src/components/events/EventForm.tsx (implemented in EventsPage.tsx EventDetails dialog with series sync)
+
+### Implementation Notes for T115
+- Performer add/remove operations sync across ALL events in a series (like Location and Organizer)
+- Performer status is event-specific and does NOT sync across series
+- Frontend shows sync notice for series events: "Adding or removing performers applies to all events in the series. Status can be set per event."
+- **Performer Status Values:**
+  - `announced` (default) - Performer announced but not yet confirmed (blue badge)
+  - `confirmed` - Performer attendance confirmed (green badge)
+  - `cancelled` - Performer cancelled (red badge)
 
 **Checkpoint**: Performers can be created and associated with events
 

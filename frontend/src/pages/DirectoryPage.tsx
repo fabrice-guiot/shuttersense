@@ -13,6 +13,7 @@ import { BookOpen, MapPin, Building2, Users } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LocationsTab } from '@/components/directory/LocationsTab'
 import { OrganizersTab } from '@/components/directory/OrganizersTab'
+import { PerformersTab } from '@/components/directory/PerformersTab'
 import { useCategories } from '@/hooks/useCategories'
 
 // Tab configuration
@@ -37,18 +38,6 @@ const TABS = [
 type TabId = typeof TABS[number]['id']
 
 const DEFAULT_TAB: TabId = 'locations'
-
-// Placeholder component for tabs not yet implemented
-function PlaceholderTab({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex h-64 items-center justify-center">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-foreground mb-2">{title}</h2>
-        <p className="text-muted-foreground max-w-md">{description}</p>
-      </div>
-    </div>
-  )
-}
 
 export default function DirectoryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -110,10 +99,7 @@ export default function DirectoryPage() {
         </TabsContent>
 
         <TabsContent value="performers" className="mt-6">
-          <PlaceholderTab
-            title="Performers"
-            description="Manage performers who appear at events. Performers will be implemented in a future phase."
-          />
+          <PerformersTab categories={categories} />
         </TabsContent>
       </Tabs>
     </div>

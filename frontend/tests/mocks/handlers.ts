@@ -39,6 +39,12 @@ import type {
   LocationStatsResponse,
   GeocodeResponse
 } from '@/contracts/api/location-api'
+import type {
+  Performer,
+  PerformerCreateRequest,
+  PerformerUpdateRequest,
+  PerformerStatsResponse
+} from '@/contracts/api/performer-api'
 
 // Mock data
 let jobs: JobResponse[] = []
@@ -463,6 +469,59 @@ let locations: Location[] = [
   },
 ]
 let nextLocationNum = 3
+
+// Performer mock data
+let performers: Performer[] = [
+  {
+    guid: 'prf_01hgw2bbg00000000000000001',
+    name: 'Blue Angels',
+    website: 'https://blueangels.navy.mil',
+    instagram_handle: 'usabordo_blueangels',
+    instagram_url: 'https://instagram.com/usabordo_blueangels',
+    category: {
+      guid: 'cat_01hgw2bbg00000000000000001',
+      name: 'Airshow',
+      icon: 'plane',
+      color: '#3B82F6',
+    },
+    additional_info: 'US Navy Flight Demonstration Squadron',
+    created_at: '2026-01-10T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+  },
+  {
+    guid: 'prf_01hgw2bbg00000000000000002',
+    name: 'Thunderbirds',
+    website: 'https://thunderbirds.airforce.com',
+    instagram_handle: 'afthunderbirds',
+    instagram_url: 'https://instagram.com/afthunderbirds',
+    category: {
+      guid: 'cat_01hgw2bbg00000000000000001',
+      name: 'Airshow',
+      icon: 'plane',
+      color: '#3B82F6',
+    },
+    additional_info: 'US Air Force Air Demonstration Squadron',
+    created_at: '2026-01-10T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+  },
+  {
+    guid: 'prf_01hgw2bbg00000000000000003',
+    name: 'Wildlife Photography Guide',
+    website: null,
+    instagram_handle: null,
+    instagram_url: null,
+    category: {
+      guid: 'cat_01hgw2bbg00000000000000002',
+      name: 'Wildlife',
+      icon: 'bird',
+      color: '#22C55E',
+    },
+    additional_info: 'Expert wildlife guide',
+    created_at: '2026-01-10T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+  },
+]
+let nextPerformerNum = 4
 
 // Config mock data
 let configData = {
@@ -2243,6 +2302,193 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
     const matches = location.category.guid === params.eventCategoryGuid
     return HttpResponse.json({ matches })
   }),
+
+  // ============================================================================
+  // Performer Handlers (Phase 11)
+  // ============================================================================
+
+  http.get(`${BASE_URL}/performers`, ({ request }) => {
+    const url = new URL(request.url)
+    const categoryGuid = url.searchParams.get('category_guid')
+    const search = url.searchParams.get('search')
+    const limit = parseInt(url.searchParams.get('limit') ?? '100', 10)
+    const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
+
+    let filteredPerformers = [...performers]
+
+    if (categoryGuid) {
+      filteredPerformers = filteredPerformers.filter((p) => p.category.guid === categoryGuid)
+    }
+    if (search) {
+      const searchLower = search.toLowerCase()
+      filteredPerformers = filteredPerformers.filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchLower) ||
+          p.instagram_handle?.toLowerCase().includes(searchLower) ||
+          p.additional_info?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    const total = filteredPerformers.length
+    const items = filteredPerformers.slice(offset, offset + limit)
+
+    return HttpResponse.json({ items, total })
+  }),
+
+  http.get(`${BASE_URL}/performers/stats`, () => {
+    const stats: PerformerStatsResponse = {
+      total_count: performers.length,
+      with_instagram_count: performers.filter((p) => p.instagram_handle !== null).length,
+      with_website_count: performers.filter((p) => p.website !== null).length,
+    }
+    return HttpResponse.json(stats)
+  }),
+
+  http.get(`${BASE_URL}/performers/by-category/:categoryGuid`, ({ params, request }) => {
+    const url = new URL(request.url)
+    const search = url.searchParams.get('search')
+    const categoryGuid = params.categoryGuid as string
+
+    let filteredPerformers = performers.filter((p) => p.category.guid === categoryGuid)
+    if (search) {
+      const searchLower = search.toLowerCase()
+      filteredPerformers = filteredPerformers.filter(
+        (p) => p.name.toLowerCase().includes(searchLower)
+      )
+    }
+
+    return HttpResponse.json(filteredPerformers)
+  }),
+
+  http.get(`${BASE_URL}/performers/:guid`, ({ params }) => {
+    const performer = performers.find((p) => p.guid === params.guid)
+    if (!performer) {
+      return HttpResponse.json(
+        { detail: `Performer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+    return HttpResponse.json(performer)
+  }),
+
+  http.post(`${BASE_URL}/performers`, async ({ request }) => {
+    const data = await request.json() as PerformerCreateRequest
+
+    // Find category
+    const category = categories.find((c) => c.guid === data.category_guid)
+    if (!category) {
+      return HttpResponse.json(
+        { detail: `Category ${data.category_guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    // Check if category is inactive
+    if (!category.is_active) {
+      return HttpResponse.json(
+        { detail: 'Cannot create performer in inactive category' },
+        { status: 400 }
+      )
+    }
+
+    const newPerformer: Performer = {
+      guid: `prf_01hgw2bbg0000000000000000${nextPerformerNum++}`,
+      name: data.name,
+      website: data.website ?? null,
+      instagram_handle: data.instagram_handle?.replace(/^@/, '') ?? null,
+      instagram_url: data.instagram_handle
+        ? `https://instagram.com/${data.instagram_handle.replace(/^@/, '')}`
+        : null,
+      category: {
+        guid: category.guid,
+        name: category.name,
+        icon: category.icon,
+        color: category.color,
+      },
+      additional_info: data.additional_info ?? null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    performers.push(newPerformer)
+    return HttpResponse.json(newPerformer, { status: 201 })
+  }),
+
+  http.patch(`${BASE_URL}/performers/:guid`, async ({ params, request }) => {
+    const data = await request.json() as PerformerUpdateRequest
+    const index = performers.findIndex((p) => p.guid === params.guid)
+    if (index === -1) {
+      return HttpResponse.json(
+        { detail: `Performer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    // If category is being updated, find it
+    let category = performers[index].category
+    if (data.category_guid) {
+      const newCategory = categories.find((c) => c.guid === data.category_guid)
+      if (!newCategory) {
+        return HttpResponse.json(
+          { detail: `Category ${data.category_guid} not found` },
+          { status: 404 }
+        )
+      }
+      category = {
+        guid: newCategory.guid,
+        name: newCategory.name,
+        icon: newCategory.icon,
+        color: newCategory.color,
+      }
+    }
+
+    // Handle instagram URL
+    let instagram_url = performers[index].instagram_url
+    if (data.instagram_handle !== undefined) {
+      if (data.instagram_handle) {
+        const handle = data.instagram_handle.replace(/^@/, '')
+        instagram_url = `https://instagram.com/${handle}`
+      } else {
+        instagram_url = null
+      }
+    }
+
+    performers[index] = {
+      ...performers[index],
+      ...data,
+      instagram_handle: data.instagram_handle?.replace(/^@/, '') ?? performers[index].instagram_handle,
+      instagram_url,
+      category,
+      updated_at: new Date().toISOString(),
+    }
+
+    return HttpResponse.json(performers[index])
+  }),
+
+  http.delete(`${BASE_URL}/performers/:guid`, ({ params }) => {
+    const index = performers.findIndex((p) => p.guid === params.guid)
+    if (index === -1) {
+      return HttpResponse.json(
+        { detail: `Performer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+    performers.splice(index, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${BASE_URL}/performers/:guid/validate-category/:eventCategoryGuid`, ({ params }) => {
+    const performer = performers.find((p) => p.guid === params.guid)
+    if (!performer) {
+      return HttpResponse.json(
+        { detail: `Performer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    const matches = performer.category.guid === params.eventCategoryGuid
+    return HttpResponse.json({ matches })
+  }),
 ]
 
 // Helper to reset mock data (useful for tests)
@@ -2669,4 +2915,57 @@ export function resetMockData(): void {
     },
   ]
   nextLocationNum = 3
+
+  // Reset performers
+  performers = [
+    {
+      guid: 'prf_01hgw2bbg00000000000000001',
+      name: 'Blue Angels',
+      website: 'https://blueangels.navy.mil',
+      instagram_handle: 'usabordo_blueangels',
+      instagram_url: 'https://instagram.com/usabordo_blueangels',
+      category: {
+        guid: 'cat_01hgw2bbg00000000000000001',
+        name: 'Airshow',
+        icon: 'plane',
+        color: '#3B82F6',
+      },
+      additional_info: 'US Navy Flight Demonstration Squadron',
+      created_at: '2026-01-10T09:00:00Z',
+      updated_at: '2026-01-10T09:00:00Z',
+    },
+    {
+      guid: 'prf_01hgw2bbg00000000000000002',
+      name: 'Thunderbirds',
+      website: 'https://thunderbirds.airforce.com',
+      instagram_handle: 'afthunderbirds',
+      instagram_url: 'https://instagram.com/afthunderbirds',
+      category: {
+        guid: 'cat_01hgw2bbg00000000000000001',
+        name: 'Airshow',
+        icon: 'plane',
+        color: '#3B82F6',
+      },
+      additional_info: 'US Air Force Air Demonstration Squadron',
+      created_at: '2026-01-10T09:00:00Z',
+      updated_at: '2026-01-10T09:00:00Z',
+    },
+    {
+      guid: 'prf_01hgw2bbg00000000000000003',
+      name: 'Wildlife Photography Guide',
+      website: null,
+      instagram_handle: null,
+      instagram_url: null,
+      category: {
+        guid: 'cat_01hgw2bbg00000000000000002',
+        name: 'Wildlife',
+        icon: 'bird',
+        color: '#22C55E',
+      },
+      additional_info: 'Expert wildlife guide',
+      created_at: '2026-01-10T09:00:00Z',
+      updated_at: '2026-01-10T09:00:00Z',
+    },
+  ]
+  nextPerformerNum = 4
 }

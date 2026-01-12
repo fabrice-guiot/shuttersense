@@ -17,9 +17,9 @@ from datetime import date, datetime
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_
 
-from backend.src.models import Event, EventSeries, Category, Location, Organizer
+from backend.src.models import Event, EventSeries, Category, Location, Organizer, EventPerformer, Performer
 from backend.src.utils.logging_config import get_logger
-from backend.src.services.exceptions import NotFoundError, ValidationError
+from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
 from backend.src.services.guid import GuidService
 
 
@@ -431,6 +431,8 @@ class EventService:
                 performers.append({
                     "guid": ep.performer.guid,
                     "name": ep.performer.name,
+                    "instagram_handle": ep.performer.instagram_handle,
+                    "status": ep.status,
                 })
         response["performers"] = performers
 
@@ -1023,3 +1025,285 @@ class EventService:
 
         series.total_events = count or 0
         series.updated_at = datetime.utcnow()
+
+    # =========================================================================
+    # Event Performer Management (T115)
+    # =========================================================================
+
+    def add_performer_to_event(
+        self,
+        event_guid: str,
+        performer_guid: str,
+        status: str = "announced"
+    ) -> EventPerformer:
+        """
+        Add a performer to an event.
+
+        For series events, the performer is added to ALL events in the series
+        with the specified status. Performer assignments are a series-level property.
+
+        Args:
+            event_guid: Event GUID (evt_xxx format)
+            performer_guid: Performer GUID (prf_xxx format)
+            status: Performer status ('confirmed' or 'cancelled')
+
+        Returns:
+            Created EventPerformer instance for the requested event
+
+        Raises:
+            NotFoundError: If event or performer not found
+            ValidationError: If category mismatch
+            ConflictError: If performer already added to event
+        """
+        event = self.get_by_guid(event_guid)
+        performer = self._get_performer_by_guid(performer_guid)
+
+        # Validate category match
+        if performer.category_id != event.category_id:
+            raise ValidationError(
+                f"Performer '{performer.name}' category does not match event category",
+                field="performer_guid"
+            )
+
+        # Check if already added to this event
+        existing = (
+            self.db.query(EventPerformer)
+            .filter(
+                EventPerformer.event_id == event.id,
+                EventPerformer.performer_id == performer.id
+            )
+            .first()
+        )
+        if existing:
+            raise ConflictError(
+                f"Performer '{performer.name}' is already added to this event"
+            )
+
+        # Get all events to add performer to (for series sync)
+        if event.series:
+            events_to_update = self._get_series_events_for_update(event, "all")
+        else:
+            events_to_update = [event]
+
+        # Create association for all events
+        primary_event_performer = None
+        added_count = 0
+        for evt in events_to_update:
+            # Skip if already added to this series event
+            existing_in_series = (
+                self.db.query(EventPerformer)
+                .filter(
+                    EventPerformer.event_id == evt.id,
+                    EventPerformer.performer_id == performer.id
+                )
+                .first()
+            )
+            if existing_in_series:
+                continue
+
+            event_performer = EventPerformer(
+                event_id=evt.id,
+                performer_id=performer.id,
+                status=status
+            )
+            self.db.add(event_performer)
+            added_count += 1
+
+            # Track the one for the original event to return
+            if evt.id == event.id:
+                primary_event_performer = event_performer
+
+        self.db.commit()
+        if primary_event_performer:
+            self.db.refresh(primary_event_performer)
+
+        logger.info(
+            f"Added performer to event(s)",
+            extra={
+                "event_guid": event_guid,
+                "performer_guid": performer_guid,
+                "status": status,
+                "events_updated": added_count,
+                "is_series": event.series is not None
+            }
+        )
+
+        return primary_event_performer
+
+    def update_performer_status(
+        self,
+        event_guid: str,
+        performer_guid: str,
+        status: str
+    ) -> EventPerformer:
+        """
+        Update a performer's status on an event.
+
+        Note: Unlike add/remove operations, status updates are event-specific
+        and do NOT sync across series events. This allows tracking different
+        confirmation statuses for each event in a series.
+
+        Args:
+            event_guid: Event GUID
+            performer_guid: Performer GUID
+            status: New status ('confirmed' or 'cancelled')
+
+        Returns:
+            Updated EventPerformer instance
+
+        Raises:
+            NotFoundError: If event, performer, or association not found
+        """
+        event = self.get_by_guid(event_guid)
+        performer = self._get_performer_by_guid(performer_guid)
+
+        event_performer = (
+            self.db.query(EventPerformer)
+            .filter(
+                EventPerformer.event_id == event.id,
+                EventPerformer.performer_id == performer.id
+            )
+            .first()
+        )
+        if not event_performer:
+            raise NotFoundError("EventPerformer", f"{event_guid}/{performer_guid}")
+
+        event_performer.status = status
+        self.db.commit()
+        self.db.refresh(event_performer)
+
+        logger.info(
+            f"Updated performer status on event",
+            extra={
+                "event_guid": event_guid,
+                "performer_guid": performer_guid,
+                "status": status
+            }
+        )
+
+        return event_performer
+
+    def remove_performer_from_event(
+        self,
+        event_guid: str,
+        performer_guid: str
+    ) -> None:
+        """
+        Remove a performer from an event.
+
+        For series events, the performer is removed from ALL events in the series.
+        Performer assignments are a series-level property.
+
+        Args:
+            event_guid: Event GUID
+            performer_guid: Performer GUID
+
+        Raises:
+            NotFoundError: If event, performer, or association not found
+        """
+        event = self.get_by_guid(event_guid)
+        performer = self._get_performer_by_guid(performer_guid)
+
+        # Verify the performer is associated with this event
+        event_performer = (
+            self.db.query(EventPerformer)
+            .filter(
+                EventPerformer.event_id == event.id,
+                EventPerformer.performer_id == performer.id
+            )
+            .first()
+        )
+        if not event_performer:
+            raise NotFoundError("EventPerformer", f"{event_guid}/{performer_guid}")
+
+        # Get all events to remove performer from (for series sync)
+        if event.series:
+            events_to_update = self._get_series_events_for_update(event, "all")
+        else:
+            events_to_update = [event]
+
+        # Remove association from all events
+        removed_count = 0
+        for evt in events_to_update:
+            ep_to_delete = (
+                self.db.query(EventPerformer)
+                .filter(
+                    EventPerformer.event_id == evt.id,
+                    EventPerformer.performer_id == performer.id
+                )
+                .first()
+            )
+            if ep_to_delete:
+                self.db.delete(ep_to_delete)
+                removed_count += 1
+
+        self.db.commit()
+
+        logger.info(
+            f"Removed performer from event(s)",
+            extra={
+                "event_guid": event_guid,
+                "performer_guid": performer_guid,
+                "events_updated": removed_count,
+                "is_series": event.series is not None
+            }
+        )
+
+    def list_event_performers(
+        self,
+        event_guid: str
+    ) -> list:
+        """
+        List all performers for an event.
+
+        Args:
+            event_guid: Event GUID
+
+        Returns:
+            List of EventPerformer instances with loaded performers
+
+        Raises:
+            NotFoundError: If event not found
+        """
+        event = self.get_by_guid(event_guid)
+
+        event_performers = (
+            self.db.query(EventPerformer)
+            .options(joinedload(EventPerformer.performer).joinedload(Performer.category))
+            .filter(EventPerformer.event_id == event.id)
+            .order_by(EventPerformer.created_at.asc())
+            .all()
+        )
+
+        return event_performers
+
+    def _get_performer_by_guid(self, guid: str) -> Performer:
+        """
+        Get a performer by GUID.
+
+        Args:
+            guid: Performer GUID (prf_xxx format)
+
+        Returns:
+            Performer instance
+
+        Raises:
+            NotFoundError: If performer not found
+        """
+        if not GuidService.validate_guid(guid, "prf"):
+            raise NotFoundError("Performer", guid)
+
+        try:
+            uuid_value = GuidService.parse_guid(guid, "prf")
+        except ValueError:
+            raise NotFoundError("Performer", guid)
+
+        performer = (
+            self.db.query(Performer)
+            .filter(Performer.uuid == uuid_value)
+            .first()
+        )
+        if not performer:
+            raise NotFoundError("Performer", guid)
+
+        return performer

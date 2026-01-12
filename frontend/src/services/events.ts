@@ -15,8 +15,15 @@ import type {
   EventCreateRequest,
   EventSeriesCreateRequest,
   EventUpdateRequest,
-  UpdateScope
+  UpdateScope,
+  PerformerStatus
 } from '@/contracts/api/event-api'
+import type {
+  EventPerformer,
+  EventPerformerAddRequest,
+  EventPerformerUpdateRequest,
+  EventPerformersListResponse
+} from '@/contracts/api/performer-api'
 
 /**
  * List events with optional filtering
@@ -180,4 +187,77 @@ export const restoreEvent = async (guid: string): Promise<EventDetail> => {
   const safeGuid = encodeURIComponent(validateGuid(guid, 'evt'))
   const response = await api.post<EventDetail>(`/events/${safeGuid}/restore`)
   return response.data
+}
+
+// =============================================================================
+// Event Performer Operations (Phase 11)
+// =============================================================================
+
+/**
+ * List performers associated with an event
+ *
+ * @param eventGuid - Event GUID (evt_xxx format)
+ */
+export const listEventPerformers = async (eventGuid: string): Promise<EventPerformer[]> => {
+  const safeGuid = encodeURIComponent(validateGuid(eventGuid, 'evt'))
+  const response = await api.get<EventPerformersListResponse>(`/events/${safeGuid}/performers`)
+  return response.data.items
+}
+
+/**
+ * Add a performer to an event
+ *
+ * @param eventGuid - Event GUID (evt_xxx format)
+ * @param performerGuid - Performer GUID (prf_xxx format)
+ * @param status - Initial status (default: announced)
+ */
+export const addPerformerToEvent = async (
+  eventGuid: string,
+  performerGuid: string,
+  status: PerformerStatus = 'announced'
+): Promise<EventPerformer> => {
+  const safeEventGuid = encodeURIComponent(validateGuid(eventGuid, 'evt'))
+  const data: EventPerformerAddRequest = {
+    performer_guid: performerGuid,
+    status
+  }
+  const response = await api.post<EventPerformer>(`/events/${safeEventGuid}/performers`, data)
+  return response.data
+}
+
+/**
+ * Update a performer's status on an event
+ *
+ * @param eventGuid - Event GUID (evt_xxx format)
+ * @param performerGuid - Performer GUID (prf_xxx format)
+ * @param status - New status
+ */
+export const updateEventPerformerStatus = async (
+  eventGuid: string,
+  performerGuid: string,
+  status: PerformerStatus
+): Promise<EventPerformer> => {
+  const safeEventGuid = encodeURIComponent(validateGuid(eventGuid, 'evt'))
+  const safePerformerGuid = encodeURIComponent(validateGuid(performerGuid, 'prf'))
+  const data: EventPerformerUpdateRequest = { status }
+  const response = await api.patch<EventPerformer>(
+    `/events/${safeEventGuid}/performers/${safePerformerGuid}`,
+    data
+  )
+  return response.data
+}
+
+/**
+ * Remove a performer from an event
+ *
+ * @param eventGuid - Event GUID (evt_xxx format)
+ * @param performerGuid - Performer GUID (prf_xxx format)
+ */
+export const removePerformerFromEvent = async (
+  eventGuid: string,
+  performerGuid: string
+): Promise<void> => {
+  const safeEventGuid = encodeURIComponent(validateGuid(eventGuid, 'evt'))
+  const safePerformerGuid = encodeURIComponent(validateGuid(performerGuid, 'prf'))
+  await api.delete(`/events/${safeEventGuid}/performers/${safePerformerGuid}`)
 }

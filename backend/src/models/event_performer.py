@@ -26,8 +26,9 @@ from backend.src.models import Base
 
 class PerformerStatus(enum.Enum):
     """Performer attendance status at an event."""
-    CONFIRMED = "confirmed"
-    CANCELLED = "cancelled"
+    ANNOUNCED = "announced"   # Default - performer announced but not yet confirmed
+    CONFIRMED = "confirmed"   # Performer attendance confirmed
+    CANCELLED = "cancelled"   # Performer cancelled
 
 
 class EventPerformer(Base):
@@ -77,7 +78,7 @@ class EventPerformer(Base):
     )
 
     # Status
-    status = Column(String(50), default="confirmed", nullable=False)
+    status = Column(String(50), default="announced", nullable=False)
 
     # Timestamp
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

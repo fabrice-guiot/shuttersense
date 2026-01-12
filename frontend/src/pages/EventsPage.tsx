@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useCalendar, useEventStats, useEventMutations } from '@/hooks/useEvents'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
-import { EventCalendar, EventList, EventForm } from '@/components/events'
+import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest } from '@/contracts/api/event-api'
 
@@ -114,16 +114,35 @@ export default function EventsPage() {
     }
   }
 
+  // Fetch event details helper
+  const fetchEventDetails = async (eventGuid: string): Promise<EventDetail | null> => {
+    try {
+      const response = await fetch(`/api/events/${eventGuid}`)
+      return await response.json()
+    } catch {
+      return null
+    }
+  }
+
   // Handle event click - show event detail (fetch full details)
   const handleEventClick = async (event: Event) => {
     setSelectedDay(null) // Close day dialog if open
-    try {
-      const response = await fetch(`/api/events/${event.guid}`)
-      const fullEvent: EventDetail = await response.json()
+    const fullEvent = await fetchEventDetails(event.guid)
+    if (fullEvent) {
       setSelectedEvent(fullEvent)
-    } catch {
+    } else {
       // If fetch fails, use basic event data (description won't be available)
       setSelectedEvent(event as unknown as EventDetail)
+    }
+  }
+
+  // Refetch currently selected event (used after performer changes)
+  const refetchSelectedEvent = async () => {
+    if (selectedEvent) {
+      const refreshed = await fetchEventDetails(selectedEvent.guid)
+      if (refreshed) {
+        setSelectedEvent(refreshed)
+      }
     }
   }
 
@@ -430,6 +449,18 @@ export default function EventsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Performers Section */}
+              <div className="pt-2 border-t">
+                <EventPerformersSection
+                  eventGuid={selectedEvent.guid}
+                  categoryGuid={selectedEvent.category?.guid || null}
+                  performers={selectedEvent.performers || []}
+                  editable={true}
+                  isSeriesEvent={!!selectedEvent.series_guid}
+                  onPerformersChange={refetchSelectedEvent}
+                />
+              </div>
 
               {/* Logistics Section */}
               {(selectedEvent.ticket_required || selectedEvent.timeoff_required || selectedEvent.travel_required || selectedEvent.deadline_date) && (

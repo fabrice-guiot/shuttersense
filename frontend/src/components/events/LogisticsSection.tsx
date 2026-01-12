@@ -137,16 +137,14 @@ export function LogisticsSection({
     defaultStatus: TicketStatus | TimeoffStatus | TravelStatus
   ) => {
     const newRequired = !data[field]
-    const updates: Partial<LogisticsData> = {
-      [field]: newRequired,
-    }
+    const newData = { ...data, [field]: newRequired }
     // Set default status when enabling, clear when disabling
     if (newRequired && !data[statusField]) {
-      updates[statusField] = defaultStatus
+      ;(newData as any)[statusField] = defaultStatus
     } else if (!newRequired) {
-      updates[statusField] = null
+      ;(newData as any)[statusField] = null
     }
-    onChange({ ...data, ...updates })
+    onChange(newData)
   }
 
   return (

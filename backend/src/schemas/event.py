@@ -427,11 +427,20 @@ class OrganizerSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PerformerStatusType(str, enum.Enum):
+    """Performer status at an event."""
+    ANNOUNCED = "announced"   # Default - performer announced but not yet confirmed
+    CONFIRMED = "confirmed"   # Performer attendance confirmed
+    CANCELLED = "cancelled"   # Performer cancelled
+
+
 class PerformerSummary(BaseModel):
     """Summary of performer for inclusion in event detail responses."""
 
     guid: str
     name: str
+    instagram_handle: Optional[str] = None
+    status: PerformerStatusType
 
     model_config = {"from_attributes": True}
 

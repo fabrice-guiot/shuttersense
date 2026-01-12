@@ -40,7 +40,14 @@ from backend.src.schemas.event import (
     UpdateScope,
 )
 from backend.src.services.event_service import EventService
-from backend.src.services.exceptions import NotFoundError, ValidationError
+from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
+from backend.src.schemas.performer import (
+    EventPerformerCreate,
+    EventPerformerUpdate,
+    EventPerformerResponse,
+    EventPerformersListResponse,
+    PerformerResponse,
+)
 from backend.src.utils.logging_config import get_logger
 
 
@@ -683,4 +690,236 @@ async def restore_event(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to restore event",
+        )
+
+
+# ============================================================================
+# Event Performer Management Endpoints (T115)
+# ============================================================================
+
+
+def _build_event_performer_response(
+    event_performer,
+    performer_service_build_fn=None
+) -> dict:
+    """Build response dict for an EventPerformer."""
+    performer = event_performer.performer
+    return {
+        "performer": {
+            "guid": performer.guid,
+            "name": performer.name,
+            "website": performer.website,
+            "instagram_handle": performer.instagram_handle,
+            "instagram_url": performer.instagram_url,
+            "category": {
+                "guid": performer.category.guid,
+                "name": performer.category.name,
+                "icon": performer.category.icon,
+                "color": performer.category.color,
+            },
+            "additional_info": performer.additional_info,
+            "created_at": performer.created_at,
+            "updated_at": performer.updated_at,
+        },
+        "status": event_performer.status,
+        "added_at": event_performer.created_at,
+    }
+
+
+@router.get(
+    "/{guid}/performers",
+    response_model=EventPerformersListResponse,
+    summary="List event performers",
+    description="Get all performers associated with an event",
+)
+async def list_event_performers(
+    guid: str,
+    event_service: EventService = Depends(get_event_service),
+) -> EventPerformersListResponse:
+    """
+    Get all performers for an event.
+
+    Path Parameters:
+        guid: Event GUID (evt_xxx format)
+
+    Returns:
+        EventPerformersListResponse with performers and count
+
+    Example:
+        GET /api/events/evt_xxx/performers
+    """
+    try:
+        event_performers = event_service.list_event_performers(guid)
+
+        items = [
+            EventPerformerResponse(**_build_event_performer_response(ep))
+            for ep in event_performers
+        ]
+
+        return EventPerformersListResponse(items=items, total=len(items))
+
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event {guid} not found",
+        )
+
+
+@router.post(
+    "/{guid}/performers",
+    response_model=EventPerformerResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add performer to event",
+    description="Add a performer to an event",
+)
+async def add_performer_to_event(
+    guid: str,
+    performer_data: EventPerformerCreate,
+    event_service: EventService = Depends(get_event_service),
+) -> EventPerformerResponse:
+    """
+    Add a performer to an event.
+
+    Validates that the performer's category matches the event's category.
+
+    Path Parameters:
+        guid: Event GUID (evt_xxx format)
+
+    Request Body:
+        EventPerformerCreate with performer_guid and optional status
+
+    Returns:
+        EventPerformerResponse with the new association
+
+    Raises:
+        400: Category mismatch
+        404: Event or performer not found
+        409: Performer already added
+
+    Example:
+        POST /api/events/evt_xxx/performers
+        {"performer_guid": "prf_xxx", "status": "confirmed"}
+    """
+    try:
+        event_performer = event_service.add_performer_to_event(
+            event_guid=guid,
+            performer_guid=performer_data.performer_guid,
+            status=performer_data.status,
+        )
+
+        logger.info(
+            f"Added performer to event",
+            extra={"event_guid": guid, "performer_guid": performer_data.performer_guid}
+        )
+
+        return EventPerformerResponse(**_build_event_performer_response(event_performer))
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=e.message,
+        )
+
+    except ConflictError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+
+
+@router.patch(
+    "/{guid}/performers/{performer_guid}",
+    response_model=EventPerformerResponse,
+    summary="Update performer status",
+    description="Update a performer's status on an event",
+)
+async def update_event_performer(
+    guid: str,
+    performer_guid: str,
+    update_data: EventPerformerUpdate,
+    event_service: EventService = Depends(get_event_service),
+) -> EventPerformerResponse:
+    """
+    Update a performer's status on an event.
+
+    Path Parameters:
+        guid: Event GUID (evt_xxx format)
+        performer_guid: Performer GUID (prf_xxx format)
+
+    Request Body:
+        EventPerformerUpdate with new status
+
+    Returns:
+        Updated EventPerformerResponse
+
+    Example:
+        PATCH /api/events/evt_xxx/performers/prf_xxx
+        {"status": "cancelled"}
+    """
+    try:
+        event_performer = event_service.update_performer_status(
+            event_guid=guid,
+            performer_guid=performer_guid,
+            status=update_data.status,
+        )
+
+        logger.info(
+            f"Updated performer status on event",
+            extra={"event_guid": guid, "performer_guid": performer_guid}
+        )
+
+        return EventPerformerResponse(**_build_event_performer_response(event_performer))
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+
+@router.delete(
+    "/{guid}/performers/{performer_guid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove performer from event",
+    description="Remove a performer from an event",
+)
+async def remove_performer_from_event(
+    guid: str,
+    performer_guid: str,
+    event_service: EventService = Depends(get_event_service),
+) -> None:
+    """
+    Remove a performer from an event.
+
+    Path Parameters:
+        guid: Event GUID (evt_xxx format)
+        performer_guid: Performer GUID (prf_xxx format)
+
+    Returns:
+        204 No Content on success
+
+    Example:
+        DELETE /api/events/evt_xxx/performers/prf_xxx
+    """
+    try:
+        event_service.remove_performer_from_event(
+            event_guid=guid,
+            performer_guid=performer_guid,
+        )
+
+        logger.info(
+            f"Removed performer from event",
+            extra={"event_guid": guid, "performer_guid": performer_guid}
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
         )
