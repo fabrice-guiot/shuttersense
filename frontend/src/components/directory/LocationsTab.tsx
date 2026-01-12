@@ -416,8 +416,8 @@ export function LocationsTab({ categories }: LocationsTabProps) {
 
       {/* Create/Edit Dialog */}
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {editingLocation ? 'Edit Location' : 'New Location'}
             </DialogTitle>
@@ -429,7 +429,7 @@ export function LocationsTab({ categories }: LocationsTabProps) {
               </DialogDescription>
             )}
           </DialogHeader>
-          <div className="mt-4">
+          <div className="flex-1 overflow-y-auto mt-4 pr-2">
             {formError && (
               <Alert variant="destructive" className="mb-4">
                 <AlertDescription>{formError}</AlertDescription>
