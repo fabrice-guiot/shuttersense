@@ -310,7 +310,7 @@ describe('Routing Integration - T028a', () => {
       })
     })
 
-    it('shows locations placeholder when locations tab is active', async () => {
+    it('shows locations content when locations tab is active', async () => {
       renderWithRouter(
         <Routes>
           <Route path="/directory" element={<DirectoryPage />} />
@@ -319,7 +319,8 @@ describe('Routing Integration - T028a', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText(/manage event locations with geocoding/i)).toBeInTheDocument()
+        // LocationsTab header
+        expect(screen.getByText('Event Locations')).toBeInTheDocument()
       })
     })
   })

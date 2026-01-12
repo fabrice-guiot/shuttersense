@@ -32,6 +32,13 @@ import type {
   EventDetail,
   EventStatsResponse
 } from '@/contracts/api/event-api'
+import type {
+  Location,
+  LocationCreateRequest,
+  LocationUpdateRequest,
+  LocationStatsResponse,
+  GeocodeResponse
+} from '@/contracts/api/location-api'
 
 // Mock data
 let jobs: JobResponse[] = []
@@ -401,6 +408,61 @@ let events: Event[] = [
   },
 ]
 let nextEventNum = 4
+
+// Locations mock data
+let locations: Location[] = [
+  {
+    guid: 'loc_01hgw2bbg00000000000000001',
+    name: 'EAA Grounds',
+    address: '3000 Poberezny Road',
+    city: 'Oshkosh',
+    state: 'Wisconsin',
+    country: 'USA',
+    postal_code: '54902',
+    latitude: 43.9844,
+    longitude: -88.5564,
+    timezone: 'America/Chicago',
+    category: {
+      guid: 'cat_01hgw2bbg00000000000000001',
+      name: 'Airshow',
+      icon: 'plane',
+      color: '#3B82F6',
+    },
+    rating: 5,
+    timeoff_required_default: true,
+    travel_required_default: true,
+    notes: 'Annual EAA AirVenture event location',
+    is_known: true,
+    created_at: '2026-01-01T09:00:00Z',
+    updated_at: '2026-01-01T09:00:00Z',
+  },
+  {
+    guid: 'loc_01hgw2bbg00000000000000002',
+    name: 'Yellowstone National Park',
+    address: null,
+    city: 'Yellowstone',
+    state: 'Wyoming',
+    country: 'USA',
+    postal_code: null,
+    latitude: 44.4280,
+    longitude: -110.5885,
+    timezone: 'America/Denver',
+    category: {
+      guid: 'cat_01hgw2bbg00000000000000002',
+      name: 'Wildlife',
+      icon: 'bird',
+      color: '#22C55E',
+    },
+    rating: 5,
+    timeoff_required_default: true,
+    travel_required_default: true,
+    notes: 'Great for wildlife photography',
+    is_known: true,
+    created_at: '2026-01-01T09:00:00Z',
+    updated_at: '2026-01-01T09:00:00Z',
+  },
+]
+let nextLocationNum = 3
 
 // Config mock data
 let configData = {
@@ -1992,6 +2054,195 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
 
     return HttpResponse.json(detailResponse)
   }),
+
+  // ============================================================================
+  // Locations API endpoints
+  // ============================================================================
+
+  http.get(`${BASE_URL}/locations`, ({ request }) => {
+    const url = new URL(request.url)
+    const categoryGuid = url.searchParams.get('category_guid')
+    const knownOnly = url.searchParams.get('known_only')
+    const search = url.searchParams.get('search')
+    const limit = parseInt(url.searchParams.get('limit') ?? '100', 10)
+    const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
+
+    let filteredLocations = [...locations]
+
+    if (categoryGuid) {
+      filteredLocations = filteredLocations.filter((l) => l.category.guid === categoryGuid)
+    }
+    if (knownOnly === 'true') {
+      filteredLocations = filteredLocations.filter((l) => l.is_known)
+    }
+    if (search) {
+      const searchLower = search.toLowerCase()
+      filteredLocations = filteredLocations.filter(
+        (l) =>
+          l.name.toLowerCase().includes(searchLower) ||
+          l.city?.toLowerCase().includes(searchLower) ||
+          l.address?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    const total = filteredLocations.length
+    const items = filteredLocations.slice(offset, offset + limit)
+
+    return HttpResponse.json({ items, total })
+  }),
+
+  http.get(`${BASE_URL}/locations/stats`, () => {
+    const stats: LocationStatsResponse = {
+      total_count: locations.length,
+      known_count: locations.filter((l) => l.is_known).length,
+      with_coordinates_count: locations.filter((l) => l.latitude !== null && l.longitude !== null).length,
+    }
+    return HttpResponse.json(stats)
+  }),
+
+  http.get(`${BASE_URL}/locations/by-category/:categoryGuid`, ({ params, request }) => {
+    const url = new URL(request.url)
+    const knownOnly = url.searchParams.get('known_only') !== 'false'
+    const categoryGuid = params.categoryGuid as string
+
+    let filteredLocations = locations.filter((l) => l.category.guid === categoryGuid)
+    if (knownOnly) {
+      filteredLocations = filteredLocations.filter((l) => l.is_known)
+    }
+
+    return HttpResponse.json(filteredLocations)
+  }),
+
+  http.get(`${BASE_URL}/locations/:guid`, ({ params }) => {
+    const location = locations.find((l) => l.guid === params.guid)
+    if (!location) {
+      return HttpResponse.json(
+        { detail: `Location ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+    return HttpResponse.json(location)
+  }),
+
+  http.post(`${BASE_URL}/locations`, async ({ request }) => {
+    const data = await request.json() as LocationCreateRequest
+
+    // Find category
+    const category = categories.find((c) => c.guid === data.category_guid)
+    if (!category) {
+      return HttpResponse.json(
+        { detail: `Category ${data.category_guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    const newLocation: Location = {
+      guid: `loc_01hgw2bbg00000000000000${nextLocationNum++}`,
+      name: data.name,
+      address: data.address ?? null,
+      city: data.city ?? null,
+      state: data.state ?? null,
+      country: data.country ?? null,
+      postal_code: data.postal_code ?? null,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      timezone: data.timezone ?? null,
+      category: {
+        guid: category.guid,
+        name: category.name,
+        icon: category.icon,
+        color: category.color,
+      },
+      rating: data.rating ?? null,
+      timeoff_required_default: data.timeoff_required_default ?? false,
+      travel_required_default: data.travel_required_default ?? false,
+      notes: data.notes ?? null,
+      is_known: data.is_known ?? true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    locations.push(newLocation)
+    return HttpResponse.json(newLocation, { status: 201 })
+  }),
+
+  http.patch(`${BASE_URL}/locations/:guid`, async ({ params, request }) => {
+    const data = await request.json() as LocationUpdateRequest
+    const index = locations.findIndex((l) => l.guid === params.guid)
+    if (index === -1) {
+      return HttpResponse.json(
+        { detail: `Location ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    // If category is being updated, find it
+    let category = locations[index].category
+    if (data.category_guid) {
+      const newCategory = categories.find((c) => c.guid === data.category_guid)
+      if (!newCategory) {
+        return HttpResponse.json(
+          { detail: `Category ${data.category_guid} not found` },
+          { status: 404 }
+        )
+      }
+      category = {
+        guid: newCategory.guid,
+        name: newCategory.name,
+        icon: newCategory.icon,
+        color: newCategory.color,
+      }
+    }
+
+    locations[index] = {
+      ...locations[index],
+      ...data,
+      category,
+      updated_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(locations[index])
+  }),
+
+  http.delete(`${BASE_URL}/locations/:guid`, ({ params }) => {
+    const index = locations.findIndex((l) => l.guid === params.guid)
+    if (index === -1) {
+      return HttpResponse.json(
+        { detail: `Location ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+    locations.splice(index, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post(`${BASE_URL}/locations/geocode`, async ({ request }) => {
+    const data = await request.json() as { address: string }
+
+    // Mock geocoding response
+    const response: GeocodeResponse = {
+      address: '123 Main St',
+      city: 'Test City',
+      state: 'Test State',
+      country: 'USA',
+      postal_code: '12345',
+      latitude: 40.7128,
+      longitude: -74.0060,
+      timezone: 'America/New_York',
+    }
+    return HttpResponse.json(response)
+  }),
+
+  http.get(`${BASE_URL}/locations/:guid/validate-category/:eventCategoryGuid`, ({ params }) => {
+    const location = locations.find((l) => l.guid === params.guid)
+    if (!location) {
+      return HttpResponse.json(
+        { detail: `Location ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    const matches = location.category.guid === params.eventCategoryGuid
+    return HttpResponse.json({ matches })
+  }),
 ]
 
 // Helper to reset mock data (useful for tests)
@@ -2364,4 +2615,58 @@ export function resetMockData(): void {
     },
   ]
   nextEventNum = 4
+  // Reset locations
+  locations = [
+    {
+      guid: 'loc_01hgw2bbg00000000000000001',
+      name: 'EAA Grounds',
+      address: '3000 Poberezny Road',
+      city: 'Oshkosh',
+      state: 'Wisconsin',
+      country: 'USA',
+      postal_code: '54902',
+      latitude: 43.9844,
+      longitude: -88.5564,
+      timezone: 'America/Chicago',
+      category: {
+        guid: 'cat_01hgw2bbg00000000000000001',
+        name: 'Airshow',
+        icon: 'plane',
+        color: '#3B82F6',
+      },
+      rating: 5,
+      timeoff_required_default: true,
+      travel_required_default: true,
+      notes: 'Annual EAA AirVenture event location',
+      is_known: true,
+      created_at: '2026-01-01T09:00:00Z',
+      updated_at: '2026-01-01T09:00:00Z',
+    },
+    {
+      guid: 'loc_01hgw2bbg00000000000000002',
+      name: 'Yellowstone National Park',
+      address: null,
+      city: 'Yellowstone',
+      state: 'Wyoming',
+      country: 'USA',
+      postal_code: null,
+      latitude: 44.4280,
+      longitude: -110.5885,
+      timezone: 'America/Denver',
+      category: {
+        guid: 'cat_01hgw2bbg00000000000000002',
+        name: 'Wildlife',
+        icon: 'bird',
+        color: '#22C55E',
+      },
+      rating: 5,
+      timeoff_required_default: true,
+      travel_required_default: true,
+      notes: 'Great for wildlife photography',
+      is_known: true,
+      created_at: '2026-01-01T09:00:00Z',
+      updated_at: '2026-01-01T09:00:00Z',
+    },
+  ]
+  nextLocationNum = 3
 }

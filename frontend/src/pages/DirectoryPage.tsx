@@ -11,6 +11,8 @@ import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BookOpen, MapPin, Building2, Users } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { LocationsTab } from '@/components/directory/LocationsTab'
+import { useCategories } from '@/hooks/useCategories'
 
 // Tab configuration
 const TABS = [
@@ -49,6 +51,9 @@ function PlaceholderTab({ title, description }: { title: string; description: st
 
 export default function DirectoryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+
+  // Fetch categories for LocationsTab
+  const { categories } = useCategories()
 
   // Get current tab from URL, default to 'locations'
   const currentTab = (searchParams.get('tab') as TabId) || DEFAULT_TAB
@@ -96,10 +101,7 @@ export default function DirectoryPage() {
         </TabsList>
 
         <TabsContent value="locations" className="mt-6">
-          <PlaceholderTab
-            title="Locations"
-            description="Manage event locations with geocoding. Locations will be implemented in a future phase."
-          />
+          <LocationsTab categories={categories} />
         </TabsContent>
 
         <TabsContent value="organizers" className="mt-6">

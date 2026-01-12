@@ -2,7 +2,7 @@
  * Locations Tab Component
  *
  * Manage event locations with CRUD operations.
- * Part of SettingsPage tabs for Issue #39 - Calendar Events feature (Phase 8).
+ * Part of DirectoryPage tabs for Issue #39 - Calendar Events feature (Phase 8).
  */
 
 import { useState, useEffect } from 'react'
