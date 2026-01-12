@@ -746,6 +746,21 @@ export const EventForm = ({
             />
         </div>
 
+        {/* Workflow Deadline */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+            Workflow Deadline
+          </label>
+          <DatePicker
+            value={logistics.deadline_date ?? ''}
+            onChange={(date) => setLogistics({ ...logistics, deadline_date: date || null })}
+            placeholder="Select deadline date"
+          />
+          <p className="text-[0.8rem] text-muted-foreground">
+            Complete images processing by this date
+          </p>
+        </div>
+
         {/* Logistics Section */}
         <div className="pt-2 border-t">
           <LogisticsSection
@@ -754,8 +769,7 @@ export const EventForm = ({
             defaultOpen={isEditMode && (
               logistics.ticket_required ||
               logistics.timeoff_required ||
-              logistics.travel_required ||
-              logistics.deadline_date !== null
+              logistics.travel_required
             ) as boolean}
           />
         </div>

@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, Ticket, Briefcase, Car, Calendar } from 'lucide-react'
+import { ChevronDown, ChevronUp, Ticket, Briefcase, Car } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -356,26 +356,6 @@ export function LogisticsSection({
               </div>
             </div>
           )}
-        </div>
-
-        {/* Deadline Section */}
-        <div className="rounded-lg border p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <Label className="font-medium">Workflow Deadline</Label>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm text-muted-foreground">
-              Complete logistics by this date
-            </Label>
-            <Input
-              type="date"
-              value={data.deadline_date ?? ''}
-              onChange={(e) => updateField('deadline_date', e.target.value || null)}
-              disabled={disabled}
-              className="max-w-[200px]"
-            />
-          </div>
         </div>
       </CollapsibleContent>
     </Collapsible>
