@@ -83,8 +83,8 @@ export default function EventsPage() {
     events: Event[]
   } | null>(null)
 
-  // Event detail dialog
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  // Event detail dialog (uses EventDetail for full info including description)
+  const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null)
 
   // Create event dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -114,10 +114,17 @@ export default function EventsPage() {
     }
   }
 
-  // Handle event click - show event detail
-  const handleEventClick = (event: Event) => {
-    setSelectedEvent(event)
+  // Handle event click - show event detail (fetch full details)
+  const handleEventClick = async (event: Event) => {
     setSelectedDay(null) // Close day dialog if open
+    try {
+      const response = await fetch(`/api/events/${event.guid}`)
+      const fullEvent: EventDetail = await response.json()
+      setSelectedEvent(fullEvent)
+    } catch {
+      // If fetch fails, use basic event data (description won't be available)
+      setSelectedEvent(event as unknown as EventDetail)
+    }
   }
 
   // Handle create button click
@@ -313,6 +320,14 @@ export default function EventsPage() {
                     />
                     <span>{selectedEvent.category.name}</span>
                   </div>
+                </div>
+              )}
+
+              {/* Description */}
+              {selectedEvent.description && (
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground mb-1">Description</div>
+                  <div className="text-sm whitespace-pre-wrap">{selectedEvent.description}</div>
                 </div>
               )}
 
