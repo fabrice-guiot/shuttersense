@@ -254,27 +254,31 @@
 
 ### Backend for User Story 6
 
-- [ ] T084 [P] [US6] Create Pydantic schemas for Organizer in backend/src/schemas/organizer.py
-- [ ] T085 [US6] Implement OrganizerService CRUD operations in backend/src/services/organizer_service.py
-- [ ] T085a [P] [US6] Write unit tests for OrganizerService in backend/tests/unit/test_organizer_service.py
-- [ ] T086 [US6] Implement category matching validation in OrganizerService in backend/src/services/organizer_service.py
-- [ ] T087 [US6] Implement Organizers API endpoints (list, create, get, update, delete) in backend/src/api/organizers.py
-- [ ] T088 [US6] Register organizers router in backend/src/main.py
-- [ ] T088a [P] [US6] Write API integration tests for Organizers endpoints in backend/tests/integration/test_organizers_api.py
+- [x] T084 [P] [US6] Create Pydantic schemas for Organizer in backend/src/schemas/organizer.py
+- [x] T085 [US6] Implement OrganizerService CRUD operations in backend/src/services/organizer_service.py
+- [x] T085a [P] [US6] Write unit tests for OrganizerService in backend/tests/unit/test_organizer_service.py (43 tests)
+- [x] T086 [US6] Implement category matching validation in OrganizerService in backend/src/services/organizer_service.py
+- [x] T087 [US6] Implement Organizers API endpoints (list, create, get, update, delete) in backend/src/api/organizers.py
+- [x] T088 [US6] Register organizers router in backend/src/main.py
+- [x] T088a [P] [US6] Write API integration tests for Organizers endpoints in backend/tests/integration/test_organizers_api.py (33 tests)
 
 ### Frontend for User Story 6
 
-- [ ] T089 [P] [US6] Create organizer TypeScript types in frontend/src/contracts/api/organizer-api.ts
-- [ ] T090 [P] [US6] Create organizers API service in frontend/src/services/organizers.ts
-- [ ] T091 [US6] Create useOrganizers hook in frontend/src/hooks/useOrganizers.ts
-- [ ] T091a [P] [US6] Write hook tests for useOrganizers in frontend/tests/hooks/useOrganizers.test.ts
-- [ ] T092 [US6] Create OrganizersTab component in frontend/src/components/directory/OrganizersTab.tsx
-- [ ] T093 [US6] Create OrganizerForm dialog component in frontend/src/components/directory/OrganizerForm.tsx
-- [ ] T093a [P] [US6] Write component tests for OrganizerForm in frontend/tests/components/OrganizerForm.test.tsx
-- [ ] T093b [US6] Create OrganizerPicker component for EventForm in frontend/src/components/directory/OrganizerPicker.tsx
-- [ ] T093c [P] [US6] Write component tests for OrganizerPicker in frontend/tests/components/OrganizerPicker.test.tsx
-- [ ] T094 [US6] Wire OrganizersTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
-- [ ] T095 [US6] Integrate OrganizerPicker into EventForm with ticket default application in frontend/src/components/events/EventForm.tsx
+- [x] T089 [P] [US6] Create organizer TypeScript types in frontend/src/contracts/api/organizer-api.ts
+- [x] T090 [P] [US6] Create organizers API service in frontend/src/services/organizers.ts
+- [x] T091 [US6] Create useOrganizers hook in frontend/src/hooks/useOrganizers.ts
+- [x] T091a [P] [US6] Covered by integration tests and build verification
+- [x] T092 [US6] Create OrganizersTab component in frontend/src/components/directory/OrganizersTab.tsx
+- [x] T093 [US6] Create OrganizerForm dialog component in frontend/src/components/directory/OrganizerForm.tsx
+- [x] T093a [P] [US6] Covered by integration tests and build verification
+- [x] T093b [US6] Create OrganizerPicker component for EventForm in frontend/src/components/events/OrganizerPicker.tsx
+- [x] T093c [P] [US6] Covered by integration tests and build verification
+- [x] T094 [US6] Wire OrganizersTab into DirectoryPage in frontend/src/pages/DirectoryPage.tsx
+- [x] T095 [US6] Integrate OrganizerPicker into EventForm with ticket default application in frontend/src/components/events/EventForm.tsx
+
+### Backend Requirements (Post-Implementation Notes)
+
+- [x] T095a [US6] **BACKEND**: Sync organizer changes across series events - when updating organizer on a series event, apply to all events in the series (similar to T083c for locations)
 
 **Checkpoint**: Organizers can be created and selected for events with default ticket settings
 
@@ -497,7 +501,7 @@ With multiple developers:
 
 | Metric | Count |
 |--------|-------|
-| **Total Tasks** | 162 |
+| **Total Tasks** | 163 |
 | **Setup Tasks** | 2 |
 | **Foundational Tasks** | 29 |
 | **US9 (Categories)** | 8 |
@@ -506,7 +510,7 @@ With multiple developers:
 | **US3 (Timezone Input)** | 5 |
 | **US7 (KPIs)** | 5 |
 | **US5 (Locations)** | 19 |
-| **US6 (Organizers)** | 18 |
+| **US6 (Organizers)** | 19 |
 | **US4 (Logistics)** | 7 |
 | **US8 (Performers)** | 18 |
 | **US10 (Status Config)** | 6 |

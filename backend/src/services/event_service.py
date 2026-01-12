@@ -772,13 +772,17 @@ class EventService:
             else:
                 location_id_update = None
 
-        if "organizer_guid" in updates:
+        # Handle organizer_guid - extract separately for series sync
+        # Organizer is a series-level property, always synced across all events
+        organizer_id_update = None
+        updating_organizer = "organizer_guid" in updates
+        if updating_organizer:
             organizer_guid = updates.pop("organizer_guid")
             if organizer_guid:
                 organizer = self._get_organizer_by_guid(organizer_guid)
-                updates["organizer_id"] = organizer.id
+                organizer_id_update = organizer.id
             else:
-                updates["organizer_id"] = None
+                organizer_id_update = None
 
         # Remove scope from updates (it's not an event field)
         updates.pop("scope", None)
@@ -810,6 +814,21 @@ class EventService:
             else:
                 # Standalone event - just update location
                 event.location_id = location_id_update
+
+        # Handle organizer sync for series events
+        # Organizer is always synced across ALL events in a series
+        if updating_organizer:
+            if event.series:
+                # Get ALL events in the series (regardless of scope)
+                all_series_events = self._get_series_events_for_update(event, "all")
+                for e in all_series_events:
+                    e.organizer_id = organizer_id_update
+                    if e not in events_to_update:
+                        e.updated_at = datetime.utcnow()
+                logger.info(f"Synced organizer across {len(all_series_events)} series events")
+            else:
+                # Standalone event - just update organizer
+                event.organizer_id = organizer_id_update
 
         self.db.commit()
         self.db.refresh(event)

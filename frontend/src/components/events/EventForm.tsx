@@ -35,6 +35,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { TimezoneCombobox } from '@/components/ui/timezone-combobox'
 import { LocationPicker } from '@/components/events/LocationPicker'
+import { OrganizerPicker } from '@/components/events/OrganizerPicker'
 import { cn } from '@/lib/utils'
 import type {
   EventDetail,
@@ -44,6 +45,7 @@ import type {
 } from '@/contracts/api/event-api'
 import type { Category } from '@/contracts/api/category-api'
 import type { Location } from '@/contracts/api/location-api'
+import type { Organizer } from '@/contracts/api/organizer-api'
 
 // ============================================================================
 // Form Schema
@@ -54,6 +56,7 @@ const eventFormSchema = z.object({
   description: z.string().optional(),
   category_guid: z.string().min(1, 'Category is required'),
   location_guid: z.string().optional().nullable(),
+  organizer_guid: z.string().optional().nullable(),
   start_time: z.string().optional(),
   end_time: z.string().optional(),
   is_all_day: z.boolean(),
@@ -142,6 +145,9 @@ export const EventForm = ({
   // Selected location (for LocationPicker display)
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
 
+  // Selected organizer (for OrganizerPicker display)
+  const [selectedOrganizer, setSelectedOrganizer] = useState<Organizer | null>(null)
+
   // Initialize form
   const form = useForm<EventFormValues>({
     resolver: zodResolver(eventFormSchema),
@@ -150,6 +156,7 @@ export const EventForm = ({
       description: '',
       category_guid: '',
       location_guid: null,
+      organizer_guid: null,
       start_time: '',
       end_time: '',
       is_all_day: false,
@@ -167,6 +174,7 @@ export const EventForm = ({
         description: event.description || '',
         category_guid: event.category?.guid || '',
         location_guid: event.location?.guid || null,
+        organizer_guid: event.organizer?.guid || null,
         start_time: event.start_time?.slice(0, 5) || '', // HH:MM
         end_time: event.end_time?.slice(0, 5) || '', // HH:MM
         is_all_day: event.is_all_day,
@@ -204,6 +212,25 @@ export const EventForm = ({
           updated_at: '',
         })
       }
+      // Set organizer for picker display (convert summary to partial Organizer)
+      if (event.organizer) {
+        setSelectedOrganizer({
+          guid: event.organizer.guid,
+          name: event.organizer.name,
+          website: null,
+          category: event.category ? {
+            guid: event.category.guid,
+            name: event.category.name,
+            icon: event.category.icon || null,
+            color: event.category.color || null,
+          } : { guid: '', name: '', icon: null, color: null },
+          rating: null,
+          ticket_required_default: false,
+          notes: null,
+          created_at: '',
+          updated_at: '',
+        })
+      }
     }
   }, [event, form])
 
@@ -235,6 +262,12 @@ export const EventForm = ({
     }
   }
 
+  // Handle organizer selection
+  const handleOrganizerChange = (organizer: Organizer | null) => {
+    setSelectedOrganizer(organizer)
+    form.setValue('organizer_guid', organizer?.guid || null)
+  }
+
   // Handle form submission
   const handleSubmit = async (values: EventFormValues) => {
     // Normalize timezone value (empty string -> undefined/null)
@@ -251,6 +284,7 @@ export const EventForm = ({
         description: values.description || undefined,
         category_guid: values.category_guid,
         location_guid: values.location_guid || undefined,
+        organizer_guid: values.organizer_guid || undefined,
         event_dates: seriesDates,
         start_time: values.is_all_day ? undefined : (values.start_time || undefined),
         end_time: values.is_all_day ? undefined : (values.end_time || undefined),
@@ -273,6 +307,7 @@ export const EventForm = ({
         description: values.description || null,
         category_guid: values.category_guid,
         location_guid: values.location_guid || null,
+        organizer_guid: values.organizer_guid || null,
         event_date: selectedDate,
         start_time: values.is_all_day ? null : (values.start_time || null),
         end_time: values.is_all_day ? null : (values.end_time || null),
@@ -300,6 +335,15 @@ export const EventForm = ({
       form.setValue('location_guid', null)
     }
   }, [selectedCategoryGuid, selectedLocation, event, form])
+
+  // Clear organizer when category changes (organizers are category-specific)
+  useEffect(() => {
+    // Only clear if we're not in initial load (when event is being populated)
+    if (!event && selectedOrganizer && selectedOrganizer.category?.guid !== selectedCategoryGuid) {
+      setSelectedOrganizer(null)
+      form.setValue('organizer_guid', null)
+    }
+  }, [selectedCategoryGuid, selectedOrganizer, event, form])
 
   // Validation for series mode
   const seriesError = mode === 'series' && seriesDates.length < 2
@@ -427,6 +471,30 @@ export const EventForm = ({
               </FormControl>
               <FormDescription>
                 Select a known location or enter a new address
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Organizer */}
+        <FormField
+          control={form.control}
+          name="organizer_guid"
+          render={() => (
+            <FormItem>
+              <FormLabel>Organizer</FormLabel>
+              <FormControl>
+                <OrganizerPicker
+                  categoryGuid={selectedCategoryGuid || null}
+                  value={selectedOrganizer}
+                  onChange={handleOrganizerChange}
+                  placeholder={selectedCategoryGuid ? 'Select organizer...' : 'Select a category first'}
+                  disabled={!selectedCategoryGuid}
+                />
+              </FormControl>
+              <FormDescription>
+                Select the event organizer (optional)
               </FormDescription>
               <FormMessage />
             </FormItem>

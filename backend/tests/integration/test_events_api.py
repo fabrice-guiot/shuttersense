@@ -15,7 +15,7 @@ Issue #39 - Calendar Events feature (Phases 4 & 5)
 import pytest
 from datetime import date, time
 
-from backend.src.models import Category, Event, EventSeries, Location
+from backend.src.models import Category, Event, EventSeries, Location, Organizer
 
 
 class TestEventsAPI:
@@ -775,6 +775,107 @@ class TestEventsUpdate:
             response = test_client.get(f"/api/events/{event.guid}")
             data = response.json()
             assert data["location"] is None, f"Event {event.guid} location not cleared"
+
+    def test_update_series_organizer_syncs_to_all_events(
+        self, test_client, test_db_session, update_category, update_series
+    ):
+        """Test that updating organizer on a series event syncs to ALL events.
+
+        Organizer is a series-level property and should always sync across
+        all events, regardless of scope.
+        """
+        series, events = update_series
+
+        # Create an organizer for the category
+        organizer = Organizer(
+            name="Test Organizer",
+            category_id=update_category.id,
+            ticket_required_default=True,
+        )
+        test_db_session.add(organizer)
+        test_db_session.commit()
+        test_db_session.refresh(organizer)
+
+        # Update organizer on middle event with scope="single"
+        # Expectation: organizer syncs to ALL events despite single scope
+        middle_event = events[1]
+        response = test_client.patch(
+            f"/api/events/{middle_event.guid}",
+            json={
+                "organizer_guid": organizer.guid,
+                "scope": "single",  # Single scope, but organizer should sync to all
+            },
+        )
+
+        assert response.status_code == 200
+
+        # Verify ALL events in series have the organizer
+        for event in events:
+            response = test_client.get(f"/api/events/{event.guid}")
+            data = response.json()
+            assert data["organizer"] is not None, f"Event {event.guid} missing organizer"
+            assert data["organizer"]["guid"] == organizer.guid
+            assert data["organizer"]["name"] == "Test Organizer"
+
+    def test_update_series_organizer_clear_syncs_to_all_events(
+        self, test_client, test_db_session, update_category
+    ):
+        """Test that clearing organizer on a series event syncs to ALL events."""
+        # Create an organizer
+        organizer = Organizer(
+            name="Organizer to Clear",
+            category_id=update_category.id,
+            ticket_required_default=False,
+        )
+        test_db_session.add(organizer)
+        test_db_session.commit()
+        test_db_session.refresh(organizer)
+
+        # Create series with organizer set
+        series = EventSeries(
+            title="Series with Organizer",
+            category_id=update_category.id,
+            organizer_id=organizer.id,
+            total_events=3,
+        )
+        test_db_session.add(series)
+        test_db_session.commit()
+        test_db_session.refresh(series)
+
+        events = []
+        for i in range(3):
+            event = Event(
+                series_id=series.id,
+                sequence_number=i + 1,
+                event_date=date(2026, 11, 20 + i),
+                organizer_id=organizer.id,  # All start with organizer
+                status="future",
+                attendance="planned",
+            )
+            test_db_session.add(event)
+            events.append(event)
+
+        test_db_session.commit()
+        for event in events:
+            test_db_session.refresh(event)
+
+        # Clear organizer on first event with scope="single"
+        first_event = events[0]
+        response = test_client.patch(
+            f"/api/events/{first_event.guid}",
+            json={
+                "organizer_guid": None,  # Clear organizer
+                "scope": "single",
+            },
+        )
+
+        assert response.status_code == 200
+
+        # Verify ALL events have organizer cleared
+        for event in events:
+            response = test_client.get(f"/api/events/{event.guid}")
+            data = response.json()
+            assert data["organizer"] is None, f"Event {event.guid} organizer not cleared"
 
 
 class TestEventsDelete:

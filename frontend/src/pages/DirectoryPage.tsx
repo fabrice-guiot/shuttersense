@@ -12,6 +12,7 @@ import { useSearchParams } from 'react-router-dom'
 import { BookOpen, MapPin, Building2, Users } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LocationsTab } from '@/components/directory/LocationsTab'
+import { OrganizersTab } from '@/components/directory/OrganizersTab'
 import { useCategories } from '@/hooks/useCategories'
 
 // Tab configuration
@@ -105,10 +106,7 @@ export default function DirectoryPage() {
         </TabsContent>
 
         <TabsContent value="organizers" className="mt-6">
-          <PlaceholderTab
-            title="Organizers"
-            description="Manage event organizers. Organizers will be implemented in a future phase."
-          />
+          <OrganizersTab categories={categories} />
         </TabsContent>
 
         <TabsContent value="performers" className="mt-6">
