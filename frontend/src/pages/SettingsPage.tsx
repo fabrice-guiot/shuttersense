@@ -9,13 +9,15 @@
 
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Settings, Plug, Cog, Tag } from 'lucide-react'
+import { Settings, Plug, Cog, Tag, MapPin } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConnectorsTab } from '@/components/settings/ConnectorsTab'
 import { ConfigTab } from '@/components/settings/ConfigTab'
 import { CategoriesTab } from '@/components/settings/CategoriesTab'
+import { LocationsTab } from '@/components/settings/LocationsTab'
+import { useCategories } from '@/hooks/useCategories'
 
-// Tab configuration - order: Config, Categories, Connectors
+// Tab configuration - order: Config, Categories, Locations, Connectors
 const TABS = [
   {
     id: 'config',
@@ -26,6 +28,11 @@ const TABS = [
     id: 'categories',
     label: 'Categories',
     icon: Tag,
+  },
+  {
+    id: 'locations',
+    label: 'Locations',
+    icon: MapPin,
   },
   {
     id: 'connectors',
@@ -40,6 +47,9 @@ const DEFAULT_TAB: TabId = 'config'
 
 export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+
+  // Fetch categories for LocationsTab
+  const { categories } = useCategories()
 
   // Get current tab from URL, default to 'config'
   const currentTab = (searchParams.get('tab') as TabId) || DEFAULT_TAB
@@ -67,7 +77,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
-            Configure tools, event categories, and storage connectors
+            Configure tools, event categories, locations, and storage connectors
           </p>
         </div>
       </div>
@@ -92,6 +102,10 @@ export default function SettingsPage() {
 
         <TabsContent value="categories" className="mt-6">
           <CategoriesTab />
+        </TabsContent>
+
+        <TabsContent value="locations" className="mt-6">
+          <LocationsTab categories={categories} />
         </TabsContent>
 
         <TabsContent value="connectors" className="mt-6">
