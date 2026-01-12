@@ -304,7 +304,7 @@ export function LocationForm({
         {/* Address Lookup */}
         {onGeocode && (
           <div className="space-y-2">
-            <FormLabel>Address Lookup</FormLabel>
+            <label className="text-sm font-medium leading-none">Address Lookup</label>
             <div className="flex gap-2">
               <Input
                 placeholder="Enter full address to lookup..."
