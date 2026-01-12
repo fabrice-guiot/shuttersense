@@ -3,9 +3,14 @@
  *
  * Month grid calendar view for displaying events
  * Issue #39 - Calendar Events feature (Phase 4)
+ *
+ * Accessibility (Phase 13):
+ * - Keyboard navigation: Arrow keys to navigate dates
+ * - ARIA labels for screen readers
+ * - Focus management for calendar cells
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -177,31 +182,65 @@ interface CalendarCellProps {
   onEventClick?: (event: Event) => void
   onDayClick?: (date: Date) => void
   maxEventsToShow?: number
+  isFocused?: boolean
+  onFocus?: () => void
+  tabIndex?: number
+  onKeyDown?: (e: React.KeyboardEvent) => void
 }
 
 const CalendarCell = ({
   day,
   onEventClick,
   onDayClick,
-  maxEventsToShow = 3
+  maxEventsToShow = 3,
+  isFocused = false,
+  onFocus,
+  tabIndex = -1,
+  onKeyDown
 }: CalendarCellProps) => {
+  const cellRef = useRef<HTMLDivElement>(null)
   const visibleEvents = day.events.slice(0, maxEventsToShow)
   const hiddenCount = day.events.length - maxEventsToShow
 
   // When there's only one event, allow it to expand and wrap text
   const isSingleEvent = day.events.length === 1
 
+  // Focus the cell when isFocused changes
+  useEffect(() => {
+    if (isFocused && cellRef.current) {
+      cellRef.current.focus()
+    }
+  }, [isFocused])
+
+  // Format date for ARIA label
+  const ariaLabel = `${day.date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  })}${day.events.length > 0 ? `, ${day.events.length} event${day.events.length !== 1 ? 's' : ''}` : ', no events'}${day.isToday ? ', today' : ''}`
+
   return (
     <div
+      ref={cellRef}
+      role="gridcell"
+      aria-label={ariaLabel}
+      aria-selected={isFocused}
+      tabIndex={tabIndex}
+      onFocus={onFocus}
+      onKeyDown={onKeyDown}
       className={cn(
         'min-h-[100px] p-1 border-b border-r border-border',
         'flex flex-col',
+        'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset',
         !day.isCurrentMonth && 'bg-muted/30'
       )}
     >
       {/* Day Number */}
       <button
         onClick={() => onDayClick?.(day.date)}
+        tabIndex={-1}
+        aria-hidden="true"
         className={cn(
           'w-7 h-7 flex items-center justify-center rounded-full text-sm mb-1',
           'hover:bg-accent transition-colors',
@@ -213,7 +252,7 @@ const CalendarCell = ({
       </button>
 
       {/* Events */}
-      <div className="flex-1 space-y-0.5 overflow-hidden">
+      <div className="flex-1 space-y-0.5 overflow-hidden" role="list" aria-label="Events on this day">
         {visibleEvents.map(event => (
           <EventCard
             key={event.guid}
@@ -228,7 +267,9 @@ const CalendarCell = ({
         {hiddenCount > 0 && (
           <button
             onClick={() => onDayClick?.(day.date)}
+            tabIndex={-1}
             className="w-full text-left px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-colors"
+            aria-label={`${hiddenCount} more events, click to view all`}
           >
             +{hiddenCount} more
           </button>
@@ -273,6 +314,76 @@ export const EventCalendar = ({
     [year, month, events]
   )
 
+  // Track focused cell index for keyboard navigation
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
+
+  // Find the index of today or first day of current month for initial focus
+  const getInitialFocusIndex = useCallback(() => {
+    const todayIndex = calendarDays.findIndex(d => d.isToday && d.isCurrentMonth)
+    if (todayIndex >= 0) return todayIndex
+    return calendarDays.findIndex(d => d.isCurrentMonth)
+  }, [calendarDays])
+
+  // Handle keyboard navigation
+  const handleKeyDown = useCallback((e: React.KeyboardEvent, currentIndex: number) => {
+    let newIndex: number | null = null
+    const totalDays = calendarDays.length
+    const cols = 7
+
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault()
+        newIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex
+        break
+      case 'ArrowRight':
+        e.preventDefault()
+        newIndex = currentIndex < totalDays - 1 ? currentIndex + 1 : currentIndex
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        newIndex = currentIndex >= cols ? currentIndex - cols : currentIndex
+        break
+      case 'ArrowDown':
+        e.preventDefault()
+        newIndex = currentIndex + cols < totalDays ? currentIndex + cols : currentIndex
+        break
+      case 'Home':
+        e.preventDefault()
+        // Go to start of current row
+        newIndex = Math.floor(currentIndex / cols) * cols
+        break
+      case 'End':
+        e.preventDefault()
+        // Go to end of current row
+        newIndex = Math.floor(currentIndex / cols) * cols + cols - 1
+        break
+      case 'PageUp':
+        e.preventDefault()
+        onPreviousMonth()
+        return
+      case 'PageDown':
+        e.preventDefault()
+        onNextMonth()
+        return
+      case 'Enter':
+      case ' ':
+        e.preventDefault()
+        onDayClick?.(calendarDays[currentIndex].date)
+        return
+      default:
+        return
+    }
+
+    if (newIndex !== null && newIndex !== currentIndex) {
+      setFocusedIndex(newIndex)
+    }
+  }, [calendarDays, onDayClick, onPreviousMonth, onNextMonth])
+
+  // Reset focus when month changes
+  useEffect(() => {
+    setFocusedIndex(null)
+  }, [year, month])
+
   return (
     <div className={cn('flex flex-col', className)}>
       {/* Header with navigation */}
@@ -285,12 +396,18 @@ export const EventCalendar = ({
       />
 
       {/* Calendar Grid */}
-      <div className="border-t border-l border-border rounded-lg overflow-hidden bg-card">
+      <div
+        role="grid"
+        aria-label={`Calendar for ${MONTH_NAMES[month - 1]} ${year}`}
+        className="border-t border-l border-border rounded-lg overflow-hidden bg-card"
+      >
         {/* Weekday headers */}
-        <div className="grid grid-cols-7">
+        <div role="row" className="grid grid-cols-7">
           {WEEKDAY_NAMES.map(day => (
             <div
               key={day}
+              role="columnheader"
+              aria-label={day === 'Sun' ? 'Sunday' : day === 'Mon' ? 'Monday' : day === 'Tue' ? 'Tuesday' : day === 'Wed' ? 'Wednesday' : day === 'Thu' ? 'Thursday' : day === 'Fri' ? 'Friday' : 'Saturday'}
               className="p-2 text-center text-sm font-medium text-muted-foreground border-b border-r border-border bg-muted/50"
             >
               {day}
@@ -300,17 +417,22 @@ export const EventCalendar = ({
 
         {/* Calendar cells */}
         <div
+          role="rowgroup"
           className={cn(
             'grid grid-cols-7',
             loading && 'opacity-50 pointer-events-none'
           )}
         >
-          {calendarDays.map(day => (
+          {calendarDays.map((day, index) => (
             <CalendarCell
               key={day.dateString}
               day={day}
               onEventClick={onEventClick}
               onDayClick={onDayClick}
+              isFocused={focusedIndex === index}
+              onFocus={() => setFocusedIndex(index)}
+              tabIndex={focusedIndex === null ? (index === getInitialFocusIndex() ? 0 : -1) : (focusedIndex === index ? 0 : -1)}
+              onKeyDown={(e) => handleKeyDown(e, index)}
             />
           ))}
         </div>
@@ -318,10 +440,16 @@ export const EventCalendar = ({
 
       {/* Loading indicator */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+        <div className="absolute inset-0 flex items-center justify-center bg-background/50" role="status" aria-live="polite">
           <div className="text-sm text-muted-foreground">Loading events...</div>
         </div>
       )}
+
+      {/* Screen reader instructions */}
+      <div className="sr-only" aria-live="polite">
+        Use arrow keys to navigate dates. Press Enter or Space to select a date.
+        Press Page Up for previous month, Page Down for next month.
+      </div>
     </div>
   )
 }

@@ -268,6 +268,12 @@ Example: `col_01hgw2bbg0000000000000001`
 | Result | `res_` | `res_01hgw2bbg...` |
 | Job | `job_` | `job_01hgw2bbg...` |
 | ImportSession | `imp_` | `imp_01hgw2bbg...` |
+| Event | `evt_` | `evt_01hgw2bbg...` |
+| EventSeries | `ser_` | `ser_01hgw2bbg...` |
+| Category | `cat_` | `cat_01hgw2bbg...` |
+| Location | `loc_` | `loc_01hgw2bbg...` |
+| Organizer | `org_` | `org_01hgw2bbg...` |
+| Performer | `prf_` | `prf_01hgw2bbg...` |
 
 **Key Files:**
 - `backend/src/services/guid.py` - GuidService for generation/validation

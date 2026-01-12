@@ -1,7 +1,7 @@
 # Photo-Admin Domain Model
 
-**Version:** 1.1.0
-**Last Updated:** 2026-01-10
+**Version:** 1.2.0
+**Last Updated:** 2026-01-12
 **Status:** Living Document
 
 ---
@@ -82,18 +82,20 @@ Example: `col_01hgw2bbg0000000000000001`
 | Result | `res_` | `res_01hgw2bbg0000000000000003` | Implemented |
 | Job | `job_` | `job_01hgw2bbg0000000000000004` | Implemented (in-memory) |
 | ImportSession | `imp_` | `imp_01hgw2bbg0000000000000005` | Implemented (in-memory) |
-| Event | `evt_` | `evt_01hgw2bbg0000000000000006` | Planned |
-| User | `usr_` | `usr_01hgw2bbg0000000000000007` | Planned |
-| Team | `tea_` | `tea_01hgw2bbg0000000000000008` | Planned |
-| Camera | `cam_` | `cam_01hgw2bbg0000000000000009` | Planned |
-| Album | `alb_` | `alb_01hgw2bbg000000000000000a` | Planned |
-| Image | `img_` | `img_01hgw2bbg000000000000000b` | Planned |
-| File | `fil_` | `fil_01hgw2bbg000000000000000c` | Planned |
-| Workflow | `wfl_` | `wfl_01hgw2bbg000000000000000d` | Planned |
-| Location | `loc_` | `loc_01hgw2bbg000000000000000e` | Planned |
-| Organizer | `org_` | `org_01hgw2bbg000000000000000f` | Planned |
-| Performer | `prf_` | `prf_01hgw2bbg0000000000000010` | Planned |
-| Agent | `agt_` | `agt_01hgw2bbg0000000000000011` | Planned |
+| Event | `evt_` | `evt_01hgw2bbg0000000000000006` | Implemented (Issue #39) |
+| EventSeries | `ser_` | `ser_01hgw2bbg0000000000000007` | Implemented (Issue #39) |
+| Category | `cat_` | `cat_01hgw2bbg0000000000000008` | Implemented (Issue #39) |
+| Location | `loc_` | `loc_01hgw2bbg0000000000000009` | Implemented (Issue #39) |
+| Organizer | `org_` | `org_01hgw2bbg000000000000000a` | Implemented (Issue #39) |
+| Performer | `prf_` | `prf_01hgw2bbg000000000000000b` | Implemented (Issue #39) |
+| User | `usr_` | `usr_01hgw2bbg000000000000000c` | Planned |
+| Team | `tea_` | `tea_01hgw2bbg000000000000000d` | Planned |
+| Camera | `cam_` | `cam_01hgw2bbg000000000000000e` | Planned |
+| Album | `alb_` | `alb_01hgw2bbg000000000000000f` | Planned |
+| Image | `img_` | `img_01hgw2bbg0000000000000010` | Planned |
+| File | `fil_` | `fil_01hgw2bbg0000000000000011` | Planned |
+| Workflow | `wfl_` | `wfl_01hgw2bbg0000000000000012` | Planned |
+| Agent | `agt_` | `agt_01hgw2bbg0000000000000013` | Planned |
 
 **Key Implementation Files:**
 - `backend/src/services/guid.py` - GuidService for generation, encoding, validation
@@ -130,7 +132,13 @@ The application implements team-based data isolation:
 | [PipelineHistory](#pipelinehistory) | :white_check_mark: | Workflow | - |
 | [AnalysisResult](#analysisresult) | :white_check_mark: | Workflow | - |
 | [Configuration](#configuration) | :white_check_mark: | System | - |
-| [Event](#event) | :construction: | Calendar | High (#39) |
+| [Event](#event) | :white_check_mark: | Calendar | Completed (#39) |
+| [EventSeries](#eventseries) | :white_check_mark: | Calendar | Completed (#39) |
+| [Category](#category-1) | :white_check_mark: | Reference | Completed (#39) |
+| [Location](#location) | :white_check_mark: | Reference | Completed (#39) |
+| [Organizer](#organizer-1) | :white_check_mark: | Reference | Completed (#39) |
+| [Performer](#performer-1) | :white_check_mark: | Reference | Completed (#39) |
+| [EventPerformer](#eventperformer-junction-table) | :white_check_mark: | Junction | Completed (#39) |
 | [User](#user) | :construction: | Identity | High |
 | [Team](#team) | :construction: | Identity | High |
 | [Camera](#camera) | :construction: | Equipment | Medium |
@@ -140,10 +148,6 @@ The application implements team-based data isolation:
 | [Workflow](#workflow) | :construction: | Workflow | Medium |
 | [WorkflowCollection](#workflowcollection-junction-table) | :construction: | Junction | Medium |
 | [ImageWorkflowProgress](#imageworkflowprogress) | :construction: | Junction | Medium |
-| [Location/Venue](#locationvenue) | :construction: | Reference | Medium |
-| [Organizer](#organizer) | :construction: | Reference | Low |
-| [Performer](#performer) | :construction: | Reference | Low |
-| [Category](#category) | :construction: | Reference | Low |
 | [ImagePerformer](#imageperformer-junction-table) | :construction: | Junction | Medium |
 | [Agent](#agent) | :thought_balloon: | Infrastructure | Future |
 
@@ -535,79 +539,279 @@ The transition from current FK-based to polymorphic pattern:
 | `extensions` | `photo_extensions`, `metadata_extensions`, `require_sidecar` | Array[String] |
 | `cameras` | Camera ID (e.g., `AB3D`) | Object with `name`, `serial_number` |
 | `processing_methods` | Method code (e.g., `HDR`) | String description |
+| `event_statuses` | Status key (e.g., `future`, `confirmed`) | Object with `label`, `display_order` |
 
 ---
 
-## Planned Entities
+### Event (Implemented - Issue #39)
 
-### Event
+**Status:** Implemented
+**Implementation:** `backend/src/models/event.py`
 
-**Priority:** High (Issue #39)
-**Target Epic:** 008-events-calendar
-
-**Purpose:** Calendar-based photography event management.
+**Purpose:** Calendar-based photography event management with logistics tracking.
 
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
 | `id` | Integer | PK, auto-increment | Internal identifier |
-| `uuid` | UUID | unique, not null | External identifier |
-| `team_id` | Integer | FK(teams.id), not null | Owning team |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
 | `title` | String(255) | not null | Event title |
 | `description` | Text | nullable | Event description |
-| `start_time` | DateTime | not null | Event start |
-| `end_time` | DateTime | not null | Event end |
+| `event_date` | Date | not null | Event date (timezone-independent) |
+| `start_time` | Time | nullable | Start time (null for all-day) |
+| `end_time` | Time | nullable | End time (null for all-day) |
 | `is_all_day` | Boolean | not null, default=false | All-day event flag |
+| `input_timezone` | String(50) | nullable | User's input timezone |
+| `category_id` | Integer | FK(categories.id), not null | Event category |
 | `location_id` | Integer | FK(locations.id), nullable | Event venue |
-| `category_id` | Integer | FK(categories.id), nullable | Event category |
 | `organizer_id` | Integer | FK(organizers.id), nullable | Event organizer |
-| `status` | Enum | not null | Event lifecycle status |
-| `attendance` | Enum | not null | `PLANNED`, `SKIPPED`, `ATTENDED` |
-| `requires_ticket` | Boolean | not null, default=false | Ticket required |
-| `has_ticket` | Boolean | nullable | Ticket acquired |
-| `requires_time_off` | Boolean | not null, default=false | Time off required |
-| `has_time_off` | Boolean | nullable | Time off approved |
-| `requires_lodging` | Boolean | not null, default=false | Lodging required |
-| `has_lodging` | Boolean | nullable | Lodging booked |
-| `requires_travel` | Boolean | not null, default=false | Travel required |
-| `has_travel` | Boolean | nullable | Travel arranged |
-| `deadline` | DateTime | nullable | Workflow deadline |
-| `notes` | Text | nullable | Additional notes |
-| `metadata_json` | JSONB | nullable | Custom metadata |
+| `series_id` | Integer | FK(event_series.id), nullable | Parent series |
+| `status` | String(50) | not null, default='future' | Event status (configurable) |
+| `attendance` | Enum | not null, default='planned' | `planned`, `attended`, `skipped` |
+| `ticket_required` | Boolean | nullable | Ticket required |
+| `ticket_status` | String(50) | nullable | `not_purchased`, `purchased`, `ready` |
+| `ticket_purchase_date` | Date | nullable | Ticket purchase date |
+| `timeoff_required` | Boolean | nullable | Time off required |
+| `timeoff_status` | String(50) | nullable | `planned`, `booked`, `approved` |
+| `timeoff_booking_date` | Date | nullable | Time off booking date |
+| `travel_required` | Boolean | nullable | Travel required |
+| `travel_status` | String(50) | nullable | `planned`, `booked` |
+| `travel_booking_date` | Date | nullable | Travel booking date |
+| `deadline_date` | Date | nullable | Workflow deadline |
 | `created_at` | DateTime | not null | Creation timestamp |
 | `updated_at` | DateTime | not null | Last modification |
 
-**Status Values:**
+**GUID Property:** `.guid` returns `evt_{crockford_base32}` format (e.g., `evt_01hgw2bbg0000000000000001`)
+
+**Status Values (Configurable via Settings > Config):**
 
 | Status | Description | Color Hint |
 |--------|-------------|------------|
-| `FUTURE` | Upcoming event | Blue |
-| `IN_PROGRESS` | Currently happening | Green |
-| `COMPLETED` | Event finished | Gray |
-| `CANCELLED` | Event cancelled | Red |
+| `future` | Upcoming event | Blue |
+| `confirmed` | Event confirmed | Green |
+| `completed` | Event finished | Gray |
+| `cancelled` | Event cancelled | Red |
 
 **Attendance Values:**
 
 | Value | Description | Calendar Color |
 |-------|-------------|----------------|
-| `PLANNED` | Intend to attend | Default |
-| `SKIPPED` | Decided not to attend | Muted/Gray |
-| `ATTENDED` | Actually attended | Success/Green |
+| `planned` | Intend to attend | Default |
+| `attended` | Actually attended | Success/Green |
+| `skipped` | Decided not to attend | Muted/Gray |
 
-**Multi-Day Event Handling:**
-- Multi-day calendar selections auto-generate individual session Events
-- Each session can have different attendees
-- Sessions linked via `parent_event_id` for series management
+**Logistics Tracking:**
+Events support three logistics categories (ticket, timeoff, travel), each with:
+- Required flag (nullable tri-state: null=unknown, true=required, false=not required)
+- Status progression
+- Booking/purchase date tracking
 
 **Relationships:**
-- Many-to-one with Team (tenant isolation)
-- Many-to-one with Location (optional)
-- Many-to-one with Category (optional)
-- Many-to-one with Organizer (optional)
-- Many-to-many with Performer (with status: `CONFIRMED`, `CANCELLED`)
-- Many-to-many with User (attendees)
-- One-to-many with Album
+- Many-to-one with Category (required)
+- Many-to-one with Location (optional, SET NULL on delete)
+- Many-to-one with Organizer (optional, SET NULL on delete)
+- Many-to-one with EventSeries (optional, CASCADE on delete)
+- Many-to-many with Performer (via EventPerformer junction)
 
 ---
+
+### EventSeries (Implemented - Issue #39)
+
+**Status:** Implemented
+**Implementation:** `backend/src/models/event_series.py`
+
+**Purpose:** Groups related events created from multi-day calendar selections.
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
+| `title` | String(255) | not null | Series title |
+| `created_at` | DateTime | not null | Creation timestamp |
+| `updated_at` | DateTime | not null | Last modification |
+
+**GUID Property:** `.guid` returns `ser_{crockford_base32}` format (e.g., `ser_01hgw2bbg0000000000000001`)
+
+**Series Behavior:**
+- Multi-day calendar selections auto-generate individual Event records linked to a Series
+- Series updates can apply to: single event, this event and future, or all events
+- Performer additions/removals sync across all series events
+- Location and organizer changes can be synced across series
+- Individual event status/attendance can differ within a series
+
+**Relationships:**
+- One-to-many with Event (CASCADE delete)
+
+---
+
+### Category (Implemented - Issue #39)
+
+**Status:** Implemented
+**Implementation:** `backend/src/models/category.py`
+
+**Purpose:** Photography categories for classification of events, locations, organizers, and performers.
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
+| `name` | String(100) | unique, not null | Category name |
+| `icon` | String(50) | nullable | Icon identifier |
+| `color` | String(7) | nullable | Hex color code |
+| `display_order` | Integer | not null, default=0 | Order in UI lists |
+| `is_active` | Boolean | not null, default=true | Active status |
+| `created_at` | DateTime | not null | Creation timestamp |
+| `updated_at` | DateTime | not null | Last modification |
+
+**GUID Property:** `.guid` returns `cat_{crockford_base32}` format (e.g., `cat_01hgw2bbg0000000000000001`)
+
+**Category Matching:**
+Events, Locations, Organizers, and Performers are category-scoped. When assigning entities to events, the system validates that the entity's category matches the event's category.
+
+**Relationships:**
+- One-to-many with Event (RESTRICT delete)
+- One-to-many with Location (RESTRICT delete)
+- One-to-many with Organizer (RESTRICT delete)
+- One-to-many with Performer (RESTRICT delete)
+
+---
+
+### Location (Implemented - Issue #39)
+
+**Status:** Implemented
+**Implementation:** `backend/src/models/location.py`
+
+**Purpose:** Event venues and shooting locations with rating system.
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
+| `name` | String(255) | not null | Location name |
+| `category_id` | Integer | FK(categories.id), not null | Location category |
+| `address` | Text | nullable | Street address |
+| `city` | String(100) | nullable | City |
+| `state` | String(100) | nullable | State/Province |
+| `country` | String(100) | nullable | Country |
+| `postal_code` | String(20) | nullable | Postal/ZIP code |
+| `timezone` | String(50) | nullable | Location timezone (IANA format) |
+| `latitude` | Decimal(10,7) | nullable | GPS latitude |
+| `longitude` | Decimal(10,7) | nullable | GPS longitude |
+| `is_known` | Boolean | not null, default=false | Known/visited location flag |
+| `website` | String(1024) | nullable | Website URL |
+| `additional_info` | Text | nullable | Additional notes |
+| `default_ticket_required` | Boolean | nullable | Default logistics |
+| `default_timeoff_required` | Boolean | nullable | Default logistics |
+| `default_travel_required` | Boolean | nullable | Default logistics |
+| `created_at` | DateTime | not null | Creation timestamp |
+| `updated_at` | DateTime | not null | Last modification |
+
+**GUID Property:** `.guid` returns `loc_{crockford_base32}` format (e.g., `loc_01hgw2bbg0000000000000001`)
+
+**Known Locations:**
+Locations can be marked as "known" after visiting, enabling rating and review features. Known locations can have photo ratings displayed as camera icons.
+
+**Default Logistics:**
+Locations can define default logistics requirements (ticket, timeoff, travel) that auto-populate when assigning the location to an event.
+
+**Relationships:**
+- Many-to-one with Category (required, RESTRICT delete)
+- One-to-many with Event (SET NULL on delete)
+
+---
+
+### Organizer (Implemented - Issue #39)
+
+**Status:** Implemented
+**Implementation:** `backend/src/models/organizer.py`
+
+**Purpose:** Event organizers for relationship management.
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
+| `name` | String(255) | not null | Organizer name |
+| `category_id` | Integer | FK(categories.id), not null | Organizer category |
+| `website` | String(1024) | nullable | Website URL |
+| `additional_info` | Text | nullable | Additional notes |
+| `default_ticket_required` | Boolean | nullable | Default logistics |
+| `default_timeoff_required` | Boolean | nullable | Default logistics |
+| `default_travel_required` | Boolean | nullable | Default logistics |
+| `created_at` | DateTime | not null | Creation timestamp |
+| `updated_at` | DateTime | not null | Last modification |
+
+**GUID Property:** `.guid` returns `org_{crockford_base32}` format (e.g., `org_01hgw2bbg0000000000000001`)
+
+**Default Logistics:**
+Organizers can define default logistics requirements that auto-populate when assigning the organizer to an event.
+
+**Relationships:**
+- Many-to-one with Category (required, RESTRICT delete)
+- One-to-many with Event (SET NULL on delete)
+
+---
+
+### Performer (Implemented - Issue #39)
+
+**Status:** Implemented
+**Implementation:** `backend/src/models/performer.py`
+
+**Purpose:** Photo subjects (models, demo teams, wildlife species, etc.).
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | Internal identifier |
+| `external_id` | UUID | unique, not null | UUIDv7 for GUID generation |
+| `name` | String(255) | not null | Performer name |
+| `category_id` | Integer | FK(categories.id), not null | Performer category |
+| `website` | String(1024) | nullable | Website URL |
+| `instagram_handle` | String(255) | nullable | Instagram handle (without @) |
+| `additional_info` | Text | nullable | Additional notes |
+| `created_at` | DateTime | not null | Creation timestamp |
+| `updated_at` | DateTime | not null | Last modification |
+
+**GUID Property:** `.guid` returns `prf_{crockford_base32}` format (e.g., `prf_01hgw2bbg0000000000000001`)
+
+**Relationships:**
+- Many-to-one with Category (required, RESTRICT delete)
+- Many-to-many with Event (via EventPerformer junction)
+
+---
+
+### EventPerformer (Junction Table - Implemented)
+
+**Status:** Implemented
+**Implementation:** `backend/src/models/event_performer.py`
+
+**Purpose:** Links Events to Performers with attendance status.
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `id` | Integer | PK, auto-increment | Internal identifier |
+| `event_id` | Integer | FK(events.id), not null | Parent event |
+| `performer_id` | Integer | FK(performers.id), not null | The performer |
+| `status` | Enum | not null, default='announced' | `announced`, `confirmed`, `cancelled` |
+| `created_at` | DateTime | not null | Record creation |
+
+**Performer Status Values:**
+
+| Status | Description |
+|--------|-------------|
+| `announced` | Performer announced but not yet confirmed (default) |
+| `confirmed` | Performer attendance confirmed |
+| `cancelled` | Performer cancelled |
+
+**Constraints:**
+- `(event_id, performer_id)` is unique
+- CASCADE delete when Event or Performer is deleted
+
+**Series Sync Behavior:**
+- Adding/removing performers syncs across all events in a series
+- Performer status can be set independently per event
+
+---
+
+## Planned Entities
 
 ### User
 
@@ -1071,136 +1275,6 @@ A Workflow is the **runtime instance** of applying a Pipeline to an Album. It tr
 - Verification workflow: User reviews AI detections, confirms or rejects
 - Search: "Find all images containing [Performer]" across entire collection
 - Analytics: Track which performers are photographed most frequently
-
----
-
-### Location/Venue
-
-**Priority:** Medium
-**Target Epic:** 008-events-calendar
-
-**Purpose:** Event venues and shooting locations.
-
-| Attribute | Type | Constraints | Description |
-|-----------|------|-------------|-------------|
-| `id` | Integer | PK, auto-increment | Internal identifier |
-| `uuid` | UUID | unique, not null | External identifier |
-| `team_id` | Integer | FK(teams.id), not null | Owning team |
-| `name` | String(255) | not null | Location name |
-| `address` | Text | nullable | Street address |
-| `city` | String(100) | nullable | City |
-| `state` | String(100) | nullable | State/Province |
-| `country` | String(100) | nullable | Country |
-| `latitude` | Decimal(10,7) | nullable | GPS latitude |
-| `longitude` | Decimal(10,7) | nullable | GPS longitude |
-| `category_id` | Integer | FK(categories.id), nullable | Matched category |
-| `rating` | Integer | nullable | 1-5 star rating |
-| `rating_lighting` | Integer | nullable | Lighting conditions rating |
-| `rating_access` | Integer | nullable | Access/parking rating |
-| `rating_equipment` | Integer | nullable | Available equipment rating |
-| `notes` | Text | nullable | Location notes |
-| `metadata_json` | JSONB | nullable | Custom metadata |
-| `created_at` | DateTime | not null | Creation timestamp |
-| `updated_at` | DateTime | not null | Last modification |
-
----
-
-### Organizer
-
-**Priority:** Low
-**Target Epic:** 008-events-calendar
-
-**Purpose:** Event organizers for relationship management.
-
-| Attribute | Type | Constraints | Description |
-|-----------|------|-------------|-------------|
-| `id` | Integer | PK, auto-increment | Internal identifier |
-| `uuid` | UUID | unique, not null | External identifier |
-| `team_id` | Integer | FK(teams.id), not null | Owning team |
-| `name` | String(255) | not null | Organizer name |
-| `contact_name` | String(255) | nullable | Primary contact |
-| `contact_email` | String(255) | nullable | Contact email |
-| `contact_phone` | String(50) | nullable | Contact phone |
-| `website` | String(1024) | nullable | Website URL |
-| `category_id` | Integer | FK(categories.id), nullable | Primary category |
-| `rating` | Integer | nullable | 1-5 star rating |
-| `notes` | Text | nullable | Organizer notes |
-| `created_at` | DateTime | not null | Creation timestamp |
-| `updated_at` | DateTime | not null | Last modification |
-
-**Rating Purpose:**
-- Helps prioritize when schedule conflicts arise
-- Historical track record affects future event selection
-
----
-
-### Performer
-
-**Priority:** Low
-**Target Epic:** 008-events-calendar
-
-**Purpose:** Photo subjects (models, demo teams, wildlife species, etc.).
-
-| Attribute | Type | Constraints | Description |
-|-----------|------|-------------|-------------|
-| `id` | Integer | PK, auto-increment | Internal identifier |
-| `uuid` | UUID | unique, not null | External identifier |
-| `team_id` | Integer | FK(teams.id), not null | Owning team |
-| `name` | String(255) | not null | Performer name |
-| `type` | String(100) | nullable | Performer type (model, aircraft, animal) |
-| `description` | Text | nullable | Description |
-| `reference_images` | JSONB | nullable | Sample image references |
-| `website` | String(1024) | nullable | Website/social URL |
-| `notes` | Text | nullable | Notes |
-| `created_at` | DateTime | not null | Creation timestamp |
-| `updated_at` | DateTime | not null | Last modification |
-
-**Relationships:**
-- Many-to-many with Event (via EventPerformer junction)
-  - Junction includes `status`: `CONFIRMED`, `CANCELLED`, `TENTATIVE`
-- Many-to-many with Image (via ImagePerformer junction)
-  - Junction includes identification method, confidence, bounding box
-  - Enables "show all images of this performer" queries
-
-**As Photo Subject:**
-Performers are the primary subjects being photographed. The Image-Performer relationship is central to the application's value:
-- Not all images at an Event contain Performers (ambiance, surroundings, etc.)
-- An image may contain multiple Performers (group shots)
-- Initial identification is manual; AI/ML assists over time
-- Reference images (stored in `reference_images`) help train ML models
-
----
-
-### Category
-
-**Priority:** Low
-**Target Epic:** 008-events-calendar
-
-**Purpose:** Photography categories/styles for classification.
-
-| Attribute | Type | Constraints | Description |
-|-----------|------|-------------|-------------|
-| `id` | Integer | PK, auto-increment | Internal identifier |
-| `uuid` | UUID | unique, not null | External identifier |
-| `team_id` | Integer | FK(teams.id), nullable | Owning team (null = system-wide) |
-| `name` | String(100) | not null | Category name |
-| `icon` | String(50) | nullable | Icon identifier |
-| `color` | String(7) | nullable | Hex color code |
-| `is_system` | Boolean | not null, default=false | System-provided category |
-| `created_at` | DateTime | not null | Creation timestamp |
-| `updated_at` | DateTime | not null | Last modification |
-
-**Default Categories:**
-- Sports
-- Wildlife
-- Portrait
-- Landscape
-- Air Show
-- Wedding
-- Event (generic)
-- Street
-- Architecture
-- Macro
 
 ---
 

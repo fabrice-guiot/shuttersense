@@ -3,6 +3,10 @@
  *
  * Compact event display for calendar cells
  * Issue #39 - Calendar Events feature (Phase 4)
+ *
+ * Accessibility (Phase 13):
+ * - ARIA labels for screen readers
+ * - Proper role attributes for status indicators
  */
 
 import { LucideIcon, MapPin } from 'lucide-react'
@@ -25,6 +29,12 @@ const ATTENDANCE_BORDER_COLORS: Record<AttendanceStatus, string> = {
   planned: 'border-l-amber-500',
   attended: 'border-l-emerald-500',
   skipped: 'border-l-red-500'
+}
+
+const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
+  planned: 'Planned',
+  attended: 'Attended',
+  skipped: 'Skipped'
 }
 
 // ============================================================================
@@ -72,6 +82,16 @@ export const EventCard = ({
     ? `${event.title} (${locationShort})`
     : event.title
 
+  // Build accessible label for screen readers
+  const accessibleLabel = [
+    event.title,
+    event.category?.name && `Category: ${event.category.name}`,
+    locationShort && `Location: ${locationShort}`,
+    timeDisplay && `Time: ${timeDisplay}`,
+    seriesIndicator && `Part ${event.sequence_number} of ${event.series_total}`,
+    `Status: ${ATTENDANCE_LABELS[event.attendance]}`
+  ].filter(Boolean).join(', ')
+
   // Compact mode - minimal display for small calendar cells
   if (compact) {
     // Expanded mode: allow wrapping up to 3 lines (for single-event days)
@@ -79,6 +99,8 @@ export const EventCard = ({
       return (
         <button
           onClick={() => onClick?.(event)}
+          aria-label={accessibleLabel}
+          role="listitem"
           className={cn(
             'w-full text-left px-1.5 py-0.5 rounded text-xs transition-colors',
             'hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -115,6 +137,8 @@ export const EventCard = ({
     return (
       <button
         onClick={() => onClick?.(event)}
+        aria-label={accessibleLabel}
+        role="listitem"
         className={cn(
           'w-full text-left px-1.5 py-0.5 rounded text-xs truncate transition-colors',
           'hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -151,6 +175,8 @@ export const EventCard = ({
   return (
     <button
       onClick={() => onClick?.(event)}
+      aria-label={accessibleLabel}
+      role="listitem"
       className={cn(
         'w-full text-left p-2 rounded-md transition-colors',
         'hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -237,11 +263,13 @@ export const EventCard = ({
 
         {/* Attendance Indicator */}
         <div
+          role="img"
+          aria-label={`Attendance status: ${ATTENDANCE_LABELS[event.attendance]}`}
           className={cn(
             'flex-shrink-0 w-2 h-2 rounded-full mt-1.5',
             ATTENDANCE_COLORS[event.attendance]
           )}
-          title={`Attendance: ${event.attendance}`}
+          title={`Attendance: ${ATTENDANCE_LABELS[event.attendance]}`}
         />
       </div>
     </button>
@@ -267,14 +295,18 @@ export const EventList = ({
 }: EventListProps) => {
   if (events.length === 0) {
     return (
-      <div className={cn('text-sm text-muted-foreground text-center py-4', className)}>
+      <div className={cn('text-sm text-muted-foreground text-center py-4', className)} role="status">
         {emptyMessage}
       </div>
     )
   }
 
   return (
-    <div className={cn('space-y-1', className)}>
+    <div
+      role="list"
+      aria-label={`${events.length} event${events.length !== 1 ? 's' : ''}`}
+      className={cn('space-y-1', className)}
+    >
       {events.map(event => (
         <EventCard
           key={event.guid}

@@ -21,6 +21,7 @@ const mockCategories: Category[] = [
     icon: 'plane',
     color: '#EF4444',
     is_active: true,
+    display_order: 1,
     created_at: '2026-01-10T10:00:00Z',
     updated_at: '2026-01-10T10:00:00Z',
   },
@@ -30,6 +31,7 @@ const mockCategories: Category[] = [
     icon: 'bird',
     color: '#22C55E',
     is_active: true,
+    display_order: 2,
     created_at: '2026-01-10T10:00:00Z',
     updated_at: '2026-01-10T10:00:00Z',
   },
@@ -39,6 +41,7 @@ const mockCategories: Category[] = [
     icon: 'archive',
     color: '#9CA3AF',
     is_active: false,
+    display_order: 3,
     created_at: '2026-01-10T10:00:00Z',
     updated_at: '2026-01-10T10:00:00Z',
   },
@@ -231,7 +234,7 @@ describe('LocationForm', () => {
       })
 
       // Verify submitted data
-      const submitData = mockOnSubmit.mock.calls[0][0]
+      const submitData = mockOnSubmit.mock.calls[0][0] as Record<string, unknown>
       expect(submitData.name).toBe('New Test Location')
       expect(submitData.category_guid).toBe('cat_01hgw2bbg00000000000000001')
       expect(submitData.is_known).toBe(true)

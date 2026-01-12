@@ -140,6 +140,7 @@ const categoryFormSchema = z.object({
   name: z.string()
     .min(1, 'Name is required')
     .max(100, 'Name must be 100 characters or less'),
+  is_active: z.boolean(),
   icon: z.string()
     .max(50, 'Icon must be 50 characters or less')
     .nullable()
@@ -152,8 +153,7 @@ const categoryFormSchema = z.object({
     .nullable()
     .optional()
     .or(z.literal(''))
-    .transform(val => val === '' ? null : val),
-  is_active: z.boolean().default(true)
+    .transform(val => val === '' ? null : val)
 })
 
 type CategoryFormData = z.infer<typeof categoryFormSchema>

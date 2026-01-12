@@ -13,6 +13,7 @@ This document establishes UI/UX guidelines to ensure consistency across all scre
 - [Notification System](#notification-system)
 - [Icons](#icons)
 - [Dark Theme Compliance](#dark-theme-compliance)
+- [Calendar & Events Patterns](#calendar--events-patterns)
 
 ---
 
@@ -549,6 +550,11 @@ Each domain object type should have a consistent icon:
 | Asset | `Archive` | Sidebar, headers, FK refs |
 | Analytics | `BarChart3` | Sidebar only |
 | Settings | `Settings` | Sidebar only |
+| Event | `Calendar` | Sidebar, headers, FK refs |
+| Category | `Tag` | Headers, FK refs |
+| Location | `MapPin` | Headers, FK refs |
+| Organizer | `Building2` | Headers, FK refs |
+| Performer | `User` | Headers, FK refs |
 
 ### Action Icons
 
@@ -676,6 +682,128 @@ Use the chart color tokens for data visualizations:
 
 ---
 
+## Calendar & Events Patterns
+
+The Calendar Events feature (Issue #39) introduces several UI patterns for event management.
+
+### Event Domain Icons
+
+Use consistent icons for event-related entities:
+
+| Entity | Icon | Usage |
+|--------|------|-------|
+| Event | `Calendar` | Event lists, forms, cards |
+| Category | `Tag` | Category badges, filters |
+| Location | `MapPin` | Location references, maps |
+| Organizer | `Building2` | Organizer references |
+| Performer | `User` | Performer lists, badges |
+
+### Event Status Mappings
+
+Event statuses are configurable via Settings > Config > Event Statuses. Default values:
+
+```typescript
+// Default event statuses (configurable)
+const DEFAULT_EVENT_STATUSES = ['future', 'confirmed', 'completed', 'cancelled']
+```
+
+### Attendance Status Badges
+
+```typescript
+// CANONICAL MAPPING - Use consistently
+const EVENT_ATTENDANCE_BADGE_VARIANT = {
+  planned: 'secondary',   // Gray - scheduled but not attended
+  attended: 'success',    // Green - user attended
+  skipped: 'muted'        // Muted - user skipped
+}
+```
+
+### Ticket Status Badges
+
+```typescript
+const TICKET_STATUS_BADGE_VARIANT = {
+  not_purchased: 'muted',    // Gray - no ticket yet
+  purchased: 'secondary',    // Default - ticket bought
+  ready: 'success'           // Green - ticket ready to use
+}
+```
+
+### Performer Status Badges
+
+```typescript
+const PERFORMER_STATUS_BADGE_VARIANT = {
+  announced: 'secondary',   // Default - performer announced
+  confirmed: 'success',     // Green - confirmed appearance
+  cancelled: 'destructive'  // Red - cancelled
+}
+```
+
+### Event Card Layout
+
+Event cards should display:
+1. **Title** - Event title (or series title with sequence number)
+2. **Date/Time** - Event date with optional time
+3. **Category** - Color-coded category badge with icon
+4. **Location** - Location name if available
+5. **Status indicators** - Ticket, timeoff, travel status icons
+
+```tsx
+// Event card pattern
+<Card>
+  <CardHeader>
+    <div className="flex items-center gap-2">
+      <Badge style={{ backgroundColor: category.color }}>
+        {category.name}
+      </Badge>
+      {series && (
+        <span className="text-sm text-muted-foreground">
+          {sequence_number}/{series_total}
+        </span>
+      )}
+    </div>
+    <CardTitle>{title}</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Calendar className="h-4 w-4" />
+      <span>{formatDate(event_date)}</span>
+    </div>
+    {location && (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <MapPin className="h-4 w-4" />
+        <span>{location.name}</span>
+      </div>
+    )}
+  </CardContent>
+</Card>
+```
+
+### Date/Time Display
+
+- Use `formatDate()` from `@/lib/date-utils` for consistent date formatting
+- Display times in user's local timezone (auto-detected)
+- All-day events should not display time
+- Series events show "x/n" indicator (e.g., "2/5")
+
+### Category Colors
+
+Categories have user-defined colors. When displaying:
+
+```tsx
+// Category with color
+<Badge
+  style={{
+    backgroundColor: category.color || undefined,
+    color: category.color ? getContrastColor(category.color) : undefined
+  }}
+>
+  {category.icon && <span>{category.icon}</span>}
+  {category.name}
+</Badge>
+```
+
+---
+
 ## Checklist for New Features
 
 Before submitting a PR for a new UI feature, verify:
@@ -742,5 +870,6 @@ Before submitting a PR for a new UI feature, verify:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2 | 2026-01-12 | Added Calendar & Events patterns, event domain icons (Issue #39) |
 | 1.1 | 2026-01-10 | Added scrollbar styling guidelines, known exceptions, error handling patterns (Issue #55) |
 | 1.0 | 2026-01-07 | Initial design system documentation |

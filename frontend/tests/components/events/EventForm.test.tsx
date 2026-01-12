@@ -20,6 +20,7 @@ const mockCategories: Category[] = [
     icon: 'music',
     color: '#FF5733',
     is_active: true,
+    display_order: 1,
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-01-01T00:00:00Z'
   },
@@ -29,6 +30,7 @@ const mockCategories: Category[] = [
     icon: 'calendar',
     color: '#3366FF',
     is_active: true,
+    display_order: 2,
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-01-01T00:00:00Z'
   }

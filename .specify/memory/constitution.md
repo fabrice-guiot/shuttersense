@@ -83,6 +83,12 @@ Example: `col_01hgw2bbg0000000000000001`
 | Result | `res_` | Database | `res_01hgw2bbg...` |
 | Job | `job_` | In-memory | `job_01hgw2bbg...` |
 | ImportSession | `imp_` | In-memory | `imp_01hgw2bbg...` |
+| Event | `evt_` | Database | `evt_01hgw2bbg...` |
+| EventSeries | `ser_` | Database | `ser_01hgw2bbg...` |
+| Category | `cat_` | Database | `cat_01hgw2bbg...` |
+| Location | `loc_` | Database | `loc_01hgw2bbg...` |
+| Organizer | `org_` | Database | `org_01hgw2bbg...` |
+| Performer | `prf_` | Database | `prf_01hgw2bbg...` |
 
 **Implementation Requirements**:
 - Database entities MUST use `GuidMixin` from `backend/src/models/mixins/guid.py`

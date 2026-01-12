@@ -44,7 +44,9 @@ frontend/
 │   ├── components/          # React components
 │   │   ├── collections/     # Collection management components
 │   │   ├── connectors/      # Connector management components
+│   │   ├── events/          # Calendar events components (Issue #39)
 │   │   ├── layout/          # Layout components (Sidebar, Header)
+│   │   ├── settings/        # Settings page components
 │   │   └── ui/              # shadcn/ui components
 │   ├── contracts/           # API contracts (shared with backend)
 │   │   └── api/             # TypeScript interfaces for API
@@ -156,6 +158,30 @@ const form = useForm({
 - Loading spinners use `role="status"`
 - Keyboard navigation fully supported (Tab, Enter, Escape)
 - Color contrast meets WCAG AA standards (4.5:1)
+
+## Calendar Events Feature (Issue #39)
+
+The frontend includes comprehensive event management:
+
+### Pages
+- **Events List** (`/events`) - Calendar view with filtering by category, status, attendance
+- **Event Detail** (`/events/:guid`) - Full event details with related entities
+- **Event Form** - Create/edit events with all fields including logistics
+
+### Components (`src/components/events/`)
+- `EventsPage.tsx` - Main events listing page with KPI header stats
+- `EventForm.tsx` - Create/edit form with category, location, organizer selection
+- `CategoryForm.tsx` - Category management with color picker and icon selector
+- `LocationForm.tsx` - Location management with address and timezone
+- `OrganizerForm.tsx` - Organizer management with contact info
+- `PerformerForm.tsx` - Performer management with social media links
+
+### Settings Integration
+- **Categories** - Manage event categories in Settings > Directory > Categories
+- **Locations** - Manage locations in Settings > Directory > Locations
+- **Organizers** - Manage organizers in Settings > Directory > Organizers
+- **Performers** - Manage performers in Settings > Directory > Performers
+- **Event Statuses** - Configure event status options in Settings > Config
 
 ## Design System
 

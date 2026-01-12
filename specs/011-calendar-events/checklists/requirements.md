@@ -80,13 +80,13 @@ The following entities are defined in this specification with GUID prefixes that
 
 ## Documentation Updates Required During Implementation
 
-The following documents will need updates during implementation:
+The following documents were updated during Phase 13 implementation (2026-01-12):
 
-- [ ] `docs/domain-model.md` - Add Event, Location, Organizer, Performer, Category, EventSeries entities
-- [ ] `frontend/docs/design-system.md` - Add calendar component patterns, rating components, logistics status colors
-- [ ] `.specify/memory/constitution.md` - Add Event GUID prefix to constitution
-- [ ] `CLAUDE.md` - Add Events section to project overview
-- [ ] `README.md` (root) - Update feature list
-- [ ] `backend/README.md` - Add Events API documentation
-- [ ] `frontend/README.md` - Add Events page documentation
-- [ ] `frontend/src/contracts/domain-labels.ts` - Add Event type labels and icons
+- [x] `docs/domain-model.md` - Added Event, Location, Organizer, Performer, Category, EventSeries entities (v1.2.0)
+- [x] `frontend/docs/design-system.md` - Added calendar component patterns, event status colors, domain icons (v1.2)
+- [x] `.specify/memory/constitution.md` - Added Event GUID prefixes (evt_, ser_, cat_, loc_, org_, prf_)
+- [x] `CLAUDE.md` - Added Event GUID prefixes to Entity Prefixes table
+- [x] `README.md` (root) - Added Calendar Events feature section
+- [x] `backend/README.md` - Added Events API endpoint documentation
+- [x] `frontend/README.md` - Added Calendar Events Feature section with components
+- [x] `frontend/src/contracts/domain-labels.ts` - Added Event domain icons and status labels

@@ -386,26 +386,26 @@
 
 ### Loading & Error States
 
-- [ ] T122a [P] Add loading states to EventsPage, DirectoryPage, SettingsPage
-- [ ] T122b [P] Add error boundaries and error toasts to new pages
+- [x] T122a [P] Add loading states to EventsPage, DirectoryPage, SettingsPage
+- [x] T122b [P] Add error boundaries and error toasts to new pages
 
 ### Dark Theme Compliance
 
-- [ ] T123a [P] Verify EventCalendar, EventCard, EventForm dark theme colors
-- [ ] T123b [P] Verify LocationForm, OrganizerForm, PerformerForm dark theme colors
-- [ ] T123c [P] Verify LogisticsSection status colors work in dark mode
+- [x] T123a [P] Verify EventCalendar, EventCard, EventForm dark theme colors
+- [x] T123b [P] Verify LocationForm, OrganizerForm, PerformerForm dark theme colors
+- [x] T123c [P] Verify LogisticsSection status colors work in dark mode
 
 ### Accessibility
 
-- [ ] T124a [P] Add keyboard navigation to EventCalendar (arrow keys for date navigation)
-- [ ] T124b [P] Add ARIA labels to calendar events and status indicators
-- [ ] T124c [P] Test screen reader compatibility with EventDetails tooltip
+- [x] T124a [P] Add keyboard navigation to EventCalendar (arrow keys for date navigation)
+- [x] T124b [P] Add ARIA labels to calendar events and status indicators
+- [x] T124c [P] Test screen reader compatibility with EventDetails tooltip
 
 ### Validation
 
-- [ ] T125 Verify category matching is enforced across all entity associations
-- [ ] T126 Run database migrations and verify schema integrity
-- [ ] T127 Run quickstart.md validation scenarios
+- [x] T125 Verify category matching is enforced across all entity associations
+- [x] T126 Run database migrations and verify schema integrity
+- [x] T127 Run quickstart.md validation scenarios
 
 ---
 

@@ -18,6 +18,11 @@ import {
   LayoutGrid,
   Cloud,
   HardDrive,
+  Calendar,
+  MapPin,
+  Building2,
+  User,
+  Tag,
   type LucideIcon
 } from 'lucide-react'
 
@@ -41,6 +46,12 @@ export const DOMAIN_ICONS = {
   analytics: BarChart3,
   team: Users,
   settings: Settings,
+  // Calendar Events domain (Issue #39)
+  event: Calendar,
+  category: Tag,
+  location: MapPin,
+  organizer: Building2,
+  performer: User,
 } as const satisfies Record<string, LucideIcon>
 
 export type DomainType = keyof typeof DOMAIN_ICONS
@@ -273,4 +284,114 @@ export function getAccessibilityBadgeVariant(
   isAccessible: boolean
 ): 'success' | 'destructive' {
   return isAccessible ? 'success' : 'destructive'
+}
+
+// ============================================================================
+// Event Attendance Status (Calendar Events - Issue #39)
+// ============================================================================
+
+export type EventAttendanceStatus = 'planned' | 'attended' | 'skipped'
+
+/**
+ * Human-readable labels for event attendance status
+ */
+export const EVENT_ATTENDANCE_LABELS: Record<EventAttendanceStatus, string> = {
+  planned: 'Planned',
+  attended: 'Attended',
+  skipped: 'Skipped'
+}
+
+/**
+ * Badge variants for event attendance status
+ */
+export const EVENT_ATTENDANCE_BADGE_VARIANT: Record<
+  EventAttendanceStatus,
+  'secondary' | 'success' | 'muted'
+> = {
+  planned: 'secondary',
+  attended: 'success',
+  skipped: 'muted'
+}
+
+// ============================================================================
+// Ticket Status (Calendar Events - Issue #39)
+// ============================================================================
+
+export type TicketStatus = 'not_purchased' | 'purchased' | 'ready'
+
+/**
+ * Human-readable labels for ticket status
+ */
+export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  not_purchased: 'Not Purchased',
+  purchased: 'Purchased',
+  ready: 'Ready'
+}
+
+/**
+ * Badge variants for ticket status
+ */
+export const TICKET_STATUS_BADGE_VARIANT: Record<
+  TicketStatus,
+  'muted' | 'secondary' | 'success'
+> = {
+  not_purchased: 'muted',
+  purchased: 'secondary',
+  ready: 'success'
+}
+
+// ============================================================================
+// Timeoff Status (Calendar Events - Issue #39)
+// ============================================================================
+
+export type TimeoffStatus = 'planned' | 'booked' | 'approved'
+
+/**
+ * Human-readable labels for timeoff status
+ */
+export const TIMEOFF_STATUS_LABELS: Record<TimeoffStatus, string> = {
+  planned: 'Planned',
+  booked: 'Booked',
+  approved: 'Approved'
+}
+
+// ============================================================================
+// Travel Status (Calendar Events - Issue #39)
+// ============================================================================
+
+export type TravelStatus = 'planned' | 'booked'
+
+/**
+ * Human-readable labels for travel status
+ */
+export const TRAVEL_STATUS_LABELS: Record<TravelStatus, string> = {
+  planned: 'Planned',
+  booked: 'Booked'
+}
+
+// ============================================================================
+// Performer Status (Calendar Events - Issue #39)
+// ============================================================================
+
+export type PerformerStatus = 'announced' | 'confirmed' | 'cancelled'
+
+/**
+ * Human-readable labels for performer status
+ */
+export const PERFORMER_STATUS_LABELS: Record<PerformerStatus, string> = {
+  announced: 'Announced',
+  confirmed: 'Confirmed',
+  cancelled: 'Cancelled'
+}
+
+/**
+ * Badge variants for performer status
+ */
+export const PERFORMER_STATUS_BADGE_VARIANT: Record<
+  PerformerStatus,
+  'secondary' | 'success' | 'destructive'
+> = {
+  announced: 'secondary',
+  confirmed: 'success',
+  cancelled: 'destructive'
 }

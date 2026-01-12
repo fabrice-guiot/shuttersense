@@ -7,6 +7,7 @@ FastAPI backend for the photo-admin web application. Supports remote photo colle
 - **Remote Storage Connectors**: Manage S3, GCS, and SMB/CIFS connections with encrypted credentials
 - **Photo Collections**: Track local and remote photo collections with accessibility monitoring
 - **File Listing Cache**: In-memory caching with state-based TTL for remote storage file listings
+- **Calendar Events**: Full event management with categories, locations, organizers, and performers
 - **RESTful API**: Comprehensive REST API with OpenAPI/Swagger documentation
 - **PostgreSQL Storage**: Persistent storage with SQLAlchemy ORM and Alembic migrations
 - **Credential Encryption**: Fernet-based encryption for remote storage credentials
@@ -439,6 +440,45 @@ mypy backend/src
 - `DELETE /api/collections/{id}` - Delete collection
 - `POST /api/collections/{id}/test` - Test collection accessibility
 - `POST /api/collections/{id}/refresh` - Refresh file listing cache
+
+#### Events (Issue #39)
+- `GET /api/events` - List events (with date range, category, status filters)
+- `POST /api/events` - Create standalone event
+- `POST /api/events/series` - Create event series (multiple dates)
+- `GET /api/events/{guid}` - Get event details
+- `PATCH /api/events/{guid}` - Update event (supports series scope)
+- `DELETE /api/events/{guid}` - Soft-delete event
+- `GET /api/events/stats` - Get event statistics (KPIs)
+
+#### Categories
+- `GET /api/categories` - List categories
+- `POST /api/categories` - Create category
+- `GET /api/categories/{guid}` - Get category details
+- `PATCH /api/categories/{guid}` - Update category
+- `DELETE /api/categories/{guid}` - Delete category
+
+#### Locations
+- `GET /api/locations` - List locations
+- `POST /api/locations` - Create location
+- `GET /api/locations/{guid}` - Get location details
+- `PATCH /api/locations/{guid}` - Update location
+- `DELETE /api/locations/{guid}` - Delete location
+
+#### Organizers
+- `GET /api/organizers` - List organizers
+- `POST /api/organizers` - Create organizer
+- `GET /api/organizers/{guid}` - Get organizer details
+- `PATCH /api/organizers/{guid}` - Update organizer
+- `DELETE /api/organizers/{guid}` - Delete organizer
+
+#### Performers
+- `GET /api/performers` - List performers
+- `POST /api/performers` - Create performer
+- `GET /api/performers/{guid}` - Get performer details
+- `PATCH /api/performers/{guid}` - Update performer
+- `DELETE /api/performers/{guid}` - Delete performer
+- `POST /api/events/{guid}/performers` - Link performer to event
+- `DELETE /api/events/{guid}/performers/{performer_guid}` - Unlink performer
 
 ## Troubleshooting
 

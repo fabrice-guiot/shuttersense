@@ -140,6 +140,17 @@ See [CLAUDE.md](CLAUDE.md) for development guidelines and coding standards.
 - **Google Cloud Storage** - GCS bucket integration
 - **SMB/CIFS** - Network share access
 
+### Calendar Events (Issue #39)
+
+Plan and track photo-related events with comprehensive management:
+- **Events** - Create standalone events or event series with multiple dates
+- **Categories** - Organize events with color-coded, icon-enabled categories
+- **Locations** - Track venues with address, coordinates, and timezone support
+- **Organizers** - Manage event organizers with contact information
+- **Performers** - Track performers with social media links and status
+- **Logistics** - Track tickets, time-off, and travel requirements per event
+- **Configurable Statuses** - Define custom event status workflows
+
 ### Security
 
 - Fernet encryption for stored credentials
