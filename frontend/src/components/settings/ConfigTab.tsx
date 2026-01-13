@@ -620,40 +620,32 @@ export function ConfigTab() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Tool Configuration</h2>
-          <p className="text-sm text-muted-foreground">
-            Configure cameras, processing methods, and file extensions
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-            accept=".yaml,.yml"
-            className="hidden"
-          />
-          <Button
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importLoading}
-            className="gap-2"
-          >
-            <Upload className="h-4 w-4" />
-            Import YAML
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleExport}
-            className="gap-2"
-          >
-            <Download className="h-4 w-4" />
-            Export YAML
-          </Button>
-        </div>
+      {/* Action Row (Issue #67 - Single Title Pattern) */}
+      <div className="flex justify-end gap-2">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept=".yaml,.yml"
+          className="hidden"
+        />
+        <Button
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={importLoading}
+          className="gap-2"
+        >
+          <Upload className="h-4 w-4" />
+          Import YAML
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleExport}
+          className="gap-2"
+        >
+          <Download className="h-4 w-4" />
+          Export YAML
+        </Button>
       </div>
 
       {/* Error Alert */}

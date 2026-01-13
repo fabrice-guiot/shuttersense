@@ -5,9 +5,15 @@
  * Updates dynamically based on current route and page context.
  */
 
-import { Bell, Menu, type LucideIcon } from 'lucide-react'
+import { Bell, Menu, HelpCircle, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 
 // ============================================================================
 // Types
@@ -35,6 +41,11 @@ export interface TopHeaderProps {
    * When true, show hamburger button even on tablet/desktop
    */
   isSidebarCollapsed?: boolean
+  /**
+   * Optional help text for the page (Issue #67)
+   * When provided, displays a help icon with tooltip next to the page title
+   */
+  pageHelp?: string
 }
 
 // ============================================================================
@@ -57,7 +68,8 @@ export function TopHeader({
   stats = [],
   className,
   onOpenMobileMenu,
-  isSidebarCollapsed = false
+  isSidebarCollapsed = false,
+  pageHelp
 }: TopHeaderProps) {
   return (
     <header
@@ -82,6 +94,23 @@ export function TopHeader({
         </button>
         {PageIcon && <PageIcon className="h-6 w-6 text-primary" />}
         <h1 className="text-xl font-semibold text-foreground">{pageTitle}</h1>
+        {pageHelp && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="rounded-md p-1 hover:bg-accent transition-colors"
+                  aria-label="Page help"
+                >
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p>{pageHelp}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
       {/* Right: Stats, Notifications, User Profile */}

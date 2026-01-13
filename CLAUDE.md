@@ -204,6 +204,38 @@ All frontend development MUST follow the Design System documentation at `fronten
 
 See [Design System](frontend/docs/design-system.md) for complete guidelines.
 
+### Single Title Pattern (Issue #67)
+
+All pages MUST follow the Single Title Pattern:
+
+1. **Page titles appear ONLY in TopHeader** - Never add `<h1>` elements in page content
+2. **TopHeader is the single source of truth** for page titles, icons, and help text
+3. **Page descriptions use `pageHelp` prop** - Not inline text in page content
+4. **Tab content has NO titles** - The tab label is sufficient context
+
+**Route Configuration** (`App.tsx`):
+```typescript
+{
+  path: '/settings',
+  element: <SettingsPage />,
+  pageTitle: 'Settings',
+  pageIcon: Settings,
+  pageHelp: 'Configure tools, event categories, and storage connectors'  // Optional tooltip
+}
+```
+
+**Action Button Patterns**:
+- Non-tabbed pages: Right-aligned action row (`flex justify-end`)
+- Tabbed pages with actions: Tabs + buttons on same row (responsive stacking)
+- Tab content: Search + action on same row (responsive stacking)
+
+**Responsive Pattern**:
+```tsx
+<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  {/* Stacks on mobile, horizontal on sm+ */}
+</div>
+```
+
 ### TopHeader KPI Pattern (Required for all pages)
 
 All frontend pages MUST display relevant KPIs in the TopHeader stats area (next to the bell icon). This is a mandatory UX pattern established in Issue #37.
@@ -394,9 +426,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 015-page-layout-cleanup: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 011-calendar-events: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
 - 010-user-timezone-display: Added TypeScript 5.9.3 + React 18.3.1, Vite 6.0.5, native browser Intl APIs (no external date libraries)
-- 009-dark-theme-compliance: Added TypeScript 5.x (Frontend), React 18.3.1 + Tailwind CSS 4.x, shadcn/ui components, Radix UI primitives, class-variance-authority (cva)
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 

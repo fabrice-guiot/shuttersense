@@ -9,7 +9,7 @@
 
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Settings, Plug, Cog, Tag } from 'lucide-react'
+import { Plug, Cog, Tag } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConnectorsTab } from '@/components/settings/ConnectorsTab'
 import { ConfigTab } from '@/components/settings/ConfigTab'
@@ -61,18 +61,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page Header */}
-      <div className="flex items-center gap-3">
-        <Settings className="h-8 w-8" />
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">
-            Configure tools, event categories, and storage connectors
-          </p>
-        </div>
-      </div>
-
-      {/* Tabs */}
+      {/* Tabs (Issue #67 - Single Title Pattern: title moved to TopHeader, description to pageHelp) */}
       <Tabs value={validTab} onValueChange={handleTabChange} className="w-full">
         <TabsList>
           {TABS.map(tab => {

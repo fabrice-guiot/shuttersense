@@ -280,9 +280,8 @@ export default function EventsPage() {
 
   return (
     <div className="flex flex-col h-full p-6">
-      {/* Header with Create Button */}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Events</h1>
+      {/* Action Row (Issue #67 - Single Title Pattern) */}
+      <div className="flex justify-end mb-4">
         <Button onClick={handleCreateClick}>
           <Plus className="h-4 w-4 mr-2" />
           New Event

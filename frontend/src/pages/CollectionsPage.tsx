@@ -129,9 +129,8 @@ export default function CollectionsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Photo Collections</h1>
+      {/* Action Row (Issue #67 - Single Title Pattern) */}
+      <div className="flex justify-end">
         <Button onClick={() => handleOpen()} className="gap-2">
           <Plus className="h-4 w-4" />
           New Collection

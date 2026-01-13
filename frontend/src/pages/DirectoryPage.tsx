@@ -9,7 +9,7 @@
 
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BookOpen, MapPin, Building2, Users } from 'lucide-react'
+import { MapPin, Building2, Users } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LocationsTab } from '@/components/directory/LocationsTab'
 import { OrganizersTab } from '@/components/directory/OrganizersTab'
@@ -65,18 +65,7 @@ export default function DirectoryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page Header */}
-      <div className="flex items-center gap-3">
-        <BookOpen className="h-8 w-8" />
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Directory</h1>
-          <p className="text-muted-foreground">
-            Manage event locations, organizers, and performers
-          </p>
-        </div>
-      </div>
-
-      {/* Tabs */}
+      {/* Tabs (Issue #67 - Single Title Pattern: title moved to TopHeader, description to pageHelp) */}
       <Tabs value={validTab} onValueChange={handleTabChange} className="w-full">
         <TabsList>
           {TABS.map(tab => {
