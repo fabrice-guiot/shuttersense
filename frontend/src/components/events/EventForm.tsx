@@ -391,6 +391,11 @@ export const EventForm = ({
   // Validation for series mode
   const seriesError = mode === 'series' && seriesDates.length < 2
 
+  // Filter categories: only show active categories when creating, all when editing
+  const availableCategories = isEditMode
+    ? categories
+    : categories.filter(c => c.is_active)
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
@@ -475,7 +480,7 @@ export const EventForm = ({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map(category => (
+                  {availableCategories.map(category => (
                     <SelectItem key={category.guid} value={category.guid}>
                       <span className="flex items-center gap-2">
                         {category.color && (
@@ -485,6 +490,9 @@ export const EventForm = ({
                           />
                         )}
                         {category.name}
+                        {!category.is_active && (
+                          <span className="text-muted-foreground">(inactive)</span>
+                        )}
                       </span>
                     </SelectItem>
                   ))}
