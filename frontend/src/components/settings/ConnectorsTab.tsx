@@ -100,14 +100,8 @@ export function ConnectorsTab() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Remote Storage Connectors</h2>
-          <p className="text-sm text-muted-foreground">
-            Configure connections to cloud storage providers
-          </p>
-        </div>
+      {/* Action Row (Issue #67 - Single Title Pattern) */}
+      <div className="flex justify-end">
         <Button onClick={() => handleOpen()} className="gap-2">
           <Plus className="h-4 w-4" />
           New Connector

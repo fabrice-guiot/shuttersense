@@ -367,37 +367,29 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Event Organizers</h2>
-          <p className="text-sm text-muted-foreground">
-            Manage organizers and promoters for your events
-          </p>
+      {/* Search + Action Row (Issue #67 - Single Title Pattern) */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2">
+          <Input
+            placeholder="Search organizers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            className="max-w-sm"
+          />
+          <Button variant="outline" onClick={handleSearch}>
+            Search
+          </Button>
+          {search && (
+            <Button variant="ghost" onClick={handleClearSearch}>
+              Clear
+            </Button>
+          )}
         </div>
         <Button onClick={() => handleOpen()} className="gap-2">
           <Plus className="h-4 w-4" />
           New Organizer
         </Button>
-      </div>
-
-      {/* Search */}
-      <div className="flex gap-2">
-        <Input
-          placeholder="Search organizers..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          className="max-w-sm"
-        />
-        <Button variant="outline" onClick={handleSearch}>
-          Search
-        </Button>
-        {search && (
-          <Button variant="ghost" onClick={handleClearSearch}>
-            Clear
-          </Button>
-        )}
       </div>
 
       {/* Error Alert */}

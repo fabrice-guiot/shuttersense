@@ -390,20 +390,6 @@ export default function AnalyticsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button onClick={() => setRunDialogOpen(true)} className="gap-2">
-            <Play className="h-4 w-4" />
-            Run Tool
-          </Button>
-        </div>
-      </div>
-
       {/* Error Alert */}
       {currentError && (
         <Alert variant="destructive">
@@ -411,9 +397,10 @@ export default function AnalyticsPage() {
         </Alert>
       )}
 
-      {/* Main Tabs */}
+      {/* Main Tabs with Action Buttons (Issue #67 - Single Title Pattern) */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList>
           <TabsTrigger value="trends" className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4" />
             Trends
@@ -426,7 +413,17 @@ export default function AnalyticsPage() {
             <Clock className="h-4 w-4" />
             Runs
           </TabsTrigger>
-        </TabsList>
+          </TabsList>
+          <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button onClick={() => setRunDialogOpen(true)} className="gap-2">
+              <Play className="h-4 w-4" />
+              Run Tool
+            </Button>
+          </div>
+        </div>
 
         {/* Trends Tab */}
         <TabsContent value="trends" className="space-y-6">

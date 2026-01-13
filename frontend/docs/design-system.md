@@ -4,6 +4,7 @@ This document establishes UI/UX guidelines to ensure consistency across all scre
 
 ## Table of Contents
 
+- [Single Title Pattern](#single-title-pattern)
 - [Color System](#color-system)
 - [Semantic Colors](#semantic-colors)
 - [Button Guidelines](#button-guidelines)
@@ -14,6 +15,166 @@ This document establishes UI/UX guidelines to ensure consistency across all scre
 - [Icons](#icons)
 - [Dark Theme Compliance](#dark-theme-compliance)
 - [Calendar & Events Patterns](#calendar--events-patterns)
+
+---
+
+## Single Title Pattern
+
+**Issue #67 - Page Layout Cleanup**
+
+All pages MUST follow the Single Title Pattern: the page title appears ONLY in the TopHeader component. Pages MUST NOT include `<h1>` elements in their content area.
+
+### Core Principles
+
+1. **TopHeader is the single source of truth** for page titles
+2. **No duplicate titles** - never render an h1 in the page content area
+3. **Page descriptions** use the `pageHelp` tooltip mechanism (not inline text)
+4. **Action buttons** follow consistent positioning patterns
+
+### Route Configuration
+
+Page metadata is defined in `App.tsx` route configuration:
+
+```typescript
+// Route configuration pattern
+const routes: RouteConfig[] = [
+  {
+    path: '/settings',
+    element: <SettingsPage />,
+    pageTitle: 'Settings',
+    pageIcon: Settings,
+    pageHelp: 'Configure tools, event categories, and storage connectors'  // Optional
+  },
+]
+```
+
+### Page Help Tooltip
+
+Use `pageHelp` to provide contextual descriptions that appear on hover/tap:
+
+- Settings page: "Configure tools, event categories, and storage connectors"
+- Directory page: "Manage locations, organizers, and performers for your events"
+
+The help icon (?) appears next to the page title only when `pageHelp` is defined.
+
+### Action Button Positioning
+
+#### Pattern A: Non-Tabbed Pages
+
+Action buttons appear in a top-right action row:
+
+```tsx
+// Non-tabbed page pattern (CollectionsPage, ConnectorsPage, EventsPage)
+<div className="flex flex-col gap-6">
+  {/* Action Row - right-aligned */}
+  <div className="flex justify-end">
+    <Button onClick={() => handleOpen()} className="gap-2">
+      <Plus className="h-4 w-4" />
+      New Collection
+    </Button>
+  </div>
+
+  {/* Page content... */}
+</div>
+```
+
+#### Pattern B: Tabbed Pages with Actions
+
+Tabs and action buttons share the same row:
+
+```tsx
+// Tabbed page with actions pattern (AnalyticsPage)
+<Tabs value={activeTab} onValueChange={handleTabChange}>
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <TabsList>
+      <TabsTrigger value="trends">Trends</TabsTrigger>
+      <TabsTrigger value="reports">Reports</TabsTrigger>
+    </TabsList>
+    <div className="flex gap-2">
+      <Button variant="outline" size="icon" onClick={handleRefresh}>
+        <RefreshCw className="h-4 w-4" />
+      </Button>
+      <Button onClick={() => setDialogOpen(true)}>Run Tool</Button>
+    </div>
+  </div>
+  {/* TabsContent... */}
+</Tabs>
+```
+
+#### Pattern C: Tabbed Pages without Actions
+
+Tabs only, no page-level action buttons:
+
+```tsx
+// Tabbed page without actions pattern (SettingsPage, DirectoryPage)
+<Tabs value={validTab} onValueChange={handleTabChange}>
+  <TabsList>
+    <TabsTrigger value="config">Configuration</TabsTrigger>
+    <TabsTrigger value="categories">Categories</TabsTrigger>
+  </TabsList>
+  {/* TabsContent with their own action buttons... */}
+</Tabs>
+```
+
+#### Pattern D: Tab Content with Search + Action
+
+For tabs with search and action buttons on the same row:
+
+```tsx
+// Tab content pattern (LocationsTab, OrganizersTab, PerformersTab)
+<div className="flex flex-col gap-6">
+  {/* Search + Action Row - responsive stacking */}
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex gap-2">
+      <Input placeholder="Search..." value={search} onChange={...} />
+      <Button variant="outline" onClick={handleSearch}>Search</Button>
+    </div>
+    <Button onClick={() => handleOpen()} className="gap-2">
+      <Plus className="h-4 w-4" />
+      New Location
+    </Button>
+  </div>
+
+  {/* List content... */}
+</div>
+```
+
+### Incorrect Patterns (Do NOT Use)
+
+```tsx
+// INCORRECT - h1 in page content
+<div className="flex flex-col gap-6">
+  <h1 className="text-3xl font-bold">Collections</h1>  {/* WRONG! */}
+  ...
+</div>
+
+// INCORRECT - Description text in page content
+<div className="flex flex-col gap-6">
+  <div>
+    <h1>Settings</h1>
+    <p>Configure your application settings</p>  {/* WRONG! Use pageHelp */}
+  </div>
+  ...
+</div>
+
+// INCORRECT - Tab content with h2 titles
+<TabsContent value="locations">
+  <h2>Locations</h2>  {/* WRONG! Tab label is sufficient */}
+  <p>Manage your locations</p>  {/* WRONG! Remove description */}
+  ...
+</TabsContent>
+```
+
+### Mobile Responsiveness
+
+All action rows must stack vertically on mobile using responsive classes:
+
+```tsx
+// Responsive action row
+<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  {/* Stacks vertically on mobile, horizontal on sm+ */}
+</div>
+```
 
 ---
 
@@ -870,6 +1031,7 @@ Before submitting a PR for a new UI feature, verify:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3 | 2026-01-13 | Added Single Title Pattern, pageHelp tooltip, action button positioning (Issue #67) |
 | 1.2 | 2026-01-12 | Added Calendar & Events patterns, event domain icons (Issue #39) |
 | 1.1 | 2026-01-10 | Added scrollbar styling guidelines, known exceptions, error handling patterns (Issue #55) |
 | 1.0 | 2026-01-07 | Initial design system documentation |

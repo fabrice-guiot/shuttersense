@@ -45,6 +45,11 @@ interface RouteConfig {
   element: ReactElement
   pageTitle: string
   pageIcon?: LucideIcon
+  /**
+   * Optional help text for the page (Issue #67)
+   * When provided, displays a help icon with tooltip in TopHeader
+   */
+  pageHelp?: string
 }
 
 const routes: RouteConfig[] = [
@@ -101,12 +106,14 @@ const routes: RouteConfig[] = [
     element: <DirectoryPage />,
     pageTitle: 'Directory',
     pageIcon: BookOpen,
+    pageHelp: 'Manage locations, organizers, and performers for your events',
   },
   {
     path: '/settings',
     element: <SettingsPage />,
     pageTitle: 'Settings',
     pageIcon: Settings,
+    pageHelp: 'Configure tools, event categories, and storage connectors',
   },
 ]
 
@@ -119,12 +126,12 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <Routes>
-          {routes.map(({ path, element, pageTitle, pageIcon }) => (
+          {routes.map(({ path, element, pageTitle, pageIcon, pageHelp }) => (
             <Route
               key={path}
               path={path}
               element={
-                <MainLayout pageTitle={pageTitle} pageIcon={pageIcon}>
+                <MainLayout pageTitle={pageTitle} pageIcon={pageIcon} pageHelp={pageHelp}>
                   {element}
                 </MainLayout>
               }

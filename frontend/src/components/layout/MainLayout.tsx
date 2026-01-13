@@ -39,6 +39,12 @@ export interface MainLayoutProps {
    * Additional CSS classes for content area
    */
   className?: string
+
+  /**
+   * Optional help text for the page (Issue #67)
+   * When provided, displays a help icon with tooltip in TopHeader
+   */
+  pageHelp?: string
 }
 
 // ============================================================================
@@ -59,6 +65,7 @@ function MainLayoutInner({
   children,
   pageTitle = 'Photo Admin',
   pageIcon,
+  pageHelp,
   className,
   onOpenMobileMenu,
   onCloseMobileMenu,
@@ -87,6 +94,7 @@ function MainLayoutInner({
         <TopHeader
           pageTitle={pageTitle}
           pageIcon={pageIcon}
+          pageHelp={pageHelp}
           stats={stats}
           onOpenMobileMenu={onOpenMobileMenu}
           isSidebarCollapsed={isCollapsed}
@@ -124,6 +132,7 @@ export function MainLayout({
   children,
   pageTitle = 'Photo Admin',
   pageIcon,
+  pageHelp,
   className,
 }: MainLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -139,6 +148,7 @@ export function MainLayout({
       <MainLayoutInner
         pageTitle={pageTitle}
         pageIcon={pageIcon}
+        pageHelp={pageHelp}
         className={className}
         onOpenMobileMenu={handleOpenMobileMenu}
         onCloseMobileMenu={handleCloseMobileMenu}

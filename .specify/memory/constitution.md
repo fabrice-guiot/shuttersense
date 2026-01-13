@@ -1,4 +1,35 @@
 <!--
+SYNC IMPACT REPORT (Constitution v1.4.0 - Single Title Pattern)
+
+Version change: 1.3.0 → 1.4.0 (MINOR)
+Modified sections:
+  - Added new Frontend UI Standard: Single Title Pattern (Issue #67)
+
+Added requirements:
+  - Pages MUST NOT include h1 elements in content area
+  - TopHeader is the single source of truth for page titles
+  - Page descriptions MUST use pageHelp tooltip, not inline text
+  - Tab content MUST NOT include h2 titles
+  - Action button positioning follows three patterns (non-tabbed, tabbed with actions, tab content)
+  - All action rows MUST use responsive stacking pattern
+
+Rationale:
+  - Issue #67 established Single Title Pattern to eliminate visual redundancy
+  - Improves information hierarchy and creates usable screen real estate
+  - pageHelp tooltip provides on-demand context without consuming permanent space
+  - Consistent action button positioning enables muscle memory
+
+Impact:
+  - All new pages MUST NOT add h1 elements in content area
+  - Code reviews MUST verify Single Title Pattern compliance
+  - Action rows MUST use flex-col/sm:flex-row responsive pattern
+
+Templates requiring updates:
+  ✅ No template changes needed - this is a UI/UX standard
+
+Previous Amendment (v1.3.0 - Global Unique Identifiers):
+  - Added new Core Principle: IV. Global Unique Identifiers (GUIDs)
+
 SYNC IMPACT REPORT (Constitution v1.3.0 - Global Unique Identifiers)
 
 Version change: 1.2.0 → 1.3.0 (MINOR)
@@ -142,6 +173,45 @@ useEffect(() => {
 
 **Rationale**: Consistent KPI placement in the topbar creates a predictable user experience across all pages. Users always know where to find key metrics. This pattern avoids duplicating KPIs in both the topbar and page content, which wastes space and creates confusion.
 
+### Single Title Pattern (Issue #67)
+
+All frontend pages MUST follow the Single Title Pattern: the page title appears ONLY in the TopHeader component. Pages MUST NOT include `<h1>` elements in their content area.
+
+**Core Requirements**:
+- TopHeader is the single source of truth for page titles
+- Pages MUST NOT render `<h1>` elements in the content area
+- Page descriptions MUST use the `pageHelp` tooltip mechanism, not inline text
+- Tab content MUST NOT include `<h2>` titles - the tab label provides sufficient context
+
+**Route Configuration Pattern**:
+```typescript
+// In App.tsx
+const routes: RouteConfig[] = [
+  {
+    path: '/settings',
+    element: <SettingsPage />,
+    pageTitle: 'Settings',
+    pageIcon: Settings,
+    pageHelp: 'Configure tools, event categories, and storage connectors'  // Optional
+  },
+]
+```
+
+**Action Button Positioning**:
+- Non-tabbed pages: Right-aligned action row (`flex justify-end`)
+- Tabbed pages with actions: Tabs + buttons on same row with responsive stacking
+- Tab content with search: Search + action on same row with responsive stacking
+
+**Mobile Responsiveness**:
+All action rows MUST stack vertically on mobile using the responsive pattern:
+```tsx
+<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  {/* Stacks vertically on mobile, horizontal on sm+ breakpoint */}
+</div>
+```
+
+**Rationale**: A single title location eliminates visual redundancy, improves information hierarchy, and creates more usable screen real estate. The `pageHelp` tooltip provides on-demand context without consuming permanent screen space. Consistent action button positioning enables muscle memory for users navigating between pages.
+
 ## Development Philosophy
 
 - **Simplicity First**: Start with the simplest implementation that solves the problem. Avoid premature abstraction or optimization.
@@ -172,4 +242,4 @@ useEffect(() => {
 - Repeated exceptions to a principle suggest it needs revision
 - Project direction or scope changes significantly
 
-**Version**: 1.3.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-10
+**Version**: 1.4.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-13

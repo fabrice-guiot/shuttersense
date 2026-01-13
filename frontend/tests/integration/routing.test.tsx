@@ -101,7 +101,8 @@ describe('Routing Integration - T028a', () => {
         { initialEntries: ['/directory'] }
       )
 
-      expect(screen.getByText('Directory')).toBeInTheDocument()
+      // Directory page shows tabs (Issue #67 - Single Title Pattern: title is now in TopHeader only)
+      expect(screen.getByRole('tab', { name: /locations/i })).toBeInTheDocument()
     })
 
     it('renders SettingsPage at /settings', () => {
@@ -112,7 +113,8 @@ describe('Routing Integration - T028a', () => {
         { initialEntries: ['/settings'] }
       )
 
-      expect(screen.getByText('Settings')).toBeInTheDocument()
+      // Settings page shows tabs (Issue #67 - Single Title Pattern: title is now in TopHeader only)
+      expect(screen.getByRole('tab', { name: /configuration/i })).toBeInTheDocument()
     })
   })
 
@@ -271,6 +273,7 @@ describe('Routing Integration - T028a', () => {
   })
 
   describe('Tab Content Visibility', () => {
+    // Issue #67 - Single Title Pattern: Tab titles removed, verify tab content by other elements
     it('shows config content when config tab is active', async () => {
       renderWithRouter(
         <Routes>
@@ -280,7 +283,8 @@ describe('Routing Integration - T028a', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('Tool Configuration')).toBeInTheDocument()
+        // ConfigTab shows camera configuration section
+        expect(screen.getByText('Camera Mappings')).toBeInTheDocument()
       })
     })
 
@@ -293,7 +297,8 @@ describe('Routing Integration - T028a', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('Event Categories')).toBeInTheDocument()
+        // CategoriesTab shows New Category button
+        expect(screen.getByRole('button', { name: /new category/i })).toBeInTheDocument()
       })
     })
 
@@ -306,7 +311,8 @@ describe('Routing Integration - T028a', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('Remote Storage Connectors')).toBeInTheDocument()
+        // ConnectorsTab shows New Connector button
+        expect(screen.getByRole('button', { name: /new connector/i })).toBeInTheDocument()
       })
     })
 
@@ -319,8 +325,8 @@ describe('Routing Integration - T028a', () => {
       )
 
       await waitFor(() => {
-        // LocationsTab header
-        expect(screen.getByText('Event Locations')).toBeInTheDocument()
+        // LocationsTab shows New Location button and search
+        expect(screen.getByRole('button', { name: /new location/i })).toBeInTheDocument()
       })
     })
   })
@@ -359,7 +365,10 @@ describe('Routing Integration - T028a', () => {
       )
 
       expect(screen.getByRole('tab', { name: /performers/i })).toHaveAttribute('data-state', 'active')
-      expect(screen.getByText(/manage performers/i)).toBeInTheDocument()
+      // Issue #67 - Single Title Pattern: Tab descriptions removed, verify by New button
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /new performer/i })).toBeInTheDocument()
+      })
     })
   })
 })
