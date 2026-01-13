@@ -45,6 +45,12 @@ import type {
   PerformerUpdateRequest,
   PerformerStatsResponse
 } from '@/contracts/api/performer-api'
+import type {
+  Organizer,
+  OrganizerCreateRequest,
+  OrganizerUpdateRequest,
+  OrganizerStatsResponse
+} from '@/contracts/api/organizer-api'
 
 // Mock data
 let jobs: JobResponse[] = []
@@ -543,6 +549,43 @@ let performers: Performer[] = [
   },
 ]
 let nextPerformerNum = 4
+
+// Organizers mock data
+let organizers: Organizer[] = [
+  {
+    guid: 'org_01hgw2bbg00000000000000001',
+    name: 'USAF Demonstration Teams',
+    website: 'https://usaf.com/demo',
+    category: {
+      guid: 'cat_01hgw2bbg00000000000000001',
+      name: 'Airshow',
+      icon: 'plane',
+      color: '#3B82F6',
+    },
+    rating: 5,
+    ticket_required_default: true,
+    notes: 'Military demonstration team organizer',
+    created_at: '2026-01-01T09:00:00Z',
+    updated_at: '2026-01-01T09:00:00Z',
+  },
+  {
+    guid: 'org_01hgw2bbg00000000000000002',
+    name: 'National Wildlife Federation',
+    website: 'https://nwf.org',
+    category: {
+      guid: 'cat_01hgw2bbg00000000000000002',
+      name: 'Wildlife',
+      icon: 'bird',
+      color: '#22C55E',
+    },
+    rating: 4,
+    ticket_required_default: false,
+    notes: 'Conservation organization',
+    created_at: '2026-01-01T10:00:00Z',
+    updated_at: '2026-01-01T10:00:00Z',
+  },
+]
+let nextOrganizerNum = 3
 
 // Config mock data
 let configData = {
@@ -2530,6 +2573,154 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
     const matches = performer.category.guid === params.eventCategoryGuid
     return HttpResponse.json({ matches })
   }),
+
+  // ============================================================================
+  // Organizers API
+  // ============================================================================
+
+  http.get(`${BASE_URL}/organizers`, ({ request }) => {
+    const url = new URL(request.url)
+    const categoryGuid = url.searchParams.get('category_guid')
+    const search = url.searchParams.get('search')
+
+    let filteredOrganizers = [...organizers]
+
+    if (categoryGuid) {
+      filteredOrganizers = filteredOrganizers.filter((o) => o.category.guid === categoryGuid)
+    }
+
+    if (search) {
+      const searchLower = search.toLowerCase()
+      filteredOrganizers = filteredOrganizers.filter(
+        (o) =>
+          o.name.toLowerCase().includes(searchLower) ||
+          o.website?.toLowerCase().includes(searchLower) ||
+          o.notes?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    return HttpResponse.json({ items: filteredOrganizers, total: filteredOrganizers.length })
+  }),
+
+  http.get(`${BASE_URL}/organizers/stats`, () => {
+    return HttpResponse.json({
+      total_count: organizers.length,
+      with_rating_count: organizers.filter((o) => o.rating !== null).length,
+      avg_rating: organizers.length > 0
+        ? organizers.filter((o) => o.rating !== null).reduce((sum, o) => sum + (o.rating || 0), 0) / organizers.filter((o) => o.rating !== null).length
+        : null,
+    })
+  }),
+
+  http.get(`${BASE_URL}/organizers/by-category/:categoryGuid`, ({ params }) => {
+    const categoryGuid = params.categoryGuid as string
+    const filteredOrganizers = organizers.filter((o) => o.category.guid === categoryGuid)
+    return HttpResponse.json(filteredOrganizers)
+  }),
+
+  http.get(`${BASE_URL}/organizers/:guid`, ({ params }) => {
+    const organizer = organizers.find((o) => o.guid === params.guid)
+    if (!organizer) {
+      return HttpResponse.json(
+        { detail: `Organizer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+    return HttpResponse.json(organizer)
+  }),
+
+  http.post(`${BASE_URL}/organizers`, async ({ request }) => {
+    const data = (await request.json()) as OrganizerCreateRequest
+    const category = categories.find((c) => c.guid === data.category_guid)
+    if (!category) {
+      return HttpResponse.json(
+        { detail: `Category ${data.category_guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    const newOrganizer: Organizer = {
+      guid: `org_01hgw2bbg0000000000000000${nextOrganizerNum++}`,
+      name: data.name,
+      website: data.website ?? null,
+      category: {
+        guid: category.guid,
+        name: category.name,
+        icon: category.icon,
+        color: category.color,
+      },
+      rating: data.rating ?? null,
+      ticket_required_default: data.ticket_required_default ?? true,
+      notes: data.notes ?? null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    organizers.push(newOrganizer)
+    return HttpResponse.json(newOrganizer, { status: 201 })
+  }),
+
+  http.patch(`${BASE_URL}/organizers/:guid`, async ({ params, request }) => {
+    const data = (await request.json()) as OrganizerUpdateRequest
+    const index = organizers.findIndex((o) => o.guid === params.guid)
+    if (index === -1) {
+      return HttpResponse.json(
+        { detail: `Organizer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    let category = organizers[index].category
+    if (data.category_guid) {
+      const newCategory = categories.find((c) => c.guid === data.category_guid)
+      if (!newCategory) {
+        return HttpResponse.json(
+          { detail: `Category ${data.category_guid} not found` },
+          { status: 404 }
+        )
+      }
+      category = {
+        guid: newCategory.guid,
+        name: newCategory.name,
+        icon: newCategory.icon,
+        color: newCategory.color,
+      }
+    }
+
+    organizers[index] = {
+      ...organizers[index],
+      ...data,
+      category,
+      updated_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(organizers[index])
+  }),
+
+  http.delete(`${BASE_URL}/organizers/:guid`, ({ params }) => {
+    const index = organizers.findIndex((o) => o.guid === params.guid)
+    if (index === -1) {
+      return HttpResponse.json(
+        { detail: `Organizer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    organizers.splice(index, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${BASE_URL}/organizers/:guid/validate-category/:eventCategoryGuid`, ({ params }) => {
+    const organizer = organizers.find((o) => o.guid === params.guid)
+    if (!organizer) {
+      return HttpResponse.json(
+        { detail: `Organizer ${params.guid} not found` },
+        { status: 404 }
+      )
+    }
+
+    const matches = organizer.category.guid === params.eventCategoryGuid
+    return HttpResponse.json({ matches })
+  }),
 ]
 
 // Helper to reset mock data (useful for tests)
@@ -3036,4 +3227,41 @@ export function resetMockData(): void {
     },
   ]
   nextPerformerNum = 4
+
+  // Reset organizers
+  organizers = [
+    {
+      guid: 'org_01hgw2bbg00000000000000001',
+      name: 'USAF Demonstration Teams',
+      website: 'https://usaf.com/demo',
+      category: {
+        guid: 'cat_01hgw2bbg00000000000000001',
+        name: 'Airshow',
+        icon: 'plane',
+        color: '#3B82F6',
+      },
+      rating: 5,
+      ticket_required_default: true,
+      notes: 'Military demonstration team organizer',
+      created_at: '2026-01-01T09:00:00Z',
+      updated_at: '2026-01-01T09:00:00Z',
+    },
+    {
+      guid: 'org_01hgw2bbg00000000000000002',
+      name: 'National Wildlife Federation',
+      website: 'https://nwf.org',
+      category: {
+        guid: 'cat_01hgw2bbg00000000000000002',
+        name: 'Wildlife',
+        icon: 'bird',
+        color: '#22C55E',
+      },
+      rating: 4,
+      ticket_required_default: false,
+      notes: 'Conservation organization',
+      created_at: '2026-01-01T10:00:00Z',
+      updated_at: '2026-01-01T10:00:00Z',
+    },
+  ]
+  nextOrganizerNum = 3
 }
