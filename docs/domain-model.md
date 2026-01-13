@@ -89,7 +89,7 @@ Example: `col_01hgw2bbg0000000000000001`
 | Organizer | `org_` | `org_01hgw2bbg000000000000000a` | Implemented (Issue #39) |
 | Performer | `prf_` | `prf_01hgw2bbg000000000000000b` | Implemented (Issue #39) |
 | User | `usr_` | `usr_01hgw2bbg000000000000000c` | Planned |
-| Team | `tea_` | `tea_01hgw2bbg000000000000000d` | Planned |
+| Team | `ten_` | `ten_01hgw2bbg000000000000000d` | Planned |
 | Camera | `cam_` | `cam_01hgw2bbg000000000000000e` | Planned |
 | Album | `alb_` | `alb_01hgw2bbg000000000000000f` | Planned |
 | Image | `img_` | `img_01hgw2bbg0000000000000010` | Planned |
