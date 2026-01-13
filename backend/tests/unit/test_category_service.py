@@ -5,6 +5,7 @@ Tests CRUD operations, reordering, and cascade protection for categories.
 """
 
 import pytest
+from datetime import date
 from unittest.mock import Mock, patch
 
 from backend.src.models import Category
@@ -317,7 +318,7 @@ class TestCategoryServiceDelete:
         event = Event(
             category_id=category.id,
             title="Test Event",
-            event_date="2026-01-15",
+            event_date=date(2026, 1, 15),
         )
         test_db_session.add(event)
         test_db_session.commit()
