@@ -31,6 +31,7 @@ from backend.src.db.database import get_db
 from backend.src.schemas.event import (
     EventCreate,
     EventSeriesCreate,
+    EventSeriesUpdate,
     EventUpdate,
     EventResponse,
     EventDetailResponse,
@@ -39,8 +40,9 @@ from backend.src.schemas.event import (
     AttendanceStatus,
     UpdateScope,
 )
+from backend.src.schemas.event_series import EventSeriesResponse
 from backend.src.services.event_service import EventService
-from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
+from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError, DeadlineProtectionError
 from backend.src.schemas.performer import (
     EventPerformerCreate,
     EventPerformerUpdate,
@@ -153,6 +155,10 @@ async def list_events(
         default=False,
         description="Include soft-deleted events",
     ),
+    include_deadlines: bool = Query(
+        default=True,
+        description="Include deadline entries (is_deadline=true). Set to false to exclude them.",
+    ),
     event_service: EventService = Depends(get_event_service),
 ) -> List[EventResponse]:
     """
@@ -190,6 +196,7 @@ async def list_events(
             status=status.value if status else None,
             attendance=attendance.value if attendance else None,
             include_deleted=include_deleted,
+            include_deadlines=include_deadlines,
         )
 
         logger.info(
@@ -357,6 +364,7 @@ async def create_event(
             timeoff_required=event_data.timeoff_required,
             travel_required=event_data.travel_required,
             deadline_date=event_data.deadline_date,
+            deadline_time=event_data.deadline_time,
         )
 
         # Reload with relationships
@@ -447,12 +455,19 @@ async def create_event_series(
             ticket_required=series_data.ticket_required,
             timeoff_required=series_data.timeoff_required,
             travel_required=series_data.travel_required,
+            deadline_date=series_data.deadline_date,
+            deadline_time=series_data.deadline_time,
         )
 
-        # Get all events in the series
+        # Get all events in the series (including deadline entry if present)
+        # Expand date range to include deadline_date if it's beyond the event dates
+        end_date = max(series_data.event_dates)
+        if series_data.deadline_date and series_data.deadline_date > end_date:
+            end_date = series_data.deadline_date
+
         events = event_service.list(
             start_date=min(series_data.event_dates),
-            end_date=max(series_data.event_dates),
+            end_date=end_date,
         )
 
         # Filter to just this series
@@ -476,6 +491,115 @@ async def create_event_series(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create event series",
+        )
+
+
+@router.get(
+    "/series/{guid}",
+    response_model=EventSeriesResponse,
+    summary="Get event series by GUID",
+    description="Get detailed information about an event series",
+)
+async def get_event_series(
+    guid: str,
+    event_service: EventService = Depends(get_event_service),
+) -> EventSeriesResponse:
+    """
+    Get event series details by GUID.
+
+    Path Parameters:
+        guid: Series GUID (ser_xxx format)
+
+    Returns:
+        Full series details including events
+
+    Raises:
+        404: Series not found
+    """
+    try:
+        series = event_service.get_series_by_guid(guid)
+
+        logger.info(f"Retrieved event series: {guid}")
+
+        return EventSeriesResponse(**event_service.build_series_response(series))
+
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event series {guid} not found",
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting event series {guid}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve event series",
+        )
+
+
+@router.patch(
+    "/series/{guid}",
+    response_model=EventSeriesResponse,
+    summary="Update an event series",
+    description="Update series-level properties (deadline changes sync automatically)",
+)
+async def update_event_series(
+    guid: str,
+    series_data: EventSeriesUpdate,
+    event_service: EventService = Depends(get_event_service),
+) -> EventSeriesResponse:
+    """
+    Update an event series.
+
+    Updates series-level properties. Changes to deadline_date/deadline_time
+    will automatically create, update, or delete the deadline calendar entry.
+
+    Path Parameters:
+        guid: Series GUID (ser_xxx format)
+
+    Request Body:
+        Any series field to update (all optional)
+
+    Returns:
+        Updated series details
+
+    Raises:
+        400: Invalid data
+        404: Series not found
+
+    Example:
+        PATCH /api/events/series/ser_xxx
+        {
+          "deadline_date": "2026-08-15",
+          "deadline_time": "23:59"
+        }
+    """
+    try:
+        updates = series_data.model_dump(exclude_unset=True)
+
+        series = event_service.update_series(guid=guid, **updates)
+
+        logger.info(f"Updated event series: {guid}")
+
+        return EventSeriesResponse(**event_service.build_series_response(series))
+
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event series {guid} not found",
+        )
+
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    except Exception as e:
+        logger.error(f"Error updating event series {guid}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update event series",
         )
 
 
@@ -515,6 +639,7 @@ async def update_event(
 
     Raises:
         400: Invalid data
+        403: Cannot modify deadline entry directly
         404: Event not found
         422: Validation error
 
@@ -532,6 +657,18 @@ async def update_event(
         }
     """
     try:
+        # Check if this is a protected deadline entry
+        event = event_service.get_by_guid(guid)
+        if event.is_deadline:
+            # Get parent reference for helpful error message
+            series_guid = event.series.guid if event.series else None
+            parent_event_guid = event.parent_event.guid if event.parent_event else None
+            raise DeadlineProtectionError(
+                event_guid=guid,
+                series_guid=series_guid,
+                parent_event_guid=parent_event_guid
+            )
+
         # Build update dict from non-None fields, excluding scope
         updates = event_data.model_dump(exclude_unset=True, exclude={"scope"})
 
@@ -548,6 +685,16 @@ async def update_event(
 
         return EventDetailResponse(
             **event_service.build_event_detail_response(event)
+        )
+
+    except DeadlineProtectionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": e.message,
+                "series_guid": e.series_guid,
+                "parent_event_guid": e.parent_event_guid,
+            },
         )
 
     except NotFoundError:
@@ -607,6 +754,7 @@ async def delete_event(
         Deleted event details (with deleted_at timestamp)
 
     Raises:
+        403: Cannot delete deadline entry directly
         404: Event not found
 
     Example:
@@ -614,6 +762,18 @@ async def delete_event(
         DELETE /api/events/evt_xxx?scope=all
     """
     try:
+        # Check if this is a protected deadline entry
+        event = event_service.get_by_guid(guid)
+        if event.is_deadline:
+            # Get parent reference for helpful error message
+            series_guid = event.series.guid if event.series else None
+            parent_event_guid = event.parent_event.guid if event.parent_event else None
+            raise DeadlineProtectionError(
+                event_guid=guid,
+                series_guid=series_guid,
+                parent_event_guid=parent_event_guid
+            )
+
         event = event_service.soft_delete(
             guid=guid,
             scope=scope.value,
@@ -626,6 +786,16 @@ async def delete_event(
 
         return EventDetailResponse(
             **event_service.build_event_detail_response(event)
+        )
+
+    except DeadlineProtectionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": e.message,
+                "series_guid": e.series_guid,
+                "parent_event_guid": e.parent_event_guid,
+            },
         )
 
     except NotFoundError:

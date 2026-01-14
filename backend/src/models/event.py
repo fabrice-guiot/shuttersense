@@ -106,6 +106,9 @@ class Event(Base, GuidMixin):
             travel_status: Travel booking status
             travel_booking_date: Date travel was booked
             deadline_date: Workflow completion deadline
+            deadline_time: Workflow completion deadline time (synced from series)
+            is_deadline: True if this event is a deadline entry
+            parent_event_id: FK to parent Event (for standalone event deadline entries)
 
         Soft Delete:
             deleted_at: Soft delete timestamp (NULL = not deleted)
@@ -204,6 +207,20 @@ class Event(Base, GuidMixin):
 
     # Workflow
     deadline_date = Column(Date, nullable=True)
+    deadline_time = Column(Time, nullable=True)
+
+    # Deadline entry flag (True = this event represents a series/event deadline)
+    # Deadline entries are protected from direct modification
+    is_deadline = Column(Boolean, default=False, nullable=False)
+
+    # Parent event (for standalone event deadline entries)
+    # Links deadline entry to standalone event (series events use series_id instead)
+    parent_event_id = Column(
+        Integer,
+        ForeignKey("events.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
 
     # Soft delete
     deleted_at = Column(DateTime, nullable=True, index=True)
@@ -227,6 +244,13 @@ class Event(Base, GuidMixin):
         back_populates="event",
         lazy="dynamic",
         cascade="all, delete-orphan"
+    )
+    # Self-referential relationship for standalone event deadline entries
+    parent_event = relationship(
+        "Event",
+        remote_side=[id],
+        foreign_keys=[parent_event_id],
+        backref="deadline_entry"
     )
 
     # Table-level indexes

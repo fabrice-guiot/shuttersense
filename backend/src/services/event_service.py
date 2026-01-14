@@ -130,6 +130,7 @@ class EventService:
         status: Optional[str] = None,
         attendance: Optional[str] = None,
         include_deleted: bool = False,
+        include_deadlines: bool = True,
     ) -> List[Event]:
         """
         List events with optional filtering.
@@ -141,6 +142,7 @@ class EventService:
             status: Filter by event status
             attendance: Filter by attendance status
             include_deleted: If True, include soft-deleted events
+            include_deadlines: If False, exclude deadline entries (is_deadline=True)
 
         Returns:
             List of Event instances ordered by date
@@ -154,6 +156,10 @@ class EventService:
         # Exclude soft-deleted unless requested
         if not include_deleted:
             query = query.filter(Event.deleted_at.is_(None))
+
+        # Exclude deadline entries if requested (T043)
+        if not include_deadlines:
+            query = query.filter(Event.is_deadline == False)
 
         # Date range filter
         if start_date:
@@ -390,6 +396,8 @@ class EventService:
             "timeoff_status": timeoff_status,
             "travel_required": travel_required,
             "travel_status": travel_status,
+            # Deadline flag
+            "is_deadline": event.is_deadline,
             "created_at": event.created_at,
             "updated_at": event.updated_at,
         }
@@ -436,12 +444,17 @@ class EventService:
                 })
         response["performers"] = performers
 
-        # Add series details
+        # Add series details (including deadline info)
         if event.series:
+            # Get deadline entry GUID if exists
+            deadline_entry = self._get_deadline_entry(event.series.id)
             response["series"] = {
                 "guid": event.series.guid,
                 "title": event.series.title,
                 "total_events": event.series.total_events,
+                "deadline_date": event.series.deadline_date.isoformat() if event.series.deadline_date else None,
+                "deadline_time": event.series.deadline_time.isoformat() if event.series.deadline_time else None,
+                "deadline_entry_guid": deadline_entry.guid if deadline_entry else None,
             }
         else:
             response["series"] = None
@@ -457,6 +470,7 @@ class EventService:
         response["travel_status"] = event.travel_status
         response["travel_booking_date"] = event.travel_booking_date
         response["deadline_date"] = event.deadline_date
+        response["deadline_time"] = event.deadline_time
 
         # Add soft delete
         response["deleted_at"] = event.deleted_at
@@ -576,6 +590,7 @@ class EventService:
         timeoff_required: Optional[bool] = None,
         travel_required: Optional[bool] = None,
         deadline_date: Optional[date] = None,
+        deadline_time: Optional[Any] = None,
     ) -> Event:
         """
         Create a new standalone event.
@@ -596,7 +611,8 @@ class EventService:
             ticket_required: Optional ticket requirement
             timeoff_required: Optional time-off requirement
             travel_required: Optional travel requirement
-            deadline_date: Optional workflow deadline
+            deadline_date: Optional workflow deadline date
+            deadline_time: Optional workflow deadline time
 
         Returns:
             Created Event instance
@@ -644,9 +660,16 @@ class EventService:
             timeoff_required=effective_timeoff_required,
             travel_required=effective_travel_required,
             deadline_date=deadline_date,
+            deadline_time=deadline_time,
         )
 
         self.db.add(event)
+        self.db.flush()  # Get ID for deadline entry creation
+
+        # Create deadline entry if deadline_date is set
+        if deadline_date:
+            self._sync_standalone_deadline_entry(event)
+
         self.db.commit()
         self.db.refresh(event)
 
@@ -670,6 +693,8 @@ class EventService:
         travel_required: bool = False,
         status: str = "future",
         attendance: str = "planned",
+        deadline_date: Optional[date] = None,
+        deadline_time: Optional[Any] = None,
     ) -> EventSeries:
         """
         Create a new event series with individual events.
@@ -690,6 +715,8 @@ class EventService:
             travel_required: Default travel requirement
             status: Initial status for all events (default: future)
             attendance: Initial attendance for all events (default: planned)
+            deadline_date: Optional deadline date for deliverables
+            deadline_time: Optional deadline time
 
         Returns:
             Created EventSeries instance with events
@@ -741,6 +768,8 @@ class EventService:
             timeoff_required=effective_timeoff_required,
             travel_required=effective_travel_required,
             total_events=len(sorted_dates),
+            deadline_date=deadline_date,
+            deadline_time=deadline_time,
         )
 
         self.db.add(series)
@@ -767,8 +796,14 @@ class EventService:
                 ticket_required=None,
                 timeoff_required=None,
                 travel_required=None,
+                # Deadline is synced across all events in series
+                deadline_date=deadline_date,
+                deadline_time=deadline_time,
             )
             self.db.add(event)
+
+        # Sync deadline entry if deadline_date is set
+        self._sync_deadline_entry(series)
 
         self.db.commit()
         self.db.refresh(series)
@@ -779,6 +814,151 @@ class EventService:
     # =========================================================================
     # Update Operations
     # =========================================================================
+
+    def update_series(
+        self,
+        guid: str,
+        **updates: Any
+    ) -> EventSeries:
+        """
+        Update an event series and sync deadline entry.
+
+        Args:
+            guid: Series GUID (ser_xxx)
+            **updates: Fields to update (deadline_date, deadline_time, title, etc.)
+
+        Returns:
+            Updated EventSeries instance
+
+        Raises:
+            NotFoundError: If series not found
+            ValidationError: If invalid update data
+        """
+        series = self.get_series_by_guid(guid)
+
+        # Handle foreign key resolutions
+        if "category_guid" in updates:
+            category_guid = updates.pop("category_guid")
+            if category_guid:
+                category = self._get_category_by_guid(category_guid)
+                updates["category_id"] = category.id
+            else:
+                updates["category_id"] = None
+
+        if "location_guid" in updates:
+            location_guid = updates.pop("location_guid")
+            if location_guid:
+                location = self._get_location_by_guid(location_guid)
+                updates["location_id"] = location.id
+            else:
+                updates["location_id"] = None
+
+        if "organizer_guid" in updates:
+            organizer_guid = updates.pop("organizer_guid")
+            if organizer_guid:
+                organizer = self._get_organizer_by_guid(organizer_guid)
+                updates["organizer_id"] = organizer.id
+            else:
+                updates["organizer_id"] = None
+
+        # Check if deadline fields are being updated
+        has_deadline_date = "deadline_date" in updates
+        has_deadline_time = "deadline_time" in updates
+        deadline_changed = has_deadline_date or has_deadline_time
+        deadline_date_value = updates.get("deadline_date") if has_deadline_date else None
+        deadline_time_value = updates.get("deadline_time") if has_deadline_time else None
+
+        # Apply updates to series
+        for field, value in updates.items():
+            if hasattr(series, field):
+                setattr(series, field, value)
+        series.updated_at = datetime.utcnow()
+
+        # Sync deadline across all events and create/update deadline entry
+        if deadline_changed:
+            # Sync deadline_date and deadline_time to ALL events in the series
+            all_events = (
+                self.db.query(Event)
+                .filter(
+                    Event.series_id == series.id,
+                    Event.is_deadline == False,
+                    Event.deleted_at.is_(None)
+                )
+                .all()
+            )
+            for e in all_events:
+                if has_deadline_date:
+                    e.deadline_date = deadline_date_value
+                if has_deadline_time:
+                    e.deadline_time = deadline_time_value
+                e.updated_at = datetime.utcnow()
+            logger.info(f"Synced deadline across {len(all_events)} series events")
+
+            # Sync the deadline entry (create/update/delete)
+            self._sync_deadline_entry(series)
+
+        self.db.commit()
+        self.db.refresh(series)
+
+        logger.info(f"Updated event series: {series.guid}")
+        return series
+
+    def build_series_response(self, series: EventSeries) -> dict:
+        """
+        Build a response dictionary for an event series.
+
+        Args:
+            series: EventSeries instance with relationships loaded
+
+        Returns:
+            Dictionary suitable for EventSeriesResponse schema
+        """
+        # Get deadline entry GUID if exists
+        deadline_entry = self._get_deadline_entry(series.id)
+        deadline_entry_guid = deadline_entry.guid if deadline_entry else None
+
+        # Get events in series (excluding deadline entries)
+        events = (
+            self.db.query(Event)
+            .filter(
+                Event.series_id == series.id,
+                Event.is_deadline == False,
+                Event.deleted_at.is_(None)
+            )
+            .order_by(Event.event_date.asc())
+            .all()
+        )
+
+        events_data = [
+            {
+                "guid": e.guid,
+                "event_date": e.event_date.isoformat() if e.event_date else None,
+                "sequence_number": e.sequence_number,
+                "attendance": e.attendance,
+            }
+            for e in events
+        ]
+
+        return {
+            "guid": series.guid,
+            "title": series.title,
+            "description": series.description,
+            "category_guid": series.category.guid if series.category else None,
+            "category_name": series.category.name if series.category else None,
+            "location_guid": series.location.guid if series.location else None,
+            "organizer_guid": series.organizer.guid if series.organizer else None,
+            "input_timezone": series.input_timezone,
+            "ticket_required": series.ticket_required,
+            "timeoff_required": series.timeoff_required,
+            "travel_required": series.travel_required,
+            "deadline_date": series.deadline_date,
+            "deadline_time": series.deadline_time,
+            "deadline_entry_guid": deadline_entry_guid,
+            "total_events": series.total_events,
+            "events": events_data,
+            "created_at": series.created_at,
+            "updated_at": series.updated_at,
+        }
 
     def update(
         self,
@@ -844,6 +1024,14 @@ class EventService:
             else:
                 organizer_id_update = None
 
+        # Handle deadline fields - series-level property
+        # Deadline is stored on EventSeries, synced via deadline entry
+        has_deadline_date = "deadline_date" in updates
+        has_deadline_time = "deadline_time" in updates
+        updating_deadline = has_deadline_date or has_deadline_time
+        deadline_date_update = updates.pop("deadline_date", None) if has_deadline_date else None
+        deadline_time_update = updates.pop("deadline_time", None) if has_deadline_time else None
+
         # Remove scope from updates (it's not an event field)
         updates.pop("scope", None)
 
@@ -889,6 +1077,43 @@ class EventService:
             else:
                 # Standalone event - just update organizer
                 event.organizer_id = organizer_id_update
+
+        # Handle deadline sync for series events
+        # Deadline is a series-level property: update series, sync to all events, and create deadline entry
+        if updating_deadline:
+            if event.series:
+                series = event.series
+                if has_deadline_date:
+                    series.deadline_date = deadline_date_update
+                if has_deadline_time:
+                    series.deadline_time = deadline_time_update
+                series.updated_at = datetime.utcnow()
+
+                # Sync deadline_date and deadline_time to ALL events in the series (like location/organizer)
+                all_series_events = self._get_series_events_for_update(event, "all")
+                for e in all_series_events:
+                    if not e.is_deadline:  # Don't update deadline entry's deadline_date/time
+                        if has_deadline_date:
+                            e.deadline_date = deadline_date_update
+                        if has_deadline_time:
+                            e.deadline_time = deadline_time_update
+                        if e not in events_to_update:
+                            e.updated_at = datetime.utcnow()
+                logger.info(f"Synced deadline across {len(all_series_events)} series events")
+
+                # Sync the deadline entry (create/update/delete)
+                self._sync_deadline_entry(series)
+                logger.info(f"Synced deadline entry for series: {series.guid}")
+            else:
+                # Standalone event - update deadline_date and deadline_time, sync entry
+                if has_deadline_date:
+                    event.deadline_date = deadline_date_update
+                if has_deadline_time:
+                    event.deadline_time = deadline_time_update
+
+                # Sync the deadline entry for standalone event (create/update/delete)
+                self._sync_standalone_deadline_entry(event)
+                logger.info(f"Synced deadline entry for standalone event: {event.guid}")
 
         self.db.commit()
         self.db.refresh(event)
@@ -1025,6 +1250,294 @@ class EventService:
 
         series.total_events = count or 0
         series.updated_at = datetime.utcnow()
+
+    # =========================================================================
+    # Deadline Entry Sync (T018-T022)
+    # =========================================================================
+
+    def _get_deadline_entry(self, series_id: int) -> Optional[Event]:
+        """
+        Get the deadline entry for a series.
+
+        Args:
+            series_id: Internal series ID
+
+        Returns:
+            Event instance if deadline entry exists, None otherwise
+        """
+        return (
+            self.db.query(Event)
+            .filter(
+                Event.series_id == series_id,
+                Event.is_deadline == True,
+                Event.deleted_at.is_(None)
+            )
+            .first()
+        )
+
+    def _create_deadline_entry(self, series: EventSeries) -> Event:
+        """
+        Create a deadline entry for a series.
+
+        The deadline entry is a special Event record with is_deadline=True.
+        It appears in the calendar on the deadline date.
+
+        Note: Only organizer is copied to deadline entry, not location or performers.
+
+        Args:
+            series: EventSeries with deadline_date set
+
+        Returns:
+            Created Event instance
+        """
+        deadline_entry = Event(
+            series_id=series.id,
+            sequence_number=None,  # Not part of series sequence
+            title=f"{series.title} - Deadline",
+            category_id=series.category_id,
+            location_id=None,  # Deadline entries don't have a location
+            organizer_id=series.organizer_id,
+            event_date=series.deadline_date,
+            start_time=series.deadline_time,
+            end_time=None,
+            is_all_day=series.deadline_time is None,
+            input_timezone=series.input_timezone,
+            status="future",
+            attendance="planned",
+            is_deadline=True,
+        )
+        self.db.add(deadline_entry)
+        self.db.flush()  # Get ID for logging
+
+        logger.info(
+            f"Created deadline entry for series",
+            extra={
+                "series_guid": series.guid,
+                "deadline_entry_guid": deadline_entry.guid,
+                "deadline_date": str(series.deadline_date)
+            }
+        )
+
+        return deadline_entry
+
+    def _update_deadline_entry(self, existing: Event, series: EventSeries) -> Event:
+        """
+        Update an existing deadline entry with new deadline data.
+
+        Note: Only organizer is synced to deadline entry, not location or performers.
+
+        Args:
+            existing: Existing deadline Event record
+            series: EventSeries with updated deadline data
+
+        Returns:
+            Updated Event instance
+        """
+        existing.event_date = series.deadline_date
+        existing.start_time = series.deadline_time
+        existing.is_all_day = series.deadline_time is None
+        existing.title = f"{series.title} - Deadline"
+        existing.category_id = series.category_id
+        existing.location_id = None  # Deadline entries don't have a location
+        existing.organizer_id = series.organizer_id
+        existing.input_timezone = series.input_timezone
+        existing.updated_at = datetime.utcnow()
+
+        logger.info(
+            f"Updated deadline entry for series",
+            extra={
+                "series_guid": series.guid,
+                "deadline_entry_guid": existing.guid,
+                "deadline_date": str(series.deadline_date)
+            }
+        )
+
+        return existing
+
+    def _delete_deadline_entry(self, existing: Event) -> None:
+        """
+        Delete a deadline entry (hard delete).
+
+        Args:
+            existing: Deadline Event to delete
+        """
+        guid = existing.guid
+        series_guid = existing.series.guid if existing.series else None
+
+        self.db.delete(existing)
+
+        logger.info(
+            f"Deleted deadline entry for series",
+            extra={
+                "series_guid": series_guid,
+                "deadline_entry_guid": guid
+            }
+        )
+
+    def _sync_deadline_entry(self, series: EventSeries) -> Optional[Event]:
+        """
+        Synchronize deadline entry with series deadline data.
+
+        Creates, updates, or deletes the deadline entry based on whether
+        the series has a deadline_date set.
+
+        Args:
+            series: EventSeries to sync deadline for
+
+        Returns:
+            Deadline Event if created/updated, None if deleted/no deadline
+        """
+        existing = self._get_deadline_entry(series.id)
+
+        if series.deadline_date:
+            if existing:
+                # Update existing deadline entry
+                return self._update_deadline_entry(existing, series)
+            else:
+                # Create new deadline entry
+                return self._create_deadline_entry(series)
+        else:
+            if existing:
+                # Remove deadline entry since deadline was cleared
+                self._delete_deadline_entry(existing)
+            return None
+
+    # =========================================================================
+    # Standalone Event Deadline Entry Sync
+    # =========================================================================
+
+    def _get_standalone_deadline_entry(self, event_id: int) -> Optional[Event]:
+        """
+        Get the deadline entry for a standalone event.
+
+        Args:
+            event_id: Internal event ID
+
+        Returns:
+            Event instance if deadline entry exists, None otherwise
+        """
+        return (
+            self.db.query(Event)
+            .filter(
+                Event.parent_event_id == event_id,
+                Event.is_deadline == True,
+                Event.deleted_at.is_(None)
+            )
+            .first()
+        )
+
+    def _create_standalone_deadline_entry(self, event: Event) -> Event:
+        """
+        Create a deadline entry for a standalone event.
+
+        The deadline entry is a special Event record with is_deadline=True
+        linked to the parent event via parent_event_id.
+
+        Note: Only organizer is copied to deadline entry, not location or performers.
+
+        Args:
+            event: Standalone Event with deadline_date set
+
+        Returns:
+            Created Event instance
+        """
+        deadline_entry = Event(
+            parent_event_id=event.id,
+            sequence_number=None,
+            title=f"{event.title} - Deadline",
+            category_id=event.category_id,
+            location_id=None,  # Deadline entries don't have a location
+            organizer_id=event.organizer_id,
+            event_date=event.deadline_date,
+            start_time=event.deadline_time,
+            end_time=None,
+            is_all_day=event.deadline_time is None,
+            input_timezone=event.input_timezone,
+            status="future",
+            attendance="planned",
+            is_deadline=True,
+        )
+        self.db.add(deadline_entry)
+        self.db.flush()
+
+        logger.info(
+            f"Created deadline entry for standalone event",
+            extra={
+                "event_guid": event.guid,
+                "deadline_entry_guid": deadline_entry.guid,
+                "deadline_date": str(event.deadline_date)
+            }
+        )
+
+        return deadline_entry
+
+    def _update_standalone_deadline_entry(self, existing: Event, event: Event) -> Event:
+        """
+        Update an existing deadline entry for a standalone event.
+
+        Note: Only organizer is synced to deadline entry, not location or performers.
+
+        Args:
+            existing: Existing deadline Event record
+            event: Standalone Event with updated deadline data
+
+        Returns:
+            Updated Event instance
+        """
+        existing.event_date = event.deadline_date
+        existing.start_time = event.deadline_time
+        existing.is_all_day = event.deadline_time is None
+        existing.title = f"{event.title} - Deadline"
+        existing.category_id = event.category_id
+        existing.location_id = None  # Deadline entries don't have a location
+        existing.organizer_id = event.organizer_id
+        existing.input_timezone = event.input_timezone
+        existing.updated_at = datetime.utcnow()
+
+        logger.info(
+            f"Updated deadline entry for standalone event",
+            extra={
+                "event_guid": event.guid,
+                "deadline_entry_guid": existing.guid,
+                "deadline_date": str(event.deadline_date)
+            }
+        )
+
+        return existing
+
+    def _sync_standalone_deadline_entry(self, event: Event) -> Optional[Event]:
+        """
+        Synchronize deadline entry with standalone event deadline data.
+
+        Creates, updates, or deletes the deadline entry based on whether
+        the event has a deadline_date set.
+
+        Args:
+            event: Standalone Event to sync deadline for
+
+        Returns:
+            Deadline Event if created/updated, None if deleted/no deadline
+        """
+        existing = self._get_standalone_deadline_entry(event.id)
+
+        if event.deadline_date:
+            if existing:
+                return self._update_standalone_deadline_entry(existing, event)
+            else:
+                return self._create_standalone_deadline_entry(event)
+        else:
+            if existing:
+                # Remove deadline entry since deadline was cleared
+                guid = existing.guid
+                self.db.delete(existing)
+                logger.info(
+                    f"Deleted deadline entry for standalone event",
+                    extra={
+                        "event_guid": event.guid,
+                        "deadline_entry_guid": guid
+                    }
+                )
+            return None
 
     # =========================================================================
     # Event Performer Management (T115)

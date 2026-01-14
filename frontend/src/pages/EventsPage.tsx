@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar } from 'lucide-react'
+import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -225,9 +225,27 @@ export default function EventsPage() {
     return `${y}-${m}-${day}`
   }
 
+  // Parse ISO date string (YYYY-MM-DD) as local date (not UTC)
+  // This prevents the date from shifting when displayed in timezones west of UTC
+  const parseLocalDate = (dateStr: string): Date => {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
   // Format date for display
   const formatDisplayDate = (date: Date): string => {
     return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+
+  // Format ISO date string for display (handles timezone correctly)
+  const formatDateStr = (dateStr: string, options?: Intl.DateTimeFormatOptions): string => {
+    const date = parseLocalDate(dateStr)
+    return date.toLocaleDateString('en-US', options || {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
@@ -347,12 +365,7 @@ export default function EventsPage() {
             <DialogDescription>
               {selectedEvent && (
                 <>
-                  {new Date(selectedEvent.event_date).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
+                  {formatDateStr(selectedEvent.event_date)}
                   {selectedEvent.start_time && ` at ${formatTimeWithTimezone(
                     selectedEvent.start_time,
                     selectedEvent.input_timezone,
@@ -401,8 +414,8 @@ export default function EventsPage() {
                 </div>
               )}
 
-              {/* Time */}
-              {!selectedEvent.is_all_day && selectedEvent.start_time && (
+              {/* Time (hidden for deadline events - already shown in header) */}
+              {!selectedEvent.is_deadline && !selectedEvent.is_all_day && selectedEvent.start_time && (
                 <div>
                   <div className="text-sm font-medium text-muted-foreground mb-1">Time</div>
                   <div>
@@ -416,20 +429,41 @@ export default function EventsPage() {
                 </div>
               )}
 
-              {/* Status and Attendance */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground mb-1">Status</div>
-                  <div className="capitalize">{selectedEvent.status}</div>
+              {/* Status and Attendance (hidden for deadline events) */}
+              {!selectedEvent.is_deadline && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground mb-1">Status</div>
+                    <div className="capitalize">{selectedEvent.status}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground mb-1">Attendance</div>
+                    <div className="capitalize">{selectedEvent.attendance}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm font-medium text-muted-foreground mb-1">Attendance</div>
-                  <div className="capitalize">{selectedEvent.attendance}</div>
-                </div>
-              </div>
+              )}
 
-              {/* Series Info */}
-              {selectedEvent.series_guid && (
+              {/* Deadline (shown separately from Logistics, hidden for deadline events themselves) */}
+              {!selectedEvent.is_deadline && selectedEvent.deadline_date && (
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground mb-1">Deadline</div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span>
+                      {formatDateStr(selectedEvent.deadline_date, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                      {selectedEvent.deadline_time && ` at ${formatTime12h(selectedEvent.deadline_time)}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Series Info (hidden for deadline events) */}
+              {!selectedEvent.is_deadline && selectedEvent.series_guid && (
                 <div>
                   <div className="text-sm font-medium text-muted-foreground mb-1">Series</div>
                   <div>
@@ -449,20 +483,22 @@ export default function EventsPage() {
                 </div>
               )}
 
-              {/* Performers Section */}
-              <div className="pt-2 border-t">
-                <EventPerformersSection
-                  eventGuid={selectedEvent.guid}
-                  categoryGuid={selectedEvent.category?.guid || null}
-                  performers={selectedEvent.performers || []}
-                  editable={true}
-                  isSeriesEvent={!!selectedEvent.series_guid}
-                  onPerformersChange={refetchSelectedEvent}
-                />
-              </div>
+              {/* Performers Section (hidden for deadline events) */}
+              {!selectedEvent.is_deadline && (
+                <div className="pt-2 border-t">
+                  <EventPerformersSection
+                    eventGuid={selectedEvent.guid}
+                    categoryGuid={selectedEvent.category?.guid || null}
+                    performers={selectedEvent.performers || []}
+                    editable={true}
+                    isSeriesEvent={!!selectedEvent.series_guid}
+                    onPerformersChange={refetchSelectedEvent}
+                  />
+                </div>
+              )}
 
-              {/* Logistics Section */}
-              {(selectedEvent.ticket_required || selectedEvent.timeoff_required || selectedEvent.travel_required || selectedEvent.deadline_date) && (
+              {/* Logistics Section (hidden for deadline events) */}
+              {!selectedEvent.is_deadline && (selectedEvent.ticket_required || selectedEvent.timeoff_required || selectedEvent.travel_required) && (
                 <div className="pt-2 border-t">
                   <div className="text-sm font-medium text-muted-foreground mb-2">Logistics</div>
                   <div className="space-y-2">
@@ -484,7 +520,7 @@ export default function EventsPage() {
                           </span>
                           {selectedEvent.ticket_purchase_date && (
                             <span className="text-xs text-muted-foreground">
-                              {new Date(selectedEvent.ticket_purchase_date).toLocaleDateString()}
+                              {formatDateStr(selectedEvent.ticket_purchase_date, { month: 'short', day: 'numeric' })}
                             </span>
                           )}
                         </div>
@@ -509,7 +545,7 @@ export default function EventsPage() {
                           </span>
                           {selectedEvent.timeoff_booking_date && (
                             <span className="text-xs text-muted-foreground">
-                              {new Date(selectedEvent.timeoff_booking_date).toLocaleDateString()}
+                              {formatDateStr(selectedEvent.timeoff_booking_date, { month: 'short', day: 'numeric' })}
                             </span>
                           )}
                         </div>
@@ -532,40 +568,46 @@ export default function EventsPage() {
                           </span>
                           {selectedEvent.travel_booking_date && (
                             <span className="text-xs text-muted-foreground">
-                              {new Date(selectedEvent.travel_booking_date).toLocaleDateString()}
+                              {formatDateStr(selectedEvent.travel_booking_date, { month: 'short', day: 'numeric' })}
                             </span>
                           )}
                         </div>
                       </div>
                     )}
-
-                    {/* Deadline */}
-                    {selectedEvent.deadline_date && (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="h-4 w-4" />
-                          <span>Deadline</span>
-                        </div>
-                        <span className="text-sm">
-                          {new Date(selectedEvent.deadline_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
+
+              {/* Deadline Protection Alert (T038) */}
+              {selectedEvent.is_deadline && (
+                <Alert className="mt-4 border-amber-500/50 bg-amber-500/10">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertDescription className="text-sm">
+                    This is a deadline entry managed automatically.
+                    {selectedEvent.series_guid && (
+                      <> Edit the parent series to change the deadline.</>
+                    )}
+                    {!selectedEvent.series_guid && (
+                      <> Edit the parent event to change the deadline.</>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={handleEditClick}>
-              <Pencil className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteClick}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-          </DialogFooter>
+          {/* Edit/Delete buttons hidden for deadline entries (T036-T037) */}
+          {selectedEvent && !selectedEvent.is_deadline && (
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={handleEditClick}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteClick}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -33,6 +33,9 @@ export interface EventSeriesSummary {
   guid: string           // Series GUID (ser_xxx)
   title: string
   total_events: number
+  deadline_date: string | null      // ISO date (YYYY-MM-DD)
+  deadline_time: string | null      // HH:MM:SS or null
+  deadline_entry_guid: string | null // Event GUID of deadline entry
 }
 
 export interface LocationSummary {
@@ -99,6 +102,9 @@ export interface Event {
   travel_required: boolean | null
   travel_status: TravelStatus | null
 
+  // Deadline entry flag (true = this event represents a series deadline)
+  is_deadline: boolean
+
   // Timestamps
   created_at: string                  // ISO 8601 timestamp
   updated_at: string                  // ISO 8601 timestamp
@@ -136,6 +142,7 @@ export interface EventDetail extends Event {
 
   // Deadline
   deadline_date: string | null        // ISO date
+  deadline_time: string | null        // HH:MM:SS or null
 
   // Soft delete
   deleted_at: string | null           // ISO 8601 timestamp
@@ -166,6 +173,7 @@ export interface EventCreateRequest {
   timeoff_required?: boolean | null
   travel_required?: boolean | null
   deadline_date?: string | null       // ISO date
+  deadline_time?: string | null       // HH:MM format
 }
 
 export interface EventSeriesCreateRequest {
@@ -185,6 +193,10 @@ export interface EventSeriesCreateRequest {
   ticket_required?: boolean
   timeoff_required?: boolean
   travel_required?: boolean
+
+  // Deadline for deliverables (creates a deadline entry in the calendar)
+  deadline_date?: string | null       // ISO date (e.g., client delivery date)
+  deadline_time?: string | null       // HH:MM format (e.g., competition cutoff time)
 
   // Initial status/attendance for all events in series
   status?: EventStatus
@@ -220,6 +232,7 @@ export interface EventUpdateRequest {
   travel_booking_date?: string | null
 
   deadline_date?: string | null
+  deadline_time?: string | null        // HH:MM format (for series deadline)
 
   scope?: UpdateScope                  // For series events (default: single)
 }

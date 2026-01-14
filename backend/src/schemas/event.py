@@ -117,6 +117,7 @@ class EventCreate(BaseModel):
     timeoff_required: Optional[bool] = Field(default=None)
     travel_required: Optional[bool] = Field(default=None)
     deadline_date: Optional[date] = Field(default=None)
+    deadline_time: Optional[time] = Field(default=None)
 
     @field_validator("title")
     @classmethod
@@ -163,6 +164,8 @@ class EventSeriesCreate(BaseModel):
         ticket_required: Default ticket requirement
         timeoff_required: Default time-off requirement
         travel_required: Default travel requirement
+        deadline_date: Series-level deadline date for deliverables
+        deadline_time: Optional deadline time (e.g., 11:59 PM for competitions)
     """
 
     title: str = Field(..., min_length=1, max_length=255)
@@ -185,6 +188,16 @@ class EventSeriesCreate(BaseModel):
     ticket_required: bool = Field(default=False)
     timeoff_required: bool = Field(default=False)
     travel_required: bool = Field(default=False)
+
+    # Deadline for deliverables (creates a deadline entry in the calendar)
+    deadline_date: Optional[date] = Field(
+        default=None,
+        description="Deadline date for deliverables (e.g., client delivery date)"
+    )
+    deadline_time: Optional[time] = Field(
+        default=None,
+        description="Optional deadline time (e.g., competition cutoff time)"
+    )
 
     # Initial status/attendance for all events in series
     status: EventStatus = Field(default=EventStatus.FUTURE)
@@ -279,6 +292,7 @@ class EventUpdate(BaseModel):
     travel_booking_date: Optional[date] = Field(default=None)
 
     deadline_date: Optional[date] = Field(default=None)
+    deadline_time: Optional[time] = Field(default=None)
 
     scope: UpdateScope = Field(default=UpdateScope.SINGLE)
 
@@ -294,6 +308,54 @@ class EventUpdate(BaseModel):
             "example": {
                 "attendance": "attended",
                 "ticket_status": "ready",
+            }
+        }
+    }
+
+
+class EventSeriesUpdate(BaseModel):
+    """
+    Schema for updating an existing event series.
+
+    Updates series-level properties. Changes to deadline_date/deadline_time
+    will automatically sync the deadline calendar entry.
+
+    All fields are optional - only provided fields will be updated.
+    """
+
+    title: Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None)
+    category_guid: Optional[str] = Field(default=None)
+    location_guid: Optional[str] = Field(default=None)
+    organizer_guid: Optional[str] = Field(default=None)
+    input_timezone: Optional[str] = Field(default=None, max_length=64)
+
+    ticket_required: Optional[bool] = Field(default=None)
+    timeoff_required: Optional[bool] = Field(default=None)
+    travel_required: Optional[bool] = Field(default=None)
+
+    # Deadline for deliverables (changes will sync the deadline entry)
+    deadline_date: Optional[date] = Field(
+        default=None,
+        description="Deadline date for deliverables"
+    )
+    deadline_time: Optional[time] = Field(
+        default=None,
+        description="Optional deadline time"
+    )
+
+    @field_validator("title")
+    @classmethod
+    def validate_title_not_whitespace(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
+            raise ValueError("Title cannot be empty or whitespace")
+        return v.strip() if v else None
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "deadline_date": "2026-08-15",
+                "deadline_time": "23:59",
             }
         }
     }
@@ -380,6 +442,9 @@ class EventResponse(BaseModel):
     travel_required: Optional[bool] = Field(default=None)
     travel_status: Optional[TravelStatus] = Field(default=None)
 
+    # Deadline entry flag (True = this event represents a series deadline)
+    is_deadline: bool = Field(default=False, description="True if this is a deadline entry")
+
     # Timestamps
     created_at: datetime
     updated_at: datetime
@@ -411,6 +476,7 @@ class EventResponse(BaseModel):
                 "series_guid": "ser_01hgw2bbg0000000000000001",
                 "sequence_number": 1,
                 "series_total": 3,
+                "is_deadline": False,
                 "created_at": "2026-01-10T10:00:00Z",
                 "updated_at": "2026-01-10T10:00:00Z",
             }
@@ -481,6 +547,7 @@ class EventDetailResponse(EventResponse):
     travel_booking_date: Optional[date]
 
     deadline_date: Optional[date]
+    deadline_time: Optional[time]
 
     # Soft delete
     deleted_at: Optional[datetime]

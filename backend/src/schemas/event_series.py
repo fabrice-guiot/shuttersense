@@ -11,7 +11,7 @@ Design:
 - GUIDs are exposed via guid property, never internal IDs
 """
 
-from datetime import datetime
+from datetime import datetime, date, time
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_serializer
 
@@ -57,6 +57,20 @@ class EventSeriesResponse(BaseModel):
     timeoff_required: bool
     travel_required: bool
 
+    # Deadline for deliverables
+    deadline_date: Optional[date] = Field(
+        default=None,
+        description="Deadline date for deliverables"
+    )
+    deadline_time: Optional[time] = Field(
+        default=None,
+        description="Optional deadline time"
+    )
+    deadline_entry_guid: Optional[str] = Field(
+        default=None,
+        description="GUID of the deadline entry event if deadline is set"
+    )
+
     # Series metadata
     total_events: int
 
@@ -86,6 +100,9 @@ class EventSeriesResponse(BaseModel):
                 "ticket_required": True,
                 "travel_required": True,
                 "timeoff_required": True,
+                "deadline_date": "2026-08-15",
+                "deadline_time": None,
+                "deadline_entry_guid": "evt_01hgw2bbg0000000000000004",
                 "events": [
                     {"guid": "evt_xxx1", "event_date": "2026-07-27", "sequence_number": 1, "attendance": "planned"},
                     {"guid": "evt_xxx2", "event_date": "2026-07-28", "sequence_number": 2, "attendance": "planned"},

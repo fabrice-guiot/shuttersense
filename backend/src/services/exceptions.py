@@ -58,3 +58,38 @@ class CollectionNotAccessibleError(ServiceError):
             "'Test Connection' action to update its accessibility status."
         )
         super().__init__(self.message)
+
+
+class DeadlineProtectionError(ServiceError):
+    """Raised when attempting to modify or delete a deadline entry directly.
+
+    Deadline entries are automatically managed by the system and should only
+    be modified through their parent event or series.
+    """
+
+    def __init__(
+        self,
+        event_guid: str,
+        series_guid: Optional[str] = None,
+        parent_event_guid: Optional[str] = None
+    ):
+        self.event_guid = event_guid
+        self.series_guid = series_guid
+        self.parent_event_guid = parent_event_guid
+
+        if series_guid:
+            self.message = (
+                f"Cannot modify deadline entry '{event_guid}' directly. "
+                f"Edit the parent series '{series_guid}' to change the deadline."
+            )
+        elif parent_event_guid:
+            self.message = (
+                f"Cannot modify deadline entry '{event_guid}' directly. "
+                f"Edit the parent event '{parent_event_guid}' to change the deadline."
+            )
+        else:
+            self.message = (
+                f"Cannot modify deadline entry '{event_guid}' directly. "
+                "Deadline entries are managed automatically."
+            )
+        super().__init__(self.message)

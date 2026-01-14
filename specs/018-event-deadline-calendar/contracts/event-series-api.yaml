@@ -1,0 +1,301 @@
+# Event Series API Contract Changes
+# Feature: 018-event-deadline-calendar
+#
+# This document describes the API changes for EventSeries deadline support.
+# Changes are additive - existing API behavior is preserved.
+
+openapi: 3.1.0
+info:
+  title: Event Series API - Deadline Extensions
+  version: 1.1.0
+  description: |
+    Extensions to Event Series API for deadline management.
+    Deadline entries are automatically created/updated/deleted when
+    deadline_date is set on an EventSeries.
+
+paths:
+  /api/events/series:
+    post:
+      summary: Create Event Series (with optional deadline)
+      description: |
+        Creates a new Event Series. If deadline_date is provided,
+        a deadline entry is automatically created.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventSeriesCreate'
+      responses:
+        '201':
+          description: Event Series created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSeriesResponse'
+
+  /api/events/series/{guid}:
+    parameters:
+      - name: guid
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ser_[a-z0-9]{26}$'
+        example: ser_01hgw2bbg0000000000000001
+
+    get:
+      summary: Get Event Series details
+      responses:
+        '200':
+          description: Event Series details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSeriesDetailResponse'
+
+    patch:
+      summary: Update Event Series (including deadline)
+      description: |
+        Updates Event Series properties. Changes to deadline_date or
+        deadline_time automatically synchronize the deadline entry:
+        - Set deadline_date: Creates deadline entry if none exists
+        - Update deadline_date/time: Updates existing deadline entry
+        - Clear deadline_date (null): Deletes deadline entry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventSeriesUpdate'
+      responses:
+        '200':
+          description: Event Series updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSeriesDetailResponse'
+
+    delete:
+      summary: Delete Event Series
+      description: |
+        Deletes the Event Series and all associated events,
+        including the deadline entry (via CASCADE).
+      responses:
+        '204':
+          description: Event Series deleted successfully
+
+components:
+  schemas:
+    EventSeriesCreate:
+      type: object
+      required:
+        - title
+        - category_guid
+        - event_dates
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Series title (shared by all events and deadline)
+        category_guid:
+          type: string
+          pattern: '^cat_[a-z0-9]{26}$'
+        event_dates:
+          type: array
+          items:
+            type: string
+            format: date
+          minItems: 2
+          description: At least 2 dates required for a series
+        description:
+          type: string
+          nullable: true
+        location_guid:
+          type: string
+          pattern: '^loc_[a-z0-9]{26}$'
+          nullable: true
+        organizer_guid:
+          type: string
+          pattern: '^org_[a-z0-9]{26}$'
+          nullable: true
+        start_time:
+          type: string
+          format: time
+          nullable: true
+          example: "14:00:00"
+        end_time:
+          type: string
+          format: time
+          nullable: true
+          example: "16:00:00"
+        is_all_day:
+          type: boolean
+          default: false
+        input_timezone:
+          type: string
+          nullable: true
+          example: "America/New_York"
+        ticket_required:
+          type: boolean
+          default: false
+        timeoff_required:
+          type: boolean
+          default: false
+        travel_required:
+          type: boolean
+          default: false
+        # NEW FIELDS
+        deadline_date:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Deadline date for the series (e.g., client delivery date).
+            When set, creates a deadline entry in the calendar.
+          example: "2026-03-15"
+        deadline_time:
+          type: string
+          format: time
+          nullable: true
+          description: |
+            Optional deadline time (e.g., competition cutoff time).
+            Only meaningful if deadline_date is set.
+          example: "23:59:00"
+
+    EventSeriesUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        location_guid:
+          type: string
+          pattern: '^loc_[a-z0-9]{26}$'
+          nullable: true
+        organizer_guid:
+          type: string
+          pattern: '^org_[a-z0-9]{26}$'
+          nullable: true
+        input_timezone:
+          type: string
+          nullable: true
+        ticket_required:
+          type: boolean
+        timeoff_required:
+          type: boolean
+        travel_required:
+          type: boolean
+        # NEW FIELDS
+        deadline_date:
+          type: string
+          format: date
+          nullable: true
+          description: Set to null to remove deadline
+        deadline_time:
+          type: string
+          format: time
+          nullable: true
+
+    EventSeriesResponse:
+      type: object
+      properties:
+        guid:
+          type: string
+          pattern: '^ser_[a-z0-9]{26}$'
+        title:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategorySummary'
+        location:
+          $ref: '#/components/schemas/LocationSummary'
+          nullable: true
+        organizer:
+          $ref: '#/components/schemas/OrganizerSummary'
+          nullable: true
+        total_events:
+          type: integer
+        # NEW FIELDS
+        deadline_date:
+          type: string
+          format: date
+          nullable: true
+        deadline_time:
+          type: string
+          format: time
+          nullable: true
+        deadline_entry_guid:
+          type: string
+          pattern: '^evt_[a-z0-9]{26}$'
+          nullable: true
+          description: GUID of the deadline entry if deadline is set
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EventSeriesDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/EventSeriesResponse'
+        - type: object
+          properties:
+            description:
+              type: string
+              nullable: true
+            input_timezone:
+              type: string
+              nullable: true
+            ticket_required:
+              type: boolean
+            timeoff_required:
+              type: boolean
+            travel_required:
+              type: boolean
+            events:
+              type: array
+              items:
+                $ref: '#/components/schemas/EventSummary'
+              description: List of events in the series (excludes deadline entry)
+
+    # Reference schemas (existing)
+    CategorySummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+
+    LocationSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+
+    OrganizerSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+
+    EventSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        title:
+          type: string
+        event_date:
+          type: string
+          format: date
+        sequence_number:
+          type: integer

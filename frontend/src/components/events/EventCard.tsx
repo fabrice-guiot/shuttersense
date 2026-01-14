@@ -9,7 +9,7 @@
  * - Proper role attributes for status indicators
  */
 
-import { LucideIcon, MapPin } from 'lucide-react'
+import { LucideIcon, MapPin, ClockAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ICON_MAP } from '@/components/settings/CategoryForm'
 import { LogisticsStatusBadges } from '@/components/events/LogisticsSection'
@@ -57,10 +57,15 @@ export const EventCard = ({
   expanded = false,
   className
 }: EventCardProps) => {
-  // Get category icon component
-  const CategoryIcon: LucideIcon | undefined = event.category?.icon
-    ? ICON_MAP[event.category.icon]
-    : undefined
+  // Check if this is a deadline entry
+  const isDeadline = event.is_deadline
+
+  // Get category icon component (use ClockAlert for deadlines)
+  const CategoryIcon: LucideIcon | undefined = isDeadline
+    ? ClockAlert
+    : event.category?.icon
+      ? ICON_MAP[event.category.icon]
+      : undefined
 
   // Format time display
   const timeDisplay = event.is_all_day
@@ -69,8 +74,8 @@ export const EventCard = ({
       ? event.start_time.slice(0, 5) // HH:MM
       : null
 
-  // Series indicator
-  const seriesIndicator = event.series_guid && event.sequence_number && event.series_total
+  // Series indicator (not shown for deadline entries)
+  const seriesIndicator = !isDeadline && event.series_guid && event.sequence_number && event.series_total
     ? `${event.sequence_number}/${event.series_total}`
     : null
 
@@ -84,6 +89,7 @@ export const EventCard = ({
 
   // Build accessible label for screen readers
   const accessibleLabel = [
+    isDeadline && 'Deadline:',
     event.title,
     event.category?.name && `Category: ${event.category.name}`,
     locationShort && `Location: ${locationShort}`,
@@ -91,6 +97,11 @@ export const EventCard = ({
     seriesIndicator && `Part ${event.sequence_number} of ${event.series_total}`,
     `Status: ${ATTENDANCE_LABELS[event.attendance]}`
   ].filter(Boolean).join(', ')
+
+  // Deadline-specific styling
+  const deadlineBorderColor = 'border-l-red-500'
+  const deadlineIconColor = 'text-red-500'
+  const deadlineBackgroundColor = 'bg-red-500/10'
 
   // Compact mode - minimal display for small calendar cells
   if (compact) {
@@ -105,24 +116,30 @@ export const EventCard = ({
             'w-full text-left px-1.5 py-0.5 rounded text-xs transition-colors',
             'hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             'border-l-2',
-            ATTENDANCE_BORDER_COLORS[event.attendance],
+            isDeadline ? deadlineBorderColor : ATTENDANCE_BORDER_COLORS[event.attendance],
+            isDeadline && deadlineBackgroundColor,
             className
           )}
           style={{
-            backgroundColor: event.category?.color
-              ? `${event.category.color}20` // 12% opacity
-              : undefined
+            backgroundColor: isDeadline
+              ? undefined // Use class-based styling for deadlines
+              : event.category?.color
+                ? `${event.category.color}20` // 12% opacity
+                : undefined
           }}
           title={fullTitle}
         >
           <span className="flex items-start gap-1">
             {CategoryIcon && (
               <CategoryIcon
-                className="h-2.5 w-2.5 flex-shrink-0 mt-0.5"
-                style={{ color: event.category?.color || undefined }}
+                className={cn(
+                  'h-2.5 w-2.5 flex-shrink-0 mt-0.5',
+                  isDeadline && deadlineIconColor
+                )}
+                style={{ color: isDeadline ? undefined : event.category?.color || undefined }}
               />
             )}
-            <span className="line-clamp-3">
+            <span className={cn('line-clamp-3', isDeadline && 'font-medium')}>
               {event.title}
               {locationShort && (
                 <span className="text-muted-foreground"> ({locationShort})</span>
@@ -143,24 +160,30 @@ export const EventCard = ({
           'w-full text-left px-1.5 py-0.5 rounded text-xs truncate transition-colors',
           'hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           'border-l-2',
-          ATTENDANCE_BORDER_COLORS[event.attendance],
+          isDeadline ? deadlineBorderColor : ATTENDANCE_BORDER_COLORS[event.attendance],
+          isDeadline && deadlineBackgroundColor,
           className
         )}
         style={{
-          backgroundColor: event.category?.color
-            ? `${event.category.color}20` // 12% opacity
-            : undefined
+          backgroundColor: isDeadline
+            ? undefined // Use class-based styling for deadlines
+            : event.category?.color
+              ? `${event.category.color}20` // 12% opacity
+              : undefined
         }}
         title={fullTitle}
       >
         <span className="flex items-center gap-1">
           {CategoryIcon && (
             <CategoryIcon
-              className="h-2.5 w-2.5 flex-shrink-0"
-              style={{ color: event.category?.color || undefined }}
+              className={cn(
+                'h-2.5 w-2.5 flex-shrink-0',
+                isDeadline && deadlineIconColor
+              )}
+              style={{ color: isDeadline ? undefined : event.category?.color || undefined }}
             />
           )}
-          <span className="truncate">
+          <span className={cn('truncate', isDeadline && 'font-medium')}>
             {event.title}
             {locationShort && (
               <span className="text-muted-foreground"> ({locationShort})</span>
@@ -181,29 +204,37 @@ export const EventCard = ({
         'w-full text-left p-2 rounded-md transition-colors',
         'hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         'border-l-3',
-        ATTENDANCE_BORDER_COLORS[event.attendance],
+        isDeadline ? deadlineBorderColor : ATTENDANCE_BORDER_COLORS[event.attendance],
+        isDeadline && deadlineBackgroundColor,
         className
       )}
       style={{
-        backgroundColor: event.category?.color
-          ? `${event.category.color}15` // 8% opacity
-          : undefined
+        backgroundColor: isDeadline
+          ? undefined // Use class-based styling for deadlines
+          : event.category?.color
+            ? `${event.category.color}15` // 8% opacity
+            : undefined
       }}
     >
       <div className="flex items-start gap-2">
-        {/* Category Icon */}
+        {/* Category Icon (ClockAlert for deadlines) */}
         {CategoryIcon && (
           <div
-            className="flex-shrink-0 mt-0.5 p-1 rounded"
+            className={cn(
+              'flex-shrink-0 mt-0.5 p-1 rounded',
+              isDeadline && 'bg-red-500/20'
+            )}
             style={{
-              backgroundColor: event.category?.color
-                ? `${event.category.color}30` // 18% opacity
-                : undefined
+              backgroundColor: isDeadline
+                ? undefined
+                : event.category?.color
+                  ? `${event.category.color}30` // 18% opacity
+                  : undefined
             }}
           >
             <CategoryIcon
-              className="h-3.5 w-3.5"
-              style={{ color: event.category?.color || undefined }}
+              className={cn('h-3.5 w-3.5', isDeadline && deadlineIconColor)}
+              style={{ color: isDeadline ? undefined : event.category?.color || undefined }}
             />
           </div>
         )}
@@ -212,10 +243,17 @@ export const EventCard = ({
         <div className="flex-1 min-w-0">
           {/* Title Row */}
           <div className="flex items-center gap-1.5">
-            <span className="text-sm font-medium truncate">{event.title}</span>
+            <span className={cn('text-sm font-medium truncate', isDeadline && 'text-red-600 dark:text-red-400')}>
+              {event.title}
+            </span>
             {seriesIndicator && (
               <span className="flex-shrink-0 text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground">
                 {seriesIndicator}
+              </span>
+            )}
+            {isDeadline && (
+              <span className="flex-shrink-0 text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 font-medium">
+                DEADLINE
               </span>
             )}
           </div>
@@ -242,35 +280,39 @@ export const EventCard = ({
             </div>
           )}
 
-          {/* Logistics Indicators */}
-          <LogisticsStatusBadges
-            data={{
-              ticket_required: event.ticket_required,
-              ticket_status: event.ticket_status,
-              ticket_purchase_date: null,
-              timeoff_required: event.timeoff_required,
-              timeoff_status: event.timeoff_status,
-              timeoff_booking_date: null,
-              travel_required: event.travel_required,
-              travel_status: event.travel_status,
-              travel_booking_date: null,
-              deadline_date: null,
-            }}
-            size="sm"
-            className="mt-1"
-          />
+          {/* Logistics Indicators (not shown for deadline entries) */}
+          {!isDeadline && (
+            <LogisticsStatusBadges
+              data={{
+                ticket_required: event.ticket_required,
+                ticket_status: event.ticket_status,
+                ticket_purchase_date: null,
+                timeoff_required: event.timeoff_required,
+                timeoff_status: event.timeoff_status,
+                timeoff_booking_date: null,
+                travel_required: event.travel_required,
+                travel_status: event.travel_status,
+                travel_booking_date: null,
+                deadline_date: null,
+              }}
+              size="sm"
+              className="mt-1"
+            />
+          )}
         </div>
 
-        {/* Attendance Indicator */}
-        <div
-          role="img"
-          aria-label={`Attendance status: ${ATTENDANCE_LABELS[event.attendance]}`}
-          className={cn(
-            'flex-shrink-0 w-2 h-2 rounded-full mt-1.5',
-            ATTENDANCE_COLORS[event.attendance]
-          )}
-          title={`Attendance: ${ATTENDANCE_LABELS[event.attendance]}`}
-        />
+        {/* Attendance Indicator (not shown for deadline entries) */}
+        {!isDeadline && (
+          <div
+            role="img"
+            aria-label={`Attendance status: ${ATTENDANCE_LABELS[event.attendance]}`}
+            className={cn(
+              'flex-shrink-0 w-2 h-2 rounded-full mt-1.5',
+              ATTENDANCE_COLORS[event.attendance]
+            )}
+            title={`Attendance: ${ATTENDANCE_LABELS[event.attendance]}`}
+          />
+        )}
       </div>
     </button>
   )

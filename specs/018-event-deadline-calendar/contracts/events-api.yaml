@@ -1,0 +1,339 @@
+# Events API Contract Changes
+# Feature: 018-event-deadline-calendar
+#
+# This document describes the API changes for deadline entry support.
+# Changes are additive - existing API behavior is preserved.
+
+openapi: 3.1.0
+info:
+  title: Events API - Deadline Entry Extensions
+  version: 1.1.0
+  description: |
+    Extensions to Events API for deadline entry support.
+    Deadline entries appear in event listings but are protected
+    from direct modification.
+
+paths:
+  /api/events:
+    get:
+      summary: List events (includes deadline entries)
+      description: |
+        Returns all events including deadline entries.
+        Deadline entries are identifiable by is_deadline=true.
+        Use filter parameter to exclude deadline entries if needed.
+      parameters:
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: category_guid
+          in: query
+          schema:
+            type: string
+        - name: include_deadlines
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Set to false to exclude deadline entries
+      responses:
+        '200':
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventResponse'
+
+  /api/events/{guid}:
+    parameters:
+      - name: guid
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^evt_[a-z0-9]{26}$'
+
+    get:
+      summary: Get event details
+      description: |
+        Returns event details. For deadline entries, includes
+        reference to parent series.
+      responses:
+        '200':
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetailResponse'
+
+    patch:
+      summary: Update event
+      description: |
+        Updates an event. Returns 403 Forbidden for deadline entries.
+        Deadline entries can only be modified by updating the parent
+        Event Series deadline.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventUpdate'
+      responses:
+        '200':
+          description: Event updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetailResponse'
+        '403':
+          description: Cannot modify deadline entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadlineProtectionError'
+
+    delete:
+      summary: Delete event
+      description: |
+        Soft deletes an event. Returns 403 Forbidden for deadline entries.
+        Deadline entries are automatically deleted when the parent
+        Event Series deadline is removed.
+      responses:
+        '204':
+          description: Event deleted successfully
+        '403':
+          description: Cannot delete deadline entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadlineProtectionError'
+
+components:
+  schemas:
+    EventResponse:
+      type: object
+      properties:
+        guid:
+          type: string
+          pattern: '^evt_[a-z0-9]{26}$'
+        title:
+          type: string
+          description: For deadlines, prefixed with "[Deadline] "
+        event_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+          nullable: true
+        end_time:
+          type: string
+          format: time
+          nullable: true
+        is_all_day:
+          type: boolean
+        input_timezone:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [future, confirmed, completed, cancelled]
+        attendance:
+          type: string
+          enum: [planned, attended, skipped]
+          nullable: true
+          description: NULL for deadline entries
+        category:
+          $ref: '#/components/schemas/CategorySummary'
+          nullable: true
+        location:
+          $ref: '#/components/schemas/LocationSummary'
+          nullable: true
+          description: Always NULL for deadline entries
+        series_guid:
+          type: string
+          nullable: true
+        sequence_number:
+          type: integer
+          nullable: true
+          description: NULL for deadline entries (not part of sequence)
+        series_total:
+          type: integer
+          nullable: true
+        # Logistics fields
+        ticket_required:
+          type: boolean
+          nullable: true
+        ticket_status:
+          type: string
+          nullable: true
+        timeoff_required:
+          type: boolean
+          nullable: true
+        timeoff_status:
+          type: string
+          nullable: true
+        travel_required:
+          type: boolean
+          nullable: true
+        travel_status:
+          type: string
+          nullable: true
+        # NEW FIELD
+        is_deadline:
+          type: boolean
+          description: True if this is a deadline entry
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EventDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/EventResponse'
+        - type: object
+          properties:
+            description:
+              type: string
+              nullable: true
+            organizer:
+              $ref: '#/components/schemas/OrganizerSummary'
+              nullable: true
+            performers:
+              type: array
+              items:
+                $ref: '#/components/schemas/PerformerSummary'
+              description: Empty array for deadline entries
+            series:
+              $ref: '#/components/schemas/EventSeriesSummary'
+              nullable: true
+            ticket_purchase_date:
+              type: string
+              format: date
+              nullable: true
+            timeoff_booking_date:
+              type: string
+              format: date
+              nullable: true
+            travel_booking_date:
+              type: string
+              format: date
+              nullable: true
+            deadline_date:
+              type: string
+              format: date
+              nullable: true
+            deleted_at:
+              type: string
+              format: date-time
+              nullable: true
+
+    EventUpdate:
+      type: object
+      description: |
+        All fields are optional. Only provided fields are updated.
+        Note: is_deadline cannot be set via API - it is system-managed.
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        event_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+          nullable: true
+        end_time:
+          type: string
+          format: time
+          nullable: true
+        is_all_day:
+          type: boolean
+        input_timezone:
+          type: string
+          nullable: true
+        location_guid:
+          type: string
+          nullable: true
+        organizer_guid:
+          type: string
+          nullable: true
+        status:
+          type: string
+        attendance:
+          type: string
+        scope:
+          type: string
+          enum: [single, this_and_future, all]
+          default: single
+
+    DeadlineProtectionError:
+      type: object
+      required:
+        - detail
+        - series_guid
+      properties:
+        detail:
+          type: string
+          example: "Deadline entries cannot be modified directly. Update the deadline on the parent Event Series instead."
+        series_guid:
+          type: string
+          pattern: '^ser_[a-z0-9]{26}$'
+          description: GUID of the parent Event Series for navigation
+
+    # Reference schemas
+    CategorySummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+
+    LocationSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+
+    OrganizerSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+
+    PerformerSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+
+    EventSeriesSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        title:
+          type: string
+        total_events:
+          type: integer

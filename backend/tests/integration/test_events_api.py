@@ -8,8 +8,10 @@ Tests end-to-end flows for event management:
 - Creating single events and series (Phase 5)
 - Updating events with scope (Phase 5)
 - Soft deleting events with scope (Phase 5)
+- Deadline entry management (Issue #68)
 
 Issue #39 - Calendar Events feature (Phases 4 & 5)
+Issue #68 - Make Event Deadline appear in the Calendar view
 """
 
 import pytest
@@ -1138,3 +1140,824 @@ class TestEventsDelete:
         list_response = test_client.get("/api/events")
         guids = [e["guid"] for e in list_response.json()]
         assert delete_event.guid in guids
+
+
+# =============================================================================
+# Issue #68: Deadline Entry Tests
+# =============================================================================
+
+
+class TestEventsDeadline:
+    """Tests for deadline entry functionality (Issue #68).
+
+    Deadline entries are special Event records with is_deadline=True that
+    appear in the calendar to represent series/event deadlines.
+    """
+
+    @pytest.fixture
+    def deadline_category(self, test_db_session):
+        """Create a test category for deadline tests."""
+        category = Category(
+            name="Deadline Test Category",
+            icon="clock",
+            color="#FF0000",
+            is_active=True,
+            display_order=0,
+        )
+        test_db_session.add(category)
+        test_db_session.commit()
+        test_db_session.refresh(category)
+        return category
+
+    @pytest.fixture
+    def deadline_organizer(self, test_db_session, deadline_category):
+        """Create a test organizer for deadline tests."""
+        organizer = Organizer(
+            name="Deadline Test Organizer",
+            category_id=deadline_category.id,
+        )
+        test_db_session.add(organizer)
+        test_db_session.commit()
+        test_db_session.refresh(organizer)
+        return organizer
+
+    @pytest.fixture
+    def deadline_location(self, test_db_session, deadline_category):
+        """Create a test location for deadline tests."""
+        location = Location(
+            name="Deadline Test Location",
+            city="Test City",
+            country="USA",
+            category_id=deadline_category.id,
+            is_known=True,
+        )
+        test_db_session.add(location)
+        test_db_session.commit()
+        test_db_session.refresh(location)
+        return location
+
+    # -------------------------------------------------------------------------
+    # T011: Test deadline entry creation when deadline_date is set
+    # -------------------------------------------------------------------------
+
+    def test_create_series_with_deadline_creates_deadline_entry(
+        self, test_client, deadline_category
+    ):
+        """Test that creating a series with deadline creates a deadline entry."""
+        response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series With Deadline",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2026-09-01", "2026-09-02", "2026-09-03"],
+                "deadline_date": "2026-09-15",
+                "deadline_time": "17:00:00",
+            },
+        )
+
+        assert response.status_code == 201
+        events = response.json()
+
+        # Should have 4 events: 3 series events + 1 deadline entry
+        assert len(events) == 4
+
+        # Find the deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+
+        deadline = deadline_entries[0]
+        assert deadline["title"] == "Series With Deadline - Deadline"
+        assert deadline["event_date"] == "2026-09-15"
+        assert deadline["start_time"] == "17:00:00"
+        assert deadline["is_deadline"] is True
+
+    # -------------------------------------------------------------------------
+    # T012: Test deadline entry update when deadline changes
+    # -------------------------------------------------------------------------
+
+    def test_update_series_deadline_updates_deadline_entry(
+        self, test_client, deadline_category
+    ):
+        """Test that updating series deadline updates the deadline entry."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series to Update Deadline",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2026-10-01", "2026-10-02"],
+                "deadline_date": "2026-10-15",
+                "deadline_time": "12:00:00",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Get series GUID from first event
+        series_guid = events[0]["series_guid"]
+
+        # Update deadline via series endpoint
+        update_response = test_client.patch(
+            f"/api/events/series/{series_guid}",
+            json={
+                "deadline_date": "2026-10-20",
+                "deadline_time": "18:00:00",
+            },
+        )
+        assert update_response.status_code == 200
+
+        # List events and verify deadline entry updated
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2026-10-01",
+                "end_date": "2026-10-31",
+            },
+        )
+        assert list_response.status_code == 200
+        updated_events = list_response.json()
+
+        deadline_entries = [e for e in updated_events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+
+        deadline = deadline_entries[0]
+        assert deadline["event_date"] == "2026-10-20"
+        assert deadline["start_time"] == "18:00:00"
+
+    # -------------------------------------------------------------------------
+    # T013: Test deadline entry deletion when deadline is cleared
+    # -------------------------------------------------------------------------
+
+    def test_clear_series_deadline_deletes_deadline_entry(
+        self, test_client, deadline_category
+    ):
+        """Test that clearing deadline removes the deadline entry."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series to Clear Deadline",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2026-11-01", "2026-11-02"],
+                "deadline_date": "2026-11-15",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Verify deadline entry exists
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+
+        # Get series GUID
+        series_guid = events[0]["series_guid"]
+
+        # Clear deadline via series endpoint
+        update_response = test_client.patch(
+            f"/api/events/series/{series_guid}",
+            json={"deadline_date": None},
+        )
+        assert update_response.status_code == 200
+
+        # Verify deadline entry is deleted
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2026-11-01",
+                "end_date": "2026-11-30",
+            },
+        )
+        assert list_response.status_code == 200
+        updated_events = list_response.json()
+
+        # Should only have 2 regular events, no deadline entry
+        deadline_entries = [e for e in updated_events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 0
+        assert len(updated_events) == 2
+
+    # -------------------------------------------------------------------------
+    # T014: Test deadline entry has correct fields
+    # -------------------------------------------------------------------------
+
+    def test_deadline_entry_has_correct_fields(
+        self, test_client, deadline_category, deadline_organizer, deadline_location
+    ):
+        """Test that deadline entry has correct fields (no location, has organizer)."""
+        # Create series with deadline, location, and organizer
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series With Full Details",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2026-12-01", "2026-12-02"],
+                "deadline_date": "2026-12-15",
+                "deadline_time": "23:59:00",
+                "location_guid": deadline_location.guid,
+                "organizer_guid": deadline_organizer.guid,
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Find deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+        deadline = deadline_entries[0]
+
+        # Get full details
+        detail_response = test_client.get(f"/api/events/{deadline['guid']}")
+        assert detail_response.status_code == 200
+        detail = detail_response.json()
+
+        # Verify correct fields
+        assert detail["is_deadline"] is True
+        assert detail["title"] == "Series With Full Details - Deadline"
+        assert detail["event_date"] == "2026-12-15"
+        assert detail["start_time"] == "23:59:00"
+        assert detail["category"]["guid"] == deadline_category.guid
+
+        # Deadline should have organizer but NO location
+        assert detail["organizer"] is not None
+        assert detail["organizer"]["guid"] == deadline_organizer.guid
+        assert detail["location"] is None  # Deadline entries don't have location
+
+    # -------------------------------------------------------------------------
+    # T015: Test standalone event deadline entry
+    # -------------------------------------------------------------------------
+
+    def test_standalone_event_deadline_creates_entry(
+        self, test_client, deadline_category
+    ):
+        """Test that setting deadline on standalone event creates deadline entry."""
+        # Create standalone event without deadline
+        create_response = test_client.post(
+            "/api/events",
+            json={
+                "title": "Standalone Event",
+                "category_guid": deadline_category.guid,
+                "event_date": "2027-01-15",
+            },
+        )
+        assert create_response.status_code == 201
+        event = create_response.json()
+        event_guid = event["guid"]
+
+        # Update to add deadline
+        update_response = test_client.patch(
+            f"/api/events/{event_guid}",
+            json={
+                "deadline_date": "2027-01-30",
+                "deadline_time": "18:00:00",
+            },
+        )
+        assert update_response.status_code == 200
+
+        # List events and find deadline entry
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2027-01-01",
+                "end_date": "2027-01-31",
+            },
+        )
+        assert list_response.status_code == 200
+        events = list_response.json()
+
+        # Should have 2 events: standalone + deadline entry
+        assert len(events) == 2
+
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+
+        deadline = deadline_entries[0]
+        assert deadline["title"] == "Standalone Event - Deadline"
+        assert deadline["event_date"] == "2027-01-30"
+        assert deadline["start_time"] == "18:00:00"
+
+    def test_standalone_event_deadline_clear_deletes_entry(
+        self, test_client, deadline_category
+    ):
+        """Test that clearing deadline on standalone event deletes deadline entry."""
+        # Create standalone event with deadline
+        create_response = test_client.post(
+            "/api/events",
+            json={
+                "title": "Standalone With Deadline",
+                "category_guid": deadline_category.guid,
+                "event_date": "2027-02-15",
+                "deadline_date": "2027-02-28",
+                "deadline_time": "12:00:00",
+            },
+        )
+        assert create_response.status_code == 201
+        event = create_response.json()
+        event_guid = event["guid"]
+
+        # Verify deadline entry exists
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2027-02-01",
+                "end_date": "2027-02-28",
+            },
+        )
+        events = list_response.json()
+        assert len(events) == 2  # Event + deadline entry
+
+        # Clear deadline
+        update_response = test_client.patch(
+            f"/api/events/{event_guid}",
+            json={"deadline_date": None},
+        )
+        assert update_response.status_code == 200
+
+        # Verify deadline entry deleted
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2027-02-01",
+                "end_date": "2027-02-28",
+            },
+        )
+        events = list_response.json()
+        assert len(events) == 1  # Only original event
+        assert events[0]["is_deadline"] is False
+
+    # -------------------------------------------------------------------------
+    # T016: Test deadline_time syncs across all events in series
+    # -------------------------------------------------------------------------
+
+    def test_deadline_time_syncs_across_series_events(
+        self, test_client, deadline_category
+    ):
+        """Test that deadline_time syncs to all events in series."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series for Time Sync",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-03-01", "2027-03-02", "2027-03-03"],
+                "deadline_date": "2027-03-15",
+                "deadline_time": "14:00:00",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # All regular events should have deadline_time synced
+        regular_events = [e for e in events if e.get("is_deadline") is not True]
+        assert len(regular_events) == 3
+
+        for event in regular_events:
+            detail_response = test_client.get(f"/api/events/{event['guid']}")
+            detail = detail_response.json()
+            assert detail["deadline_date"] == "2027-03-15"
+            assert detail["deadline_time"] == "14:00:00"
+
+    def test_update_deadline_time_syncs_across_series(
+        self, test_client, deadline_category
+    ):
+        """Test that updating deadline_time via event syncs across series."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series for Time Update",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-04-01", "2027-04-02"],
+                "deadline_date": "2027-04-15",
+                "deadline_time": "09:00:00",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Get first regular event
+        regular_events = [e for e in events if e.get("is_deadline") is not True]
+        first_event = regular_events[0]
+
+        # Update deadline_time via first event
+        update_response = test_client.patch(
+            f"/api/events/{first_event['guid']}",
+            json={"deadline_time": "21:00:00"},
+        )
+        assert update_response.status_code == 200
+
+        # Verify all events have updated deadline_time
+        for event in regular_events:
+            detail_response = test_client.get(f"/api/events/{event['guid']}")
+            detail = detail_response.json()
+            assert detail["deadline_time"] == "21:00:00"
+
+        # Verify deadline entry also updated
+        deadline_events = [e for e in events if e.get("is_deadline") is True]
+        if deadline_events:
+            deadline_detail = test_client.get(f"/api/events/{deadline_events[0]['guid']}")
+            assert deadline_detail.json()["start_time"] == "21:00:00"
+
+    # -------------------------------------------------------------------------
+    # T017: Test deadline entry excluded from series sequence numbering
+    # -------------------------------------------------------------------------
+
+    def test_deadline_entry_has_no_sequence_number(
+        self, test_client, deadline_category
+    ):
+        """Test that deadline entry has sequence_number=None."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series for Sequence Test",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-05-01", "2027-05-02", "2027-05-03"],
+                "deadline_date": "2027-05-15",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Find deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+
+        deadline = deadline_entries[0]
+        assert deadline["sequence_number"] is None
+
+        # Regular events should have sequence numbers 1, 2, 3
+        regular_events = [e for e in events if e.get("is_deadline") is not True]
+        sequence_numbers = sorted([e["sequence_number"] for e in regular_events])
+        assert sequence_numbers == [1, 2, 3]
+
+    def test_deadline_entry_not_counted_in_series_total(
+        self, test_client, deadline_category
+    ):
+        """Test that deadline entry is not counted in series_total."""
+        # Create series with 3 events + deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series Total Test",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-06-01", "2027-06-02", "2027-06-03"],
+                "deadline_date": "2027-06-15",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Should have 4 events total (3 regular + 1 deadline)
+        assert len(events) == 4
+
+        # But series_total should be 3 (excludes deadline)
+        regular_events = [e for e in events if e.get("is_deadline") is not True]
+        for event in regular_events:
+            assert event["series_total"] == 3
+
+    # -------------------------------------------------------------------------
+    # T030: Test PATCH rejection on deadline entry (Phase 4 - Protection)
+    # -------------------------------------------------------------------------
+
+    def test_patch_deadline_entry_returns_403(
+        self, test_client, deadline_category
+    ):
+        """Test that PATCH on deadline entry returns 403 Forbidden."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Protected Deadline Series",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-07-01", "2027-07-02"],
+                "deadline_date": "2027-07-15",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Find deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+        deadline_guid = deadline_entries[0]["guid"]
+        series_guid = deadline_entries[0]["series_guid"]
+
+        # Try to PATCH the deadline entry
+        update_response = test_client.patch(
+            f"/api/events/{deadline_guid}",
+            json={"title": "Modified Deadline"},
+        )
+
+        # Should return 403 Forbidden
+        assert update_response.status_code == 403
+        detail = update_response.json()["detail"]
+        assert "Cannot modify deadline entry" in detail["message"]
+        assert detail["series_guid"] == series_guid
+
+    def test_patch_standalone_deadline_entry_returns_403(
+        self, test_client, deadline_category
+    ):
+        """Test that PATCH on standalone event deadline entry returns 403."""
+        # Create standalone event with deadline
+        create_response = test_client.post(
+            "/api/events",
+            json={
+                "title": "Standalone with Protected Deadline",
+                "category_guid": deadline_category.guid,
+                "event_date": "2027-08-01",
+                "deadline_date": "2027-08-15",
+            },
+        )
+        assert create_response.status_code == 201
+        event = create_response.json()
+        parent_event_guid = event["guid"]
+
+        # Find deadline entry
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2027-08-01",
+                "end_date": "2027-08-31",
+            },
+        )
+        events = list_response.json()
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+        deadline_guid = deadline_entries[0]["guid"]
+
+        # Try to PATCH the deadline entry
+        update_response = test_client.patch(
+            f"/api/events/{deadline_guid}",
+            json={"title": "Modified Standalone Deadline"},
+        )
+
+        # Should return 403 Forbidden
+        assert update_response.status_code == 403
+        detail = update_response.json()["detail"]
+        assert "Cannot modify deadline entry" in detail["message"]
+        assert detail["parent_event_guid"] == parent_event_guid
+
+    # -------------------------------------------------------------------------
+    # T031: Test DELETE rejection on deadline entry (Phase 4 - Protection)
+    # -------------------------------------------------------------------------
+
+    def test_delete_deadline_entry_returns_403(
+        self, test_client, deadline_category
+    ):
+        """Test that DELETE on deadline entry returns 403 Forbidden."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Delete Protected Series",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-09-01", "2027-09-02"],
+                "deadline_date": "2027-09-15",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Find deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+        deadline_guid = deadline_entries[0]["guid"]
+        series_guid = deadline_entries[0]["series_guid"]
+
+        # Try to DELETE the deadline entry
+        delete_response = test_client.delete(f"/api/events/{deadline_guid}")
+
+        # Should return 403 Forbidden
+        assert delete_response.status_code == 403
+        detail = delete_response.json()["detail"]
+        assert "Cannot modify deadline entry" in detail["message"]
+        assert detail["series_guid"] == series_guid
+
+    def test_delete_standalone_deadline_entry_returns_403(
+        self, test_client, deadline_category
+    ):
+        """Test that DELETE on standalone event deadline entry returns 403."""
+        # Create standalone event with deadline
+        create_response = test_client.post(
+            "/api/events",
+            json={
+                "title": "Standalone Delete Protected",
+                "category_guid": deadline_category.guid,
+                "event_date": "2027-10-01",
+                "deadline_date": "2027-10-15",
+            },
+        )
+        assert create_response.status_code == 201
+        event = create_response.json()
+        parent_event_guid = event["guid"]
+
+        # Find deadline entry
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2027-10-01",
+                "end_date": "2027-10-31",
+            },
+        )
+        events = list_response.json()
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+        deadline_guid = deadline_entries[0]["guid"]
+
+        # Try to DELETE the deadline entry
+        delete_response = test_client.delete(f"/api/events/{deadline_guid}")
+
+        # Should return 403 Forbidden
+        assert delete_response.status_code == 403
+        detail = delete_response.json()["detail"]
+        assert "Cannot modify deadline entry" in detail["message"]
+        assert detail["parent_event_guid"] == parent_event_guid
+
+    # -------------------------------------------------------------------------
+    # T039: Test GET /api/events includes deadline entries (Phase 5 - Visibility)
+    # -------------------------------------------------------------------------
+
+    def test_list_events_includes_deadlines_by_default(
+        self, test_client, deadline_category
+    ):
+        """Test that GET /api/events includes deadline entries by default."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Visibility Test Series",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-11-01", "2027-11-02"],
+                "deadline_date": "2027-11-15",
+            },
+        )
+        assert create_response.status_code == 201
+
+        # List events without specifying include_deadlines (should default to true)
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2027-11-01",
+                "end_date": "2027-11-30",
+            },
+        )
+        assert list_response.status_code == 200
+        events = list_response.json()
+
+        # Should include deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+
+        # Should also include regular events
+        regular_events = [e for e in events if e.get("is_deadline") is not True]
+        assert len(regular_events) == 2
+
+    def test_list_events_exclude_deadlines_parameter(
+        self, test_client, deadline_category
+    ):
+        """Test that include_deadlines=false excludes deadline entries."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Exclude Deadlines Test",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2027-12-01", "2027-12-02"],
+                "deadline_date": "2027-12-15",
+            },
+        )
+        assert create_response.status_code == 201
+
+        # List events with include_deadlines=false
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2027-12-01",
+                "end_date": "2027-12-31",
+                "include_deadlines": False,
+            },
+        )
+        assert list_response.status_code == 200
+        events = list_response.json()
+
+        # Should NOT include deadline entries
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 0
+
+        # Should still include regular events
+        assert len(events) == 2
+        for event in events:
+            assert event["is_deadline"] is False
+
+    def test_list_events_include_deadlines_true(
+        self, test_client, deadline_category
+    ):
+        """Test that include_deadlines=true explicitly includes deadline entries."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Include Deadlines True Test",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2028-01-01", "2028-01-02"],
+                "deadline_date": "2028-01-15",
+            },
+        )
+        assert create_response.status_code == 201
+
+        # List events with include_deadlines=true
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2028-01-01",
+                "end_date": "2028-01-31",
+                "include_deadlines": True,
+            },
+        )
+        assert list_response.status_code == 200
+        events = list_response.json()
+
+        # Should include deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+
+        # Total should be 3 (2 regular + 1 deadline)
+        assert len(events) == 3
+
+    # -------------------------------------------------------------------------
+    # T040: Test GET /api/events/{guid} on deadline entry shows series reference
+    # -------------------------------------------------------------------------
+
+    def test_get_deadline_entry_shows_series_reference(
+        self, test_client, deadline_category
+    ):
+        """Test that GET /api/events/{guid} on deadline entry shows series_guid."""
+        # Create series with deadline
+        create_response = test_client.post(
+            "/api/events/series",
+            json={
+                "title": "Series Reference Test",
+                "category_guid": deadline_category.guid,
+                "event_dates": ["2028-02-01", "2028-02-02"],
+                "deadline_date": "2028-02-15",
+            },
+        )
+        assert create_response.status_code == 201
+        events = create_response.json()
+
+        # Get series GUID from first regular event
+        regular_events = [e for e in events if e.get("is_deadline") is not True]
+        series_guid = regular_events[0]["series_guid"]
+
+        # Find deadline entry
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+        deadline_guid = deadline_entries[0]["guid"]
+
+        # Get deadline entry details
+        detail_response = test_client.get(f"/api/events/{deadline_guid}")
+        assert detail_response.status_code == 200
+        detail = detail_response.json()
+
+        # Verify series reference is present
+        assert detail["is_deadline"] is True
+        assert detail["series_guid"] == series_guid
+        assert detail["title"] == "Series Reference Test - Deadline"
+
+    def test_get_standalone_deadline_entry_shows_no_series(
+        self, test_client, deadline_category
+    ):
+        """Test that GET on standalone deadline entry has no series_guid."""
+        # Create standalone event with deadline
+        create_response = test_client.post(
+            "/api/events",
+            json={
+                "title": "Standalone Series Ref Test",
+                "category_guid": deadline_category.guid,
+                "event_date": "2028-03-01",
+                "deadline_date": "2028-03-15",
+            },
+        )
+        assert create_response.status_code == 201
+
+        # Find deadline entry
+        list_response = test_client.get(
+            "/api/events",
+            params={
+                "start_date": "2028-03-01",
+                "end_date": "2028-03-31",
+            },
+        )
+        events = list_response.json()
+        deadline_entries = [e for e in events if e.get("is_deadline") is True]
+        assert len(deadline_entries) == 1
+        deadline_guid = deadline_entries[0]["guid"]
+
+        # Get deadline entry details
+        detail_response = test_client.get(f"/api/events/{deadline_guid}")
+        assert detail_response.status_code == 200
+        detail = detail_response.json()
+
+        # Verify no series reference (standalone event deadline)
+        assert detail["is_deadline"] is True
+        assert detail["series_guid"] is None
+        assert detail["title"] == "Standalone Series Ref Test - Deadline"

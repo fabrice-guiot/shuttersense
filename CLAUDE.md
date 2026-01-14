@@ -27,6 +27,7 @@ Photo Administration toolbox - A comprehensive solution for analyzing, managing,
 - Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (011-calendar-events)
 - TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons (016-mobile-calendar-view)
 - N/A (frontend-only feature, uses existing event data from backend) (016-mobile-calendar-view)
+- Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React icons (018-event-deadline-calendar)
 
 ### Core Stack
 - **Python 3.10+** - Backend and CLI tools (required for match/case syntax)
@@ -428,9 +429,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 018-event-deadline-calendar: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React icons
 - 016-mobile-calendar-view: Added TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons
 - 015-page-layout-cleanup: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-- 011-calendar-events: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 

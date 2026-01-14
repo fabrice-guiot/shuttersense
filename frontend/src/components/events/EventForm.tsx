@@ -165,6 +165,7 @@ export const EventForm = ({
     travel_status: null,
     travel_booking_date: null,
     deadline_date: null,
+    deadline_time: null,
   })
 
   // Initialize form
@@ -251,6 +252,7 @@ export const EventForm = ({
         })
       }
       // Set logistics data from event
+      // deadline_date and deadline_time are synced from series to all events
       setLogistics({
         ticket_required: event.ticket_required,
         ticket_status: event.ticket_status,
@@ -262,6 +264,7 @@ export const EventForm = ({
         travel_status: event.travel_status,
         travel_booking_date: event.travel_booking_date,
         deadline_date: event.deadline_date,
+        deadline_time: event.deadline_time,
       })
     }
   }, [event, form])
@@ -325,6 +328,8 @@ export const EventForm = ({
         ticket_required: logistics.ticket_required ?? false,
         timeoff_required: logistics.timeoff_required ?? false,
         travel_required: logistics.travel_required ?? false,
+        deadline_date: logistics.deadline_date || undefined,
+        deadline_time: logistics.deadline_time || undefined,
         status: values.status,
         attendance: values.attendance,
       }
@@ -358,6 +363,7 @@ export const EventForm = ({
         travel_status: logistics.travel_status,
         travel_booking_date: logistics.travel_booking_date,
         deadline_date: logistics.deadline_date,
+        deadline_time: logistics.deadline_time,
       }
 
       await onSubmit(data)
@@ -764,11 +770,24 @@ export const EventForm = ({
           <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             Workflow Deadline
           </label>
-          <DatePicker
-            value={logistics.deadline_date ?? ''}
-            onChange={(date) => setLogistics({ ...logistics, deadline_date: date || null })}
-            placeholder="Select deadline date"
-          />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <DatePicker
+                value={logistics.deadline_date ?? ''}
+                onChange={(date) => setLogistics({ ...logistics, deadline_date: date || null, deadline_time: date ? logistics.deadline_time : null })}
+                placeholder="Select deadline date"
+                clearable
+              />
+            </div>
+            <div className="w-24">
+              <Input
+                type="time"
+                value={logistics.deadline_time ?? ''}
+                onChange={(e) => setLogistics({ ...logistics, deadline_time: e.target.value || null })}
+                placeholder="Time"
+              />
+            </div>
+          </div>
           <p className="text-[0.8rem] text-muted-foreground">
             Complete images processing by this date
           </p>

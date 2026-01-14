@@ -15,7 +15,7 @@ Design Rationale:
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, Text,
+    Column, Integer, String, Boolean, DateTime, Date, Time, Text,
     ForeignKey
 )
 from sqlalchemy.orm import relationship
@@ -44,6 +44,8 @@ class EventSeries(Base, GuidMixin):
         ticket_required: Default ticket requirement
         timeoff_required: Default time-off requirement
         travel_required: Default travel requirement
+        deadline_date: Series-level deadline date for deliverables
+        deadline_time: Optional deadline time (e.g., 11:59 PM for competitions)
         total_events: Number of events in series
         created_at: Creation timestamp
         updated_at: Last update timestamp
@@ -104,6 +106,10 @@ class EventSeries(Base, GuidMixin):
     ticket_required = Column(Boolean, default=False, nullable=False)
     timeoff_required = Column(Boolean, default=False, nullable=False)
     travel_required = Column(Boolean, default=False, nullable=False)
+
+    # Deadline for deliverables (triggers creation of deadline entry event)
+    deadline_date = Column(Date, nullable=True)
+    deadline_time = Column(Time, nullable=True)
 
     # Series metadata
     total_events = Column(Integer, nullable=False)

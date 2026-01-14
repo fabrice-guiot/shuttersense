@@ -90,6 +90,7 @@ export interface LogisticsData {
   travel_status: TravelStatus | null
   travel_booking_date: string | null
   deadline_date: string | null
+  deadline_time: string | null
 }
 
 export interface LogisticsSectionProps {
