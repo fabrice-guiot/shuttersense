@@ -722,25 +722,44 @@ Day 2, 2:00 PM:
 
 **Job Status State Machine:**
 ```
-                                                  ┌──────────────────────────────────┐
-                                                  │                                  │
-SCHEDULED ──(agent claims when time passes)───────┼──> ASSIGNED ──(starts)──> RUNNING
-    │                                             │        │                      │
-    │ (cancelled/TTL change)                      │        │ (agent offline)      │ (success)
-    ▼                                             │        ▼                      ▼
-CANCELLED                                         │    PENDING (released)     COMPLETED ──┐
-                                                  │                               │        │
-                              ▲                   │        ▲                      │(fail)  │
-                              │                   │        │                      ▼        │
-PENDING ──(agent claims)──────┘                   │        └──(retry)─────────FAILED       │
-    │                                             │                                        │
-    │ (cancelled)                                 └────────────────────────────────────────┤
-    ▼                                                                                      │
-CANCELLED                         ┌────────────────────────────────────────────────────────┘
-                                  │ (if collection.auto_refresh && TTL > 0)
-                                  ▼
-                           Create new SCHEDULED job
-                           (scheduled_for = completed_at + TTL)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            CLAIMABLE JOBS                                   │
+│  ┌───────────┐                              ┌───────────┐                   │
+│  │ SCHEDULED │ (scheduled_for <= NOW())     │  PENDING  │ (immediate)       │
+│  └─────┬─────┘                              └─────┬─────┘                   │
+│        │                                          │                         │
+│        │ (cancelled)                              │ (cancelled)             │
+│        ▼                                          ▼                         │
+│   CANCELLED                                  CANCELLED                      │
+└────────┼──────────────────────────────────────────┼─────────────────────────┘
+         │                                          │
+         │         ┌────────────────────────────────┘
+         │         │
+         ▼         ▼
+       ┌─────────────┐
+       │  ASSIGNED   │◄──────────────────────────────────────┐
+       └──────┬──────┘                                       │
+              │                                              │
+              │ (execution starts)                           │ (agent offline)
+              ▼                                              │
+       ┌─────────────┐                                       │
+       │   RUNNING   │───────────────────────────────────────┘
+       └──────┬──────┘
+              │
+     ┌────────┴────────┐
+     │                 │
+     ▼                 ▼
+┌─────────┐      ┌──────────┐
+│ FAILED  │      │COMPLETED │
+└────┬────┘      └────┬─────┘
+     │                │
+     │ (retry)        │ (if auto_refresh && TTL > 0)
+     │                ▼
+     │         Create new SCHEDULED job
+     │         (scheduled_for = completed_at + TTL)
+     │
+     ▼
+  PENDING (re-queued for retry)
 ```
 
 **Key Insight: No Background Task Needed**
