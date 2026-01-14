@@ -3,6 +3,7 @@
  *
  * Month grid calendar view for displaying events
  * Issue #39 - Calendar Events feature (Phase 4)
+ * Issue #69 - Mobile Calendar View (016-mobile-calendar-view)
  *
  * Accessibility (Phase 13):
  * - Keyboard navigation: Arrow keys to navigate dates
@@ -14,14 +15,71 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/useMediaQuery'
 import { EventCard } from './EventCard'
+import { CompactCalendarCell } from './CompactCalendarCell'
 import type { Event } from '@/contracts/api/event-api'
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Maximum category badges to show in compact mode before overflow */
+const MAX_VISIBLE_BADGES = 4
 
 // ============================================================================
 // Calendar Utilities
 // ============================================================================
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+// ============================================================================
+// Category Badge Data (for compact mobile view)
+// ============================================================================
+
+export interface CategoryBadgeData {
+  /** Category GUID (e.g., "cat_01hgw2bbg...") */
+  categoryGuid: string
+  /** Category display name */
+  name: string
+  /** Lucide icon name from ICON_MAP */
+  icon: string | null
+  /** Category color (hex format, e.g., "#3b82f6") */
+  color: string | null
+  /** Number of events in this category for the day */
+  count: number
+}
+
+/**
+ * Groups events by category and returns badge data.
+ * Used for compact mobile calendar view.
+ *
+ * @param events - Events for a single day
+ * @returns Array of CategoryBadgeData sorted by count (descending)
+ */
+export function groupEventsByCategory(events: Event[]): CategoryBadgeData[] {
+  const grouped = new Map<string, CategoryBadgeData>()
+
+  events.forEach((event) => {
+    const key = event.category?.guid || 'uncategorized'
+    const existing = grouped.get(key)
+
+    if (existing) {
+      existing.count++
+    } else {
+      grouped.set(key, {
+        categoryGuid: key,
+        name: event.category?.name || 'Uncategorized',
+        icon: event.category?.icon || null,
+        color: event.category?.color || null,
+        count: 1,
+      })
+    }
+  })
+
+  // Sort by count descending (most events first)
+  return Array.from(grouped.values()).sort((a, b) => b.count - a.count)
+}
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -137,12 +195,26 @@ const CalendarHeader = ({
   onNextMonth,
   onToday
 }: CalendarHeaderProps) => {
+  // Touch target classes: 44x44px on mobile (WCAG minimum), 40x40px on desktop
+  const touchTargetClasses = 'h-11 w-11 sm:h-10 sm:w-10'
+
   return (
     <div className="flex items-center justify-between mb-4">
-      <h2 className="text-xl font-semibold">
+      {/* Month/year title - responsive sizing for mobile readability */}
+      <h2 className="text-lg sm:text-xl font-semibold">
         {MONTH_NAMES[month - 1]} {year}
       </h2>
       <div className="flex items-center gap-1">
+        {/* Today button - icon only on mobile, with text on desktop */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={onToday}
+          aria-label="Go to today"
+          className={cn('sm:hidden', touchTargetClasses)}
+        >
+          <CalendarIcon className="h-4 w-4" />
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -157,6 +229,7 @@ const CalendarHeader = ({
           size="icon"
           onClick={onPreviousMonth}
           aria-label="Previous month"
+          className={touchTargetClasses}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -165,6 +238,7 @@ const CalendarHeader = ({
           size="icon"
           onClick={onNextMonth}
           aria-label="Next month"
+          className={touchTargetClasses}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -230,7 +304,7 @@ const CalendarCell = ({
       onFocus={onFocus}
       onKeyDown={onKeyDown}
       className={cn(
-        'min-h-[100px] p-1 border-b border-r border-border',
+        'min-h-[48px] sm:min-h-[100px] p-1 border-b border-r border-border',
         'flex flex-col',
         'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset',
         !day.isCurrentMonth && 'bg-muted/30'
@@ -308,6 +382,9 @@ export const EventCalendar = ({
   onDayClick,
   className
 }: EventCalendarProps) => {
+  // Detect mobile viewport for compact view
+  const isMobile = useIsMobile()
+
   // Generate calendar days with events
   const calendarDays = useMemo(
     () => generateCalendarDays(year, month, events),
@@ -385,7 +462,7 @@ export const EventCalendar = ({
   }, [year, month])
 
   return (
-    <div className={cn('flex flex-col', className)}>
+    <div className={cn('relative flex flex-col', className)}>
       {/* Header with navigation */}
       <CalendarHeader
         year={year}
@@ -423,18 +500,47 @@ export const EventCalendar = ({
             loading && 'opacity-50 pointer-events-none'
           )}
         >
-          {calendarDays.map((day, index) => (
-            <CalendarCell
-              key={day.dateString}
-              day={day}
-              onEventClick={onEventClick}
-              onDayClick={onDayClick}
-              isFocused={focusedIndex === index}
-              onFocus={() => setFocusedIndex(index)}
-              tabIndex={focusedIndex === null ? (index === getInitialFocusIndex() ? 0 : -1) : (focusedIndex === index ? 0 : -1)}
-              onKeyDown={(e) => handleKeyDown(e, index)}
-            />
-          ))}
+          {calendarDays.map((day, index) => {
+            // Calculate common props
+            const commonProps = {
+              isFocused: focusedIndex === index,
+              onFocus: () => setFocusedIndex(index),
+              tabIndex: focusedIndex === null
+                ? (index === getInitialFocusIndex() ? 0 : -1)
+                : (focusedIndex === index ? 0 : -1),
+              onKeyDown: (e: React.KeyboardEvent) => handleKeyDown(e, index),
+            }
+
+            // Render compact cell for mobile, standard cell for desktop
+            if (isMobile) {
+              const badges = groupEventsByCategory(day.events)
+              return (
+                <CompactCalendarCell
+                  key={day.dateString}
+                  date={day.date}
+                  dayNumber={day.date.getDate()}
+                  isCurrentMonth={day.isCurrentMonth}
+                  isToday={day.isToday}
+                  badges={badges.slice(0, MAX_VISIBLE_BADGES)}
+                  overflowCount={Math.max(0, badges.length - MAX_VISIBLE_BADGES)}
+                  totalEventCount={day.events.length}
+                  onClick={(date) => onDayClick?.(date)}
+                  {...commonProps}
+                />
+              )
+            }
+
+            // Standard desktop cell
+            return (
+              <CalendarCell
+                key={day.dateString}
+                day={day}
+                onEventClick={onEventClick}
+                onDayClick={onDayClick}
+                {...commonProps}
+              />
+            )
+          })}
         </div>
       </div>
 

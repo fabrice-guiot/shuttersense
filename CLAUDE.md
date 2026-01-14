@@ -25,6 +25,8 @@ Photo Administration toolbox - A comprehensive solution for analyzing, managing,
 - TypeScript 5.9.3 + React 18.3.1, Vite 6.0.5, native browser Intl APIs (no external date libraries) (010-user-timezone-display)
 - N/A (frontend-only feature, backend continues storing UTC timestamps) (010-user-timezone-display)
 - Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (011-calendar-events)
+- TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons (016-mobile-calendar-view)
+- N/A (frontend-only feature, uses existing event data from backend) (016-mobile-calendar-view)
 
 ### Core Stack
 - **Python 3.10+** - Backend and CLI tools (required for match/case syntax)
@@ -426,9 +428,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 016-mobile-calendar-view: Added TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons
 - 015-page-layout-cleanup: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 011-calendar-events: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
-- 010-user-timezone-display: Added TypeScript 5.9.3 + React 18.3.1, Vite 6.0.5, native browser Intl APIs (no external date libraries)
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 
