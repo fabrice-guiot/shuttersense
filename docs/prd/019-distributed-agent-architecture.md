@@ -538,6 +538,59 @@ Capabilities:
 
 ---
 
+### User Story 7a: Automatic Collection Refresh Scheduling (Priority: P2)
+
+**As** a team administrator
+**I want to** have collection analysis automatically re-run based on TTL
+**So that** KPIs stay fresh without manual intervention
+
+**Acceptance Criteria:**
+- Collections have a configurable refresh interval (TTL)
+- When a job completes, the next scheduled job is automatically created
+- Scheduled jobs appear in the queue with a "scheduled for" timestamp
+- Agents only claim jobs when their scheduled time has passed
+- UI shows upcoming scheduled jobs separately from ready-to-run jobs
+- Users can manually trigger a refresh (creates immediate job, reschedules next)
+- Changing TTL updates the next scheduled job's target time
+- Deleting a collection cancels any scheduled jobs
+
+**Example Workflow:**
+```
+Collection: "Wedding Photos" (TTL: 24 hours)
+
+Day 1, 10:00 AM:
+  └─ User creates collection
+  └─ System creates Job A (immediate, scheduled_for=NULL)
+  └─ Agent claims and executes Job A
+  └─ Job A completes at 10:05 AM
+  └─ System creates Job B (scheduled_for=Day 2, 10:05 AM)
+
+Day 2, 10:05 AM:
+  └─ Job B transitions: SCHEDULED → PENDING
+  └─ Agent claims and executes Job B
+  └─ Job B completes at 10:08 AM
+  └─ System creates Job C (scheduled_for=Day 3, 10:08 AM)
+
+Day 2, 2:00 PM:
+  └─ User manually triggers refresh
+  └─ System cancels Job C (scheduled)
+  └─ System creates Job D (immediate)
+  └─ Agent executes Job D
+  └─ Job D completes at 2:03 PM
+  └─ System creates Job E (scheduled_for=Day 3, 2:03 PM)
+```
+
+**Technical Notes:**
+- Job model: `scheduled_for` (DateTime, nullable) - NULL means immediate
+- Job status: Add `SCHEDULED` status (before `PENDING`)
+- Unique constraint: Only one SCHEDULED job per (collection_id, tool)
+- Background task: Transition SCHEDULED → PENDING when `scheduled_for <= NOW()`
+- Alternative: Filter in claim query (no status transition needed)
+- Job completion atomically creates next scheduled job (single transaction)
+- Collection deletion cascades to cancel scheduled jobs
+
+---
+
 ### User Story 8: Offline Agent Operation (Priority: P3)
 
 **As** a photographer working in the field
@@ -659,31 +712,70 @@ Capabilities:
 | `retry_count` | Integer | not null, default=0 | Number of retry attempts |
 | `max_retries` | Integer | not null, default=3 | Maximum retry attempts |
 | `priority` | Integer | not null, default=0 | Higher = more urgent |
+| `scheduled_for` | DateTime | nullable | Earliest execution time (NULL=immediate) |
+| `parent_job_id` | Integer | FK(jobs.id), nullable | Previous job in refresh chain |
 | `created_at` | DateTime | not null | Creation timestamp |
 | `updated_at` | DateTime | not null, auto-update | Last modification |
 
+**Indexes:**
+- Unique partial index: `(collection_id, tool) WHERE status = 'SCHEDULED'` - ensures only one scheduled job per collection/tool
+
 **Job Status State Machine:**
 ```
-PENDING ──(agent claims)──> ASSIGNED ──(execution starts)──> RUNNING
-    │                           │                               │
-    │ (cancelled)               │ (agent offline)               │ (success)
-    ▼                           ▼                               ▼
-CANCELLED                   PENDING (released)              COMPLETED
-                                                                │
-                               ▲                                │ (failure)
-                               │                                ▼
-                               └────(retry)─────────────────FAILED
+                                    ┌─────────────────────────────────────────┐
+                                    │                                         │
+SCHEDULED ──(time arrives)──> PENDING ──(agent claims)──> ASSIGNED ──(starts)──> RUNNING
+    │                           │                           │                      │
+    │ (cancelled/TTL change)    │ (cancelled)               │ (agent offline)      │ (success)
+    ▼                           ▼                           ▼                      ▼
+CANCELLED                   CANCELLED                   PENDING (released)     COMPLETED ──┐
+                                                                                   │        │
+                                                            ▲                      │(fail)  │
+                                                            │                      ▼        │
+                                                            └──(retry)─────────FAILED       │
+                                                                                            │
+                     ┌──────────────────────────────────────────────────────────────────────┘
+                     │ (if collection.auto_refresh && TTL > 0)
+                     ▼
+              Create new SCHEDULED job
+              (scheduled_for = completed_at + TTL)
 ```
 
-**Job Routing Logic:**
+**Status Definitions:**
+| Status | Description |
+|--------|-------------|
+| `SCHEDULED` | Job exists but waiting for `scheduled_for` time to arrive |
+| `PENDING` | Ready for agent to claim (immediate or scheduled time passed) |
+| `ASSIGNED` | Claimed by agent, not yet started |
+| `RUNNING` | Agent is actively executing |
+| `COMPLETED` | Successfully finished |
+| `FAILED` | Execution failed (may retry) |
+| `CANCELLED` | Cancelled by user or system |
+
+**Job Creation Logic:**
 ```python
-def create_job(collection: Collection, tool: str) -> Job:
-    """Create job with appropriate routing constraints."""
+def create_job(
+    collection: Collection,
+    tool: str,
+    scheduled_for: datetime | None = None,
+    parent_job_id: int | None = None
+) -> Job:
+    """Create job with appropriate routing constraints and scheduling."""
+
+    # Determine initial status based on scheduling
+    if scheduled_for and scheduled_for > datetime.utcnow():
+        status = JobStatus.SCHEDULED
+    else:
+        status = JobStatus.PENDING
+        scheduled_for = None  # Normalize: immediate jobs have NULL scheduled_for
+
     job = Job(
         team_id=collection.team_id,
         collection_id=collection.id,
         tool=tool,
-        status=JobStatus.PENDING
+        status=status,
+        scheduled_for=scheduled_for,
+        parent_job_id=parent_job_id
     )
 
     # LOCAL collections: explicit agent binding (NOT capability-based)
@@ -708,16 +800,41 @@ def resolve_connector_capabilities(collection: Collection) -> list[str]:
     return caps
 ```
 
+**Scheduled Job Activation (Background Task):**
+```python
+async def activate_scheduled_jobs():
+    """Transition SCHEDULED jobs to PENDING when their time arrives.
+
+    Run periodically (every 30-60 seconds) or integrate into claim query.
+    """
+    now = datetime.utcnow()
+
+    # Find all SCHEDULED jobs whose time has arrived
+    jobs = db.query(Job).filter(
+        Job.status == JobStatus.SCHEDULED,
+        Job.scheduled_for <= now
+    ).with_for_update(skip_locked=True).all()
+
+    for job in jobs:
+        job.status = JobStatus.PENDING
+        job.scheduled_for = None  # Clear to indicate "ready now"
+        logger.info(f"Activated scheduled job {job.guid} for collection {job.collection_id}")
+
+    db.commit()
+```
+
 **Job Claim Logic:**
 ```python
 def claim_job(agent: Agent) -> Job | None:
     """Find and assign a job this agent can execute."""
 
+    # Only claim PENDING jobs (not SCHEDULED - those aren't ready yet)
     # Priority 1: Jobs explicitly bound to this agent
     job = db.query(Job).filter(
         Job.status == JobStatus.PENDING,
         Job.team_id == agent.team_id,
         Job.bound_agent_id == agent.id
+    ).order_by(Job.priority.desc(), Job.created_at.asc()
     ).with_for_update(skip_locked=True).first()
 
     if job:
@@ -729,12 +846,57 @@ def claim_job(agent: Agent) -> Job | None:
         Job.team_id == agent.team_id,
         Job.bound_agent_id.is_(None),
         Job.required_capabilities_json.contained_by(agent.capabilities_json)
+    ).order_by(Job.priority.desc(), Job.created_at.asc()
     ).with_for_update(skip_locked=True).first()
 
     if job:
         return assign_job(job, agent)
 
     return None
+```
+
+**Job Completion with Auto-Scheduling:**
+```python
+def complete_job(job: Job, status: JobStatus, result: AnalysisResult | None) -> None:
+    """Complete job and optionally schedule next refresh."""
+    job.status = status
+    job.completed_at = datetime.utcnow()
+
+    if result:
+        job.result_id = result.id
+
+    # Auto-schedule next job if collection has TTL configured
+    if status == JobStatus.COMPLETED:
+        collection = job.collection
+        if collection.auto_refresh and collection.refresh_interval_hours:
+            # Calculate next scheduled time
+            next_run = job.completed_at + timedelta(hours=collection.refresh_interval_hours)
+
+            # Cancel any existing scheduled job for this collection/tool
+            existing = db.query(Job).filter(
+                Job.collection_id == job.collection_id,
+                Job.tool == job.tool,
+                Job.status == JobStatus.SCHEDULED
+            ).first()
+
+            if existing:
+                existing.status = JobStatus.CANCELLED
+
+            # Create next scheduled job
+            next_job = create_job(
+                collection=collection,
+                tool=job.tool,
+                scheduled_for=next_run,
+                parent_job_id=job.id
+            )
+            db.add(next_job)
+
+            logger.info(
+                f"Scheduled next {job.tool} job for collection {collection.guid} "
+                f"at {next_run.isoformat()}"
+            )
+
+    db.commit()
 ```
 
 ---
@@ -784,6 +946,10 @@ def claim_job(agent: Agent) -> Job | None:
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
 | `bound_agent_id` | Integer | FK(agents.id), nullable | Agent bound to LOCAL collections |
+| `auto_refresh` | Boolean | not null, default=true | Enable automatic refresh scheduling |
+| `refresh_interval_hours` | Integer | nullable | Hours between automatic refreshes (TTL) |
+| `last_refresh_at` | DateTime | nullable | Timestamp of last completed refresh |
+| `next_refresh_at` | DateTime | nullable | Computed: next scheduled refresh time |
 
 **Binding Rules:**
 
@@ -794,11 +960,26 @@ def claim_job(agent: Agent) -> Job | None:
 | `GCS` | NULL | Any agent with connector capability |
 | `SMB` | NULL (usually) | Any agent with connector capability |
 
+**Auto-Refresh Configuration:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `auto_refresh` | true | Whether to auto-schedule next job on completion |
+| `refresh_interval_hours` | 24 | Time between refreshes (NULL = no auto-refresh) |
+
+**Common TTL Values:**
+- Real-time monitoring: 1 hour
+- Daily reports: 24 hours
+- Weekly summaries: 168 hours (7 days)
+- Archive collections: NULL (manual only)
+
 **Design Notes:**
 - `bound_agent_id` is **required** for LOCAL collections, **optional** for others
 - SMB collections may optionally bind to specific agent (network locality)
 - UI enforces: LOCAL collection form requires agent selection
 - Deleting an agent with bound collections requires migration or fails
+- `next_refresh_at` is denormalized for efficient dashboard queries
+- Collection deletion cascades to cancel any SCHEDULED jobs
 
 **Validation Rules:**
 ```python
@@ -810,6 +991,13 @@ def validate_collection(collection: CollectionCreate) -> None:
     if collection.type in (CollectionType.S3, CollectionType.GCS):
         if not collection.connector_id:
             raise ValidationError("Remote collections require a connector")
+
+def on_collection_delete(collection: Collection) -> None:
+    """Cancel scheduled jobs when collection is deleted."""
+    db.query(Job).filter(
+        Job.collection_id == collection.id,
+        Job.status == JobStatus.SCHEDULED
+    ).update({Job.status: JobStatus.CANCELLED})
 ```
 
 ---
@@ -1698,6 +1886,21 @@ class JobCoordinatorService:
 - **FR-450.3**: Agent heartbeat includes current capabilities
 - **FR-450.4**: Server tracks which agents can execute which tools
 - **FR-450.5**: (Future) Agent detects and reports external tool availability
+
+#### FR-460: Scheduled Job Execution
+
+- **FR-460.1**: Jobs support `scheduled_for` field (DateTime, nullable)
+- **FR-460.2**: Jobs with future `scheduled_for` have status `SCHEDULED`
+- **FR-460.3**: Background task transitions SCHEDULED → PENDING when time arrives
+- **FR-460.4**: Agents only claim PENDING jobs (not SCHEDULED)
+- **FR-460.5**: Unique constraint ensures one SCHEDULED job per (collection, tool)
+- **FR-460.6**: Job completion auto-creates next SCHEDULED job if TTL configured
+- **FR-460.7**: Next scheduled time = completion time + collection TTL
+- **FR-460.8**: Manual refresh cancels existing SCHEDULED job, runs immediately
+- **FR-460.9**: Collection TTL change updates existing SCHEDULED job's time
+- **FR-460.10**: Collection deletion cascades to cancel SCHEDULED jobs
+- **FR-460.11**: UI displays scheduled jobs with countdown to execution
+- **FR-460.12**: Job history links via `parent_job_id` for refresh chain visibility
 
 #### FR-500: Real-Time Progress Streaming
 
