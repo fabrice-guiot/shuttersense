@@ -22,10 +22,13 @@ This PRD defines the architecture for distributed Agents in photo-admin, enablin
 ### Key Design Decisions
 
 1. **Pull-Based Job Assignment**: Agents poll for work (not pushed), enabling NAT traversal and firewall-friendly operation
-2. **Capability-Based Routing**: Jobs are matched to agents based on declared capabilities (access to specific connectors, tools, resources)
-3. **Credential Locality**: Connector credentials can remain encrypted on the agent's host, never transmitted to the central server
-4. **Eventual Consistency**: Results are stored centrally for reporting, but agents can operate offline and sync when connected
-5. **Team-Scoped Agents**: Each agent belongs to exactly one team; agents cannot access other teams' data or jobs
+2. **Explicit Agent Binding for Local Collections**: Local collections are bound to a specific agent at creation time (not capability-based), because the same path may exist on multiple agents with different content
+3. **Capability-Based Routing for Connectors**: Jobs for remote storage are matched to agents that have verified access to the connector (via connection testing)
+4. **Three Credential Modes**: Connectors support `SERVER` (credentials on server), `AGENT` (credentials only on agent), or `PENDING` (no credentials yet, awaiting agent configuration)
+5. **Agent-Driven Capability Acquisition**: Agents discover and report their capabilities by testing connections and detecting installed tools
+6. **Credential Locality**: Connector credentials can remain encrypted on the agent's host, never transmitted to the central server
+7. **Eventual Consistency**: Results are stored centrally for reporting, but agents can operate offline and sync when connected
+8. **Team-Scoped Agents**: Each agent belongs to exactly one team; agents cannot access other teams' data or jobs
 
 ---
 
@@ -112,8 +115,66 @@ The Agent architecture solves these by moving execution to user-controlled infra
 | **Capability** | A declared ability of an agent (connector access, tool support, etc.) |
 | **Heartbeat** | Periodic signal from agent to coordinator indicating availability |
 | **Claim** | An agent's request to take ownership of a job |
-| **Local Connector** | A connector whose credentials are stored only on the agent |
-| **Remote Connector** | A connector whose credentials are stored on the central server |
+| **Bound Agent** | The specific agent assigned to a local collection (explicit binding) |
+| **Server Connector** | A connector whose credentials are stored on the central server |
+| **Agent Connector** | A connector whose credentials are stored only on agent(s) |
+| **Pending Connector** | A connector created without credentials, awaiting agent configuration |
+
+### Collection Access Models
+
+Photo-admin supports two distinct access models for collections:
+
+**Model 1: Agent-Bound Local Collections**
+
+Local filesystem collections are explicitly bound to a single agent at creation time. This is necessary because:
+- The same path (e.g., `/home/user/Photos`) may exist on multiple agents
+- Each agent's path represents completely different photo content
+- There is no authentication mechanism to differentiate access
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Collection: "Wedding Photos 2026"                                   │
+│  type: LOCAL                                                         │
+│  location: /home/user/Photos/Wedding2026                             │
+│  bound_agent_id: agt_01hgw2bbg... ◄── EXPLICIT BINDING              │
+│                                                                      │
+│  Jobs for this collection can ONLY execute on Agent Alpha           │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────┐
+                    │      Agent Alpha          │
+                    │  /home/user/Photos/       │
+                    │    └── Wedding2026/       │
+                    │        ├── IMG_001.jpg    │
+                    │        └── IMG_002.jpg    │
+                    └───────────────────────────┘
+```
+
+**Model 2: Capability-Based Remote Collections**
+
+Connector-based collections (S3, GCS, SMB) use capability-based routing. Multiple agents may have access to the same connector, and jobs route to any capable agent:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Collection: "Cloud Archive"                                         │
+│  type: S3                                                            │
+│  connector_id: con_aws_prod                                          │
+│  bound_agent_id: NULL ◄── NO BINDING (capability-based)             │
+│                                                                      │
+│  Jobs route to ANY agent with capability "connector:con_aws_prod"   │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+        ┌─────────────────────┐        ┌─────────────────────┐
+        │   Agent Alpha       │        │   Agent Beta        │
+        │   has credentials   │        │   has credentials   │
+        │   for con_aws_prod  │        │   for con_aws_prod  │
+        │                     │        │                     │
+        │   ✅ Can execute    │        │   ✅ Can execute    │
+        └─────────────────────┘        └─────────────────────┘
+```
 
 ### Agent Execution Modes
 
@@ -131,29 +192,50 @@ The Agent architecture solves these by moving execution to user-controlled infra
 
 ### Job Assignment Model
 
+The coordinator uses two different assignment strategies based on collection type:
+
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          Coordinator (Server)                         │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                    Distributed Job Queue                       │   │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐              │   │
-│  │  │ Job A   │ │ Job B   │ │ Job C   │ │ Job D   │ ...          │   │
-│  │  │ caps:   │ │ caps:   │ │ caps:   │ │ caps:   │              │   │
-│  │  │ [local] │ │ [s3]    │ │ [smb]   │ │ [dxo]   │              │   │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘              │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                       │
-│  Job Matcher: Match job.required_capabilities ⊆ agent.capabilities   │
-└────────────────────────┬───────────────────────┬─────────────────────┘
-                         │                       │
-         ┌───────────────▼──────┐    ┌──────────▼───────────────┐
-         │     Agent Alpha      │    │      Agent Beta          │
-         │  hostname: workstation│    │  hostname: nas-server    │
-         │  caps: [local, smb]  │    │  caps: [local, smb, s3]  │
-         │  connectors:         │    │  connectors:              │
-         │    - con_abc (local) │    │    - con_xyz (local)     │
-         │    - con_def (smb)   │    │    - con_123 (s3)        │
-         └──────────────────────┘    └──────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          Coordinator (Server)                             │
+│                                                                           │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                    Distributed Job Queue                            │ │
+│  │                                                                      │ │
+│  │  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐       │ │
+│  │  │ Job A           │ │ Job B           │ │ Job C           │       │ │
+│  │  │ LOCAL collection│ │ S3 collection   │ │ SMB collection  │       │ │
+│  │  │ bound_agent:    │ │ bound_agent:    │ │ bound_agent:    │       │ │
+│  │  │   agt_alpha     │ │   NULL          │ │   NULL          │       │ │
+│  │  │ required_caps:  │ │ required_caps:  │ │ required_caps:  │       │ │
+│  │  │   [tool:*]      │ │   [con_s3_prod] │ │   [con_smb_nas] │       │ │
+│  │  └────────┬────────┘ └────────┬────────┘ └────────┬────────┘       │ │
+│  └───────────┼───────────────────┼───────────────────┼────────────────┘ │
+│              │                   │                   │                   │
+│  ┌───────────▼───────────────────▼───────────────────▼────────────────┐ │
+│  │                        Job Matcher Logic                            │ │
+│  │                                                                      │ │
+│  │  if job.bound_agent_id:                                             │ │
+│  │      → Route ONLY to bound agent (local collections)                │ │
+│  │  else:                                                               │ │
+│  │      → Route to ANY agent with matching capabilities (connectors)   │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────┘
+                    │                               │
+    ┌───────────────▼──────┐          ┌────────────▼─────────────┐
+    │     Agent Alpha      │          │      Agent Beta          │
+    │  hostname: workstation│          │  hostname: nas-server    │
+    │                       │          │                          │
+    │  Bound collections:   │          │  Bound collections:      │
+    │    - col_wedding (✓)  │          │    - col_archive (✓)     │
+    │                       │          │                          │
+    │  Connector access:    │          │  Connector access:       │
+    │    - con_s3_prod (✓)  │          │    - con_s3_prod (✓)     │
+    │    - con_smb_nas (✓)  │          │    - con_smb_nas (✓)     │
+    │                       │          │                          │
+    │  Job A → ✅ (bound)   │          │  Job A → ❌ (not bound)  │
+    │  Job B → ✅ (capable) │          │  Job B → ✅ (capable)    │
+    │  Job C → ✅ (capable) │          │  Job C → ✅ (capable)    │
+    └───────────────────────┘          └──────────────────────────┘
 ```
 
 ---
@@ -210,7 +292,7 @@ The Agent architecture solves these by moving execution to user-controlled infra
 
 ---
 
-### User Story 2: Local Collection Job Execution (Priority: P0 - Critical)
+### User Story 2: Local Collection with Agent Binding (Priority: P0 - Critical)
 
 **As** a photographer
 **I want to** analyze my local photo collection via an agent
@@ -218,39 +300,115 @@ The Agent architecture solves these by moving execution to user-controlled infra
 
 **Acceptance Criteria:**
 - Create collection pointing to local path (e.g., `/home/user/Photos`)
-- Collection automatically requires agent with `local` capability
-- When job is created, it is assigned to a capable online agent
+- **Must select a specific agent** when creating a local collection
+- Only online agents with `local_filesystem` capability are shown in selector
+- Collection is permanently bound to the selected agent
+- Jobs for this collection route **only** to the bound agent
 - Agent executes PhotoStats/Photo Pairing locally
 - Results appear in web UI same as server-executed jobs
 - HTML report generated and stored on server
+- If bound agent is offline, jobs queue until agent comes online
+- UI clearly shows which agent a local collection is bound to
 
 **Technical Notes:**
-- Collection `type=LOCAL` with `location=/absolute/path`
-- Job includes `required_capabilities: ['local']`
-- Agent resolves path relative to its filesystem
-- Agent sends results JSON + generated HTML to server
+- Collection `type=LOCAL` with `location=/absolute/path` and `bound_agent_id`
+- Job routing checks `bound_agent_id` first (not capability-based for locals)
+- Path uniqueness is scoped to agent (same path on different agents = different collections)
+- Agent binding cannot be changed after creation (delete and recreate collection)
+- Agent deletion prevented if bound collections exist (or migrate to another agent)
 
 ---
 
-### User Story 3: Agent-Local Connector Credentials (Priority: P1)
+### User Story 3: Connector Credential Modes (Priority: P1)
 
-**As** a security-conscious enterprise user
-**I want to** store connector credentials only on my agent
-**So that** sensitive AWS/GCS keys never reach the cloud server
+**As** a team administrator
+**I want to** choose where connector credentials are stored
+**So that** I can balance convenience with security requirements
 
 **Acceptance Criteria:**
-- Create connector marked as "agent-local" credentials
+
+**Server Credentials (credential_location=SERVER):**
+- Provide credentials when creating connector (current behavior)
+- Credentials stored encrypted on server
+- Server can execute jobs directly (when no agent required)
+- Agents with server-connector capability can also execute
+- Agent tests connection to verify access, then reports capability
+
+**Agent-Only Credentials (credential_location=AGENT):**
+- Create connector marked as "agent-only" credentials
 - Server stores connector metadata but NOT credentials
-- When configuring agent, provide credentials locally
-- Agent stores credentials in local encrypted file
-- Jobs requiring this connector automatically route to agent
-- UI indicates which connectors have agent-local credentials
+- Credentials configured via agent CLI (see User Story 3a)
+- Only agents with local credentials can execute jobs
+- UI shows which agents have credentials for this connector
+
+**Pending Credentials (credential_location=PENDING):**
+- Create connector without any credentials
+- Connector exists but is not usable until credentials provided
+- Agent CLI shows pending connectors for credential configuration
+- Once agent configures credentials, connector becomes usable via that agent
+- Multiple agents can independently configure credentials
 
 **Technical Notes:**
-- Connector model: `credential_location` enum (`SERVER`, `AGENT`)
-- Agent-local credentials encrypted with agent's local master key
-- Server cannot execute jobs requiring agent-local connectors
-- Multiple agents can have same connector's credentials for redundancy
+- Connector model: `credential_location` enum (`SERVER`, `AGENT`, `PENDING`)
+- Existing connectors default to `SERVER` for backward compatibility
+- `PENDING` enables "tentative activation" workflow (create first, configure later)
+- UI badge indicates credential status: "Server", "Agent-only", "Pending"
+
+---
+
+### User Story 3a: Agent Credential Configuration via CLI (Priority: P1)
+
+**As** an agent operator
+**I want to** configure connector credentials locally
+**So that** credentials never leave my machine
+
+**Acceptance Criteria:**
+- Agent CLI command lists connectors awaiting credentials
+- CLI prompts for credentials based on connector type schema
+- Credentials stored in local encrypted file (agent master key)
+- Agent tests connection before confirming credential storage
+- On success, agent reports capability to server ("I can access con_xyz")
+- Server updates agent's capability list
+- If connection test fails, credentials not stored, error displayed
+
+**Agent CLI Workflow:**
+```bash
+# List connectors needing credentials on this agent
+$ photo-admin-agent connectors list --pending
+
+Connectors awaiting credentials:
+  con_01hgw2bbg... "AWS Production" (S3) - PENDING
+  con_01hgw2bbh... "Office NAS" (SMB) - PENDING
+
+# Configure credentials for a connector
+$ photo-admin-agent connectors configure con_01hgw2bbg...
+
+Connector: AWS Production (S3)
+AWS Access Key ID: AKIA...
+AWS Secret Access Key: ****
+Region [us-east-1]:
+Endpoint URL (optional):
+
+Testing connection... ✓ Success (42 objects found)
+Credentials stored locally.
+Capability reported to server.
+
+# Verify agent capabilities
+$ photo-admin-agent capabilities
+
+Capabilities:
+  - local_filesystem
+  - tool:photostats
+  - tool:photo_pairing
+  - tool:pipeline_validation
+  - connector:con_01hgw2bbg... (AWS Production)
+```
+
+**Technical Notes:**
+- Credentials encrypted with agent-local master key
+- Master key derived from user password or hardware key
+- Server never receives actual credentials
+- Agent capability update via heartbeat or explicit API call
 
 ---
 
@@ -262,8 +420,9 @@ The Agent architecture solves these by moving execution to user-controlled infra
 
 **Acceptance Criteria:**
 - Create SMB connector pointing to local network share
-- Connector can be configured with agent-local credentials
+- Connector can be configured with agent-local credentials (or PENDING)
 - Agent on same network can access SMB share
+- Agent tests SMB connection, then reports capability
 - Jobs execute locally with low-latency file access
 - No SMB traffic traverses the internet
 
@@ -272,6 +431,48 @@ The Agent architecture solves these by moving execution to user-controlled infra
 - Agent resolves SMB hostname from its network location
 - Agent-local credentials avoid server credential storage
 - Progress reporting includes file scan count
+
+---
+
+### User Story 4a: Tool Capability Detection (Priority: P2)
+
+**As** an agent
+**I want to** automatically detect and report available tools
+**So that** the server knows what jobs I can execute
+
+**Acceptance Criteria:**
+
+**Bundled Tools (v1):**
+- Agent includes PhotoStats, Photo Pairing, Pipeline Validation
+- All agents report these tool capabilities automatically
+- No user configuration required for bundled tools
+- Tool versions reported with capabilities
+
+**External Tools (Future - v2):**
+- Agent detects installed applications (Lightroom, DxO PureRAW, etc.)
+- Detection via well-known paths, registry, or CLI probing
+- User can manually declare tool availability
+- Agent tests tool execution before reporting capability
+- Server tracks which agents can execute which external tools
+
+**Capability Reporting:**
+```json
+{
+  "capabilities": [
+    "local_filesystem",
+    "tool:photostats:1.2.3",
+    "tool:photo_pairing:1.2.3",
+    "tool:pipeline_validation:1.2.3",
+    "connector:con_01hgw2bbg..."
+  ]
+}
+```
+
+**Technical Notes:**
+- In v1, all agents have all bundled tools (same codebase)
+- Future tool capabilities will follow same pattern as connector capabilities
+- External tool integration requires defining invocation protocol per app
+- Tool version tracking enables compatibility checks
 
 ---
 
@@ -446,8 +647,9 @@ The Agent architecture solves these by moving execution to user-controlled infra
 | `tool` | Enum | not null | `photostats`, `photo_pairing`, `pipeline_validation` |
 | `pipeline_id` | Integer | FK(pipelines.id), nullable | Pipeline for validation |
 | `status` | Enum | not null, default='PENDING' | Job lifecycle state |
-| `required_capabilities_json` | JSONB | not null | Capabilities needed to execute |
-| `agent_id` | Integer | FK(agents.id), nullable | Assigned/executing agent |
+| `bound_agent_id` | Integer | FK(agents.id), nullable | Required agent for LOCAL collections |
+| `required_capabilities_json` | JSONB | not null | Capabilities needed (for unbound jobs) |
+| `agent_id` | Integer | FK(agents.id), nullable | Currently assigned/executing agent |
 | `assigned_at` | DateTime | nullable | When job was assigned |
 | `started_at` | DateTime | nullable | When execution began |
 | `completed_at` | DateTime | nullable | When execution finished |
@@ -473,23 +675,66 @@ CANCELLED                   PENDING (released)              COMPLETED
                                └────(retry)─────────────────FAILED
 ```
 
-**Required Capabilities Resolution:**
+**Job Routing Logic:**
 ```python
-def resolve_required_capabilities(collection: Collection) -> list[str]:
-    """Determine capabilities needed to process a collection."""
-    caps = []
+def create_job(collection: Collection, tool: str) -> Job:
+    """Create job with appropriate routing constraints."""
+    job = Job(
+        team_id=collection.team_id,
+        collection_id=collection.id,
+        tool=tool,
+        status=JobStatus.PENDING
+    )
 
+    # LOCAL collections: explicit agent binding (NOT capability-based)
     if collection.type == CollectionType.LOCAL:
-        caps.append("local_filesystem")
-    elif collection.type == CollectionType.SMB:
-        caps.append("connector:smb")
-        if collection.connector.credential_location == CredentialLocation.AGENT:
-            caps.append(f"connector:{collection.connector.guid}")
-    elif collection.type == CollectionType.S3:
-        caps.append("connector:s3")
-        # Similar logic for agent-local S3 credentials
+        job.bound_agent_id = collection.bound_agent_id
+        job.required_capabilities_json = [f"tool:{tool}"]
+    else:
+        # Remote collections: capability-based routing
+        job.bound_agent_id = None
+        job.required_capabilities_json = resolve_connector_capabilities(collection)
+
+    return job
+
+def resolve_connector_capabilities(collection: Collection) -> list[str]:
+    """Determine capabilities needed for connector-based collection."""
+    caps = [f"tool:{collection.tool}"]
+
+    if collection.connector:
+        # Require specific connector access
+        caps.append(f"connector:{collection.connector.guid}")
 
     return caps
+```
+
+**Job Claim Logic:**
+```python
+def claim_job(agent: Agent) -> Job | None:
+    """Find and assign a job this agent can execute."""
+
+    # Priority 1: Jobs explicitly bound to this agent
+    job = db.query(Job).filter(
+        Job.status == JobStatus.PENDING,
+        Job.team_id == agent.team_id,
+        Job.bound_agent_id == agent.id
+    ).with_for_update(skip_locked=True).first()
+
+    if job:
+        return assign_job(job, agent)
+
+    # Priority 2: Unbound jobs matching agent capabilities
+    job = db.query(Job).filter(
+        Job.status == JobStatus.PENDING,
+        Job.team_id == agent.team_id,
+        Job.bound_agent_id.is_(None),
+        Job.required_capabilities_json.contained_by(agent.capabilities_json)
+    ).with_for_update(skip_locked=True).first()
+
+    if job:
+        return assign_job(job, agent)
+
+    return None
 ```
 
 ---
@@ -500,13 +745,72 @@ def resolve_required_capabilities(collection: Collection) -> list[str]:
 
 | Attribute | Type | Constraints | Description |
 |-----------|------|-------------|-------------|
-| `credential_location` | Enum | not null, default='SERVER' | `SERVER` or `AGENT` |
+| `credential_location` | Enum | not null, default='SERVER' | `SERVER`, `AGENT`, or `PENDING` |
 
 **Credential Location Semantics:**
-- `SERVER`: Credentials stored encrypted in database, server can execute jobs
-- `AGENT`: Credentials stored only on registered agents, server cannot execute jobs
+
+| Mode | Credentials On Server | Credentials On Agent | Server Execution | Agent Execution |
+|------|----------------------|---------------------|------------------|-----------------|
+| `SERVER` | ✅ Encrypted | Optional (via test) | ✅ Yes | ✅ If capable |
+| `AGENT` | ❌ None | ✅ Required | ❌ No | ✅ If has creds |
+| `PENDING` | ❌ None | ❌ Not yet | ❌ No | ❌ Not yet |
+
+**Workflow for Each Mode:**
+
+1. **SERVER** (default, current behavior):
+   - User provides credentials when creating connector
+   - Server can execute jobs directly
+   - Agents can also access if they test connection successfully
+
+2. **AGENT** (security-focused):
+   - User creates connector without credentials on server
+   - User configures credentials via agent CLI
+   - Only agents with local credentials can execute jobs
+
+3. **PENDING** (tentative activation):
+   - User creates connector with just metadata (type, name, bucket/path)
+   - Connector is "inactive" until an agent configures credentials
+   - Agent operator discovers pending connector via CLI
+   - After agent configures credentials and tests connection, connector becomes usable
 
 **Migration:** Existing connectors default to `SERVER` for backward compatibility.
+
+---
+
+### Collection (Enhanced)
+
+**Additions to existing Collection model:**
+
+| Attribute | Type | Constraints | Description |
+|-----------|------|-------------|-------------|
+| `bound_agent_id` | Integer | FK(agents.id), nullable | Agent bound to LOCAL collections |
+
+**Binding Rules:**
+
+| Collection Type | bound_agent_id | Job Routing |
+|-----------------|----------------|-------------|
+| `LOCAL` | Required (not null) | Only bound agent can execute |
+| `S3` | NULL | Any agent with connector capability |
+| `GCS` | NULL | Any agent with connector capability |
+| `SMB` | NULL (usually) | Any agent with connector capability |
+
+**Design Notes:**
+- `bound_agent_id` is **required** for LOCAL collections, **optional** for others
+- SMB collections may optionally bind to specific agent (network locality)
+- UI enforces: LOCAL collection form requires agent selection
+- Deleting an agent with bound collections requires migration or fails
+
+**Validation Rules:**
+```python
+def validate_collection(collection: CollectionCreate) -> None:
+    if collection.type == CollectionType.LOCAL:
+        if not collection.bound_agent_id:
+            raise ValidationError("Local collections require an agent binding")
+    # Remote collections must have either connector or bound_agent
+    if collection.type in (CollectionType.S3, CollectionType.GCS):
+        if not collection.connector_id:
+            raise ValidationError("Remote collections require a connector")
+```
 
 ---
 
@@ -1096,22 +1400,38 @@ class JobCoordinatorService:
 - **FR-200.7**: Failed jobs retry up to max_retries (default: 3)
 - **FR-200.8**: Job history retained for 90 days (configurable)
 
-#### FR-300: Credential Locality
+#### FR-300: Connector Credential Modes
 
-- **FR-300.1**: Connector has `credential_location` enum (`SERVER` | `AGENT`)
-- **FR-300.2**: Agent-local connectors: credentials NOT stored on server
-- **FR-300.3**: Agent stores credentials in local encrypted file
-- **FR-300.4**: Agent declares which connectors it has credentials for
-- **FR-300.5**: Jobs requiring agent-local connectors only route to agents
-- **FR-300.6**: UI indicates credential location for each connector
+- **FR-300.1**: Connector has `credential_location` enum (`SERVER` | `AGENT` | `PENDING`)
+- **FR-300.2**: `SERVER`: Credentials stored encrypted on server (current behavior)
+- **FR-300.3**: `AGENT`: Credentials stored only on agent(s), NOT on server
+- **FR-300.4**: `PENDING`: Connector created without credentials (tentative activation)
+- **FR-300.5**: Agent CLI lists PENDING/AGENT connectors for credential configuration
+- **FR-300.6**: Agent tests connection before storing credentials locally
+- **FR-300.7**: Agent reports connector capability to server after successful test
+- **FR-300.8**: Jobs requiring agent-only connectors only route to capable agents
+- **FR-300.9**: UI indicates credential status: "Server", "Agent-only", "Pending"
+- **FR-300.10**: UI shows which agents have credentials for each connector
 
-#### FR-400: Local Collection Support
+#### FR-400: Local Collection Support (Agent Binding)
 
 - **FR-400.1**: Collection `type=LOCAL` creates local filesystem collection
-- **FR-400.2**: Local collections require agent with `local_filesystem` capability
-- **FR-400.3**: Agent resolves local path relative to its filesystem
-- **FR-400.4**: Local collection jobs cannot execute on server
-- **FR-400.5**: UI shows which agent(s) can access a local collection
+- **FR-400.2**: Local collections REQUIRE explicit agent binding at creation
+- **FR-400.3**: UI enforces agent selection for LOCAL collection type
+- **FR-400.4**: Jobs for LOCAL collections route ONLY to bound agent (not capability-based)
+- **FR-400.5**: Same path on different agents creates different collections
+- **FR-400.6**: Local collection jobs cannot execute on server
+- **FR-400.7**: UI clearly shows bound agent for each local collection
+- **FR-400.8**: Agent deletion blocked if bound collections exist (or require migration)
+- **FR-400.9**: If bound agent is offline, jobs queue until agent comes online
+
+#### FR-450: Tool Capability Reporting
+
+- **FR-450.1**: All agents report bundled tool capabilities automatically
+- **FR-450.2**: Tool capabilities include version information
+- **FR-450.3**: Agent heartbeat includes current capabilities
+- **FR-450.4**: Server tracks which agents can execute which tools
+- **FR-450.5**: (Future) Agent detects and reports external tool availability
 
 #### FR-500: Progress and Results
 
@@ -1601,6 +1921,21 @@ Example: agt_key_xK9mN2pQrStUvWxYz01234567890ABCDEFghij
 ---
 
 ## Revision History
+
+- **2026-01-14 (v1.1)**: Refined routing model and credential modes
+  - **Local Collections**: Changed from capability-based to explicit agent binding
+    - Local collections now require agent selection at creation time
+    - Same path on different agents represents different collections
+    - Jobs route ONLY to bound agent (not any capable agent)
+  - **Connector Credential Modes**: Expanded from 2 to 3 modes
+    - Added `PENDING` mode for tentative activation without credentials
+    - Agent CLI workflow for discovering and configuring pending connectors
+    - Agent tests connection before reporting capability to server
+  - **Tool Capability Reporting**: Clarified capability detection model
+    - Bundled tools auto-detected (all agents have same tools in v1)
+    - Foundation for future external tool detection (Lightroom, DxO, etc.)
+  - Added Collection model enhancements (bound_agent_id)
+  - Updated Job routing logic to prioritize bound agents
 
 - **2026-01-14 (v1.0)**: Initial draft
   - Defined core Agent architecture and concepts
