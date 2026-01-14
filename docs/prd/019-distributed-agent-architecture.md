@@ -591,7 +591,9 @@ Day 2, 2:00 PM:
 
 ---
 
-### User Story 8: Offline Agent Operation (Priority: P3)
+### User Story 8: Offline Agent Operation (Priority: P3 — Future Version)
+
+> **⚠️ OUT OF SCOPE FOR V1**: This user story describes a future enhancement, not part of the initial agent implementation. It is retained here for long-term vision and planning purposes.
 
 **As** a photographer working in the field
 **I want to** run analysis while disconnected from internet
@@ -604,11 +606,21 @@ Day 2, 2:00 PM:
 - No duplicate job execution during sync
 - UI shows "pending sync" status for offline results
 
-**Technical Notes:**
+**Why This Is Complex (Future Work):**
+
+Offline operation requires significant enhancements beyond the initial agent architecture:
+
+1. **Local Collection Management**: Ability to create or modify collections while offline, requiring local-first data model
+2. **Conflict Resolution**: Reconciling local changes with server state when back online (last-write-wins, merge strategies, etc.)
+3. **CLI Enhancements**: Extended CLI toolbox for offline workflows (local job creation, result browsing, manual sync triggers)
+4. **Sync Protocol**: Robust bi-directional sync with idempotency guarantees
+5. **Offline-First UI**: Agent-side result viewer for field use without server connectivity
+
+**Technical Notes (for future reference):**
 - Local job queue on agent (SQLite)
 - Result upload retry with exponential backoff
-- Conflict resolution: server result wins if already exists
-- V1: Offline mode limited to locally-queued jobs (not new assignments)
+- Conflict resolution strategy TBD (server-wins simplest, but limits offline utility)
+- Consider CRDT or event-sourcing patterns for true offline-first support
 
 ---
 
