@@ -2357,7 +2357,16 @@ class ConfigLoader(Protocol):
         ...
 
     def get_pipeline(self, pipeline_guid: str) -> PipelineDefinition:
-        """Get pipeline definition by GUID."""
+        """Get pipeline definition by GUID.
+
+        Returns complete pipeline structure including:
+        - Pipeline metadata (name, description)
+        - All stages in order
+        - Validation rules for each stage
+        - Pipeline-level settings
+
+        Critical for pipeline_validation tool execution.
+        """
         ...
 
     def get_collection(self, collection_guid: str) -> CollectionConfig:
@@ -2393,7 +2402,15 @@ class ApiConfigLoader:
         return {k: CameraInfo(**v) for k, v in data.items()}
 
     def get_pipeline(self, pipeline_guid: str) -> PipelineDefinition:
-        """Fetch pipeline definition from server."""
+        """Fetch complete pipeline definition from server.
+
+        Returns full pipeline structure needed by pipeline_validation tool:
+        - stages: ordered list of pipeline stages
+        - rules: validation rules per stage (patterns, severities)
+        - settings: pipeline-level configuration
+
+        Note: Not cached (pipelines are job-specific, fetched once per job).
+        """
         data = self.api_client.get(f"/api/pipelines/{pipeline_guid}")
         return PipelineDefinition.from_api_response(data)
 
@@ -2442,6 +2459,43 @@ async def get_processing_methods(
     """Get processing method definitions for user's team."""
     methods = await get_team_processing_methods(current_user.team_id)
     return {m.code: m.description for m in methods}
+
+# Pipeline definition endpoint (critical for pipeline_validation tool)
+@router.get("/api/pipelines/{pipeline_guid}")
+async def get_pipeline(
+    pipeline_guid: str,
+    current_agent: Agent = Depends(get_current_agent)
+) -> PipelineDefinitionResponse:
+    """Get complete pipeline definition for validation.
+
+    Returns the full pipeline structure including all stages,
+    rules, and validation criteria needed by pipeline_validation tool.
+    """
+    pipeline = await get_pipeline_by_guid(pipeline_guid)
+
+    return PipelineDefinitionResponse(
+        guid=pipeline.guid,
+        name=pipeline.name,
+        description=pipeline.description,
+        stages=[
+            PipelineStageResponse(
+                name=stage.name,
+                order=stage.order,
+                rules=[
+                    StageRuleResponse(
+                        rule_type=rule.rule_type,
+                        pattern=rule.pattern,
+                        description=rule.description,
+                        severity=rule.severity,
+                    )
+                    for rule in stage.rules
+                ]
+            )
+            for stage in pipeline.stages
+        ],
+        # Include any pipeline-level settings
+        settings=pipeline.settings_json or {}
+    )
 
 # Job-specific configuration endpoint
 @router.get("/api/jobs/{job_guid}/config")
@@ -2724,11 +2778,13 @@ class AgentToolExecutor:
 - **FR-540.5**: `/api/config/photo-extensions` returns team photo extensions
 - **FR-540.6**: `/api/config/camera-mappings` returns team camera mappings
 - **FR-540.7**: `/api/config/processing-methods` returns team processing methods
-- **FR-540.8**: `/api/jobs/{guid}/config` returns all config needed for job execution
-- **FR-540.9**: Job config endpoint bundles collection, pipeline, and settings (single request)
-- **FR-540.10**: ApiConfigLoader caches responses (5-minute TTL) to reduce API calls
-- **FR-540.11**: Tools accept ConfigLoader parameter instead of assuming config source
-- **FR-540.12**: Backward compatible: CLI usage unchanged, server execution unchanged
+- **FR-540.8**: `/api/pipelines/{guid}` returns complete pipeline definition (stages, rules, settings)
+- **FR-540.9**: Pipeline endpoint returns all data needed by pipeline_validation tool
+- **FR-540.10**: `/api/jobs/{guid}/config` returns all config needed for job execution
+- **FR-540.11**: Job config endpoint bundles collection, pipeline, and settings (single request)
+- **FR-540.12**: ApiConfigLoader caches team settings (5-minute TTL), pipelines fetched per-job
+- **FR-540.13**: Tools accept ConfigLoader parameter instead of assuming config source
+- **FR-540.14**: Backward compatible: CLI usage unchanged, server execution unchanged
 
 ---
 
