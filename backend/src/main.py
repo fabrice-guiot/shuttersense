@@ -107,6 +107,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
         else:
             # CSP for SPA pages - allow self-hosted scripts, styles, images, fonts
+            # Note: 'self' includes same-origin API calls (/api/*)
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self'; "
@@ -114,6 +115,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "img-src 'self' data: blob:; "
                 "font-src 'self'; "
                 "connect-src 'self' ws: wss:; "
+                "manifest-src 'self'; "
+                "worker-src 'self' blob:; "
+                "object-src 'none'; "
+                "base-uri 'self'; "
                 "frame-ancestors 'none'"
             )
 

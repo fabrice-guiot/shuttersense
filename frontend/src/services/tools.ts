@@ -59,16 +59,31 @@ export const getQueueStatus = async (): Promise<QueueStatusResponse> => {
 }
 
 /**
+ * Build WebSocket URL from API base URL
+ * Handles both relative URLs (/api) and absolute URLs (http://...)
+ */
+const buildWebSocketUrl = (path: string): string => {
+  const baseUrl = api.defaults.baseURL || '/api'
+
+  // If baseUrl is relative, construct absolute WebSocket URL from current location
+  if (baseUrl.startsWith('/')) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${protocol}//${window.location.host}${baseUrl}${path}`
+  }
+
+  // If baseUrl is absolute, convert HTTP to WS
+  const wsUrl = baseUrl.replace(/^http/, 'ws')
+  return `${wsUrl}${path}`
+}
+
+/**
  * Create WebSocket connection for job progress updates
  * Returns the WebSocket URL for the given job
  */
 export const getJobWebSocketUrl = (jobId: string): string => {
   // Job IDs use 'job' prefix
   const safeJobId = encodeURIComponent(validateGuid(jobId, 'job'))
-  const baseUrl = api.defaults.baseURL || 'http://localhost:8000/api'
-  // Convert HTTP URL to WebSocket URL
-  const wsUrl = baseUrl.replace(/^http/, 'ws')
-  return `${wsUrl}/tools/ws/jobs/${safeJobId}`
+  return buildWebSocketUrl(`/tools/ws/jobs/${safeJobId}`)
 }
 
 /**
@@ -76,10 +91,7 @@ export const getJobWebSocketUrl = (jobId: string): string => {
  * Returns the WebSocket URL for the global jobs channel
  */
 export const getGlobalJobsWebSocketUrl = (): string => {
-  const baseUrl = api.defaults.baseURL || 'http://localhost:8000/api'
-  // Convert HTTP URL to WebSocket URL
-  const wsUrl = baseUrl.replace(/^http/, 'ws')
-  return `${wsUrl}/tools/ws/jobs/all`
+  return buildWebSocketUrl('/tools/ws/jobs/all')
 }
 
 /**

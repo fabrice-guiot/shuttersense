@@ -36,9 +36,15 @@ export interface ApiError extends AxiosError<ApiErrorResponse> {
 // Axios Instance Configuration
 // ============================================================================
 
+// Determine API base URL:
+// - In production (served from FastAPI): Use relative URL '/api' (same origin)
+// - In development with Vite proxy: Use relative URL '/api' (proxy forwards to backend)
+// - Override with VITE_API_BASE_URL if needed for special setups
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+
 // Create Axios instance with default configuration
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: apiBaseUrl,
   timeout: 30000, // 30 seconds for potentially long-running requests
   headers: {
     'Content-Type': 'application/json'

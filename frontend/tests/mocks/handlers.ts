@@ -615,10 +615,12 @@ let configData = {
   lastImport: null as string | null,
 }
 
-const BASE_URL = 'http://localhost:8000/api'
+// Use path-only pattern so MSW matches both relative (/api) and absolute URLs
+// MSW v2 will match these against any origin
+const BASE_URL = '*/api'
 
 // WebSocket handler for job updates
-const jobsWebSocket = ws.link('ws://localhost:8000/api/tools/ws/jobs/*')
+const jobsWebSocket = ws.link('*/api/tools/ws/jobs/*')
 
 export const handlers = [
   // WebSocket handler for all job channels
