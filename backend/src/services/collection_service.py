@@ -14,6 +14,7 @@ Design:
 
 import os
 import json
+from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -815,6 +816,35 @@ class CollectionService:
 
     # Private helper methods
 
+    def _is_path_in_blocked_directory(self, resolved_path: Path) -> Optional[str]:
+        """
+        Check if a resolved path is in a blocked system directory.
+
+        Args:
+            resolved_path: Already-resolved Path object
+
+        Returns:
+            The blocked directory prefix if path is blocked, None otherwise
+        """
+        # Blocked system directories (prevent access to sensitive locations)
+        # Note: /var is intentionally not blocked as it contains temp dirs
+        # that are legitimately used (e.g., /var/folders on macOS)
+        blocked_dirs = [
+            Path('/etc'), Path('/sys'), Path('/proc'), Path('/dev'),
+            Path('/boot'), Path('/root'), Path('/var/log'), Path('/var/mail'),
+            Path('/usr/bin'), Path('/usr/sbin'), Path('/bin'), Path('/sbin'),
+            Path('C:/Windows'), Path('C:/Program Files'), Path('C:/System32'),
+        ]
+
+        for blocked in blocked_dirs:
+            try:
+                if resolved_path.is_relative_to(blocked):
+                    return str(blocked)
+            except (ValueError, TypeError):
+                # is_relative_to raises ValueError if paths are on different drives
+                continue
+        return None
+
     def _test_accessibility(
         self,
         type: CollectionType,
@@ -833,8 +863,27 @@ class CollectionService:
             Tuple of (is_accessible: bool, last_error: Optional[str])
         """
         if type == CollectionType.LOCAL:
+            # Security: Reject obvious path traversal attempts in input
+            # This provides defense-in-depth alongside blocked directory checks
+            if ".." in location:
+                return False, "Path traversal sequences not allowed in location"
+
+            try:
+                # Normalize and expand the path
+                normalized = os.path.normpath(os.path.expanduser(location))
+                # Convert to absolute path if relative
+                if not os.path.isabs(normalized):
+                    normalized = os.path.abspath(normalized)
+            except (OSError, ValueError) as e:
+                return False, f"Invalid path: {str(e)}"
+
+            # Check if path is in a blocked system directory
+            blocked = self._is_path_in_blocked_directory(Path(normalized))
+            if blocked:
+                return False, f"Access to system directory not allowed: {blocked}"
+
             # Test local filesystem access
-            if os.path.isdir(location) and os.access(location, os.R_OK):
+            if os.path.isdir(normalized) and os.access(normalized, os.R_OK):
                 return True, None
             else:
                 return False, f"Local directory not found or not readable: {location}"

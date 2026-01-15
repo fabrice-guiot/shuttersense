@@ -554,8 +554,13 @@ async def spa_catch_all(request: Request, full_path: str):
     # Check if the requested path is a static file that exists in dist root
     # This handles files like favicon.ico, robots.txt, etc.
     if full_path and "." in full_path.split("/")[-1]:
-        static_file_path = _spa_dist_path / full_path
-        if static_file_path.exists() and static_file_path.is_file():
-            return FileResponse(static_file_path)
+        # Security: Serve static files only from allowed filenames
+        # Use an allowlist of known static files to prevent path traversal
+        allowed_static_files = ["favicon.ico", "robots.txt", "manifest.json", "logo.png"]
+        filename = full_path.split("/")[-1] if "/" in full_path else full_path
+        if filename in allowed_static_files:
+            static_file = _spa_dist_path / filename
+            if static_file.exists() and static_file.is_file():
+                return FileResponse(static_file)
 
     return await serve_spa(request)
