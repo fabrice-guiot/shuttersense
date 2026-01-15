@@ -349,7 +349,12 @@ class TestCollectionAPITestAccessibility:
         assert response.status_code == 200
         json_data = response.json()
         assert json_data["success"] is False
-        assert "not accessible" in json_data["message"].lower() or "not found" in json_data["message"].lower()
+        # Path is rejected either because it's not accessible, not found, or not authorized
+        assert any(msg in json_data["message"].lower() for msg in [
+            "not accessible",
+            "not found",
+            "not under an authorized root",
+        ])
         # Verify updated collection is returned with error
         assert "collection" in json_data
         assert json_data["collection"]["guid"] == collection.guid

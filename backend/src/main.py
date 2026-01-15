@@ -16,12 +16,14 @@ Environment Variables:
     PHOTO_ADMIN_MASTER_KEY: Master encryption key (required)
     PHOTO_ADMIN_ENV: Environment (production/development, default: development)
     PHOTO_ADMIN_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL, default: INFO)
+    PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
+        paths for local collections (security - required for local collections)
+    PHOTO_ADMIN_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
 """
 
 import os
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Dict, Any
 
 from fastapi import FastAPI, Request, status
@@ -479,10 +481,15 @@ app.include_router(performers.router, prefix="/api")
 # ============================================================================
 # SPA Static Files Configuration
 # ============================================================================
-# Determine the path to the frontend dist directory
-# This works both when running from project root and from backend directory
-_project_root = Path(__file__).parent.parent.parent.parent
-_spa_dist_path = _project_root / "frontend" / "dist"
+# Security: Use centralized security settings for SPA path configuration
+# The SPA dist path can be configured via PHOTO_ADMIN_SPA_DIST_PATH env var
+# All static file paths are validated to prevent path traversal attacks
+from backend.src.utils.security_settings import (
+    get_spa_dist_path,
+    is_safe_static_file_path
+)
+
+_spa_dist_path = get_spa_dist_path()
 _spa_index_path = _spa_dist_path / "index.html"
 
 
@@ -553,14 +560,14 @@ async def spa_catch_all(request: Request, full_path: str):
 
     # Check if the requested path is a static file that exists in dist root
     # This handles files like favicon.ico, robots.txt, etc.
+    # Security: Use is_safe_static_file_path to validate the path is within
+    # the SPA dist directory and doesn't contain path traversal sequences
     if full_path and "." in full_path.split("/")[-1]:
-        # Security: Serve static files only from allowed filenames
-        # Use an allowlist of known static files to prevent path traversal
-        allowed_static_files = ["favicon.ico", "robots.txt", "manifest.json", "logo.png"]
+        # Only serve files from the root of dist (not subdirectories)
+        # to limit exposure - assets are served via /assets mount
         filename = full_path.split("/")[-1] if "/" in full_path else full_path
-        if filename in allowed_static_files:
-            static_file = _spa_dist_path / filename
-            if static_file.exists() and static_file.is_file():
-                return FileResponse(static_file)
+        is_safe, safe_path = is_safe_static_file_path(filename, _spa_dist_path)
+        if is_safe and safe_path:
+            return FileResponse(safe_path)
 
     return await serve_spa(request)

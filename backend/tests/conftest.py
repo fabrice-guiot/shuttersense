@@ -25,6 +25,13 @@ _TEST_MASTER_KEY = Fernet.generate_key().decode('utf-8')
 os.environ['PHOTO_ADMIN_MASTER_KEY'] = _TEST_MASTER_KEY
 os.environ['PHOTO_ADMIN_DB_URL'] = 'sqlite:///:memory:'
 
+# Allow temp directories for testing (covers both macOS and Linux paths)
+# macOS: /private/var/folders (resolved) and /var/folders (symlink)
+# Linux: /tmp
+import tempfile
+_temp_base = tempfile.gettempdir()
+os.environ['PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS'] = f'{_temp_base},/tmp,/private/var,/var'
+
 # Disable rate limiter at import time to prevent rate limit exhaustion during tests
 from backend.src.main import limiter as _main_limiter
 _main_limiter.enabled = False

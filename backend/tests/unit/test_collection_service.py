@@ -57,7 +57,11 @@ class TestCollectionServiceCreate:
         )
 
         assert collection.is_accessible is False
-        assert "not found or not readable" in collection.last_error
+        # Path is rejected either because it's not under authorized root, or not found
+        assert any(msg in collection.last_error.lower() for msg in [
+            "not found or not readable",
+            "not under an authorized root",
+        ])
 
     def test_create_remote_collection_with_connector(
         self, test_db_session, test_file_cache, test_connector_service, sample_connector
