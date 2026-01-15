@@ -248,15 +248,18 @@ def is_safe_static_file_path(
         return False, None
 
     try:
-        # Resolve the full path
-        full_path = (base_dir / requested_path).resolve()
+        # Resolve the full path relative to the resolved_base_dir
+        # Using resolved_base_dir ensures both base and child share the same root
+        full_path = (resolved_base_dir / requested_path).resolve()
 
-        # Verify the resolved path is still within base_dir
-        # This catches symlinks that point outside
-        if not full_path.is_relative_to(resolved_base_dir):
+        # Verify the resolved path is still within resolved_base_dir
+        # This catches symlinks that point outside and prevents directory traversal
+        base_parts = resolved_base_dir.parts
+        full_parts = full_path.parts
+        if len(full_parts) < len(base_parts) or full_parts[: len(base_parts)] != base_parts:
             logger.warning(
                 f"Static file path escapes base directory: "
-                f"requested={requested_path}, resolved={full_path}, base={base_dir}"
+                f"requested={requested_path}, resolved={full_path}, base={resolved_base_dir}"
             )
             return False, None
 
