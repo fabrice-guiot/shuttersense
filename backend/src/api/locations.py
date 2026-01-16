@@ -37,6 +37,7 @@ from backend.src.schemas.location import (
 from backend.src.services.location_service import LocationService
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
 from backend.src.utils.logging_config import get_logger
+from backend.src.middleware.auth import require_auth, TenantContext
 
 
 logger = get_logger("api")
@@ -69,10 +70,14 @@ def get_location_service(db: Session = Depends(get_db)) -> LocationService:
     description="Get aggregated statistics for all locations",
 )
 async def get_location_stats(
+    ctx: TenantContext = Depends(require_auth),
     location_service: LocationService = Depends(get_location_service),
 ) -> LocationStatsResponse:
     """
     Get aggregated statistics for all locations.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Returns:
         LocationStatsResponse with:
@@ -91,7 +96,7 @@ async def get_location_stats(
         }
     """
     try:
-        stats = location_service.get_stats()
+        stats = location_service.get_stats(team_id=ctx.team_id)
 
         logger.info(
             "Retrieved location stats",
@@ -116,6 +121,7 @@ async def get_location_stats(
 )
 async def get_locations_by_category(
     category_guid: str,
+    ctx: TenantContext = Depends(require_auth),
     known_only: bool = Query(
         True, description="Only return saved 'known' locations"
     ),
@@ -126,6 +132,9 @@ async def get_locations_by_category(
 
     Used when creating/editing events to show only compatible locations
     (locations whose category matches the event's category).
+
+    Args:
+        ctx: Tenant context with team_id
 
     Path Parameters:
         category_guid: Category GUID (cat_xxx format)
@@ -144,6 +153,7 @@ async def get_locations_by_category(
     """
     try:
         locations = location_service.get_by_category(
+            team_id=ctx.team_id,
             category_guid=category_guid,
             known_only=known_only,
         )
@@ -178,6 +188,7 @@ async def get_locations_by_category(
 )
 async def geocode_address(
     request: GeocodeRequest,
+    ctx: TenantContext = Depends(require_auth),
     location_service: LocationService = Depends(get_location_service),
 ) -> GeocodeResponse:
     """
@@ -245,6 +256,7 @@ async def geocode_address(
     description="List all locations with optional filtering",
 )
 async def list_locations(
+    ctx: TenantContext = Depends(require_auth),
     category_guid: Optional[str] = Query(
         None, description="Filter by category GUID"
     ),
@@ -260,6 +272,9 @@ async def list_locations(
 ) -> LocationListResponse:
     """
     List all locations with optional filtering.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Query Parameters:
         category_guid: Filter by category GUID (optional)
@@ -279,6 +294,7 @@ async def list_locations(
     """
     try:
         locations, total = location_service.list(
+            team_id=ctx.team_id,
             category_guid=category_guid,
             known_only=known_only,
             search=search,
@@ -325,10 +341,14 @@ async def list_locations(
 )
 async def create_location(
     location: LocationCreate,
+    ctx: TenantContext = Depends(require_auth),
     location_service: LocationService = Depends(get_location_service),
 ) -> LocationResponse:
     """
     Create a new location.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Request Body:
         LocationCreate schema with name, category_guid (required), and optional fields
@@ -355,6 +375,7 @@ async def create_location(
         created_location = location_service.create(
             name=location.name,
             category_guid=location.category_guid,
+            team_id=ctx.team_id,
             address=location.address,
             city=location.city,
             state=location.state,
@@ -408,10 +429,14 @@ async def create_location(
 )
 async def get_location(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     location_service: LocationService = Depends(get_location_service),
 ) -> LocationResponse:
     """
     Get location by GUID.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Path Parameters:
         guid: Location GUID (loc_xxx format)
@@ -426,7 +451,7 @@ async def get_location(
         GET /api/locations/loc_01hgw2bbg0000000000000001
     """
     try:
-        location = location_service.get_by_guid(guid)
+        location = location_service.get_by_guid(guid, team_id=ctx.team_id)
 
         logger.info(
             f"Retrieved location: {location.name}",
@@ -452,12 +477,16 @@ async def get_location(
 async def update_location(
     guid: str,
     location_update: LocationUpdate,
+    ctx: TenantContext = Depends(require_auth),
     location_service: LocationService = Depends(get_location_service),
 ) -> LocationResponse:
     """
     Update location properties by GUID.
 
     Only provided fields will be updated.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Path Parameters:
         guid: Location GUID (loc_xxx format)
@@ -482,6 +511,7 @@ async def update_location(
     try:
         updated_location = location_service.update(
             guid=guid,
+            team_id=ctx.team_id,
             name=location_update.name,
             category_guid=location_update.category_guid,
             address=location_update.address,
@@ -537,6 +567,7 @@ async def update_location(
 )
 async def delete_location(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     location_service: LocationService = Depends(get_location_service),
 ) -> None:
     """
@@ -544,6 +575,9 @@ async def delete_location(
 
     PROTECTED OPERATION: Cannot delete if events or event series
     reference this location.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Path Parameters:
         guid: Location GUID (loc_xxx format)
@@ -563,7 +597,7 @@ async def delete_location(
         "Cannot delete location 'Madison Square Garden': 5 event(s) are using it"
     """
     try:
-        location_service.delete(guid)
+        location_service.delete(guid, team_id=ctx.team_id)
 
         logger.info(f"Deleted location", extra={"guid": guid})
 
@@ -598,6 +632,7 @@ async def delete_location(
 async def validate_category_match(
     guid: str,
     event_category_guid: str,
+    ctx: TenantContext = Depends(require_auth),
     location_service: LocationService = Depends(get_location_service),
 ) -> dict:
     """
@@ -605,6 +640,9 @@ async def validate_category_match(
 
     This endpoint is used to verify compatibility when assigning a
     location to an event.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Path Parameters:
         guid: Location GUID (loc_xxx format)
@@ -626,6 +664,7 @@ async def validate_category_match(
         matches = location_service.validate_category_match(
             location_guid=guid,
             event_category_guid=event_category_guid,
+            team_id=ctx.team_id,
         )
 
         logger.info(

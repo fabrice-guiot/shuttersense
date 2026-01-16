@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.middleware.auth import require_auth, TenantContext
 from backend.src.schemas.category import (
     CategoryCreate,
     CategoryUpdate,
@@ -65,6 +66,7 @@ def get_category_service(db: Session = Depends(get_db)) -> CategoryService:
     description="Get aggregated statistics for all categories",
 )
 async def get_category_stats(
+    ctx: TenantContext = Depends(require_auth),
     category_service: CategoryService = Depends(get_category_service),
 ) -> CategoryStatsResponse:
     """
@@ -87,7 +89,7 @@ async def get_category_stats(
         }
     """
     try:
-        stats = category_service.get_stats()
+        stats = category_service.get_stats(team_id=ctx.team_id)
 
         logger.info(
             "Retrieved category stats",
@@ -111,6 +113,7 @@ async def get_category_stats(
     description="List all categories with optional filtering by active status",
 )
 async def list_categories(
+    ctx: TenantContext = Depends(require_auth),
     is_active: Optional[bool] = Query(
         None, description="Filter by active status (true/false)"
     ),
@@ -132,7 +135,7 @@ async def list_categories(
     try:
         # Only filter by active if explicitly set
         active_only = is_active if is_active is True else False
-        categories = category_service.list(active_only=active_only)
+        categories = category_service.list(team_id=ctx.team_id, active_only=active_only)
 
         logger.info(
             f"Listed {len(categories)} categories",
@@ -158,6 +161,7 @@ async def list_categories(
 )
 async def create_category(
     category: CategoryCreate,
+    ctx: TenantContext = Depends(require_auth),
     category_service: CategoryService = Depends(get_category_service),
 ) -> CategoryResponse:
     """
@@ -185,6 +189,7 @@ async def create_category(
     try:
         created_category = category_service.create(
             name=category.name,
+            team_id=ctx.team_id,
             icon=category.icon,
             color=category.color,
             is_active=category.is_active,
@@ -228,6 +233,7 @@ async def create_category(
 )
 async def get_category(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     category_service: CategoryService = Depends(get_category_service),
 ) -> CategoryResponse:
     """
@@ -246,7 +252,7 @@ async def get_category(
         GET /api/categories/cat_01hgw2bbg0000000000000001
     """
     try:
-        category = category_service.get_by_guid(guid)
+        category = category_service.get_by_guid(guid, team_id=ctx.team_id)
 
         logger.info(
             f"Retrieved category: {category.name}",
@@ -272,6 +278,7 @@ async def get_category(
 async def update_category(
     guid: str,
     category_update: CategoryUpdate,
+    ctx: TenantContext = Depends(require_auth),
     category_service: CategoryService = Depends(get_category_service),
 ) -> CategoryResponse:
     """
@@ -303,6 +310,7 @@ async def update_category(
     try:
         updated_category = category_service.update(
             guid=guid,
+            team_id=ctx.team_id,
             name=category_update.name,
             icon=category_update.icon,
             color=category_update.color,
@@ -353,6 +361,7 @@ async def update_category(
 )
 async def delete_category(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     category_service: CategoryService = Depends(get_category_service),
 ) -> None:
     """
@@ -379,7 +388,7 @@ async def delete_category(
         "Cannot delete category 'Airshow': 5 event(s) are using it"
     """
     try:
-        category_service.delete(guid)
+        category_service.delete(guid, team_id=ctx.team_id)
 
         logger.info(f"Deleted category", extra={"guid": guid})
 
@@ -413,6 +422,7 @@ async def delete_category(
 )
 async def reorder_categories(
     reorder_request: CategoryReorderRequest,
+    ctx: TenantContext = Depends(require_auth),
     category_service: CategoryService = Depends(get_category_service),
 ) -> List[CategoryResponse]:
     """
@@ -441,7 +451,7 @@ async def reorder_categories(
         }
     """
     try:
-        categories = category_service.reorder(reorder_request.ordered_guids)
+        categories = category_service.reorder(reorder_request.ordered_guids, team_id=ctx.team_id)
 
         logger.info(f"Reordered {len(categories)} categories")
 

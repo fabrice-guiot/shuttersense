@@ -15,7 +15,7 @@ import enum
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, Enum, Index, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Enum, Index, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.src.models import Base
@@ -80,6 +80,9 @@ class Configuration(Base):
 
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Tenant isolation
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
 
     # Core fields
     category = Column(String(50), nullable=False, index=True)

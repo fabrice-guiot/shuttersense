@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.middleware.auth import require_auth, TenantContext
 from backend.src.schemas.organizer import (
     OrganizerCreate,
     OrganizerUpdate,
@@ -67,6 +68,7 @@ def get_organizer_service(db: Session = Depends(get_db)) -> OrganizerService:
     description="Get aggregated statistics for all organizers",
 )
 async def get_organizer_stats(
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> OrganizerStatsResponse:
     """
@@ -89,11 +91,11 @@ async def get_organizer_stats(
         }
     """
     try:
-        stats = organizer_service.get_stats()
+        stats = organizer_service.get_stats(team_id=ctx.team_id)
 
         logger.info(
             "Retrieved organizer stats",
-            extra={"total_count": stats["total_count"]},
+            extra={"total_count": stats["total_count"], "team_id": ctx.team_id},
         )
 
         return OrganizerStatsResponse(**stats)
@@ -114,6 +116,7 @@ async def get_organizer_stats(
 )
 async def get_organizers_by_category(
     category_guid: str,
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> List[OrganizerResponse]:
     """
@@ -135,11 +138,14 @@ async def get_organizers_by_category(
         GET /api/organizers/by-category/cat_01hgw2bbg0000000000000001
     """
     try:
-        organizers = organizer_service.get_by_category(category_guid=category_guid)
+        organizers = organizer_service.get_by_category(
+            category_guid=category_guid,
+            team_id=ctx.team_id,
+        )
 
         logger.info(
             f"Listed {len(organizers)} organizers for category",
-            extra={"category_guid": category_guid, "count": len(organizers)},
+            extra={"category_guid": category_guid, "count": len(organizers), "team_id": ctx.team_id},
         )
 
         return [OrganizerResponse.model_validate(org) for org in organizers]
@@ -174,6 +180,7 @@ async def list_organizers(
     ),
     limit: int = Query(100, ge=1, le=500, description="Maximum results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> OrganizerListResponse:
     """
@@ -195,6 +202,7 @@ async def list_organizers(
     """
     try:
         organizers, total = organizer_service.list(
+            team_id=ctx.team_id,
             category_guid=category_guid,
             search=search,
             limit=limit,
@@ -207,6 +215,7 @@ async def list_organizers(
                 "total": total,
                 "category_filter": category_guid,
                 "search": search,
+                "team_id": ctx.team_id,
             },
         )
 
@@ -239,6 +248,7 @@ async def list_organizers(
 )
 async def create_organizer(
     organizer: OrganizerCreate,
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> OrganizerResponse:
     """
@@ -268,6 +278,7 @@ async def create_organizer(
         created_organizer = organizer_service.create(
             name=organizer.name,
             category_guid=organizer.category_guid,
+            team_id=ctx.team_id,
             website=organizer.website,
             instagram_handle=organizer.instagram_handle,
             rating=organizer.rating,
@@ -277,7 +288,7 @@ async def create_organizer(
 
         logger.info(
             f"Created organizer: {organizer.name}",
-            extra={"guid": created_organizer.guid},
+            extra={"guid": created_organizer.guid, "team_id": ctx.team_id},
         )
 
         return OrganizerResponse.model_validate(created_organizer)
@@ -312,6 +323,7 @@ async def create_organizer(
 )
 async def get_organizer(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> OrganizerResponse:
     """
@@ -330,11 +342,11 @@ async def get_organizer(
         GET /api/organizers/org_01hgw2bbg0000000000000001
     """
     try:
-        organizer = organizer_service.get_by_guid(guid)
+        organizer = organizer_service.get_by_guid(guid, team_id=ctx.team_id)
 
         logger.info(
             f"Retrieved organizer: {organizer.name}",
-            extra={"guid": guid},
+            extra={"guid": guid, "team_id": ctx.team_id},
         )
 
         return OrganizerResponse.model_validate(organizer)
@@ -356,6 +368,7 @@ async def get_organizer(
 async def update_organizer(
     guid: str,
     organizer_update: OrganizerUpdate,
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> OrganizerResponse:
     """
@@ -386,6 +399,7 @@ async def update_organizer(
     try:
         updated_organizer = organizer_service.update(
             guid=guid,
+            team_id=ctx.team_id,
             name=organizer_update.name,
             category_guid=organizer_update.category_guid,
             website=organizer_update.website,
@@ -397,7 +411,7 @@ async def update_organizer(
 
         logger.info(
             f"Updated organizer: {updated_organizer.name}",
-            extra={"guid": guid},
+            extra={"guid": guid, "team_id": ctx.team_id},
         )
 
         return OrganizerResponse.model_validate(updated_organizer)
@@ -432,6 +446,7 @@ async def update_organizer(
 )
 async def delete_organizer(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> None:
     """
@@ -458,9 +473,9 @@ async def delete_organizer(
         "Cannot delete organizer 'Live Nation': 5 event(s) are using it"
     """
     try:
-        organizer_service.delete(guid)
+        organizer_service.delete(guid, team_id=ctx.team_id)
 
-        logger.info(f"Deleted organizer", extra={"guid": guid})
+        logger.info(f"Deleted organizer", extra={"guid": guid, "team_id": ctx.team_id})
 
     except NotFoundError:
         logger.warning(f"Organizer not found for deletion: {guid}")
@@ -493,6 +508,7 @@ async def delete_organizer(
 async def validate_category_match(
     guid: str,
     event_category_guid: str,
+    ctx: TenantContext = Depends(require_auth),
     organizer_service: OrganizerService = Depends(get_organizer_service),
 ) -> dict:
     """
@@ -521,6 +537,7 @@ async def validate_category_match(
         matches = organizer_service.validate_category_match(
             organizer_guid=guid,
             event_category_guid=event_category_guid,
+            team_id=ctx.team_id,
         )
 
         logger.info(
@@ -529,6 +546,7 @@ async def validate_category_match(
                 "organizer_guid": guid,
                 "event_category_guid": event_category_guid,
                 "matches": matches,
+                "team_id": ctx.team_id,
             },
         )
 

@@ -17,10 +17,14 @@ import {
   GitBranch,
   Calendar,
   BookOpen,
+  User,
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
 import { ErrorBoundary } from './components/error'
+import { AuthProvider } from './contexts/AuthContext'
+import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { AuthRedirectHandler } from './components/auth/AuthRedirectHandler'
 
 // Page components
 import DashboardPage from './pages/DashboardPage'
@@ -35,6 +39,8 @@ import PipelinesPage from './pages/PipelinesPage'
 import PipelineEditorPage from './pages/PipelineEditorPage'
 import EventsPage from './pages/EventsPage'
 import DirectoryPage from './pages/DirectoryPage'
+import LoginPage from './pages/LoginPage'
+import ProfilePage from './pages/ProfilePage'
 
 // ============================================================================
 // Route Configuration
@@ -125,28 +131,74 @@ function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <Routes>
-          {routes.map(({ path, element, pageTitle, pageIcon, pageHelp }) => (
+        <AuthProvider>
+          <AuthRedirectHandler>
+            <Routes>
+            {/* Login page - public, no auth required */}
+            <Route path="/login" element={<LoginPage />} />
+
+            {/* Protected routes - require authentication */}
+            {routes.map(({ path, element, pageTitle, pageIcon, pageHelp }) => (
+              <Route
+                key={path}
+                path={path}
+                element={
+                  <ProtectedRoute>
+                    <MainLayout pageTitle={pageTitle} pageIcon={pageIcon} pageHelp={pageHelp}>
+                      {element}
+                    </MainLayout>
+                  </ProtectedRoute>
+                }
+              />
+            ))}
+
+            {/* Profile page - user profile view */}
             <Route
-              key={path}
-              path={path}
+              path="/profile"
               element={
-                <MainLayout pageTitle={pageTitle} pageIcon={pageIcon} pageHelp={pageHelp}>
-                  {element}
-                </MainLayout>
+                <ProtectedRoute>
+                  <MainLayout pageTitle="Profile" pageIcon={User}>
+                    <ProfilePage />
+                  </MainLayout>
+                </ProtectedRoute>
               }
             />
-          ))}
-          {/* Pipeline editor routes - these pages include their own MainLayout */}
-          <Route path="/pipelines/new" element={<PipelineEditorPage />} />
-          <Route path="/pipelines/:id" element={<PipelineEditorPage />} />
-          <Route path="/pipelines/:id/edit" element={<PipelineEditorPage />} />
-          {/* Legacy route redirects (Issue #39 - Navigation restructure) */}
-          <Route path="/connectors" element={<Navigate to="/settings?tab=connectors" replace />} />
-          <Route path="/config" element={<Navigate to="/settings?tab=config" replace />} />
-          {/* Catch-all 404 route */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+
+            {/* Pipeline editor routes - these pages include their own MainLayout */}
+            <Route
+              path="/pipelines/new"
+              element={
+                <ProtectedRoute>
+                  <PipelineEditorPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pipelines/:id"
+              element={
+                <ProtectedRoute>
+                  <PipelineEditorPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pipelines/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <PipelineEditorPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Legacy route redirects (Issue #39 - Navigation restructure) */}
+            <Route path="/connectors" element={<Navigate to="/settings?tab=connectors" replace />} />
+            <Route path="/config" element={<Navigate to="/settings?tab=config" replace />} />
+
+            {/* Catch-all 404 route */}
+            <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </AuthRedirectHandler>
+        </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>
   )

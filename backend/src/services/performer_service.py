@@ -56,6 +56,7 @@ class PerformerService:
         self,
         name: str,
         category_guid: str,
+        team_id: int,
         website: Optional[str] = None,
         instagram_handle: Optional[str] = None,
         additional_info: Optional[str] = None,
@@ -66,6 +67,7 @@ class PerformerService:
         Args:
             name: Performer display name
             category_guid: Category GUID (must be active)
+            team_id: Team ID for tenant isolation
             website: Performer website URL
             instagram_handle: Instagram username (without @)
             additional_info: Additional notes/bio
@@ -91,6 +93,7 @@ class PerformerService:
             performer = Performer(
                 name=name,
                 category_id=category.id,
+                team_id=team_id,
                 website=website,
                 instagram_handle=instagram_handle,
                 additional_info=additional_info,
@@ -99,7 +102,7 @@ class PerformerService:
             self.db.commit()
             self.db.refresh(performer)
 
-            logger.info(f"Created performer: {performer.name} ({performer.guid})")
+            logger.info(f"Created performer: {performer.name} ({performer.guid}) for team_id={team_id}")
             return performer
 
         except IntegrityError as e:
@@ -107,18 +110,19 @@ class PerformerService:
             logger.error(f"Failed to create performer '{name}': {e}")
             raise ValidationError("Failed to create performer: database constraint violation")
 
-    def get_by_guid(self, guid: str) -> Performer:
+    def get_by_guid(self, guid: str, team_id: Optional[int] = None) -> Performer:
         """
         Get a performer by GUID.
 
         Args:
             guid: Performer GUID (prf_xxx format)
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Performer instance
 
         Raises:
-            NotFoundError: If performer not found
+            NotFoundError: If performer not found or belongs to different team
         """
         # Validate GUID format
         if not GuidService.validate_guid(guid, "prf"):
@@ -130,9 +134,11 @@ class PerformerService:
         except ValueError:
             raise NotFoundError("Performer", guid)
 
-        performer = (
-            self.db.query(Performer).filter(Performer.uuid == uuid_value).first()
-        )
+        query = self.db.query(Performer).filter(Performer.uuid == uuid_value)
+        if team_id is not None:
+            query = query.filter(Performer.team_id == team_id)
+
+        performer = query.first()
         if not performer:
             raise NotFoundError("Performer", guid)
 
@@ -158,6 +164,7 @@ class PerformerService:
 
     def list(
         self,
+        team_id: int,
         category_guid: Optional[str] = None,
         search: Optional[str] = None,
         limit: int = 100,
@@ -167,6 +174,7 @@ class PerformerService:
         List performers with optional filtering.
 
         Args:
+            team_id: Team ID for tenant isolation
             category_guid: Filter by category GUID
             search: Search term for name/instagram/additional_info
             limit: Maximum number of results
@@ -175,7 +183,7 @@ class PerformerService:
         Returns:
             Tuple of (list of Performer instances, total count)
         """
-        query = self.db.query(Performer)
+        query = self.db.query(Performer).filter(Performer.team_id == team_id)
 
         # Filter by category
         if category_guid:
@@ -208,6 +216,7 @@ class PerformerService:
     def update(
         self,
         guid: str,
+        team_id: Optional[int] = None,
         name: Optional[str] = None,
         category_guid: Optional[str] = None,
         website: Optional[str] = None,
@@ -219,6 +228,7 @@ class PerformerService:
 
         Args:
             guid: Performer GUID
+            team_id: Team ID for tenant isolation (if provided, filters by team)
             name: New name
             category_guid: New category GUID
             website: New website URL (empty string to clear)
@@ -229,10 +239,10 @@ class PerformerService:
             Updated Performer instance
 
         Raises:
-            NotFoundError: If performer or category not found
+            NotFoundError: If performer or category not found or belongs to different team
             ValidationError: If category inactive
         """
-        performer = self.get_by_guid(guid)
+        performer = self.get_by_guid(guid, team_id=team_id)
 
         # Validate and resolve new category if provided
         if category_guid is not None:
@@ -265,18 +275,19 @@ class PerformerService:
             logger.error(f"Failed to update performer {guid}: {e}")
             raise ValidationError("Failed to update performer: database constraint violation")
 
-    def delete(self, guid: str) -> None:
+    def delete(self, guid: str, team_id: Optional[int] = None) -> None:
         """
         Delete a performer.
 
         Args:
             guid: Performer GUID
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Raises:
-            NotFoundError: If performer not found
+            NotFoundError: If performer not found or belongs to different team
             ConflictError: If performer has event associations
         """
-        performer = self.get_by_guid(guid)
+        performer = self.get_by_guid(guid, team_id=team_id)
 
         # Check for event associations
         event_count = (
@@ -301,9 +312,12 @@ class PerformerService:
                 f"Cannot delete performer '{performer.name}': it has associated entities"
             )
 
-    def get_stats(self) -> dict:
+    def get_stats(self, team_id: int) -> dict:
         """
-        Get performer statistics.
+        Get performer statistics for a team.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Dictionary with performer statistics:
@@ -313,14 +327,20 @@ class PerformerService:
                 "with_website_count": int
             }
         """
-        total = self.db.query(func.count(Performer.id)).scalar()
+        total = (
+            self.db.query(func.count(Performer.id))
+            .filter(Performer.team_id == team_id)
+            .scalar()
+        )
         with_instagram = (
             self.db.query(func.count(Performer.id))
+            .filter(Performer.team_id == team_id)
             .filter(Performer.instagram_handle.isnot(None))
             .scalar()
         )
         with_website = (
             self.db.query(func.count(Performer.id))
+            .filter(Performer.team_id == team_id)
             .filter(Performer.website.isnot(None))
             .scalar()
         )
@@ -335,6 +355,7 @@ class PerformerService:
         self,
         performer_guid: str,
         event_category_guid: str,
+        team_id: Optional[int] = None,
     ) -> bool:
         """
         Validate that a performer's category matches an event's category.
@@ -344,18 +365,20 @@ class PerformerService:
         Args:
             performer_guid: Performer GUID to validate
             event_category_guid: Event's category GUID
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             True if categories match, False otherwise
 
         Raises:
-            NotFoundError: If performer not found
+            NotFoundError: If performer not found or belongs to different team
         """
-        performer = self.get_by_guid(performer_guid)
+        performer = self.get_by_guid(performer_guid, team_id=team_id)
         return performer.category.guid == event_category_guid
 
     def get_by_category(
         self,
+        team_id: int,
         category_guid: str,
         search: Optional[str] = None,
         limit: int = 100,
@@ -366,6 +389,7 @@ class PerformerService:
         Convenience method for populating performer pickers in the UI.
 
         Args:
+            team_id: Team ID for tenant isolation
             category_guid: Category GUID to filter by
             search: Optional search term
             limit: Maximum results
@@ -379,6 +403,7 @@ class PerformerService:
         category = self._resolve_category(category_guid)
         query = (
             self.db.query(Performer)
+            .filter(Performer.team_id == team_id)
             .filter(Performer.category_id == category.id)
         )
 

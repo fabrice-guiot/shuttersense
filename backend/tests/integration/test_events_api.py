@@ -24,7 +24,7 @@ class TestEventsAPI:
     """Integration tests for Events API endpoints."""
 
     @pytest.fixture
-    def test_category(self, test_db_session):
+    def test_category(self, test_db_session, test_team):
         """Create a test category."""
         category = Category(
             name="Test Airshow",
@@ -32,6 +32,7 @@ class TestEventsAPI:
             color="#3B82F6",
             is_active=True,
             display_order=0,
+            team_id=test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -39,7 +40,7 @@ class TestEventsAPI:
         return category
 
     @pytest.fixture
-    def test_events(self, test_db_session, test_category):
+    def test_events(self, test_db_session, test_category, test_team):
         """Create test events."""
         events = []
 
@@ -54,6 +55,7 @@ class TestEventsAPI:
                 status="future",
                 attendance="planned",
                 category_id=test_category.id,
+                team_id=test_team.id,
             )
             test_db_session.add(event)
             events.append(event)
@@ -65,7 +67,7 @@ class TestEventsAPI:
         return events
 
     @pytest.fixture
-    def test_series(self, test_db_session, test_category):
+    def test_series(self, test_db_session, test_category, test_team):
         """Create a test event series with events."""
         series = EventSeries(
             title="Multi-Day Airshow",
@@ -90,6 +92,7 @@ class TestEventsAPI:
                 is_all_day=False,
                 status="future",
                 attendance="planned",
+                team_id=test_team.id,
             )
             test_db_session.add(event)
             events.append(event)
@@ -295,12 +298,13 @@ class TestEventsSoftDelete:
     """Tests for soft-deleted events."""
 
     @pytest.fixture
-    def deleted_event(self, test_db_session):
+    def deleted_event(self, test_db_session, test_team):
         """Create a soft-deleted event."""
         category = Category(
             name="Deleted Test Category",
             is_active=True,
             display_order=0,
+            team_id=test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -313,6 +317,7 @@ class TestEventsSoftDelete:
             status="cancelled",
             attendance="skipped",
             category_id=category.id,
+            team_id=test_team.id,
             deleted_at=datetime.utcnow(),
         )
         test_db_session.add(event)
@@ -368,7 +373,7 @@ class TestEventsCreate:
     """Tests for creating events (Phase 5)."""
 
     @pytest.fixture
-    def test_category(self, test_db_session):
+    def test_category(self, test_db_session, test_team):
         """Create a test category for event creation."""
         category = Category(
             name="Create Test Category",
@@ -376,6 +381,7 @@ class TestEventsCreate:
             color="#FF5733",
             is_active=True,
             display_order=0,
+            team_id=test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -521,7 +527,7 @@ class TestEventsCreate:
         assert response.status_code == 422  # Validation error
 
     def test_create_event_with_organizer_ticket_default(
-        self, test_client, test_db_session, test_category
+        self, test_client, test_db_session, test_category, test_team
     ):
         """Test that organizer's ticket_required_default is applied to new events."""
         # Create an organizer with ticket_required_default=True
@@ -529,6 +535,7 @@ class TestEventsCreate:
             name="Ticket Required Organizer",
             category_id=test_category.id,
             ticket_required_default=True,
+            team_id=test_team.id,
         )
         test_db_session.add(organizer)
         test_db_session.commit()
@@ -556,7 +563,7 @@ class TestEventsCreate:
         assert detail["ticket_required"] is True
 
     def test_create_event_with_location_logistics_defaults(
-        self, test_client, test_db_session, test_category
+        self, test_client, test_db_session, test_category, test_team
     ):
         """Test that location's travel/timeoff defaults are applied to new events."""
         # Create a location with logistics defaults
@@ -568,6 +575,7 @@ class TestEventsCreate:
             is_known=True,
             timeoff_required_default=True,
             travel_required_default=True,
+            team_id=test_team.id,
         )
         test_db_session.add(location)
         test_db_session.commit()
@@ -596,7 +604,7 @@ class TestEventsCreate:
         assert detail["travel_required"] is True
 
     def test_create_event_explicit_overrides_defaults(
-        self, test_client, test_db_session, test_category
+        self, test_client, test_db_session, test_category, test_team
     ):
         """Test that explicit False overrides organizer/location defaults."""
         # Create organizer with default=True
@@ -604,6 +612,7 @@ class TestEventsCreate:
             name="Ticket Default Organizer",
             category_id=test_category.id,
             ticket_required_default=True,
+            team_id=test_team.id,
         )
         test_db_session.add(organizer)
 
@@ -615,6 +624,7 @@ class TestEventsCreate:
             category_id=test_category.id,
             is_known=True,
             travel_required_default=True,
+            team_id=test_team.id,
         )
         test_db_session.add(location)
         test_db_session.commit()
@@ -650,7 +660,7 @@ class TestEventsUpdate:
     """Tests for updating events (Phase 5)."""
 
     @pytest.fixture
-    def update_category(self, test_db_session):
+    def update_category(self, test_db_session, test_team):
         """Create a test category."""
         category = Category(
             name="Update Test Category",
@@ -658,6 +668,7 @@ class TestEventsUpdate:
             color="#00FF00",
             is_active=True,
             display_order=0,
+            team_id=test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -665,7 +676,7 @@ class TestEventsUpdate:
         return category
 
     @pytest.fixture
-    def update_event(self, test_db_session, update_category):
+    def update_event(self, test_db_session, update_category, test_team):
         """Create an event for update testing."""
         event = Event(
             title="Event to Update",
@@ -675,6 +686,7 @@ class TestEventsUpdate:
             status="future",
             attendance="planned",
             category_id=update_category.id,
+            team_id=test_team.id,
         )
         test_db_session.add(event)
         test_db_session.commit()
@@ -682,7 +694,7 @@ class TestEventsUpdate:
         return event
 
     @pytest.fixture
-    def update_series(self, test_db_session, update_category):
+    def update_series(self, test_db_session, update_category, test_team):
         """Create a series for update testing."""
         series = EventSeries(
             title="Series to Update",
@@ -703,6 +715,7 @@ class TestEventsUpdate:
                 end_time=time(17, 0),
                 status="future",
                 attendance="planned",
+                team_id=test_team.id,
             )
             test_db_session.add(event)
             events.append(event)
@@ -799,7 +812,7 @@ class TestEventsUpdate:
             assert response.json()["status"] == "confirmed"
 
     def test_update_series_location_syncs_to_all_events(
-        self, test_client, test_db_session, update_category, update_series
+        self, test_client, test_db_session, update_category, update_series, test_team
     ):
         """Test that updating location on a series event syncs to ALL events.
 
@@ -815,6 +828,7 @@ class TestEventsUpdate:
             country="USA",
             category_id=update_category.id,
             is_known=True,
+            team_id=test_team.id,
         )
         test_db_session.add(location)
         test_db_session.commit()
@@ -842,7 +856,7 @@ class TestEventsUpdate:
             assert data["location"]["name"] == "Test Venue"
 
     def test_update_series_location_clear_syncs_to_all_events(
-        self, test_client, test_db_session, update_category
+        self, test_client, test_db_session, update_category, test_team
     ):
         """Test that clearing location on a series event syncs to ALL events."""
         # Create a location
@@ -852,6 +866,7 @@ class TestEventsUpdate:
             country="USA",
             category_id=update_category.id,
             is_known=True,
+            team_id=test_team.id,
         )
         test_db_session.add(location)
         test_db_session.commit()
@@ -877,6 +892,7 @@ class TestEventsUpdate:
                 location_id=location.id,  # All start with location
                 status="future",
                 attendance="planned",
+                team_id=test_team.id,
             )
             test_db_session.add(event)
             events.append(event)
@@ -904,7 +920,7 @@ class TestEventsUpdate:
             assert data["location"] is None, f"Event {event.guid} location not cleared"
 
     def test_update_series_organizer_syncs_to_all_events(
-        self, test_client, test_db_session, update_category, update_series
+        self, test_client, test_db_session, update_category, update_series, test_team
     ):
         """Test that updating organizer on a series event syncs to ALL events.
 
@@ -918,6 +934,7 @@ class TestEventsUpdate:
             name="Test Organizer",
             category_id=update_category.id,
             ticket_required_default=True,
+            team_id=test_team.id,
         )
         test_db_session.add(organizer)
         test_db_session.commit()
@@ -945,7 +962,7 @@ class TestEventsUpdate:
             assert data["organizer"]["name"] == "Test Organizer"
 
     def test_update_series_organizer_clear_syncs_to_all_events(
-        self, test_client, test_db_session, update_category
+        self, test_client, test_db_session, update_category, test_team
     ):
         """Test that clearing organizer on a series event syncs to ALL events."""
         # Create an organizer
@@ -953,6 +970,7 @@ class TestEventsUpdate:
             name="Organizer to Clear",
             category_id=update_category.id,
             ticket_required_default=False,
+            team_id=test_team.id,
         )
         test_db_session.add(organizer)
         test_db_session.commit()
@@ -978,6 +996,7 @@ class TestEventsUpdate:
                 organizer_id=organizer.id,  # All start with organizer
                 status="future",
                 attendance="planned",
+                team_id=test_team.id,
             )
             test_db_session.add(event)
             events.append(event)
@@ -1009,12 +1028,13 @@ class TestEventsDelete:
     """Tests for deleting events (Phase 5)."""
 
     @pytest.fixture
-    def delete_category(self, test_db_session):
+    def delete_category(self, test_db_session, test_team):
         """Create a test category."""
         category = Category(
             name="Delete Test Category",
             is_active=True,
             display_order=0,
+            team_id=test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -1022,7 +1042,7 @@ class TestEventsDelete:
         return category
 
     @pytest.fixture
-    def delete_event(self, test_db_session, delete_category):
+    def delete_event(self, test_db_session, delete_category, test_team):
         """Create an event for delete testing."""
         event = Event(
             title="Event to Delete",
@@ -1030,6 +1050,7 @@ class TestEventsDelete:
             status="future",
             attendance="planned",
             category_id=delete_category.id,
+            team_id=test_team.id,
         )
         test_db_session.add(event)
         test_db_session.commit()
@@ -1037,7 +1058,7 @@ class TestEventsDelete:
         return event
 
     @pytest.fixture
-    def delete_series(self, test_db_session, delete_category):
+    def delete_series(self, test_db_session, delete_category, test_team):
         """Create a series for delete testing."""
         series = EventSeries(
             title="Series to Delete",
@@ -1056,6 +1077,7 @@ class TestEventsDelete:
                 event_date=date(2026, 12, 10 + i),
                 status="future",
                 attendance="planned",
+                team_id=test_team.id,
             )
             test_db_session.add(event)
             events.append(event)
@@ -1155,7 +1177,7 @@ class TestEventsDeadline:
     """
 
     @pytest.fixture
-    def deadline_category(self, test_db_session):
+    def deadline_category(self, test_db_session, test_team):
         """Create a test category for deadline tests."""
         category = Category(
             name="Deadline Test Category",
@@ -1163,6 +1185,7 @@ class TestEventsDeadline:
             color="#FF0000",
             is_active=True,
             display_order=0,
+            team_id=test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -1170,11 +1193,12 @@ class TestEventsDeadline:
         return category
 
     @pytest.fixture
-    def deadline_organizer(self, test_db_session, deadline_category):
+    def deadline_organizer(self, test_db_session, deadline_category, test_team):
         """Create a test organizer for deadline tests."""
         organizer = Organizer(
             name="Deadline Test Organizer",
             category_id=deadline_category.id,
+            team_id=test_team.id,
         )
         test_db_session.add(organizer)
         test_db_session.commit()
@@ -1182,7 +1206,7 @@ class TestEventsDeadline:
         return organizer
 
     @pytest.fixture
-    def deadline_location(self, test_db_session, deadline_category):
+    def deadline_location(self, test_db_session, deadline_category, test_team):
         """Create a test location for deadline tests."""
         location = Location(
             name="Deadline Test Location",
@@ -1190,6 +1214,7 @@ class TestEventsDeadline:
             country="USA",
             category_id=deadline_category.id,
             is_known=True,
+            team_id=test_team.id,
         )
         test_db_session.add(location)
         test_db_session.commit()

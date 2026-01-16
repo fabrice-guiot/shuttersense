@@ -58,6 +58,7 @@ class OrganizerService:
         self,
         name: str,
         category_guid: str,
+        team_id: int,
         website: Optional[str] = None,
         instagram_handle: Optional[str] = None,
         rating: Optional[int] = None,
@@ -70,6 +71,7 @@ class OrganizerService:
         Args:
             name: Organizer display name
             category_guid: Category GUID (must be active)
+            team_id: Team ID for tenant isolation
             website: Organizer website URL
             instagram_handle: Instagram username (without @)
             rating: Organizer rating (1-5)
@@ -104,6 +106,7 @@ class OrganizerService:
             organizer = Organizer(
                 name=name,
                 category_id=category.id,
+                team_id=team_id,
                 website=website,
                 instagram_handle=instagram_handle,
                 rating=rating,
@@ -114,7 +117,7 @@ class OrganizerService:
             self.db.commit()
             self.db.refresh(organizer)
 
-            logger.info(f"Created organizer: {organizer.name} ({organizer.guid})")
+            logger.info(f"Created organizer: {organizer.name} ({organizer.guid}) for team_id={team_id}")
             return organizer
 
         except IntegrityError as e:
@@ -122,18 +125,19 @@ class OrganizerService:
             logger.error(f"Failed to create organizer '{name}': {e}")
             raise ValidationError("Failed to create organizer: database constraint violation")
 
-    def get_by_guid(self, guid: str) -> Organizer:
+    def get_by_guid(self, guid: str, team_id: Optional[int] = None) -> Organizer:
         """
         Get an organizer by GUID.
 
         Args:
             guid: Organizer GUID (org_xxx format)
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Organizer instance
 
         Raises:
-            NotFoundError: If organizer not found
+            NotFoundError: If organizer not found or belongs to different team
         """
         # Validate GUID format
         if not GuidService.validate_guid(guid, "org"):
@@ -145,9 +149,11 @@ class OrganizerService:
         except ValueError:
             raise NotFoundError("Organizer", guid)
 
-        organizer = (
-            self.db.query(Organizer).filter(Organizer.uuid == uuid_value).first()
-        )
+        query = self.db.query(Organizer).filter(Organizer.uuid == uuid_value)
+        if team_id is not None:
+            query = query.filter(Organizer.team_id == team_id)
+
+        organizer = query.first()
         if not organizer:
             raise NotFoundError("Organizer", guid)
 
@@ -173,6 +179,7 @@ class OrganizerService:
 
     def list(
         self,
+        team_id: int,
         category_guid: Optional[str] = None,
         search: Optional[str] = None,
         limit: int = 100,
@@ -182,6 +189,7 @@ class OrganizerService:
         List organizers with optional filtering.
 
         Args:
+            team_id: Team ID for tenant isolation
             category_guid: Filter by category GUID
             search: Search term for name/website/notes
             limit: Maximum number of results
@@ -190,7 +198,7 @@ class OrganizerService:
         Returns:
             Tuple of (list of Organizer instances, total count)
         """
-        query = self.db.query(Organizer)
+        query = self.db.query(Organizer).filter(Organizer.team_id == team_id)
 
         # Filter by category
         if category_guid:
@@ -224,6 +232,7 @@ class OrganizerService:
     def update(
         self,
         guid: str,
+        team_id: Optional[int] = None,
         name: Optional[str] = None,
         category_guid: Optional[str] = None,
         website: Optional[str] = None,
@@ -237,6 +246,7 @@ class OrganizerService:
 
         Args:
             guid: Organizer GUID
+            team_id: Team ID for tenant isolation (if provided, validates ownership)
             name: New name
             category_guid: New category GUID
             website: New website URL
@@ -249,10 +259,10 @@ class OrganizerService:
             Updated Organizer instance
 
         Raises:
-            NotFoundError: If organizer or category not found
+            NotFoundError: If organizer or category not found or belongs to different team
             ValidationError: If category inactive or rating invalid
         """
-        organizer = self.get_by_guid(guid)
+        organizer = self.get_by_guid(guid, team_id=team_id)
 
         # Validate and resolve new category if provided
         if category_guid is not None:
@@ -296,18 +306,19 @@ class OrganizerService:
             logger.error(f"Failed to update organizer {guid}: {e}")
             raise ValidationError("Failed to update organizer: database constraint violation")
 
-    def delete(self, guid: str) -> None:
+    def delete(self, guid: str, team_id: Optional[int] = None) -> None:
         """
         Delete an organizer.
 
         Args:
             guid: Organizer GUID
+            team_id: Team ID for tenant isolation (if provided, validates ownership)
 
         Raises:
-            NotFoundError: If organizer not found
+            NotFoundError: If organizer not found or belongs to different team
             ConflictError: If organizer has associated events
         """
-        organizer = self.get_by_guid(guid)
+        organizer = self.get_by_guid(guid, team_id=team_id)
 
         # Check for dependent events
         from backend.src.models import Event, EventSeries
@@ -345,9 +356,12 @@ class OrganizerService:
                 f"Cannot delete organizer '{organizer.name}': it has associated entities"
             )
 
-    def get_stats(self) -> dict:
+    def get_stats(self, team_id: int) -> dict:
         """
         Get organizer statistics.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Dictionary with organizer statistics:
@@ -358,19 +372,26 @@ class OrganizerService:
                 "avg_rating": Optional[float]
             }
         """
-        total = self.db.query(func.count(Organizer.id)).scalar()
+        total = (
+            self.db.query(func.count(Organizer.id))
+            .filter(Organizer.team_id == team_id)
+            .scalar()
+        )
         with_rating = (
             self.db.query(func.count(Organizer.id))
+            .filter(Organizer.team_id == team_id)
             .filter(Organizer.rating.isnot(None))
             .scalar()
         )
         with_instagram = (
             self.db.query(func.count(Organizer.id))
+            .filter(Organizer.team_id == team_id)
             .filter(Organizer.instagram_handle.isnot(None))
             .scalar()
         )
         avg_rating = (
             self.db.query(func.avg(Organizer.rating))
+            .filter(Organizer.team_id == team_id)
             .filter(Organizer.rating.isnot(None))
             .scalar()
         )
@@ -386,6 +407,7 @@ class OrganizerService:
         self,
         organizer_guid: str,
         event_category_guid: str,
+        team_id: Optional[int] = None,
     ) -> bool:
         """
         Validate that an organizer's category matches an event's category.
@@ -395,19 +417,21 @@ class OrganizerService:
         Args:
             organizer_guid: Organizer GUID to validate
             event_category_guid: Event's category GUID
+            team_id: Team ID for tenant isolation (if provided, validates ownership)
 
         Returns:
             True if categories match, False otherwise
 
         Raises:
-            NotFoundError: If organizer not found
+            NotFoundError: If organizer not found or belongs to different team
         """
-        organizer = self.get_by_guid(organizer_guid)
+        organizer = self.get_by_guid(organizer_guid, team_id=team_id)
         return organizer.category.guid == event_category_guid
 
     def get_by_category(
         self,
         category_guid: str,
+        team_id: int,
     ) -> List[Organizer]:
         """
         Get all organizers for a specific category.
@@ -416,6 +440,7 @@ class OrganizerService:
 
         Args:
             category_guid: Category GUID to filter by
+            team_id: Team ID for tenant isolation
 
         Returns:
             List of Organizer instances matching the category
@@ -424,6 +449,7 @@ class OrganizerService:
         return (
             self.db.query(Organizer)
             .filter(Organizer.category_id == category.id)
+            .filter(Organizer.team_id == team_id)
             .order_by(Organizer.name.asc())
             .all()
         )

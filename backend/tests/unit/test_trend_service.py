@@ -42,7 +42,7 @@ def sample_pipeline(test_db_session):
 
 
 @pytest.fixture
-def sample_result(test_db_session, sample_collection):
+def sample_result(test_db_session, sample_collection, test_team):
     """Factory for creating sample AnalysisResult models."""
     def _create(
         tool="photostats",
@@ -50,6 +50,7 @@ def sample_result(test_db_session, sample_collection):
         results_json=None,
         completed_at=None,
         pipeline_id=None,
+        team_id=None,
         **kwargs
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -78,6 +79,7 @@ def sample_result(test_db_session, sample_collection):
                 results_json=results_json,
                 files_scanned=100,
                 issues_found=0,
+                team_id=team_id if team_id is not None else test_team.id,
                 **kwargs
             )
             test_db_session.add(result)
@@ -124,7 +126,7 @@ class TestParseCollectionIds:
 class TestPhotoStatsTrends:
     """Tests for PhotoStats trend extraction."""
 
-    def test_extract_orphaned_counts(self, trend_service, sample_result, sample_collection):
+    def test_extract_orphaned_counts(self, trend_service, sample_result, sample_collection, test_team):
         """Test extracting orphaned file counts from JSONB."""
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(name="Test", location=temp_dir)
@@ -141,6 +143,7 @@ class TestPhotoStatsTrends:
         )
 
         response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id)
         )
 
@@ -152,7 +155,7 @@ class TestPhotoStatsTrends:
         assert point.total_files == 500
         assert point.total_size == 5000000
 
-    def test_filter_by_date_range(self, trend_service, sample_result, sample_collection):
+    def test_filter_by_date_range(self, trend_service, sample_result, sample_collection, test_team):
         """Test date range filtering."""
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(name="Date Test", location=temp_dir)
@@ -176,6 +179,7 @@ class TestPhotoStatsTrends:
 
         # Filter to recent week
         response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id),
             from_date=(now - timedelta(days=7)).date()
         )
@@ -186,7 +190,7 @@ class TestPhotoStatsTrends:
 class TestPhotoPairingTrends:
     """Tests for Photo Pairing trend extraction."""
 
-    def test_extract_camera_usage(self, trend_service, sample_result, sample_collection):
+    def test_extract_camera_usage(self, trend_service, sample_result, sample_collection, test_team):
         """Test extracting camera usage from JSONB."""
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(name="Camera Test", location=temp_dir)
@@ -202,6 +206,7 @@ class TestPhotoPairingTrends:
         )
 
         response = trend_service.get_photo_pairing_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id)
         )
 
@@ -212,7 +217,7 @@ class TestPhotoPairingTrends:
         assert point.camera_usage["AB3D"] == 200
 
     def test_aggregate_cameras_across_results(
-        self, trend_service, sample_result, sample_collection
+        self, trend_service, sample_result, sample_collection, test_team
     ):
         """Test that camera list aggregates across multiple results."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -233,6 +238,7 @@ class TestPhotoPairingTrends:
         )
 
         response = trend_service.get_photo_pairing_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id)
         )
 
@@ -241,7 +247,7 @@ class TestPhotoPairingTrends:
         assert "XY7Z" in response.collections[0].cameras
 
     def test_extract_camera_usage_complex_format(
-        self, trend_service, sample_result, sample_collection
+        self, trend_service, sample_result, sample_collection, test_team
     ):
         """Test extracting camera usage when stored as complex objects.
 
@@ -276,6 +282,7 @@ class TestPhotoPairingTrends:
         )
 
         response = trend_service.get_photo_pairing_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id)
         )
 
@@ -292,7 +299,7 @@ class TestPipelineValidationTrends:
     """Tests for Pipeline Validation trend extraction."""
 
     def test_extract_consistency_ratios(
-        self, trend_service, sample_result, sample_collection, sample_pipeline
+        self, trend_service, sample_result, sample_collection, sample_pipeline, test_team
     ):
         """Test extracting consistency ratios from JSONB."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -313,6 +320,7 @@ class TestPipelineValidationTrends:
         )
 
         response = trend_service.get_pipeline_validation_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id)
         )
 
@@ -325,7 +333,7 @@ class TestPipelineValidationTrends:
         assert point.inconsistent_ratio == 5.0
 
     def test_filter_by_pipeline_id(
-        self, trend_service, sample_result, sample_collection, sample_pipeline
+        self, trend_service, sample_result, sample_collection, sample_pipeline, test_team
     ):
         """Test filtering by pipeline ID."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -349,6 +357,7 @@ class TestPipelineValidationTrends:
         )
 
         response = trend_service.get_pipeline_validation_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id),
             pipeline_id=pipeline1.id
         )
@@ -358,7 +367,7 @@ class TestPipelineValidationTrends:
             assert point.pipeline_id == pipeline1.id
 
     def test_filter_by_pipeline_version(
-        self, trend_service, sample_result, sample_collection, sample_pipeline, test_db_session
+        self, trend_service, sample_result, sample_collection, sample_pipeline, test_db_session, test_team
     ):
         """Test filtering by pipeline version."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -399,6 +408,7 @@ class TestPipelineValidationTrends:
 
         # Filter by version 2
         response = trend_service.get_pipeline_validation_trends(
+            team_id=test_team.id,
             collection_ids=str(collection.id),
             pipeline_id=pipeline.id,
             pipeline_version=2
@@ -479,16 +489,16 @@ class TestTrendDirectionCalculation:
 class TestTrendSummary:
     """Tests for trend summary generation."""
 
-    def test_summary_with_no_data(self, trend_service):
+    def test_summary_with_no_data(self, trend_service, test_team):
         """Test summary when no data exists."""
-        summary = trend_service.get_trend_summary()
+        summary = trend_service.get_trend_summary(team_id=test_team.id)
 
         assert summary.orphaned_trend == TrendDirection.INSUFFICIENT_DATA
         assert summary.consistency_trend == TrendDirection.INSUFFICIENT_DATA
         assert summary.data_points_available.photostats == 0
 
     def test_summary_counts_by_tool(
-        self, trend_service, sample_result, sample_collection, sample_pipeline
+        self, trend_service, sample_result, sample_collection, sample_pipeline, test_team
     ):
         """Test that summary counts results by tool."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -506,14 +516,14 @@ class TestTrendSummary:
             pipeline_id=pipeline.id
         )
 
-        summary = trend_service.get_trend_summary()
+        summary = trend_service.get_trend_summary(team_id=test_team.id)
 
         assert summary.data_points_available.photostats == 3
         assert summary.data_points_available.photo_pairing == 2
         assert summary.data_points_available.pipeline_validation == 1
 
     def test_summary_filter_by_collection(
-        self, trend_service, sample_result, sample_collection
+        self, trend_service, sample_result, sample_collection, test_team
     ):
         """Test summary filtered by collection."""
         with tempfile.TemporaryDirectory() as temp_dir1:
@@ -529,13 +539,13 @@ class TestTrendSummary:
         sample_result(tool="photostats", collection_id=collection2.id)
 
         # Filter to collection1
-        summary = trend_service.get_trend_summary(collection_id=collection1.id)
+        summary = trend_service.get_trend_summary(team_id=test_team.id, collection_id=collection1.id)
 
         assert summary.collection_id == collection1.id
         assert summary.data_points_available.photostats == 3
 
     def test_summary_calculates_orphaned_trend(
-        self, trend_service, sample_result, sample_collection
+        self, trend_service, sample_result, sample_collection, test_team
     ):
         """Test that orphaned trend is calculated with sufficient data."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -555,7 +565,7 @@ class TestTrendSummary:
                 completed_at=base_time + timedelta(days=i)
             )
 
-        summary = trend_service.get_trend_summary(collection_id=collection.id)
+        summary = trend_service.get_trend_summary(team_id=test_team.id, collection_id=collection.id)
 
         # Should have a calculated trend (not insufficient_data)
         assert summary.orphaned_trend in [

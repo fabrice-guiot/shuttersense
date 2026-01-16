@@ -1,0 +1,329 @@
+openapi: 3.1.0
+info:
+  title: Photo Admin API Tokens API
+  description: API token management endpoints for programmatic access
+  version: 1.0.0
+
+paths:
+  /api/tokens:
+    get:
+      summary: List user's API tokens
+      description: Returns all API tokens owned by the authenticated user
+      operationId: listTokens
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        '200':
+          description: List of tokens (without full token values)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create API token
+      description: Generate a new API token (full token shown only once)
+      operationId: createToken
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTokenRequest'
+      responses:
+        '201':
+          description: Token created (includes full token value - shown only once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenCreatedResponse'
+        '400':
+          description: Invalid request or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/tokens/{guid}:
+    get:
+      summary: Get token by GUID
+      description: Returns token metadata (not the token value)
+      operationId: getToken
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^tok_[a-z0-9]{26}$'
+          description: Token GUID
+      responses:
+        '200':
+          description: Token metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Token not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Revoke token
+      description: Revoke an API token (cannot be undone)
+      operationId: revokeToken
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^tok_[a-z0-9]{26}$'
+      responses:
+        '204':
+          description: Token revoked
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Token not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/tokens/validate:
+    post:
+      summary: Validate token
+      description: Check if a token is valid (for testing purposes)
+      operationId: validateToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: The full JWT token to validate
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  user_guid:
+                    type: string
+                  team_guid:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+        '401':
+          description: Token is invalid or expired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Token expired"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: photo_admin_session
+
+  schemas:
+    TokenResponse:
+      type: object
+      required:
+        - guid
+        - name
+        - token_prefix
+        - is_active
+        - expires_at
+        - created_at
+      properties:
+        guid:
+          type: string
+          example: "tok_01hgw2bbg0000000000000001"
+        name:
+          type: string
+          example: "CI/CD Pipeline Token"
+        token_prefix:
+          type: string
+          example: "eyJhbGci"
+          description: First 8 characters of token for identification
+        scopes:
+          type: array
+          items:
+            type: string
+          example: ["*"]
+        is_active:
+          type: boolean
+          example: true
+        expires_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    TokenCreatedResponse:
+      type: object
+      required:
+        - guid
+        - name
+        - token
+        - token_prefix
+        - expires_at
+        - created_at
+      properties:
+        guid:
+          type: string
+          example: "tok_01hgw2bbg0000000000000001"
+        name:
+          type: string
+          example: "CI/CD Pipeline Token"
+        token:
+          type: string
+          description: |
+            Full JWT token - SHOWN ONLY ONCE!
+            Copy this value immediately, it cannot be retrieved again.
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_prefix:
+          type: string
+          example: "eyJhbGci"
+        scopes:
+          type: array
+          items:
+            type: string
+          example: ["*"]
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    TokenListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenResponse'
+        total:
+          type: integer
+          example: 3
+
+    CreateTokenRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "CI/CD Pipeline Token"
+          description: A name to identify this token
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+          default: 90
+          example: 90
+          description: Number of days until token expires (default 90)
+        scopes:
+          type: array
+          items:
+            type: string
+          default: ["*"]
+          description: API scopes (v1 only supports ["*"])
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string

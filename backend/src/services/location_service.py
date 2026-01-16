@@ -72,6 +72,7 @@ class LocationService:
         self,
         name: str,
         category_guid: str,
+        team_id: int,
         address: Optional[str] = None,
         city: Optional[str] = None,
         state: Optional[str] = None,
@@ -93,6 +94,7 @@ class LocationService:
         Args:
             name: Location display name
             category_guid: Category GUID (must be active)
+            team_id: Team ID for tenant isolation
             address: Full street address
             city: City name
             state: State/province
@@ -143,6 +145,7 @@ class LocationService:
             location = Location(
                 name=name,
                 category_id=category.id,
+                team_id=team_id,
                 address=address,
                 city=city,
                 state=state,
@@ -162,7 +165,7 @@ class LocationService:
             self.db.commit()
             self.db.refresh(location)
 
-            logger.info(f"Created location: {location.name} ({location.guid})")
+            logger.info(f"Created location: {location.name} ({location.guid}, team_id={team_id})")
             return location
 
         except IntegrityError as e:
@@ -170,18 +173,19 @@ class LocationService:
             logger.error(f"Failed to create location '{name}': {e}")
             raise ValidationError(f"Failed to create location: database constraint violation")
 
-    def get_by_guid(self, guid: str) -> Location:
+    def get_by_guid(self, guid: str, team_id: Optional[int] = None) -> Location:
         """
         Get a location by GUID.
 
         Args:
             guid: Location GUID (loc_xxx format)
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Location instance
 
         Raises:
-            NotFoundError: If location not found
+            NotFoundError: If location not found or belongs to different team
         """
         # Validate GUID format
         if not GuidService.validate_guid(guid, "loc"):
@@ -193,9 +197,11 @@ class LocationService:
         except ValueError:
             raise NotFoundError("Location", guid)
 
-        location = (
-            self.db.query(Location).filter(Location.uuid == uuid_value).first()
-        )
+        query = self.db.query(Location).filter(Location.uuid == uuid_value)
+        if team_id is not None:
+            query = query.filter(Location.team_id == team_id)
+
+        location = query.first()
         if not location:
             raise NotFoundError("Location", guid)
 
@@ -221,6 +227,7 @@ class LocationService:
 
     def list(
         self,
+        team_id: int,
         category_guid: Optional[str] = None,
         known_only: bool = False,
         search: Optional[str] = None,
@@ -231,6 +238,7 @@ class LocationService:
         List locations with optional filtering.
 
         Args:
+            team_id: Team ID for tenant isolation
             category_guid: Filter by category GUID
             known_only: If True, only return known locations
             search: Search term for name/city/address
@@ -240,7 +248,7 @@ class LocationService:
         Returns:
             Tuple of (list of Location instances, total count)
         """
-        query = self.db.query(Location)
+        query = self.db.query(Location).filter(Location.team_id == team_id)
 
         # Filter by category
         if category_guid:
@@ -279,6 +287,7 @@ class LocationService:
     def update(
         self,
         guid: str,
+        team_id: int,
         name: Optional[str] = None,
         category_guid: Optional[str] = None,
         address: Optional[str] = None,
@@ -301,6 +310,7 @@ class LocationService:
 
         Args:
             guid: Location GUID
+            team_id: Team ID for tenant isolation
             name: New name
             category_guid: New category GUID
             address: New address
@@ -322,10 +332,10 @@ class LocationService:
             Updated Location instance
 
         Raises:
-            NotFoundError: If location or category not found
+            NotFoundError: If location or category not found or belongs to different team
             ValidationError: If category inactive or coordinates incomplete
         """
-        location = self.get_by_guid(guid)
+        location = self.get_by_guid(guid, team_id=team_id)
 
         # Validate and resolve new category if provided
         if category_guid is not None:
@@ -394,18 +404,19 @@ class LocationService:
             logger.error(f"Failed to update location {guid}: {e}")
             raise ValidationError("Failed to update location: database constraint violation")
 
-    def delete(self, guid: str) -> None:
+    def delete(self, guid: str, team_id: int) -> None:
         """
         Delete a location.
 
         Args:
             guid: Location GUID
+            team_id: Team ID for tenant isolation
 
         Raises:
-            NotFoundError: If location not found
+            NotFoundError: If location not found or belongs to different team
             ConflictError: If location has associated events
         """
-        location = self.get_by_guid(guid)
+        location = self.get_by_guid(guid, team_id=team_id)
 
         # Check for dependent events
         from backend.src.models import Event, EventSeries
@@ -481,9 +492,12 @@ class LocationService:
             "timezone": result.timezone,
         }
 
-    def get_stats(self) -> dict:
+    def get_stats(self, team_id: int) -> dict:
         """
-        Get location statistics.
+        Get location statistics for a team.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Dictionary with location statistics:
@@ -494,15 +508,21 @@ class LocationService:
                 "with_instagram_count": int
             }
         """
-        total = self.db.query(func.count(Location.id)).scalar()
+        total = self.db.query(func.count(Location.id)).filter(
+            Location.team_id == team_id
+        ).scalar()
         known = (
             self.db.query(func.count(Location.id))
-            .filter(Location.is_known == True)
+            .filter(
+                Location.team_id == team_id,
+                Location.is_known == True
+            )
             .scalar()
         )
         with_coords = (
             self.db.query(func.count(Location.id))
             .filter(
+                Location.team_id == team_id,
                 Location.latitude.isnot(None),
                 Location.longitude.isnot(None)
             )
@@ -510,7 +530,10 @@ class LocationService:
         )
         with_instagram = (
             self.db.query(func.count(Location.id))
-            .filter(Location.instagram_handle.isnot(None))
+            .filter(
+                Location.team_id == team_id,
+                Location.instagram_handle.isnot(None)
+            )
             .scalar()
         )
 
@@ -525,6 +548,7 @@ class LocationService:
         self,
         location_guid: str,
         event_category_guid: str,
+        team_id: int,
     ) -> bool:
         """
         Validate that a location's category matches an event's category.
@@ -534,18 +558,20 @@ class LocationService:
         Args:
             location_guid: Location GUID to validate
             event_category_guid: Event's category GUID
+            team_id: Team ID for tenant isolation
 
         Returns:
             True if categories match, False otherwise
 
         Raises:
-            NotFoundError: If location not found
+            NotFoundError: If location not found or belongs to different team
         """
-        location = self.get_by_guid(location_guid)
+        location = self.get_by_guid(location_guid, team_id=team_id)
         return location.category.guid == event_category_guid
 
     def get_by_category(
         self,
+        team_id: int,
         category_guid: str,
         known_only: bool = True,
     ) -> List[Location]:
@@ -555,6 +581,7 @@ class LocationService:
         Useful for populating location dropdown when creating/editing events.
 
         Args:
+            team_id: Team ID for tenant isolation
             category_guid: Category GUID to filter by
             known_only: If True, only return known (saved) locations
 
@@ -562,7 +589,10 @@ class LocationService:
             List of Location instances matching the category
         """
         category = self._resolve_category(category_guid)
-        query = self.db.query(Location).filter(Location.category_id == category.id)
+        query = self.db.query(Location).filter(
+            Location.team_id == team_id,
+            Location.category_id == category.id
+        )
 
         if known_only:
             query = query.filter(Location.is_known == True)

@@ -34,6 +34,7 @@ from backend.src.schemas.collection import (
 from backend.src.services.connector_service import ConnectorService
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
+from backend.src.middleware.auth import require_auth, TenantContext
 
 
 logger = get_logger("api")
@@ -72,16 +73,17 @@ def get_connector_service(
     description="Get aggregated KPI statistics for all connectors (Issue #37)"
 )
 async def get_connector_stats(
+    ctx: TenantContext = Depends(require_auth),
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorStatsResponse:
     """
-    Get aggregated statistics for all connectors.
+    Get aggregated statistics for team's connectors.
 
     Returns KPIs for the Connectors page topband.
 
     Returns:
         ConnectorStatsResponse with:
-        - total_connectors: Count of all connectors
+        - total_connectors: Count of team's connectors
         - active_connectors: Count of active connectors (is_active=true)
 
     Example:
@@ -94,7 +96,7 @@ async def get_connector_stats(
         }
     """
     try:
-        stats = connector_service.get_connector_stats()
+        stats = connector_service.get_connector_stats(team_id=ctx.team_id)
 
         logger.info(
             f"Retrieved connector stats",
@@ -118,12 +120,13 @@ async def get_connector_stats(
     description="List all connectors with optional filtering by type and active status"
 )
 async def list_connectors(
+    ctx: TenantContext = Depends(require_auth),
     type: Optional[ConnectorType] = Query(None, description="Filter by type (s3, gcs, smb)"),
     active_only: bool = Query(False, description="Only return active connectors"),
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> List[ConnectorResponse]:
     """
-    List connectors with optional filters.
+    List team's connectors with optional filters.
 
     Query Parameters:
         - type: Filter by connector type (S3, GCS, SMB)
@@ -137,6 +140,7 @@ async def list_connectors(
     """
     try:
         connectors = connector_service.list_connectors(
+            team_id=ctx.team_id,
             type_filter=type,
             active_only=active_only
         )
@@ -169,6 +173,7 @@ async def list_connectors(
 )
 async def create_connector(
     connector: ConnectorCreate,
+    ctx: TenantContext = Depends(require_auth),
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorResponse:
     """
@@ -208,6 +213,7 @@ async def create_connector(
             name=connector.name,
             type=connector.type,
             credentials=connector.credentials,
+            team_id=ctx.team_id,
             metadata=connector.metadata
         )
 
@@ -254,6 +260,7 @@ async def create_connector(
 )
 async def get_connector(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorResponse:
     """
@@ -267,13 +274,14 @@ async def get_connector(
 
     Raises:
         400 Bad Request: If GUID format is invalid or prefix mismatch
-        404 Not Found: If connector doesn't exist
+        404 Not Found: If connector doesn't exist or belongs to different team
 
     Example:
         GET /api/connectors/con_01hgw2bbg0000000000000000
     """
     try:
-        connector = connector_service.get_by_guid(guid)
+        # Filter by team_id to ensure tenant isolation (cross-team access returns 404)
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not connector:
             logger.warning(f"Connector not found: {guid}")
@@ -307,6 +315,7 @@ async def get_connector(
 async def update_connector(
     guid: str,
     connector_update: ConnectorUpdate,
+    ctx: TenantContext = Depends(require_auth),
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorResponse:
     """
@@ -325,7 +334,7 @@ async def update_connector(
 
     Raises:
         400 Bad Request: If GUID format is invalid or prefix mismatch
-        404 Not Found: If connector doesn't exist
+        404 Not Found: If connector doesn't exist or belongs to different team
         409 Conflict: If name conflicts with existing connector
 
     Example:
@@ -336,8 +345,8 @@ async def update_connector(
         }
     """
     try:
-        # Get connector by GUID
-        connector = connector_service.get_by_guid(guid)
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not connector:
             logger.warning(f"Connector not found for update: {guid}")
@@ -404,6 +413,7 @@ async def update_connector(
 )
 async def delete_connector(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> None:
     """
@@ -420,7 +430,7 @@ async def delete_connector(
 
     Raises:
         400 Bad Request: If GUID format is invalid or prefix mismatch
-        404 Not Found: If connector doesn't exist
+        404 Not Found: If connector doesn't exist or belongs to different team
         409 Conflict: If collections reference this connector
 
     Example:
@@ -432,8 +442,8 @@ async def delete_connector(
          Delete or reassign collections first."
     """
     try:
-        # Get connector by GUID
-        connector = connector_service.get_by_guid(guid)
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not connector:
             logger.warning(f"Connector not found for deletion: {guid}")
@@ -499,6 +509,7 @@ async def delete_connector(
 )
 async def test_connector(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     connector_service: ConnectorService = Depends(get_connector_service)
 ) -> ConnectorTestResponse:
     """
@@ -515,7 +526,7 @@ async def test_connector(
 
     Raises:
         400 Bad Request: If GUID format is invalid or prefix mismatch
-        404 Not Found: If connector doesn't exist
+        404 Not Found: If connector doesn't exist or belongs to different team
 
     Example:
         POST /api/connectors/con_01hgw2bbg0000000000000000/test
@@ -533,8 +544,8 @@ async def test_connector(
         }
     """
     try:
-        # Get connector by GUID
-        connector = connector_service.get_by_guid(guid)
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not connector:
             logger.warning(f"Connector not found for test: {guid}")

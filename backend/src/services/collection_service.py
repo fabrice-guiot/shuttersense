@@ -41,13 +41,17 @@ class CollectionService:
     Handles CRUD operations for collections with automatic accessibility testing,
     file listing caching, and remote storage integration via connectors.
 
+    All operations are tenant-scoped via team_id parameter. Pass team_id from
+    TenantContext to ensure data isolation between teams.
+
     Usage:
         >>> service = CollectionService(db_session, file_cache, connector_service)
         >>> collection = service.create_collection(
         ...     name="Vacation 2024",
         ...     type=CollectionType.LOCAL,
         ...     location="/photos/2024/vacation",
-        ...     state=CollectionState.LIVE
+        ...     state=CollectionState.LIVE,
+        ...     team_id=ctx.team_id  # From TenantContext
         ... )
     """
 
@@ -74,6 +78,7 @@ class CollectionService:
         name: str,
         type: CollectionType,
         location: str,
+        team_id: int,
         state: CollectionState = CollectionState.LIVE,
         connector_id: Optional[int] = None,
         pipeline_id: Optional[int] = None,
@@ -89,9 +94,10 @@ class CollectionService:
         - Pipeline assignment: pipeline exists and is active
 
         Args:
-            name: User-friendly collection name (must be unique)
+            name: User-friendly collection name (must be unique within team)
             type: Collection type (LOCAL, S3, GCS, SMB)
             location: Storage location path/URI
+            team_id: Team ID for tenant isolation (from TenantContext)
             state: Collection lifecycle state (default: LIVE)
             connector_id: Connector ID (required for remote types, None for LOCAL)
             pipeline_id: Optional explicit pipeline assignment (NULL = use default)
@@ -145,11 +151,12 @@ class CollectionService:
             # Convert metadata to JSON string if provided
             metadata_json = json.dumps(metadata) if metadata else None
 
-            # Create collection
+            # Create collection with team_id for tenant isolation
             collection = Collection(
                 name=name,
                 type=type,
                 location=location,
+                team_id=team_id,
                 state=state,
                 connector_id=connector_id,
                 pipeline_id=pipeline_id,
@@ -202,27 +209,39 @@ class CollectionService:
         """
         return self.db.query(Collection).filter(Collection.id == collection_id).first()
 
-    def get_by_guid(self, guid: str) -> Optional[Collection]:
+    def get_by_guid(self, guid: str, team_id: Optional[int] = None) -> Optional[Collection]:
         """
-        Get collection by GUID.
+        Get collection by GUID with optional tenant filtering.
+
+        If team_id is provided, returns None if collection belongs to different team.
+        This ensures cross-team GUID access returns 404 (not 403) for security.
 
         Args:
             guid: Collection GUID (e.g., "col_01hgw...")
+            team_id: Team ID for tenant isolation (from TenantContext). If None,
+                     returns collection regardless of team (for internal use only).
 
         Returns:
-            Collection instance or None if not found
+            Collection instance or None if not found (or belongs to different team)
 
         Raises:
             ValueError: If GUID format is invalid or prefix doesn't match "col"
 
         Example:
-            >>> collection = service.get_by_guid("col_01hgw2bbg...")
+            >>> collection = service.get_by_guid("col_01hgw2bbg...", team_id=ctx.team_id)
         """
         uuid_value = GuidService.parse_identifier(guid, expected_prefix="col")
-        return self.db.query(Collection).filter(Collection.uuid == uuid_value).first()
+        query = self.db.query(Collection).filter(Collection.uuid == uuid_value)
+
+        # Filter by team_id if provided (for tenant isolation)
+        if team_id is not None:
+            query = query.filter(Collection.team_id == team_id)
+
+        return query.first()
 
     def list_collections(
         self,
+        team_id: int,
         state_filter: Optional[CollectionState] = None,
         type_filter: Optional[CollectionType] = None,
         accessible_only: bool = False,
@@ -231,7 +250,10 @@ class CollectionService:
         """
         List collections with optional filtering, sorted by creation date (newest first).
 
+        All results are filtered to the specified team for tenant isolation.
+
         Args:
+            team_id: Team ID for tenant isolation (from TenantContext)
             state_filter: Filter by collection state (LIVE, CLOSED, ARCHIVED)
             type_filter: Filter by collection type (LOCAL, S3, GCS, SMB)
             accessible_only: If True, only return accessible collections
@@ -242,12 +264,14 @@ class CollectionService:
 
         Example:
             >>> collections = service.list_collections(
+            ...     team_id=ctx.team_id,
             ...     state_filter=CollectionState.LIVE,
             ...     accessible_only=True,
             ...     search="vacation"
             ... )
         """
-        query = self.db.query(Collection)
+        # Always filter by team_id for tenant isolation
+        query = self.db.query(Collection).filter(Collection.team_id == team_id)
 
         if state_filter:
             query = query.filter(Collection.state == state_filter)
@@ -766,34 +790,37 @@ class CollectionService:
     # KPI Statistics Methods (Issue #37)
     # ============================================================================
 
-    def get_collection_stats(self) -> Dict[str, Any]:
+    def get_collection_stats(self, team_id: int) -> Dict[str, Any]:
         """
-        Get aggregated statistics for all collections.
+        Get aggregated statistics for collections in a team.
 
         Returns KPIs for the Collections page topband:
-        - total_collections: Count of all collections
-        - storage_used_bytes: Sum of storage_bytes across all collections
+        - total_collections: Count of all collections in team
+        - storage_used_bytes: Sum of storage_bytes across team collections
         - storage_used_formatted: Human-readable storage amount
-        - file_count: Sum of file_count across all collections
-        - image_count: Sum of image_count across all collections
+        - file_count: Sum of file_count across team collections
+        - image_count: Sum of image_count across team collections
 
-        These values are NOT affected by any filter parameters.
+        These values are NOT affected by any filter parameters other than team_id.
+
+        Args:
+            team_id: Team ID for tenant isolation (from TenantContext)
 
         Returns:
             Dict with total_collections, storage_used_bytes, storage_used_formatted,
             file_count, and image_count
 
         Example:
-            >>> stats = service.get_collection_stats()
+            >>> stats = service.get_collection_stats(team_id=ctx.team_id)
             >>> print(f"Total: {stats['total_collections']}, Storage: {stats['storage_used_formatted']}")
         """
-        # Query aggregated stats
+        # Query aggregated stats filtered by team_id
         result = self.db.query(
             func.count(Collection.id).label('total_collections'),
             func.coalesce(func.sum(Collection.storage_bytes), 0).label('storage_used_bytes'),
             func.coalesce(func.sum(Collection.file_count), 0).label('file_count'),
             func.coalesce(func.sum(Collection.image_count), 0).label('image_count')
-        ).first()
+        ).filter(Collection.team_id == team_id).first()
 
         storage_bytes = int(result.storage_used_bytes)
 

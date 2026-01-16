@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -246,19 +247,11 @@ async def lifespan(app: FastAPI):
     # Log CORS configuration
     logger.info(f"CORS allowed origins: {cors_origins}")
 
-    # Seed default configuration (extension keys must always exist)
-    # Skip during testing to avoid database session conflicts
-    if os.environ.get('PYTEST_CURRENT_TEST') is None:
-        logger.info("Seeding default configuration values")
-        db = SessionLocal()
-        try:
-            config_service = ConfigService(db)
-            config_service.seed_default_extensions()
-            logger.info("Default configuration seeded successfully")
-        finally:
-            db.close()
-    else:
-        logger.info("Skipping configuration seeding in test environment")
+    # NOTE: Default configuration seeding (extensions) is now team-specific
+    # and should be done when a team is created, not on application startup.
+    # The seed_default_extensions(team_id) method requires a team_id parameter
+    # for proper tenant isolation.
+    logger.info("Skipping global configuration seeding (tenant-specific data is seeded per-team)")
 
     logger.info("Photo-admin backend started successfully")
 
@@ -323,6 +316,35 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
     expose_headers=["Content-Disposition"],  # Expose for report download filenames
 )
+
+# ============================================================================
+# Session Middleware (Issue #73 - Authentication)
+# ============================================================================
+# SessionMiddleware provides signed cookie-based sessions for OAuth auth flow.
+# The session stores user_id after successful OAuth login.
+# Configuration is loaded from environment variables via SessionSettings.
+from backend.src.config.session import get_session_settings
+
+_session_settings = get_session_settings()
+if _session_settings.is_configured:
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=_session_settings.session_secret_key,
+        session_cookie=_session_settings.session_cookie_name,
+        max_age=_session_settings.session_max_age,
+        same_site=_session_settings.session_same_site,
+        https_only=_session_settings.session_https_only,
+        path=_session_settings.session_path,
+    )
+else:
+    # Session not configured - auth features will be unavailable
+    # This is acceptable for development without OAuth setup
+    import warnings
+    warnings.warn(
+        "SESSION_SECRET_KEY not configured. Session-based authentication disabled. "
+        "Set SESSION_SECRET_KEY in .env to enable OAuth login.",
+        UserWarning
+    )
 
 
 # Exception handlers
@@ -468,6 +490,7 @@ async def get_version() -> Dict[str, str]:
 
 # API routers
 from backend.src.api import collections, connectors, tools, results, pipelines, trends, config, categories, events, locations, organizers, performers
+from backend.src.api import auth as auth_router
 
 app.include_router(collections.router, prefix="/api")
 app.include_router(connectors.router, prefix="/api")
@@ -481,6 +504,9 @@ app.include_router(events.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(organizers.router, prefix="/api")
 app.include_router(performers.router, prefix="/api")
+
+# Authentication router
+app.include_router(auth_router.router, prefix="/api")
 
 
 # ============================================================================

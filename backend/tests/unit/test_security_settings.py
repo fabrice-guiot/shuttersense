@@ -361,7 +361,7 @@ class TestIsSafeStaticFilePath:
 class TestCollectionPathSecurity:
     """Integration tests for collection path security."""
 
-    def test_collection_creation_requires_authorized_roots(self, test_db_session, test_encryptor):
+    def test_collection_creation_requires_authorized_roots(self, test_db_session, test_encryptor, test_team):
         """Test that collection creation validates against authorized roots."""
         from backend.src.services.collection_service import CollectionService
         from backend.src.services.connector_service import ConnectorService
@@ -385,7 +385,8 @@ class TestCollectionPathSecurity:
                     name="Test Collection",
                     type=CollectionType.LOCAL,
                     location=temp_dir,
-                    state=CollectionState.LIVE
+                    state=CollectionState.LIVE,
+                    team_id=test_team.id
                 )
 
                 # Should fail because path is not authorized
@@ -393,7 +394,7 @@ class TestCollectionPathSecurity:
                 assert result.last_error is not None
                 assert "disabled" in result.last_error.lower()
 
-    def test_collection_creation_succeeds_with_authorized_root(self, test_db_session, test_encryptor):
+    def test_collection_creation_succeeds_with_authorized_root(self, test_db_session, test_encryptor, test_team):
         """Test that collection creation succeeds when path is under authorized root."""
         from backend.src.services.collection_service import CollectionService
         from backend.src.services.connector_service import ConnectorService
@@ -413,7 +414,8 @@ class TestCollectionPathSecurity:
                     name="Test Collection",
                     type=CollectionType.LOCAL,
                     location=temp_dir,
-                    state=CollectionState.LIVE
+                    state=CollectionState.LIVE,
+                    team_id=test_team.id
                 )
 
                 # Should succeed because path is authorized

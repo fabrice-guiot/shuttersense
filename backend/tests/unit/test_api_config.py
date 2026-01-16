@@ -26,14 +26,15 @@ from backend.src.models import Configuration, ConfigSource
 # ============================================================================
 
 @pytest.fixture
-def sample_config(test_db_session):
+def sample_config(test_db_session, test_team):
     """Factory for creating sample Configuration models."""
     def _create(
         category="cameras",
         key="AB3D",
         value=None,
         description=None,
-        source=ConfigSource.DATABASE
+        source=ConfigSource.DATABASE,
+        team_id=None
     ):
         if value is None:
             value = {"name": "Canon EOS R5", "serial_number": "12345"}
@@ -42,7 +43,8 @@ def sample_config(test_db_session):
             key=key,
             value_json=value,
             description=description,
-            source=source
+            source=source,
+            team_id=team_id if team_id is not None else test_team.id
         )
         test_db_session.add(config)
         test_db_session.commit()

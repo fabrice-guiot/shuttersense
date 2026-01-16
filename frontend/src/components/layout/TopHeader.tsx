@@ -5,7 +5,8 @@
  * Updates dynamically based on current route and page context.
  */
 
-import { Bell, Menu, HelpCircle, type LucideIcon } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Bell, Menu, HelpCircle, LogOut, User, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -14,6 +15,13 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useAuth } from '@/hooks/useAuth'
 
 // ============================================================================
 // Types
@@ -22,12 +30,6 @@ import {
 export interface HeaderStat {
   label: string
   value: string | number
-}
-
-export interface UserProfile {
-  initials: string
-  name?: string
-  email?: string
 }
 
 export interface TopHeaderProps {
@@ -49,13 +51,24 @@ export interface TopHeaderProps {
 }
 
 // ============================================================================
-// Constants
+// Helpers
 // ============================================================================
 
-const DEFAULT_USER_PROFILE: UserProfile = {
-  initials: 'PA',
-  name: 'Photo Admin',
-  email: 'admin@photoapp.local',
+/**
+ * Get user initials from display name or email
+ */
+function getUserInitials(displayName: string | null | undefined, email: string | undefined): string {
+  if (displayName) {
+    const parts = displayName.trim().split(/\s+/)
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    }
+    return displayName.substring(0, 2).toUpperCase()
+  }
+  if (email) {
+    return email.substring(0, 2).toUpperCase()
+  }
+  return 'PA'
 }
 
 // ============================================================================
@@ -71,6 +84,19 @@ export function TopHeader({
   isSidebarCollapsed = false,
   pageHelp
 }: TopHeaderProps) {
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
+
+  // Compute user display info
+  const displayName = user?.display_name || user?.email?.split('@')[0] || 'User'
+  const email = user?.email || ''
+  const pictureUrl = user?.picture_url
+  const initials = getUserInitials(user?.display_name, user?.email)
+
+  const handleViewProfile = () => {
+    navigate('/profile')
+  }
+
   return (
     <header
       className={cn(
@@ -143,24 +169,52 @@ export function TopHeader({
           </Badge>
         </button>
 
-        {/* User Profile */}
-        <button
-          className="flex items-center gap-3 rounded-md p-2 hover:bg-accent transition-colors"
-          aria-label="User profile menu"
-        >
-          {/* User info - hidden on mobile */}
-          <div className="hidden md:block text-right">
-            <div className="text-sm font-medium text-foreground">
-              {DEFAULT_USER_PROFILE.name}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {DEFAULT_USER_PROFILE.email}
-            </div>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
-            {DEFAULT_USER_PROFILE.initials}
-          </div>
-        </button>
+        {/* User Profile Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="flex items-center gap-3 rounded-md p-2 hover:bg-accent transition-colors"
+              aria-label="User profile menu"
+            >
+              {/* User info - hidden on mobile */}
+              <div className="hidden md:block text-right">
+                <div className="text-sm font-medium text-foreground">
+                  {displayName}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {email}
+                </div>
+              </div>
+              {pictureUrl ? (
+                <img
+                  src={pictureUrl}
+                  alt={displayName}
+                  className="h-10 w-10 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+                  {initials}
+                </div>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={handleViewProfile}
+              className="cursor-pointer"
+            >
+              <User className="mr-2 h-4 w-4" />
+              <span>View Profile</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={logout}
+              className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground focus:bg-destructive focus:text-destructive-foreground"
+            >
+              <LogOut className="mr-2 h-4 w-4 text-destructive" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )

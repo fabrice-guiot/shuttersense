@@ -22,7 +22,7 @@ class TestCollectionServiceCreate:
     """Tests for CollectionService.create_collection() - T104m"""
 
     def test_create_local_collection_with_accessibility_test(
-        self, test_db_session, test_file_cache, test_connector_service
+        self, test_db_session, test_file_cache, test_connector_service, test_team
     ):
         """Should create local collection and test directory accessibility"""
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
@@ -32,6 +32,7 @@ class TestCollectionServiceCreate:
                 name="Local Photos",
                 type=CollectionType.LOCAL,
                 location=temp_dir,
+                team_id=test_team.id,
                 state=CollectionState.LIVE
             )
 
@@ -44,7 +45,7 @@ class TestCollectionServiceCreate:
             assert collection.connector_id is None
 
     def test_create_local_collection_inaccessible_directory(
-        self, test_db_session, test_file_cache, test_connector_service
+        self, test_db_session, test_file_cache, test_connector_service, test_team
     ):
         """Should mark local collection as inaccessible if directory doesn't exist"""
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
@@ -53,6 +54,7 @@ class TestCollectionServiceCreate:
             name="Invalid Path",
             type=CollectionType.LOCAL,
             location="/nonexistent/path/to/photos",
+            team_id=test_team.id,
             state=CollectionState.LIVE
         )
 
@@ -64,7 +66,7 @@ class TestCollectionServiceCreate:
         ])
 
     def test_create_remote_collection_with_connector(
-        self, test_db_session, test_file_cache, test_connector_service, sample_connector
+        self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team
     ):
         """Should create remote collection and test connector accessibility"""
         connector = sample_connector(name="S3 Connector", type="s3")
@@ -78,6 +80,7 @@ class TestCollectionServiceCreate:
             name="S3 Photos",
             type=CollectionType.S3,
             location="my-bucket/photos",
+            team_id=test_team.id,
             connector_id=connector.id,
             state=CollectionState.LIVE
         )
@@ -89,7 +92,7 @@ class TestCollectionServiceCreate:
         test_connector_service.test_connector.assert_called_once_with(connector.id)
 
     def test_create_remote_collection_requires_connector(
-        self, test_db_session, test_file_cache, test_connector_service
+        self, test_db_session, test_file_cache, test_connector_service, test_team
     ):
         """Should raise ValueError if remote collection missing connector_id"""
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
@@ -98,14 +101,15 @@ class TestCollectionServiceCreate:
             service.create_collection(
                 name="S3 Photos",
                 type=CollectionType.S3,
-                location="my-bucket/photos"
+                location="my-bucket/photos",
+                team_id=test_team.id
                 # Missing connector_id
             )
 
         assert "Connector ID required" in str(exc_info.value)
 
     def test_create_local_collection_rejects_connector(
-        self, test_db_session, test_file_cache, test_connector_service, sample_connector
+        self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team
     ):
         """Should raise ValueError if local collection has connector_id"""
         connector = sample_connector(name="Test", type="s3")
@@ -117,13 +121,14 @@ class TestCollectionServiceCreate:
                     name="Local Photos",
                     type=CollectionType.LOCAL,
                     location=temp_dir,
+                    team_id=test_team.id,
                     connector_id=connector.id  # Should not be provided for LOCAL
                 )
 
         assert "should not be provided for LOCAL" in str(exc_info.value)
 
     def test_create_collection_with_metadata(
-        self, test_db_session, test_file_cache, test_connector_service
+        self, test_db_session, test_file_cache, test_connector_service, test_team
     ):
         """Should create collection with metadata"""
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
@@ -134,22 +139,23 @@ class TestCollectionServiceCreate:
                 name="Vacation Photos",
                 type=CollectionType.LOCAL,
                 location=temp_dir,
+                team_id=test_team.id,
                 metadata=metadata
             )
 
             assert collection.metadata_json == json.dumps(metadata)
 
     def test_create_collection_duplicate_name(
-        self, test_db_session, test_file_cache, test_connector_service
+        self, test_db_session, test_file_cache, test_connector_service, test_team
     ):
         """Should raise ValueError if collection name already exists"""
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir)
+            service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir, team_id=test_team.id)
 
             with pytest.raises(ValueError) as exc_info:
-                service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir)
+                service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir, team_id=test_team.id)
 
         assert "already exists" in str(exc_info.value)
 
@@ -192,7 +198,7 @@ class TestCollectionServiceList:
     """Tests for CollectionService.list_collections() - T104m"""
 
     def test_list_all_collections_sorted_by_created_at(
-        self, test_db_session, test_file_cache, test_connector_service, sample_collection
+        self, test_db_session, test_file_cache, test_connector_service, sample_collection, test_team
     ):
         """Should list all collections sorted by created_at DESC (newest first)"""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -202,7 +208,7 @@ class TestCollectionServiceList:
             coll3 = sample_collection(name="Third", type="local", location=temp_dir)
 
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
-        collections = service.list_collections()
+        collections = service.list_collections(team_id=test_team.id)
 
         assert len(collections) == 3
         # Should be newest first
@@ -211,7 +217,7 @@ class TestCollectionServiceList:
         assert collections[2].id == coll1.id
 
     def test_list_collections_filter_by_state(
-        self, test_db_session, test_file_cache, test_connector_service, sample_collection
+        self, test_db_session, test_file_cache, test_connector_service, sample_collection, test_team
     ):
         """Should filter collections by state"""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -220,14 +226,14 @@ class TestCollectionServiceList:
             sample_collection(name="Closed", type="local", location=temp_dir, state="closed")
 
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
-        collections = service.list_collections(state_filter=CollectionState.LIVE)
+        collections = service.list_collections(team_id=test_team.id, state_filter=CollectionState.LIVE)
 
         assert len(collections) == 2
         assert all(c.state == CollectionState.LIVE for c in collections)
 
     def test_list_collections_filter_by_type(
         self, test_db_session, test_file_cache, test_connector_service,
-        sample_collection, sample_connector
+        sample_collection, sample_connector, test_team
     ):
         """Should filter collections by type"""
         connector = sample_connector(name="Test", type="s3")
@@ -237,13 +243,13 @@ class TestCollectionServiceList:
             sample_collection(name="S3", type="s3", connector_id=connector.id, location="bucket")
 
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
-        collections = service.list_collections(type_filter=CollectionType.LOCAL)
+        collections = service.list_collections(team_id=test_team.id, type_filter=CollectionType.LOCAL)
 
         assert len(collections) == 2
         assert all(c.type == CollectionType.LOCAL for c in collections)
 
     def test_list_collections_accessible_only(
-        self, test_db_session, test_file_cache, test_connector_service, sample_collection
+        self, test_db_session, test_file_cache, test_connector_service, sample_collection, test_team
     ):
         """Should filter collections by accessibility"""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -253,7 +259,7 @@ class TestCollectionServiceList:
             )
 
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
-        collections = service.list_collections(accessible_only=True)
+        collections = service.list_collections(team_id=test_team.id, accessible_only=True)
 
         assert len(collections) == 1
         assert collections[0].id == accessible.id

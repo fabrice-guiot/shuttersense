@@ -25,7 +25,7 @@ def location_service(test_db_session):
 
 
 @pytest.fixture
-def sample_category(test_db_session):
+def sample_category(test_db_session, test_team):
     """Factory for creating sample Category models."""
 
     def _create(
@@ -34,6 +34,7 @@ def sample_category(test_db_session):
         color="#3B82F6",
         is_active=True,
         display_order=0,
+        team_id=None,
     ):
         category = Category(
             name=name,
@@ -41,6 +42,7 @@ def sample_category(test_db_session):
             color=color,
             is_active=is_active,
             display_order=display_order,
+            team_id=team_id if team_id is not None else test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -51,7 +53,7 @@ def sample_category(test_db_session):
 
 
 @pytest.fixture
-def sample_location(test_db_session, sample_category):
+def sample_location(test_db_session, sample_category, test_team):
     """Factory for creating sample Location models."""
 
     def _create(
@@ -70,6 +72,7 @@ def sample_location(test_db_session, sample_category):
         travel_required_default=False,
         notes=None,
         is_known=True,
+        team_id=None,
     ):
         if category is None:
             category = sample_category()
@@ -77,6 +80,7 @@ def sample_location(test_db_session, sample_category):
         location = Location(
             name=name,
             category_id=category.id,
+            team_id=team_id if team_id is not None else test_team.id,
             address=address,
             city=city,
             state=state,
@@ -107,13 +111,14 @@ def sample_location(test_db_session, sample_category):
 class TestLocationServiceCreate:
     """Tests for location creation."""
 
-    def test_create_location_minimal(self, location_service, sample_category):
+    def test_create_location_minimal(self, location_service, sample_category, test_team):
         """Test creating a location with minimal fields."""
         category = sample_category(name="Airshow")
 
         result = location_service.create(
             name="EAA Grounds",
             category_guid=category.guid,
+            team_id=test_team.id,
         )
 
         assert result.id is not None
@@ -123,13 +128,14 @@ class TestLocationServiceCreate:
         assert result.category_id == category.id
         assert result.is_known is True
 
-    def test_create_location_full(self, location_service, sample_category):
+    def test_create_location_full(self, location_service, sample_category, test_team):
         """Test creating a location with all fields."""
         category = sample_category(name="Airshow")
 
         result = location_service.create(
             name="EAA Grounds",
             category_guid=category.guid,
+            team_id=test_team.id,
             address="3000 Poberezny Road",
             city="Oshkosh",
             state="Wisconsin",
@@ -159,15 +165,16 @@ class TestLocationServiceCreate:
         assert result.travel_required_default is True
         assert result.notes == "Annual AirVenture location"
 
-    def test_create_location_invalid_category(self, location_service):
+    def test_create_location_invalid_category(self, location_service, test_team):
         """Test error when creating with non-existent category."""
         with pytest.raises(NotFoundError):
             location_service.create(
                 name="Test Location",
                 category_guid="cat_00000000000000000000000000",
+                team_id=test_team.id,
             )
 
-    def test_create_location_inactive_category(self, location_service, sample_category):
+    def test_create_location_inactive_category(self, location_service, sample_category, test_team):
         """Test error when creating with inactive category."""
         category = sample_category(name="Inactive", is_active=False)
 
@@ -175,11 +182,12 @@ class TestLocationServiceCreate:
             location_service.create(
                 name="Test Location",
                 category_guid=category.guid,
+                team_id=test_team.id,
             )
 
         assert "inactive" in str(exc_info.value).lower()
 
-    def test_create_location_incomplete_coordinates(self, location_service, sample_category):
+    def test_create_location_incomplete_coordinates(self, location_service, sample_category, test_team):
         """Test error when providing only latitude or longitude."""
         category = sample_category()
 
@@ -188,6 +196,7 @@ class TestLocationServiceCreate:
             location_service.create(
                 name="Test",
                 category_guid=category.guid,
+                team_id=test_team.id,
                 latitude=Decimal("40.7128"),
             )
         assert "latitude" in str(exc_info.value).lower() or "longitude" in str(exc_info.value).lower()
@@ -197,11 +206,12 @@ class TestLocationServiceCreate:
             location_service.create(
                 name="Test2",
                 category_guid=category.guid,
+                team_id=test_team.id,
                 longitude=Decimal("-74.0060"),
             )
         assert "latitude" in str(exc_info.value).lower() or "longitude" in str(exc_info.value).lower()
 
-    def test_create_location_invalid_rating(self, location_service, sample_category):
+    def test_create_location_invalid_rating(self, location_service, sample_category, test_team):
         """Test error on invalid rating."""
         category = sample_category()
 
@@ -209,6 +219,7 @@ class TestLocationServiceCreate:
             location_service.create(
                 name="Test",
                 category_guid=category.guid,
+                team_id=test_team.id,
                 rating=0,
             )
         assert "rating" in str(exc_info.value).lower()
@@ -217,11 +228,12 @@ class TestLocationServiceCreate:
             location_service.create(
                 name="Test2",
                 category_guid=category.guid,
+                team_id=test_team.id,
                 rating=6,
             )
         assert "rating" in str(exc_info.value).lower()
 
-    def test_create_location_valid_rating_range(self, location_service, sample_category):
+    def test_create_location_valid_rating_range(self, location_service, sample_category, test_team):
         """Test valid rating values."""
         category = sample_category()
 
@@ -229,17 +241,19 @@ class TestLocationServiceCreate:
             result = location_service.create(
                 name=f"Test{rating}",
                 category_guid=category.guid,
+                team_id=test_team.id,
                 rating=rating,
             )
             assert result.rating == rating
 
-    def test_create_location_is_known_false(self, location_service, sample_category):
+    def test_create_location_is_known_false(self, location_service, sample_category, test_team):
         """Test creating a one-time (not known) location."""
         category = sample_category()
 
         result = location_service.create(
             name="One-time Venue",
             category_guid=category.guid,
+            team_id=test_team.id,
             is_known=False,
         )
 
@@ -291,78 +305,78 @@ class TestLocationServiceGet:
 class TestLocationServiceList:
     """Tests for listing locations."""
 
-    def test_list_all(self, location_service, sample_location, sample_category):
+    def test_list_all(self, location_service, sample_location, sample_category, test_team):
         """Test listing all locations."""
         category = sample_category()
         sample_location(name="Location A", category=category)
         sample_location(name="Location B", category=category)
         sample_location(name="Location C", category=category)
 
-        locations, total = location_service.list()
+        locations, total = location_service.list(team_id=test_team.id)
 
         assert len(locations) == 3
         assert total == 3
 
-    def test_list_known_only(self, location_service, sample_location, sample_category):
+    def test_list_known_only(self, location_service, sample_location, sample_category, test_team):
         """Test listing only known locations."""
         category = sample_category()
         sample_location(name="Known", category=category, is_known=True)
         sample_location(name="One-time", category=category, is_known=False)
 
-        locations, total = location_service.list(known_only=True)
+        locations, total = location_service.list(team_id=test_team.id, known_only=True)
 
         assert len(locations) == 1
         assert locations[0].name == "Known"
 
-    def test_list_by_category(self, location_service, sample_location, sample_category):
+    def test_list_by_category(self, location_service, sample_location, sample_category, test_team):
         """Test filtering by category."""
         cat1 = sample_category(name="Airshow")
         cat2 = sample_category(name="Wildlife")
         sample_location(name="Airshow Loc", category=cat1)
         sample_location(name="Wildlife Loc", category=cat2)
 
-        locations, total = location_service.list(category_guid=cat1.guid)
+        locations, total = location_service.list(team_id=test_team.id, category_guid=cat1.guid)
 
         assert len(locations) == 1
         assert locations[0].name == "Airshow Loc"
 
-    def test_list_search(self, location_service, sample_location, sample_category):
+    def test_list_search(self, location_service, sample_location, sample_category, test_team):
         """Test search functionality."""
         category = sample_category()
         sample_location(name="Madison Square Garden", city="New York", category=category)
         sample_location(name="Staples Center", city="Los Angeles", category=category)
 
         # Search by name
-        locations, _ = location_service.list(search="Madison")
+        locations, _ = location_service.list(team_id=test_team.id, search="Madison")
         assert len(locations) == 1
         assert locations[0].name == "Madison Square Garden"
 
         # Search by city
-        locations, _ = location_service.list(search="Angeles")
+        locations, _ = location_service.list(team_id=test_team.id, search="Angeles")
         assert len(locations) == 1
         assert locations[0].city == "Los Angeles"
 
-    def test_list_pagination(self, location_service, sample_location, sample_category):
+    def test_list_pagination(self, location_service, sample_location, sample_category, test_team):
         """Test pagination."""
         category = sample_category()
         for i in range(5):
             sample_location(name=f"Location {i}", category=category)
 
-        locations, total = location_service.list(limit=2, offset=0)
+        locations, total = location_service.list(team_id=test_team.id, limit=2, offset=0)
         assert len(locations) == 2
         assert total == 5
 
-        locations, total = location_service.list(limit=2, offset=2)
+        locations, total = location_service.list(team_id=test_team.id, limit=2, offset=2)
         assert len(locations) == 2
         assert total == 5
 
-        locations, total = location_service.list(limit=2, offset=4)
+        locations, total = location_service.list(team_id=test_team.id, limit=2, offset=4)
         assert len(locations) == 1
         assert total == 5
 
-    def test_list_empty(self, location_service):
+    def test_list_empty(self, location_service, test_team):
         """Test listing when no locations exist."""
-        locations, total = location_service.list()
+        locations, total = location_service.list(team_id=test_team.id)
         assert locations == []
         assert total == 0
 
@@ -370,20 +384,21 @@ class TestLocationServiceList:
 class TestLocationServiceUpdate:
     """Tests for location updates."""
 
-    def test_update_name(self, location_service, sample_location):
+    def test_update_name(self, location_service, sample_location, test_team):
         """Test updating location name."""
         location = sample_location(name="Original")
 
-        result = location_service.update(location.guid, name="Updated")
+        result = location_service.update(location.guid, team_id=test_team.id, name="Updated")
 
         assert result.name == "Updated"
 
-    def test_update_address_fields(self, location_service, sample_location):
+    def test_update_address_fields(self, location_service, sample_location, test_team):
         """Test updating address fields."""
         location = sample_location()
 
         result = location_service.update(
             location.guid,
+            team_id=test_team.id,
             address="456 New St",
             city="New City",
             state="New State",
@@ -397,12 +412,13 @@ class TestLocationServiceUpdate:
         assert result.country == "Canada"
         assert result.postal_code == "A1B 2C3"
 
-    def test_update_coordinates(self, location_service, sample_location):
+    def test_update_coordinates(self, location_service, sample_location, test_team):
         """Test updating coordinates."""
         location = sample_location()
 
         result = location_service.update(
             location.guid,
+            team_id=test_team.id,
             latitude=Decimal("51.5074"),
             longitude=Decimal("-0.1278"),
         )
@@ -410,61 +426,61 @@ class TestLocationServiceUpdate:
         assert result.latitude == Decimal("51.5074")
         assert result.longitude == Decimal("-0.1278")
 
-    def test_update_rating(self, location_service, sample_location):
+    def test_update_rating(self, location_service, sample_location, test_team):
         """Test updating rating."""
         location = sample_location(rating=3)
 
-        result = location_service.update(location.guid, rating=5)
+        result = location_service.update(location.guid, team_id=test_team.id, rating=5)
 
         assert result.rating == 5
 
-    def test_update_category(self, location_service, sample_location, sample_category):
+    def test_update_category(self, location_service, sample_location, sample_category, test_team):
         """Test changing category."""
         cat1 = sample_category(name="Original")
         cat2 = sample_category(name="New Category")
         location = sample_location(category=cat1)
 
-        result = location_service.update(location.guid, category_guid=cat2.guid)
+        result = location_service.update(location.guid, team_id=test_team.id, category_guid=cat2.guid)
 
         assert result.category_id == cat2.id
 
-    def test_update_not_found(self, location_service):
+    def test_update_not_found(self, location_service, test_team):
         """Test error when updating non-existent location."""
         with pytest.raises(NotFoundError):
             location_service.update(
-                "loc_00000000000000000000000000", name="New Name"
+                "loc_00000000000000000000000000", team_id=test_team.id, name="New Name"
             )
 
-    def test_update_invalid_rating(self, location_service, sample_location):
+    def test_update_invalid_rating(self, location_service, sample_location, test_team):
         """Test error on invalid rating during update."""
         location = sample_location()
 
         with pytest.raises(ValidationError):
-            location_service.update(location.guid, rating=0)
+            location_service.update(location.guid, team_id=test_team.id, rating=0)
 
         with pytest.raises(ValidationError):
-            location_service.update(location.guid, rating=6)
+            location_service.update(location.guid, team_id=test_team.id, rating=6)
 
 
 class TestLocationServiceDelete:
     """Tests for location deletion."""
 
-    def test_delete_location(self, location_service, sample_location):
+    def test_delete_location(self, location_service, sample_location, test_team):
         """Test deleting a location."""
         location = sample_location(name="ToDelete")
         guid = location.guid
 
-        location_service.delete(guid)
+        location_service.delete(guid, team_id=test_team.id)
 
         with pytest.raises(NotFoundError):
             location_service.get_by_guid(guid)
 
-    def test_delete_not_found(self, location_service):
+    def test_delete_not_found(self, location_service, test_team):
         """Test error when deleting non-existent location."""
         with pytest.raises(NotFoundError):
-            location_service.delete("loc_00000000000000000000000000")
+            location_service.delete("loc_00000000000000000000000000", team_id=test_team.id)
 
-    def test_delete_with_events_fails(self, location_service, sample_location, test_db_session):
+    def test_delete_with_events_fails(self, location_service, sample_location, test_db_session, test_team):
         """Test deleting location with events fails."""
         from datetime import date
         from backend.src.models import Event
@@ -474,6 +490,7 @@ class TestLocationServiceDelete:
         # Create an event using this location
         event = Event(
             category_id=location.category_id,
+            team_id=test_team.id,
             location_id=location.id,
             title="Test Event",
             event_date=date(2026, 1, 15),
@@ -482,7 +499,7 @@ class TestLocationServiceDelete:
         test_db_session.commit()
 
         with pytest.raises(ConflictError) as exc_info:
-            location_service.delete(location.guid)
+            location_service.delete(location.guid, team_id=test_team.id)
 
         assert "event" in str(exc_info.value).lower()
 
@@ -490,22 +507,22 @@ class TestLocationServiceDelete:
 class TestLocationServiceStats:
     """Tests for location statistics."""
 
-    def test_get_stats(self, location_service, sample_location, sample_category):
+    def test_get_stats(self, location_service, sample_location, sample_category, test_team):
         """Test getting location statistics."""
         category = sample_category()
         sample_location(name="Known1", category=category, is_known=True, latitude=Decimal("40.0"), longitude=Decimal("-74.0"))
         sample_location(name="Known2", category=category, is_known=True)
         sample_location(name="OneTime", category=category, is_known=False)
 
-        stats = location_service.get_stats()
+        stats = location_service.get_stats(team_id=test_team.id)
 
         assert stats["total_count"] == 3
         assert stats["known_count"] == 2
         assert stats["with_coordinates_count"] == 1
 
-    def test_get_stats_empty(self, location_service):
+    def test_get_stats_empty(self, location_service, test_team):
         """Test statistics when no locations exist."""
-        stats = location_service.get_stats()
+        stats = location_service.get_stats(team_id=test_team.id)
 
         assert stats["total_count"] == 0
         assert stats["known_count"] == 0
@@ -515,7 +532,7 @@ class TestLocationServiceStats:
 class TestLocationServiceCategoryMatching:
     """Tests for category matching validation."""
 
-    def test_validate_category_match_success(self, location_service, sample_location, sample_category):
+    def test_validate_category_match_success(self, location_service, sample_location, sample_category, test_team):
         """Test category match validation succeeds for same category."""
         category = sample_category(name="Airshow")
         location = sample_location(category=category)
@@ -523,11 +540,12 @@ class TestLocationServiceCategoryMatching:
         result = location_service.validate_category_match(
             location.guid,
             category.guid,
+            team_id=test_team.id,
         )
 
         assert result is True
 
-    def test_validate_category_match_failure(self, location_service, sample_location, sample_category):
+    def test_validate_category_match_failure(self, location_service, sample_location, sample_category, test_team):
         """Test category match validation fails for different categories."""
         cat1 = sample_category(name="Airshow")
         cat2 = sample_category(name="Wildlife")
@@ -536,11 +554,12 @@ class TestLocationServiceCategoryMatching:
         result = location_service.validate_category_match(
             location.guid,
             cat2.guid,
+            team_id=test_team.id,
         )
 
         assert result is False
 
-    def test_get_by_category(self, location_service, sample_location, sample_category):
+    def test_get_by_category(self, location_service, sample_location, sample_category, test_team):
         """Test getting locations by category."""
         cat1 = sample_category(name="Airshow")
         cat2 = sample_category(name="Wildlife")
@@ -550,11 +569,11 @@ class TestLocationServiceCategoryMatching:
         sample_location(name="Airshow One-time", category=cat1, is_known=False)
 
         # Known only (default)
-        locations = location_service.get_by_category(cat1.guid, known_only=True)
+        locations = location_service.get_by_category(team_id=test_team.id, category_guid=cat1.guid, known_only=True)
         assert len(locations) == 2
 
         # Include one-time
-        locations = location_service.get_by_category(cat1.guid, known_only=False)
+        locations = location_service.get_by_category(team_id=test_team.id, category_guid=cat1.guid, known_only=False)
         assert len(locations) == 3
 
 

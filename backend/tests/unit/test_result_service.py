@@ -74,7 +74,7 @@ class TestResultServiceList:
         mock_db.query.return_value.filter.return_value.first.return_value = sample_collection
 
         service = ResultService(db=mock_db)
-        items, total = service.list_results()
+        items, total = service.list_results(team_id=1)
 
         assert total == 1
         assert len(items) == 1
@@ -94,6 +94,7 @@ class TestResultServiceList:
 
         service = ResultService(db=mock_db)
         items, total = service.list_results(
+            team_id=1,
             collection_guid="col_01hgw2bbg00000000000000001",
             tool="photostats",
             status=ResultStatus.COMPLETED,
@@ -261,10 +262,10 @@ class TestResultServiceStats:
 
         return db
 
-    def test_get_stats_integration(self, test_db_session):
+    def test_get_stats_integration(self, test_db_session, test_team):
         """Test getting statistics with real database."""
         service = ResultService(db=test_db_session)
-        stats = service.get_stats()
+        stats = service.get_stats(team_id=test_team.id)
 
         # Empty database should return zeros
         assert stats.total_results == 0

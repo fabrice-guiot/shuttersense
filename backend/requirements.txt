@@ -44,5 +44,10 @@ httpx>=0.27.0  # For testing FastAPI endpoints
 # Security
 slowapi>=0.1.9  # Rate limiting middleware
 
+# Authentication (OAuth 2.0 + PKCE)
+authlib>=1.6.0  # OAuth 2.0/OpenID Connect client
+itsdangerous>=2.2.0  # Session signing (used by Starlette)
+python-jose[cryptography]>=3.3.0  # JWT encoding/decoding for API tokens
+
 # Development
 ruff>=0.8.0  # Linter and formatter

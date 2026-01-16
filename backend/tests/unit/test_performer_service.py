@@ -27,7 +27,7 @@ def performer_service(test_db_session):
 
 
 @pytest.fixture
-def sample_category(test_db_session):
+def sample_category(test_db_session, test_team):
     """Factory for creating sample Category models."""
 
     def _create(
@@ -36,6 +36,7 @@ def sample_category(test_db_session):
         color="#3B82F6",
         is_active=True,
         display_order=0,
+        team_id=None,
     ):
         category = Category(
             name=name,
@@ -43,6 +44,7 @@ def sample_category(test_db_session):
             color=color,
             is_active=is_active,
             display_order=display_order,
+            team_id=team_id if team_id is not None else test_team.id,
         )
         test_db_session.add(category)
         test_db_session.commit()
@@ -53,7 +55,7 @@ def sample_category(test_db_session):
 
 
 @pytest.fixture
-def sample_performer(test_db_session, sample_category):
+def sample_performer(test_db_session, sample_category, test_team):
     """Factory for creating sample Performer models."""
 
     def _create(
@@ -62,6 +64,7 @@ def sample_performer(test_db_session, sample_category):
         website=None,
         instagram_handle=None,
         additional_info=None,
+        team_id=None,
     ):
         if category is None:
             category = sample_category()
@@ -69,6 +72,7 @@ def sample_performer(test_db_session, sample_category):
         performer = Performer(
             name=name,
             category_id=category.id,
+            team_id=team_id if team_id is not None else test_team.id,
             website=website,
             instagram_handle=instagram_handle,
             additional_info=additional_info,
@@ -89,13 +93,14 @@ def sample_performer(test_db_session, sample_category):
 class TestPerformerServiceCreate:
     """Tests for performer creation."""
 
-    def test_create_performer_minimal(self, performer_service, sample_category):
+    def test_create_performer_minimal(self, performer_service, sample_category, test_team):
         """Test creating a performer with minimal fields."""
         category = sample_category(name="Airshow")
 
         result = performer_service.create(
             name="Blue Angels",
             category_guid=category.guid,
+            team_id=test_team.id,
         )
 
         assert result.id is not None
@@ -104,13 +109,14 @@ class TestPerformerServiceCreate:
         assert result.name == "Blue Angels"
         assert result.category_id == category.id
 
-    def test_create_performer_full(self, performer_service, sample_category):
+    def test_create_performer_full(self, performer_service, sample_category, test_team):
         """Test creating a performer with all fields."""
         category = sample_category(name="Airshow")
 
         result = performer_service.create(
             name="Blue Angels",
             category_guid=category.guid,
+            team_id=test_team.id,
             website="https://www.blueangels.navy.mil",
             instagram_handle="usaborngirl",
             additional_info="U.S. Navy flight demonstration squadron",
@@ -121,15 +127,16 @@ class TestPerformerServiceCreate:
         assert result.instagram_handle == "usaborngirl"
         assert result.additional_info == "U.S. Navy flight demonstration squadron"
 
-    def test_create_performer_invalid_category(self, performer_service):
+    def test_create_performer_invalid_category(self, performer_service, test_team):
         """Test error when creating with non-existent category."""
         with pytest.raises(NotFoundError):
             performer_service.create(
                 name="Test Performer",
                 category_guid="cat_00000000000000000000000000",
+                team_id=test_team.id,
             )
 
-    def test_create_performer_inactive_category(self, performer_service, sample_category):
+    def test_create_performer_inactive_category(self, performer_service, sample_category, test_team):
         """Test error when creating with inactive category."""
         category = sample_category(name="Inactive", is_active=False)
 
@@ -137,6 +144,7 @@ class TestPerformerServiceCreate:
             performer_service.create(
                 name="Test Performer",
                 category_guid=category.guid,
+                team_id=test_team.id,
             )
 
         assert "inactive" in str(exc_info.value).lower()
@@ -188,14 +196,14 @@ class TestPerformerServiceRead:
 class TestPerformerServiceList:
     """Tests for performer listing."""
 
-    def test_list_all(self, performer_service, sample_performer, sample_category):
+    def test_list_all(self, performer_service, sample_performer, sample_category, test_team):
         """Test listing all performers."""
         category = sample_category()
         sample_performer(name="Performer A", category=category)
         sample_performer(name="Performer B", category=category)
         sample_performer(name="Performer C", category=category)
 
-        result, total = performer_service.list()
+        result, total = performer_service.list(team_id=test_team.id)
 
         assert total == 3
         assert len(result) == 3
@@ -204,7 +212,7 @@ class TestPerformerServiceList:
         assert result[1].name == "Performer B"
         assert result[2].name == "Performer C"
 
-    def test_list_by_category(self, performer_service, sample_performer, sample_category):
+    def test_list_by_category(self, performer_service, sample_performer, sample_category, test_team):
         """Test listing performers filtered by category."""
         cat1 = sample_category(name="Category 1")
         cat2 = sample_category(name="Category 2")
@@ -212,56 +220,56 @@ class TestPerformerServiceList:
         sample_performer(name="Performer B", category=cat2)
         sample_performer(name="Performer C", category=cat1)
 
-        result, total = performer_service.list(category_guid=cat1.guid)
+        result, total = performer_service.list(team_id=test_team.id, category_guid=cat1.guid)
 
         assert total == 2
         assert len(result) == 2
         assert all(p.category_id == cat1.id for p in result)
 
-    def test_list_with_search(self, performer_service, sample_performer, sample_category):
+    def test_list_with_search(self, performer_service, sample_performer, sample_category, test_team):
         """Test listing performers with search filter."""
         category = sample_category()
         sample_performer(name="Blue Angels", category=category)
         sample_performer(name="Thunderbirds", category=category)
         sample_performer(name="Red Arrows", category=category)
 
-        result, total = performer_service.list(search="Blue")
+        result, total = performer_service.list(team_id=test_team.id, search="Blue")
 
         assert total == 1
         assert result[0].name == "Blue Angels"
 
-    def test_list_search_instagram(self, performer_service, sample_performer, sample_category):
+    def test_list_search_instagram(self, performer_service, sample_performer, sample_category, test_team):
         """Test searching performers by Instagram handle."""
         category = sample_category()
         sample_performer(name="Performer 1", instagram_handle="blueangels", category=category)
         sample_performer(name="Performer 2", instagram_handle="other", category=category)
 
-        result, total = performer_service.list(search="blueangels")
+        result, total = performer_service.list(team_id=test_team.id, search="blueangels")
 
         assert total == 1
         assert result[0].instagram_handle == "blueangels"
 
-    def test_list_pagination(self, performer_service, sample_performer, sample_category):
+    def test_list_pagination(self, performer_service, sample_performer, sample_category, test_team):
         """Test performer list pagination."""
         category = sample_category()
         for i in range(5):
             sample_performer(name=f"Performer {i:02d}", category=category)
 
         # First page
-        result, total = performer_service.list(limit=2, offset=0)
+        result, total = performer_service.list(team_id=test_team.id, limit=2, offset=0)
         assert total == 5
         assert len(result) == 2
         assert result[0].name == "Performer 00"
 
         # Second page
-        result, total = performer_service.list(limit=2, offset=2)
+        result, total = performer_service.list(team_id=test_team.id, limit=2, offset=2)
         assert total == 5
         assert len(result) == 2
         assert result[0].name == "Performer 02"
 
-    def test_list_empty(self, performer_service):
+    def test_list_empty(self, performer_service, test_team):
         """Test listing when no performers exist."""
-        result, total = performer_service.list()
+        result, total = performer_service.list(team_id=test_team.id)
 
         assert total == 0
         assert len(result) == 0
@@ -432,7 +440,7 @@ class TestPerformerServiceDelete:
             performer_service.delete("prf_00000000000000000000000000")
 
     def test_delete_with_event_associations(
-        self, performer_service, sample_performer, sample_category, test_db_session
+        self, performer_service, sample_performer, sample_category, test_db_session, test_team
     ):
         """Test error when deleting performer with event associations."""
         category = sample_category()
@@ -445,6 +453,7 @@ class TestPerformerServiceDelete:
             status="future",
             attendance="planned",
             category_id=category.id,
+            team_id=test_team.id,
         )
         test_db_session.add(event)
         test_db_session.commit()
@@ -467,15 +476,15 @@ class TestPerformerServiceDelete:
 class TestPerformerServiceStats:
     """Tests for performer statistics."""
 
-    def test_get_stats_empty(self, performer_service):
+    def test_get_stats_empty(self, performer_service, test_team):
         """Test stats when no performers exist."""
-        stats = performer_service.get_stats()
+        stats = performer_service.get_stats(team_id=test_team.id)
 
         assert stats["total_count"] == 0
         assert stats["with_instagram_count"] == 0
         assert stats["with_website_count"] == 0
 
-    def test_get_stats_with_data(self, performer_service, sample_performer, sample_category):
+    def test_get_stats_with_data(self, performer_service, sample_performer, sample_category, test_team):
         """Test stats with existing performers."""
         category = sample_category()
         sample_performer(name="P1", instagram_handle="handle1", website="https://site1.com", category=category)
@@ -483,7 +492,7 @@ class TestPerformerServiceStats:
         sample_performer(name="P3", website="https://site3.com", category=category)  # No instagram
         sample_performer(name="P4", category=category)  # No instagram or website
 
-        stats = performer_service.get_stats()
+        stats = performer_service.get_stats(team_id=test_team.id)
 
         assert stats["total_count"] == 4
         assert stats["with_instagram_count"] == 2
@@ -532,7 +541,7 @@ class TestPerformerServiceCategoryMatch:
 class TestPerformerServiceGetByCategory:
     """Tests for get_by_category method."""
 
-    def test_get_by_category(self, performer_service, sample_performer, sample_category):
+    def test_get_by_category(self, performer_service, sample_performer, sample_category, test_team):
         """Test getting performers by category."""
         cat1 = sample_category(name="Category 1")
         cat2 = sample_category(name="Category 2")
@@ -540,26 +549,26 @@ class TestPerformerServiceGetByCategory:
         sample_performer(name="B", category=cat1)
         sample_performer(name="C", category=cat2)
 
-        result = performer_service.get_by_category(cat1.guid)
+        result = performer_service.get_by_category(team_id=test_team.id, category_guid=cat1.guid)
 
         assert len(result) == 2
         assert all(p.category_id == cat1.id for p in result)
 
-    def test_get_by_category_with_search(self, performer_service, sample_performer, sample_category):
+    def test_get_by_category_with_search(self, performer_service, sample_performer, sample_category, test_team):
         """Test getting performers by category with search."""
         category = sample_category()
         sample_performer(name="Blue Angels", category=category)
         sample_performer(name="Thunderbirds", category=category)
 
-        result = performer_service.get_by_category(category.guid, search="Blue")
+        result = performer_service.get_by_category(team_id=test_team.id, category_guid=category.guid, search="Blue")
 
         assert len(result) == 1
         assert result[0].name == "Blue Angels"
 
-    def test_get_by_category_invalid(self, performer_service):
+    def test_get_by_category_invalid(self, performer_service, test_team):
         """Test error when category not found."""
         with pytest.raises(NotFoundError):
-            performer_service.get_by_category("cat_00000000000000000000000000")
+            performer_service.get_by_category(team_id=test_team.id, category_guid="cat_00000000000000000000000000")
 
 
 class TestPerformerServiceBuildResponse:

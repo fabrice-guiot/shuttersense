@@ -17,7 +17,7 @@ from backend.src.models import Connector, ConnectorType
 class TestConnectorServiceCreate:
     """Tests for ConnectorService.create_connector() - T104j"""
 
-    def test_create_connector_with_encryption(self, test_db_session, test_encryptor):
+    def test_create_connector_with_encryption(self, test_db_session, test_encryptor, test_team):
         """Should create connector with encrypted credentials"""
         service = ConnectorService(test_db_session, test_encryptor)
         credentials = {
@@ -30,6 +30,7 @@ class TestConnectorServiceCreate:
             name="AWS Production",
             type=ConnectorType.S3,
             credentials=credentials,
+            team_id=test_team.id,
             metadata=metadata
         )
 
@@ -45,7 +46,7 @@ class TestConnectorServiceCreate:
         # Metadata should be stored as JSON
         assert connector.metadata_json == json.dumps(metadata)
 
-    def test_create_connector_without_metadata(self, test_db_session, test_encryptor):
+    def test_create_connector_without_metadata(self, test_db_session, test_encryptor, test_team):
         """Should create connector without metadata (optional field)"""
         service = ConnectorService(test_db_session, test_encryptor)
         credentials = {"server": "nas.example.com", "share": "photos", "username": "user", "password": "pass"}
@@ -53,21 +54,22 @@ class TestConnectorServiceCreate:
         connector = service.create_connector(
             name="NAS Share",
             type=ConnectorType.SMB,
-            credentials=credentials
+            credentials=credentials,
+            team_id=test_team.id
         )
 
         assert connector.id is not None
         assert connector.metadata_json is None
 
-    def test_create_connector_duplicate_name(self, test_db_session, test_encryptor):
+    def test_create_connector_duplicate_name(self, test_db_session, test_encryptor, test_team):
         """Should raise ValueError if connector name already exists"""
         service = ConnectorService(test_db_session, test_encryptor)
         credentials = {"service_account_json": '{"type": "service_account"}'}
 
-        service.create_connector("GCS Bucket", ConnectorType.GCS, credentials)
+        service.create_connector("GCS Bucket", ConnectorType.GCS, credentials, team_id=test_team.id)
 
         with pytest.raises(ValueError) as exc_info:
-            service.create_connector("GCS Bucket", ConnectorType.GCS, credentials)
+            service.create_connector("GCS Bucket", ConnectorType.GCS, credentials, team_id=test_team.id)
 
         assert "already exists" in str(exc_info.value)
 
@@ -112,14 +114,14 @@ class TestConnectorServiceGet:
 class TestConnectorServiceList:
     """Tests for ConnectorService.list_connectors() - T104j"""
 
-    def test_list_all_connectors(self, test_db_session, test_encryptor, sample_connector):
+    def test_list_all_connectors(self, test_db_session, test_encryptor, sample_connector, test_team):
         """Should list all connectors sorted by name"""
         service = ConnectorService(test_db_session, test_encryptor)
         sample_connector(name="Zebra S3", type="s3")
         sample_connector(name="Alpha GCS", type="gcs")
         sample_connector(name="Beta SMB", type="smb")
 
-        connectors = service.list_connectors()
+        connectors = service.list_connectors(team_id=test_team.id)
 
         assert len(connectors) == 3
         # Should be sorted by name
@@ -127,37 +129,37 @@ class TestConnectorServiceList:
         assert connectors[1].name == "Beta SMB"
         assert connectors[2].name == "Zebra S3"
 
-    def test_list_connectors_filter_by_type(self, test_db_session, test_encryptor, sample_connector):
+    def test_list_connectors_filter_by_type(self, test_db_session, test_encryptor, sample_connector, test_team):
         """Should filter connectors by type"""
         service = ConnectorService(test_db_session, test_encryptor)
         sample_connector(name="S3 Connector 1", type="s3")
         sample_connector(name="S3 Connector 2", type="s3")
         sample_connector(name="GCS Connector", type="gcs")
 
-        connectors = service.list_connectors(type_filter=ConnectorType.S3)
+        connectors = service.list_connectors(team_id=test_team.id, type_filter=ConnectorType.S3)
 
         assert len(connectors) == 2
         assert all(c.type == ConnectorType.S3 for c in connectors)
 
-    def test_list_connectors_active_only(self, test_db_session, test_encryptor, sample_connector):
+    def test_list_connectors_active_only(self, test_db_session, test_encryptor, sample_connector, test_team):
         """Should filter connectors by active status"""
         service = ConnectorService(test_db_session, test_encryptor)
         active_conn = sample_connector(name="Active", type="s3", is_active=True)
         inactive_conn = sample_connector(name="Inactive", type="gcs", is_active=False)
 
-        connectors = service.list_connectors(active_only=True)
+        connectors = service.list_connectors(team_id=test_team.id, active_only=True)
 
         assert len(connectors) == 1
         assert connectors[0].id == active_conn.id
 
-    def test_list_connectors_combined_filters(self, test_db_session, test_encryptor, sample_connector):
+    def test_list_connectors_combined_filters(self, test_db_session, test_encryptor, sample_connector, test_team):
         """Should apply both type and active filters"""
         service = ConnectorService(test_db_session, test_encryptor)
         sample_connector(name="Active S3", type="s3", is_active=True)
         sample_connector(name="Inactive S3", type="s3", is_active=False)
         sample_connector(name="Active GCS", type="gcs", is_active=True)
 
-        connectors = service.list_connectors(type_filter=ConnectorType.S3, active_only=True)
+        connectors = service.list_connectors(team_id=test_team.id, type_filter=ConnectorType.S3, active_only=True)
 
         assert len(connectors) == 1
         assert connectors[0].name == "Active S3"

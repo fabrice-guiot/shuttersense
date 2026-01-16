@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.middleware.auth import require_auth, TenantContext
 from backend.src.models import ResultStatus
 from backend.src.schemas.results import (
     SortField, SortOrder, ResultListResponse, AnalysisResultResponse,
@@ -59,6 +60,7 @@ def get_result_service(db: Session = Depends(get_db)) -> ResultService:
     summary="List analysis results"
 )
 def list_results(
+    ctx: TenantContext = Depends(require_auth),
     collection_guid: Optional[str] = Query(None, description="Filter by collection GUID (col_xxx)"),
     tool: Optional[str] = Query(None, description="Filter by tool type"),
     status: Optional[ResultStatus] = Query(None, description="Filter by status"),
@@ -92,6 +94,7 @@ def list_results(
     """
     try:
         items, total = service.list_results(
+            team_id=ctx.team_id,
             collection_guid=collection_guid,
             tool=tool,
             status=status,
@@ -122,6 +125,7 @@ def list_results(
     summary="Get results statistics"
 )
 def get_stats(
+    ctx: TenantContext = Depends(require_auth),
     service: ResultService = Depends(get_result_service)
 ) -> ResultStatsResponse:
     """
@@ -133,7 +137,7 @@ def get_stats(
     Returns:
         Statistics including total results, counts by status and tool
     """
-    return service.get_stats()
+    return service.get_stats(team_id=ctx.team_id)
 
 
 # ============================================================================
@@ -147,6 +151,7 @@ def get_stats(
 )
 def get_result(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ResultService = Depends(get_result_service)
 ) -> AnalysisResultResponse:
     """
@@ -163,7 +168,7 @@ def get_result(
         404: Result not found
     """
     try:
-        result = service.get_result_by_guid(guid)
+        result = service.get_result_by_guid(guid, team_id=ctx.team_id)
 
         if not result:
             logger.warning(f"Result not found: {guid}")
@@ -172,7 +177,7 @@ def get_result(
                 detail=f"Result not found: {guid}"
             )
 
-        return service.get_result(result.id)
+        return service.get_result(result.id, team_id=ctx.team_id)
 
     except ValueError as e:
         logger.warning(f"Invalid result GUID: {guid} - {str(e)}")
@@ -194,6 +199,7 @@ def get_result(
 )
 def delete_result(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ResultService = Depends(get_result_service)
 ) -> DeleteResponse:
     """
@@ -212,7 +218,7 @@ def delete_result(
         404: Result not found
     """
     try:
-        result = service.get_result_by_guid(guid)
+        result = service.get_result_by_guid(guid, team_id=ctx.team_id)
 
         if not result:
             raise HTTPException(
@@ -220,7 +226,7 @@ def delete_result(
                 detail=f"Result not found: {guid}"
             )
 
-        deleted_guid = service.delete_result(result.id)
+        deleted_guid = service.delete_result(result.id, team_id=ctx.team_id)
         logger.info(f"Result {guid} deleted")
         return DeleteResponse(
             message="Result deleted successfully",
@@ -254,6 +260,7 @@ def delete_result(
 )
 def download_report(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ResultService = Depends(get_result_service)
 ) -> Response:
     """
@@ -274,7 +281,7 @@ def download_report(
         404: Result not found or no report available
     """
     try:
-        result = service.get_result_by_guid(guid)
+        result = service.get_result_by_guid(guid, team_id=ctx.team_id)
 
         if not result:
             raise HTTPException(
@@ -282,7 +289,7 @@ def download_report(
                 detail=f"Result not found: {guid}"
             )
 
-        report_data = service.get_report_with_metadata(result.id)
+        report_data = service.get_report_with_metadata(result.id, team_id=ctx.team_id)
 
         # Generate filename following CLI tool conventions
         # Format: {tool}_report_{collection_name}_{collection_id}_{timestamp}.html
