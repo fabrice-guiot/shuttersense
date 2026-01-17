@@ -72,25 +72,30 @@ class PipelineService:
         name: str,
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]],
+        team_id: int,
         description: Optional[str] = None
     ) -> PipelineResponse:
         """
         Create a new pipeline.
 
         Args:
-            name: Pipeline name (unique)
+            name: Pipeline name (unique within team)
             nodes: List of node definitions
             edges: List of edge connections
+            team_id: Team ID for tenant isolation
             description: Optional description
 
         Returns:
             Created pipeline details
 
         Raises:
-            ConflictError: If name already exists
+            ConflictError: If name already exists within team
         """
-        # Check for duplicate name
-        existing = self.db.query(Pipeline).filter(Pipeline.name == name).first()
+        # Check for duplicate name within team
+        existing = self.db.query(Pipeline).filter(
+            Pipeline.name == name,
+            Pipeline.team_id == team_id
+        ).first()
         if existing:
             raise ConflictError(f"Pipeline with name '{name}' already exists")
 
@@ -110,14 +115,15 @@ class PipelineService:
             is_active=False,
             is_default=False,
             is_valid=is_valid,
-            validation_errors=validation_errors if validation_errors else None
+            validation_errors=validation_errors if validation_errors else None,
+            team_id=team_id
         )
 
         self.db.add(pipeline)
         self.db.commit()
         self.db.refresh(pipeline)
 
-        logger.info(f"Created pipeline '{name}' (id={pipeline.id})")
+        logger.info(f"Created pipeline '{name}' (id={pipeline.id}, team_id={team_id})")
         return self._to_response(pipeline)
 
     def get(self, pipeline_id: int) -> PipelineResponse:
@@ -136,39 +142,45 @@ class PipelineService:
         pipeline = self._get_pipeline(pipeline_id)
         return self._to_response(pipeline)
 
-    def get_by_guid(self, guid: str) -> PipelineResponse:
+    def get_by_guid(self, guid: str, team_id: Optional[int] = None) -> PipelineResponse:
         """
         Get pipeline by GUID.
 
         Args:
             guid: Pipeline GUID (e.g., "pip_01hgw2bbg...")
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Pipeline response
 
         Raises:
             ValueError: If GUID format is invalid or prefix doesn't match "pip"
-            NotFoundError: If pipeline doesn't exist
+            NotFoundError: If pipeline doesn't exist or belongs to different team
 
         Example:
-            >>> pipeline = service.get_by_guid("pip_01hgw2bbg...")
+            >>> pipeline = service.get_by_guid("pip_01hgw2bbg...", team_id=1)
         """
         uuid_value = GuidService.parse_identifier(guid, expected_prefix="pip")
-        pipeline = self.db.query(Pipeline).filter(Pipeline.uuid == uuid_value).first()
+        query = self.db.query(Pipeline).filter(Pipeline.uuid == uuid_value)
+        if team_id is not None:
+            query = query.filter(Pipeline.team_id == team_id)
+        pipeline = query.first()
         if not pipeline:
             raise NotFoundError("Pipeline", guid)
         return self._to_response(pipeline)
 
     def list(
         self,
+        team_id: int,
         is_active: Optional[bool] = None,
         is_default: Optional[bool] = None,
         is_valid: Optional[bool] = None
     ) -> List[PipelineSummary]:
         """
-        List all pipelines with optional filters.
+        List all pipelines for a team with optional filters.
 
         Args:
+            team_id: Team ID for tenant isolation
             is_active: Filter by active status
             is_default: Filter by default status
             is_valid: Filter by validation status
@@ -176,7 +188,7 @@ class PipelineService:
         Returns:
             List of pipeline summaries
         """
-        query = self.db.query(Pipeline)
+        query = self.db.query(Pipeline).filter(Pipeline.team_id == team_id)
 
         if is_active is not None:
             query = query.filter(Pipeline.is_active == is_active)
@@ -800,12 +812,13 @@ class PipelineService:
     # Import/Export
     # =========================================================================
 
-    def import_from_yaml(self, yaml_content: str) -> PipelineResponse:
+    def import_from_yaml(self, yaml_content: str, team_id: int) -> PipelineResponse:
         """
         Import pipeline from YAML string.
 
         Args:
             yaml_content: YAML content
+            team_id: Team ID for tenant isolation
 
         Returns:
             Created pipeline
@@ -836,7 +849,8 @@ class PipelineService:
             name=name,
             description=description,
             nodes=nodes,
-            edges=edges
+            edges=edges,
+            team_id=team_id
         )
 
     def export_to_yaml(self, pipeline_id: int) -> str:
@@ -905,22 +919,32 @@ class PipelineService:
     # Statistics
     # =========================================================================
 
-    def get_stats(self) -> PipelineStatsResponse:
+    def get_stats(self, team_id: int) -> PipelineStatsResponse:
         """
         Get pipeline statistics for dashboard KPIs.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Statistics including counts, active count, and default pipeline info
         """
-        total = self.db.query(func.count(Pipeline.id)).scalar() or 0
+        total = self.db.query(func.count(Pipeline.id)).filter(
+            Pipeline.team_id == team_id
+        ).scalar() or 0
         valid = self.db.query(func.count(Pipeline.id)).filter(
+            Pipeline.team_id == team_id,
             Pipeline.is_valid == True
         ).scalar() or 0
         active_count = self.db.query(func.count(Pipeline.id)).filter(
+            Pipeline.team_id == team_id,
             Pipeline.is_active == True
         ).scalar() or 0
 
-        default = self.db.query(Pipeline).filter(Pipeline.is_default == True).first()
+        default = self.db.query(Pipeline).filter(
+            Pipeline.team_id == team_id,
+            Pipeline.is_default == True
+        ).first()
 
         return PipelineStatsResponse(
             total_pipelines=total,
@@ -952,22 +976,26 @@ class PipelineService:
             raise NotFoundError("Pipeline", pipeline_id)
         return pipeline
 
-    def _get_pipeline_by_guid(self, guid: str) -> Pipeline:
+    def _get_pipeline_by_guid(self, guid: str, team_id: Optional[int] = None) -> Pipeline:
         """
         Get pipeline by GUID.
 
         Args:
             guid: Pipeline GUID (e.g., "pip_01hgw...")
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Pipeline model
 
         Raises:
             ValueError: If GUID format is invalid or prefix doesn't match "pip"
-            NotFoundError: If pipeline doesn't exist
+            NotFoundError: If pipeline doesn't exist or belongs to different team
         """
         uuid_value = GuidService.parse_identifier(guid, expected_prefix="pip")
-        pipeline = self.db.query(Pipeline).filter(Pipeline.uuid == uuid_value).first()
+        query = self.db.query(Pipeline).filter(Pipeline.uuid == uuid_value)
+        if team_id is not None:
+            query = query.filter(Pipeline.team_id == team_id)
+        pipeline = query.first()
         if not pipeline:
             raise NotFoundError("Pipeline", guid)
         return pipeline

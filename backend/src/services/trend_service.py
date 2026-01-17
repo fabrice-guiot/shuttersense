@@ -122,6 +122,7 @@ class TrendService:
     def _build_base_query(
         self,
         tool: str,
+        team_id: int,
         collection_ids: Optional[List[int]] = None,
         from_date: Optional[date] = None,
         to_date: Optional[date] = None,
@@ -134,6 +135,7 @@ class TrendService:
 
         Args:
             tool: Tool type filter
+            team_id: Team ID for tenant isolation
             collection_ids: Optional list of collection IDs to filter
             from_date: Optional start date
             to_date: Optional end date
@@ -147,7 +149,8 @@ class TrendService:
         query = self.db.query(AnalysisResult).filter(
             AnalysisResult.tool == tool,
             AnalysisResult.status == ResultStatus.COMPLETED,
-            AnalysisResult.collection_id.isnot(None)  # Exclude display-graph results
+            AnalysisResult.collection_id.isnot(None),  # Exclude display-graph results
+            AnalysisResult.team_id == team_id
         )
 
         if collection_ids:
@@ -175,6 +178,7 @@ class TrendService:
 
     def get_photostats_trends(
         self,
+        team_id: int,
         collection_ids: Optional[str] = None,
         from_date: Optional[date] = None,
         to_date: Optional[date] = None,
@@ -190,6 +194,7 @@ class TrendService:
         Deduplication: Keeps only the LAST result per Collection + Day.
 
         Args:
+            team_id: Team ID for tenant isolation
             collection_ids: Comma-separated collection IDs (1-5 for comparison mode)
             from_date: Filter from date (inclusive)
             to_date: Filter to date (inclusive)
@@ -205,6 +210,7 @@ class TrendService:
 
         query = self._build_base_query(
             tool="photostats",
+            team_id=team_id,
             collection_ids=parsed_ids,
             from_date=from_date,
             to_date=to_date,
@@ -311,6 +317,7 @@ class TrendService:
 
     def get_photo_pairing_trends(
         self,
+        team_id: int,
         collection_ids: Optional[str] = None,
         from_date: Optional[date] = None,
         to_date: Optional[date] = None,
@@ -328,6 +335,7 @@ class TrendService:
         Deduplication: Keeps only the LAST result per Collection + Day.
 
         Args:
+            team_id: Team ID for tenant isolation
             collection_ids: Comma-separated collection IDs (1-5 for comparison mode)
             from_date: Filter from date (inclusive)
             to_date: Filter to date (inclusive)
@@ -343,6 +351,7 @@ class TrendService:
 
         query = self._build_base_query(
             tool="photo_pairing",
+            team_id=team_id,
             collection_ids=parsed_ids,
             from_date=from_date,
             to_date=to_date,
@@ -454,6 +463,7 @@ class TrendService:
 
     def get_pipeline_validation_trends(
         self,
+        team_id: int,
         collection_ids: Optional[str] = None,
         pipeline_id: Optional[int] = None,
         pipeline_version: Optional[int] = None,
@@ -477,6 +487,7 @@ class TrendService:
         Deduplication: Keeps only the LAST result per Collection + Pipeline + Version + Day.
 
         Args:
+            team_id: Team ID for tenant isolation
             collection_ids: Comma-separated collection IDs (1-5 for comparison mode)
             pipeline_id: Filter by specific pipeline
             pipeline_version: Filter by specific pipeline version
@@ -494,6 +505,7 @@ class TrendService:
 
         query = self._build_base_query(
             tool="pipeline_validation",
+            team_id=team_id,
             collection_ids=parsed_ids,
             from_date=from_date,
             to_date=to_date,
@@ -673,6 +685,7 @@ class TrendService:
 
     def get_display_graph_trends(
         self,
+        team_id: int,
         pipeline_ids: Optional[str] = None,
         from_date: Optional[date] = None,
         to_date: Optional[date] = None,
@@ -688,6 +701,7 @@ class TrendService:
         Aggregation: Sums metrics across all pipelines for each day.
 
         Args:
+            team_id: Team ID for tenant isolation
             pipeline_ids: Comma-separated pipeline IDs (optional filter)
             from_date: Filter from date (inclusive)
             to_date: Filter to date (inclusive)
@@ -712,7 +726,8 @@ class TrendService:
             AnalysisResult.tool == "pipeline_validation",
             AnalysisResult.status == ResultStatus.COMPLETED,
             AnalysisResult.collection_id.is_(None),  # Display-graph has no collection
-            AnalysisResult.pipeline_id.isnot(None)
+            AnalysisResult.pipeline_id.isnot(None),
+            AnalysisResult.team_id == team_id
         )
 
         if parsed_ids:
@@ -856,6 +871,7 @@ class TrendService:
 
     def get_trend_summary(
         self,
+        team_id: int,
         collection_id: Optional[int] = None
     ) -> TrendSummaryResponse:
         """
@@ -865,13 +881,17 @@ class TrendService:
         and consistency metrics.
 
         Args:
+            team_id: Team ID for tenant isolation
             collection_id: Optional collection ID filter
 
         Returns:
             Trend summary with direction indicators and latest timestamps
         """
         # Base query filter
-        base_filter = [AnalysisResult.status == ResultStatus.COMPLETED]
+        base_filter = [
+            AnalysisResult.status == ResultStatus.COMPLETED,
+            AnalysisResult.team_id == team_id
+        ]
         if collection_id:
             base_filter.append(AnalysisResult.collection_id == collection_id)
         else:

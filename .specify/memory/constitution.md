@@ -1,4 +1,38 @@
 <!--
+SYNC IMPACT REPORT (Constitution v1.5.0 - Multi-Tenancy and Authentication)
+
+Version change: 1.4.0 → 1.5.0 (MINOR)
+Modified sections:
+  - Added new Core Principle: V. Multi-Tenancy and Authentication (Web Application)
+
+Added requirements:
+  - All API endpoints MUST require authentication except public endpoints (/health, /api/version, /api/auth/*)
+  - All data MUST be scoped to authenticated user's team (tenant isolation)
+  - Services MUST accept TenantContext and filter by team_id
+  - Cross-team data access MUST return 404 (not 403) to prevent information leakage
+  - New entities MUST be auto-assigned to user's team
+  - Database entities with tenant scope MUST have team_id FK
+  - API tokens MUST NOT access /api/admin/* endpoints
+  - Frontend routes MUST be wrapped with ProtectedRoute (except /login)
+
+Rationale:
+  - Issue #73 / Feature 019-user-tenancy established multi-tenancy architecture
+  - Ensures complete data isolation between organizations
+  - Consistent TenantContext pattern prevents accidental data leakage
+  - 404 response for cross-team access prevents GUID enumeration attacks
+
+Impact:
+  - All new backend endpoints MUST use get_tenant_context dependency
+  - All new services MUST filter by team_id
+  - All new frontend routes MUST be protected
+  - Code reviews MUST verify tenant isolation compliance
+
+Templates requiring updates:
+  ✅ No template changes needed - this is an architecture standard
+
+Previous Amendment (v1.4.0 - Single Title Pattern):
+  - Added new Frontend UI Standard: Single Title Pattern (Issue #67)
+
 SYNC IMPACT REPORT (Constitution v1.4.0 - Single Title Pattern)
 
 Version change: 1.3.0 → 1.4.0 (MINOR)
@@ -131,6 +165,77 @@ Example: `col_01hgw2bbg0000000000000001`
 
 **Rationale**: GUIDs provide URL-safe, globally unique identifiers that can be safely shared, bookmarked, and used in external integrations. Entity prefixes enable immediate type identification from the ID alone. UUIDv7 provides time-ordering for database efficiency. Separating internal numeric IDs from external GUIDs improves security by not exposing database structure.
 
+### V. Multi-Tenancy and Authentication (Web Application)
+
+All Web Application features (backend APIs and frontend UI) MUST enforce authentication and tenant isolation. This principle applies to the web application only; CLI tools remain independent and do not require authentication.
+
+**Authentication Requirements**:
+- All API endpoints MUST require authentication EXCEPT explicit public endpoints (`/health`, `/api/version`, `/api/auth/*`)
+- Authentication is provided via either:
+  - **Session cookies**: For browser-based access (OAuth login flow)
+  - **API tokens**: For programmatic access (Bearer token in Authorization header)
+- API tokens MUST NOT grant access to super admin endpoints (`/api/admin/*`)
+- Unauthenticated requests to protected endpoints MUST return 401 Unauthorized
+
+**Tenant Isolation Requirements**:
+- All data MUST be scoped to the authenticated user's team (`team_id`)
+- Services MUST accept `TenantContext` and filter all queries by `team_id`
+- Cross-team data access MUST return 404 Not Found (never 403 Forbidden, to avoid information leakage)
+- New entities MUST be automatically assigned to the user's team on creation
+- Database entities with tenant scope MUST have a `team_id` foreign key column
+
+**Backend Implementation Pattern**:
+```python
+from backend.src.middleware.tenant import TenantContext, get_tenant_context
+
+@router.get("/items")
+async def list_items(
+    ctx: TenantContext = Depends(get_tenant_context)
+):
+    # Service filters by team_id automatically
+    return service.list_items(team_id=ctx.team_id)
+
+@router.get("/items/{guid}")
+async def get_item(
+    guid: str,
+    ctx: TenantContext = Depends(get_tenant_context)
+):
+    # Returns None (404) if item belongs to different team
+    item = service.get_by_guid(guid, team_id=ctx.team_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+```
+
+**Frontend Implementation Pattern**:
+```typescript
+// All routes except /login MUST be wrapped with ProtectedRoute
+<Route path="/items" element={
+  <ProtectedRoute>
+    <ItemsPage />
+  </ProtectedRoute>
+} />
+
+// Components access user context via useAuth hook
+const { user, isAuthenticated, logout } = useAuth()
+```
+
+**Key Files**:
+- `backend/src/middleware/tenant.py` - TenantContext and get_tenant_context dependency
+- `backend/src/middleware/auth.py` - Authentication middleware
+- `frontend/src/contexts/AuthContext.tsx` - Frontend authentication context
+- `frontend/src/components/auth/ProtectedRoute.tsx` - Route protection wrapper
+
+**Entity Prefixes for Auth Entities**:
+
+| Entity | Prefix | Description |
+|--------|--------|-------------|
+| Team | `tea_` | Tenant/organization |
+| User | `usr_` | Human or system user |
+| ApiToken | `tok_` | API token for programmatic access |
+
+**Rationale**: Multi-tenancy enables the application to serve multiple organizations while ensuring complete data isolation. Authentication prevents unauthorized access. The consistent pattern of TenantContext injection ensures tenant isolation cannot be accidentally bypassed. Returning 404 for cross-team access prevents attackers from discovering which GUIDs exist in other tenants.
+
 ## Shared Infrastructure Standards
 
 - **Configuration Management**: All tools MUST use `PhotoAdminConfig` from `config_manager.py` for loading and managing YAML configuration
@@ -242,4 +347,4 @@ All action rows MUST stack vertically on mobile using the responsive pattern:
 - Repeated exceptions to a principle suggest it needs revision
 - Project direction or scope changes significantly
 
-**Version**: 1.4.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-13
+**Version**: 1.5.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-16

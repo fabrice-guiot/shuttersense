@@ -18,6 +18,20 @@ import SettingsPage from '@/pages/SettingsPage'
 import DirectoryPage from '@/pages/DirectoryPage'
 import EventsPage from '@/pages/EventsPage'
 
+// Mock useAuth hook to return non-super-admin by default
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: { is_super_admin: false },
+    isAuthenticated: true,
+    isLoading: false,
+    error: null,
+    logout: async () => {},
+    refreshAuth: async () => {},
+  }),
+  useCurrentUser: () => ({ is_super_admin: false }),
+  useIsSuperAdmin: () => false,
+}))
+
 // Helper component to display current location for testing
 function LocationDisplay() {
   const location = useLocation()

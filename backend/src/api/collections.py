@@ -38,6 +38,7 @@ from backend.src.services.guid import GuidService
 from backend.src.utils.cache import FileListingCache
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
+from backend.src.middleware.auth import require_auth, TenantContext
 
 
 logger = get_logger("api")
@@ -91,20 +92,21 @@ def get_collection_service(
     "/stats",
     response_model=CollectionStatsResponse,
     summary="Get collection statistics",
-    description="Get aggregated KPI statistics for all collections (Issue #37)"
+    description="Get aggregated KPI statistics for team's collections (Issue #37)"
 )
 async def get_collection_stats(
+    ctx: TenantContext = Depends(require_auth),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionStatsResponse:
     """
-    Get aggregated statistics for all collections.
+    Get aggregated statistics for team's collections.
 
     Returns KPIs for the Collections page topband. These values are NOT affected
-    by any filter parameters - always shows system-wide totals.
+    by any filter parameters - shows team-wide totals.
 
     Returns:
         CollectionStatsResponse with:
-        - total_collections: Count of all collections
+        - total_collections: Count of team's collections
         - storage_used_bytes: Total storage in bytes
         - storage_used_formatted: Human-readable storage (e.g., "2.5 TB")
         - file_count: Total number of files
@@ -123,7 +125,7 @@ async def get_collection_stats(
         }
     """
     try:
-        stats = collection_service.get_collection_stats()
+        stats = collection_service.get_collection_stats(team_id=ctx.team_id)
 
         logger.info(
             f"Retrieved collection stats",
@@ -144,9 +146,10 @@ async def get_collection_stats(
     "",
     response_model=List[CollectionResponse],
     summary="List collections",
-    description="List all collections with optional filtering by state, type, accessibility, and name search"
+    description="List team's collections with optional filtering by state, type, accessibility, and name search"
 )
 async def list_collections(
+    ctx: TenantContext = Depends(require_auth),
     state: Optional[CollectionState] = Query(None, description="Filter by state (live, closed, archived)"),
     type: Optional[CollectionType] = Query(None, description="Filter by type (local, s3, gcs, smb)"),
     accessible_only: bool = Query(False, description="Only return accessible collections"),
@@ -170,6 +173,7 @@ async def list_collections(
     """
     try:
         collections = collection_service.list_collections(
+            team_id=ctx.team_id,
             state_filter=state,
             type_filter=type,
             accessible_only=accessible_only,
@@ -206,6 +210,7 @@ async def list_collections(
 )
 async def create_collection(
     collection: CollectionCreate,
+    ctx: TenantContext = Depends(require_auth),
     db: Session = Depends(get_db),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionResponse:
@@ -274,6 +279,7 @@ async def create_collection(
             name=collection.name,
             type=collection.type,
             location=collection.location,
+            team_id=ctx.team_id,
             state=collection.state,
             connector_id=connector_id,
             pipeline_id=pipeline_id,
@@ -325,6 +331,7 @@ async def create_collection(
 )
 async def get_collection(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionResponse:
     """
@@ -338,13 +345,14 @@ async def get_collection(
 
     Raises:
         400 Bad Request: If GUID format is invalid or prefix mismatch
-        404 Not Found: If collection doesn't exist
+        404 Not Found: If collection doesn't exist or belongs to different team
 
     Example:
         GET /api/collections/col_01hgw2bbg0000000000000000
     """
     try:
-        collection = collection_service.get_by_guid(guid)
+        # Filter by team_id to ensure tenant isolation (cross-team access returns 404)
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not collection:
             logger.warning(f"Collection not found: {guid}")
@@ -378,6 +386,7 @@ async def get_collection(
 async def update_collection(
     guid: str,
     collection_update: CollectionUpdate,
+    ctx: TenantContext = Depends(require_auth),
     db: Session = Depends(get_db),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionResponse:
@@ -408,8 +417,8 @@ async def update_collection(
         }
     """
     try:
-        # Get collection by GUID
-        collection = collection_service.get_by_guid(guid)
+        # Get collection by GUID with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not collection:
             logger.warning(f"Collection not found for update: {guid}")
@@ -494,6 +503,7 @@ async def update_collection(
 async def delete_collection(
     guid: str,
     force: bool = Query(False, description="Force delete even if results/jobs exist"),
+    ctx: TenantContext = Depends(require_auth),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> None:
     """
@@ -519,8 +529,8 @@ async def delete_collection(
         DELETE /api/collections/col_01hgw2bbg0000000000000000?force=true
     """
     try:
-        # Get collection by GUID
-        collection = collection_service.get_by_guid(guid)
+        # Get collection by GUID with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not collection:
             logger.warning(f"Collection not found for deletion: {guid}")
@@ -589,6 +599,7 @@ async def delete_collection(
 )
 async def test_collection(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionTestResponse:
     """
@@ -618,8 +629,8 @@ async def test_collection(
         }
     """
     try:
-        # Get collection by GUID
-        collection = collection_service.get_by_guid(guid)
+        # Get collection by GUID with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not collection:
             logger.warning(f"Collection not found for test: {guid}")
@@ -680,6 +691,7 @@ async def refresh_collection_cache(
     guid: str,
     confirm: bool = Query(False, description="Confirm refresh for large collections (>100K files)"),
     threshold: int = Query(100000, ge=1000, le=1000000, description="File count warning threshold"),
+    ctx: TenantContext = Depends(require_auth),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionRefreshResponse:
     """
@@ -712,8 +724,8 @@ async def refresh_collection_cache(
         }
     """
     try:
-        # Get collection by GUID
-        collection = collection_service.get_by_guid(guid)
+        # Get collection by GUID with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not collection:
             logger.warning(f"Collection not found for refresh: {guid}")
@@ -789,6 +801,7 @@ async def refresh_collection_cache(
 async def assign_pipeline(
     guid: str,
     pipeline_guid: str = Query(..., description="Pipeline GUID to assign (pip_xxx format)"),
+    ctx: TenantContext = Depends(require_auth),
     db: Session = Depends(get_db),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionResponse:
@@ -825,8 +838,8 @@ async def assign_pipeline(
         }
     """
     try:
-        # Get collection by GUID
-        collection = collection_service.get_by_guid(guid)
+        # Get collection by GUID with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not collection:
             logger.warning(f"Collection not found for pipeline assignment: {guid}")
@@ -905,6 +918,7 @@ async def assign_pipeline(
 )
 async def clear_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionResponse:
     """
@@ -937,8 +951,8 @@ async def clear_pipeline(
         }
     """
     try:
-        # Get collection by GUID
-        collection = collection_service.get_by_guid(guid)
+        # Get collection by GUID with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
 
         if not collection:
             logger.warning(f"Collection not found for clear pipeline: {guid}")

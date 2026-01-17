@@ -12,7 +12,7 @@ from backend.src.models import AnalysisResult, ResultStatus
 
 
 @pytest.fixture
-def sample_result(test_db_session, sample_collection):
+def sample_result(test_db_session, sample_collection, test_team):
     """Factory for creating sample AnalysisResult models in the database."""
     def _create(
         collection_id=None,
@@ -20,6 +20,7 @@ def sample_result(test_db_session, sample_collection):
         status=ResultStatus.COMPLETED,
         results=None,
         report_html=None,
+        team_id=None,
         **kwargs
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -42,6 +43,7 @@ def sample_result(test_db_session, sample_collection):
                 report_html=report_html,
                 files_scanned=100,
                 issues_found=5,
+                team_id=team_id if team_id is not None else test_team.id,
                 **kwargs
             )
             test_db_session.add(result)

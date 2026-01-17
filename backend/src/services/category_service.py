@@ -54,6 +54,7 @@ class CategoryService:
     def create(
         self,
         name: str,
+        team_id: int,
         icon: Optional[str] = None,
         color: Optional[str] = None,
         is_active: bool = True,
@@ -63,7 +64,8 @@ class CategoryService:
         Create a new category.
 
         Args:
-            name: Category name (must be unique, case-insensitive)
+            name: Category name (must be unique within team, case-insensitive)
+            team_id: Team ID for tenant isolation
             icon: Lucide icon name (e.g., "plane")
             color: Hex color code (e.g., "#3B82F6")
             is_active: Whether category is active (default: True)
@@ -73,7 +75,7 @@ class CategoryService:
             Created Category instance
 
         Raises:
-            ConflictError: If name already exists
+            ConflictError: If name already exists within team
             ValidationError: If color format is invalid
         """
         # Validate color format
@@ -83,19 +85,22 @@ class CategoryService:
                 field="color",
             )
 
-        # Check for existing category with same name (case-insensitive)
+        # Check for existing category with same name within team (case-insensitive)
         existing = (
             self.db.query(Category)
             .filter(func.lower(Category.name) == func.lower(name))
+            .filter(Category.team_id == team_id)
             .first()
         )
         if existing:
             raise ConflictError(f"Category with name '{name}' already exists")
 
-        # Auto-assign display_order if not provided
+        # Auto-assign display_order if not provided (within team)
         if display_order is None:
             max_order = (
-                self.db.query(func.max(Category.display_order)).scalar() or -1
+                self.db.query(func.max(Category.display_order))
+                .filter(Category.team_id == team_id)
+                .scalar() or -1
             )
             display_order = max_order + 1
 
@@ -106,12 +111,13 @@ class CategoryService:
                 color=color,
                 is_active=is_active,
                 display_order=display_order,
+                team_id=team_id,
             )
             self.db.add(category)
             self.db.commit()
             self.db.refresh(category)
 
-            logger.info(f"Created category: {category.name} ({category.guid})")
+            logger.info(f"Created category: {category.name} ({category.guid}) for team_id={team_id}")
             return category
 
         except IntegrityError as e:
@@ -119,18 +125,19 @@ class CategoryService:
             logger.error(f"Failed to create category '{name}': {e}")
             raise ConflictError(f"Category with name '{name}' already exists")
 
-    def get_by_guid(self, guid: str) -> Category:
+    def get_by_guid(self, guid: str, team_id: Optional[int] = None) -> Category:
         """
         Get a category by GUID.
 
         Args:
             guid: Category GUID (cat_xxx format)
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Category instance
 
         Raises:
-            NotFoundError: If category not found
+            NotFoundError: If category not found or belongs to different team
         """
         # Validate GUID format
         if not GuidService.validate_guid(guid, "cat"):
@@ -142,9 +149,11 @@ class CategoryService:
         except ValueError:
             raise NotFoundError("Category", guid)
 
-        category = (
-            self.db.query(Category).filter(Category.uuid == uuid_value).first()
-        )
+        query = self.db.query(Category).filter(Category.uuid == uuid_value)
+        if team_id is not None:
+            query = query.filter(Category.team_id == team_id)
+
+        category = query.first()
         if not category:
             raise NotFoundError("Category", guid)
 
@@ -170,20 +179,22 @@ class CategoryService:
 
     def list(
         self,
+        team_id: int,
         active_only: bool = False,
         order_by_display: bool = True,
     ) -> List[Category]:
         """
-        List all categories.
+        List all categories for a team.
 
         Args:
+            team_id: Team ID for tenant isolation
             active_only: If True, only return active categories
             order_by_display: If True, order by display_order (default)
 
         Returns:
             List of Category instances
         """
-        query = self.db.query(Category)
+        query = self.db.query(Category).filter(Category.team_id == team_id)
 
         if active_only:
             query = query.filter(Category.is_active == True)
@@ -198,6 +209,7 @@ class CategoryService:
     def update(
         self,
         guid: str,
+        team_id: int,
         name: Optional[str] = None,
         icon: Optional[str] = None,
         color: Optional[str] = None,
@@ -208,6 +220,7 @@ class CategoryService:
 
         Args:
             guid: Category GUID
+            team_id: Team ID for tenant isolation
             name: New name (optional)
             icon: New icon (optional)
             color: New color (optional)
@@ -217,11 +230,11 @@ class CategoryService:
             Updated Category instance
 
         Raises:
-            NotFoundError: If category not found
-            ConflictError: If new name conflicts with existing
+            NotFoundError: If category not found or belongs to different team
+            ConflictError: If new name conflicts with existing within team
             ValidationError: If color format is invalid
         """
-        category = self.get_by_guid(guid)
+        category = self.get_by_guid(guid, team_id=team_id)
 
         # Validate color format
         if color is not None and color and not self._is_valid_color(color):
@@ -230,11 +243,12 @@ class CategoryService:
                 field="color",
             )
 
-        # Check for name conflict (case-insensitive)
+        # Check for name conflict within team (case-insensitive)
         if name and name.lower() != category.name.lower():
             existing = (
                 self.db.query(Category)
                 .filter(func.lower(Category.name) == func.lower(name))
+                .filter(Category.team_id == team_id)
                 .filter(Category.id != category.id)
                 .first()
             )
@@ -262,18 +276,19 @@ class CategoryService:
             logger.error(f"Failed to update category {guid}: {e}")
             raise ConflictError(f"Category with name '{name}' already exists")
 
-    def delete(self, guid: str) -> None:
+    def delete(self, guid: str, team_id: int) -> None:
         """
         Delete a category.
 
         Args:
             guid: Category GUID
+            team_id: Team ID for tenant isolation
 
         Raises:
-            NotFoundError: If category not found
+            NotFoundError: If category not found or belongs to different team
             ConflictError: If category has associated events/entities
         """
-        category = self.get_by_guid(guid)
+        category = self.get_by_guid(guid, team_id=team_id)
 
         # Check for dependent entities
         # Import here to avoid circular imports
@@ -346,7 +361,7 @@ class CategoryService:
                 f"Cannot delete category '{category.name}': it has associated entities"
             )
 
-    def reorder(self, ordered_guids: List[str]) -> List[Category]:
+    def reorder(self, ordered_guids: List[str], team_id: int) -> List[Category]:
         """
         Reorder categories based on provided GUID list.
 
@@ -355,17 +370,18 @@ class CategoryService:
 
         Args:
             ordered_guids: List of category GUIDs in desired order
+            team_id: Team ID for tenant isolation
 
         Returns:
             List of reordered Category instances
 
         Raises:
-            NotFoundError: If any GUID is not found
+            NotFoundError: If any GUID is not found or belongs to different team
         """
         categories = []
 
         for index, guid in enumerate(ordered_guids):
-            category = self.get_by_guid(guid)
+            category = self.get_by_guid(guid, team_id=team_id)
             category.display_order = index
             categories.append(category)
 
@@ -376,16 +392,24 @@ class CategoryService:
         logger.info(f"Reordered {len(categories)} categories")
         return categories
 
-    def get_stats(self) -> dict:
+    def get_stats(self, team_id: int) -> dict:
         """
-        Get category statistics.
+        Get category statistics for a team.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Dictionary with category statistics
         """
-        total = self.db.query(func.count(Category.id)).scalar()
+        total = (
+            self.db.query(func.count(Category.id))
+            .filter(Category.team_id == team_id)
+            .scalar()
+        )
         active = (
             self.db.query(func.count(Category.id))
+            .filter(Category.team_id == team_id)
             .filter(Category.is_active == True)
             .scalar()
         )

@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.middleware.auth import require_auth, TenantContext
 from backend.src.schemas.event import (
     EventCreate,
     EventSeriesCreate,
@@ -83,10 +84,14 @@ def get_event_service(db: Session = Depends(get_db)) -> EventService:
     description="Get aggregated statistics for all events",
 )
 async def get_event_stats(
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventStatsResponse:
     """
     Get aggregated statistics for all events.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Returns:
         EventStatsResponse with:
@@ -107,7 +112,7 @@ async def get_event_stats(
         }
     """
     try:
-        stats = event_service.get_stats()
+        stats = event_service.get_stats(team_id=ctx.team_id)
 
         logger.info(
             "Retrieved event stats",
@@ -131,6 +136,7 @@ async def get_event_stats(
     description="List events with optional date range and filtering",
 )
 async def list_events(
+    ctx: TenantContext = Depends(require_auth),
     start_date: Optional[date] = Query(
         default=None,
         description="Start of date range (inclusive)",
@@ -164,6 +170,9 @@ async def list_events(
     """
     List events with optional filtering.
 
+    Args:
+        ctx: Tenant context with team_id
+
     Query Parameters:
         start_date: Start of date range (inclusive)
         end_date: End of date range (inclusive)
@@ -190,6 +199,7 @@ async def list_events(
     """
     try:
         events = event_service.list(
+            team_id=ctx.team_id,
             start_date=start_date,
             end_date=end_date,
             category_guid=category_guid,
@@ -236,6 +246,7 @@ async def list_events(
 )
 async def get_event(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     include_deleted: bool = Query(
         default=False,
         description="Include soft-deleted event",
@@ -247,6 +258,9 @@ async def get_event(
 
     Path Parameters:
         guid: Event GUID (evt_xxx format)
+
+    Args:
+        ctx: Tenant context with team_id
 
     Query Parameters:
         include_deleted: Include soft-deleted event
@@ -270,7 +284,7 @@ async def get_event(
         }
     """
     try:
-        event = event_service.get_by_guid(guid, include_deleted=include_deleted)
+        event = event_service.get_by_guid(guid, include_deleted=include_deleted, team_id=ctx.team_id)
 
         logger.info(f"Retrieved event: {guid}")
 
@@ -306,6 +320,7 @@ async def get_event(
 )
 async def create_event(
     event_data: EventCreate,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventDetailResponse:
     """
@@ -348,6 +363,7 @@ async def create_event(
     """
     try:
         event = event_service.create(
+            team_id=ctx.team_id,
             title=event_data.title,
             category_guid=event_data.category_guid,
             event_date=event_data.event_date,
@@ -368,7 +384,7 @@ async def create_event(
         )
 
         # Reload with relationships
-        event = event_service.get_by_guid(event.guid)
+        event = event_service.get_by_guid(event.guid, team_id=ctx.team_id)
 
         logger.info(f"Created event: {event.guid}")
 
@@ -399,6 +415,7 @@ async def create_event(
 )
 async def create_event_series(
     series_data: EventSeriesCreate,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> List[EventResponse]:
     """
@@ -406,6 +423,9 @@ async def create_event_series(
 
     Creates an EventSeries and individual Event records for each date.
     Events inherit properties from the series unless overridden.
+
+    Args:
+        ctx: Tenant context with team_id
 
     Request Body:
         title: Series title (required)
@@ -442,6 +462,7 @@ async def create_event_series(
     """
     try:
         series = event_service.create_series(
+            team_id=ctx.team_id,
             title=series_data.title,
             category_guid=series_data.category_guid,
             event_dates=series_data.event_dates,
@@ -466,6 +487,7 @@ async def create_event_series(
             end_date = series_data.deadline_date
 
         events = event_service.list(
+            team_id=ctx.team_id,
             start_date=min(series_data.event_dates),
             end_date=end_date,
         )
@@ -502,6 +524,7 @@ async def create_event_series(
 )
 async def get_event_series(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventSeriesResponse:
     """
@@ -510,6 +533,9 @@ async def get_event_series(
     Path Parameters:
         guid: Series GUID (ser_xxx format)
 
+    Args:
+        ctx: Tenant context with team_id
+
     Returns:
         Full series details including events
 
@@ -517,7 +543,7 @@ async def get_event_series(
         404: Series not found
     """
     try:
-        series = event_service.get_series_by_guid(guid)
+        series = event_service.get_series_by_guid(guid, team_id=ctx.team_id)
 
         logger.info(f"Retrieved event series: {guid}")
 
@@ -546,6 +572,7 @@ async def get_event_series(
 async def update_event_series(
     guid: str,
     series_data: EventSeriesUpdate,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventSeriesResponse:
     """
@@ -556,6 +583,9 @@ async def update_event_series(
 
     Path Parameters:
         guid: Series GUID (ser_xxx format)
+
+    Args:
+        ctx: Tenant context with team_id
 
     Request Body:
         Any series field to update (all optional)
@@ -575,6 +605,9 @@ async def update_event_series(
         }
     """
     try:
+        # Verify team ownership before update
+        event_service.get_series_by_guid(guid, team_id=ctx.team_id)
+
         updates = series_data.model_dump(exclude_unset=True)
 
         series = event_service.update_series(guid=guid, **updates)
@@ -617,6 +650,7 @@ async def update_event_series(
 async def update_event(
     guid: str,
     event_data: EventUpdate,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventDetailResponse:
     """
@@ -629,6 +663,9 @@ async def update_event(
 
     Path Parameters:
         guid: Event GUID (evt_xxx format)
+
+    Args:
+        ctx: Tenant context with team_id
 
     Request Body:
         Any event field to update (all optional)
@@ -657,8 +694,8 @@ async def update_event(
         }
     """
     try:
-        # Check if this is a protected deadline entry
-        event = event_service.get_by_guid(guid)
+        # Check if this is a protected deadline entry (also verifies team ownership)
+        event = event_service.get_by_guid(guid, team_id=ctx.team_id)
         if event.is_deadline:
             # Get parent reference for helpful error message
             series_guid = event.series.guid if event.series else None
@@ -679,7 +716,7 @@ async def update_event(
         )
 
         # Reload with relationships
-        event = event_service.get_by_guid(event.guid)
+        event = event_service.get_by_guid(event.guid, team_id=ctx.team_id)
 
         logger.info(f"Updated event: {guid}")
 
@@ -730,6 +767,7 @@ async def update_event(
 )
 async def delete_event(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     scope: UpdateScope = Query(
         default=UpdateScope.SINGLE,
         description="Delete scope for series events",
@@ -747,6 +785,9 @@ async def delete_event(
     Path Parameters:
         guid: Event GUID (evt_xxx format)
 
+    Args:
+        ctx: Tenant context with team_id
+
     Query Parameters:
         scope: Delete scope for series events
 
@@ -762,8 +803,8 @@ async def delete_event(
         DELETE /api/events/evt_xxx?scope=all
     """
     try:
-        # Check if this is a protected deadline entry
-        event = event_service.get_by_guid(guid)
+        # Check if this is a protected deadline entry (also verifies team ownership)
+        event = event_service.get_by_guid(guid, team_id=ctx.team_id)
         if event.is_deadline:
             # Get parent reference for helpful error message
             series_guid = event.series.guid if event.series else None
@@ -780,7 +821,7 @@ async def delete_event(
         )
 
         # Reload with relationships
-        event = event_service.get_by_guid(event.guid, include_deleted=True)
+        event = event_service.get_by_guid(event.guid, include_deleted=True, team_id=ctx.team_id)
 
         logger.info(f"Deleted event: {guid} (scope: {scope.value})")
 
@@ -820,6 +861,7 @@ async def delete_event(
 )
 async def restore_event(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventDetailResponse:
     """
@@ -827,6 +869,9 @@ async def restore_event(
 
     Path Parameters:
         guid: Event GUID (evt_xxx format)
+
+    Args:
+        ctx: Tenant context with team_id
 
     Returns:
         Restored event details (with deleted_at = null)
@@ -838,10 +883,13 @@ async def restore_event(
         POST /api/events/evt_xxx/restore
     """
     try:
+        # Verify team ownership before restore (use include_deleted to find deleted events)
+        event_service.get_by_guid(guid, include_deleted=True, team_id=ctx.team_id)
+
         event = event_service.restore(guid=guid)
 
         # Reload with relationships
-        event = event_service.get_by_guid(event.guid)
+        event = event_service.get_by_guid(event.guid, team_id=ctx.team_id)
 
         logger.info(f"Restored event: {guid}")
 
@@ -904,6 +952,7 @@ def _build_event_performer_response(
 )
 async def list_event_performers(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventPerformersListResponse:
     """
@@ -912,6 +961,9 @@ async def list_event_performers(
     Path Parameters:
         guid: Event GUID (evt_xxx format)
 
+    Args:
+        ctx: Tenant context with team_id
+
     Returns:
         EventPerformersListResponse with performers and count
 
@@ -919,6 +971,9 @@ async def list_event_performers(
         GET /api/events/evt_xxx/performers
     """
     try:
+        # Verify team ownership
+        event_service.get_by_guid(guid, team_id=ctx.team_id)
+
         event_performers = event_service.list_event_performers(guid)
 
         items = [
@@ -945,6 +1000,7 @@ async def list_event_performers(
 async def add_performer_to_event(
     guid: str,
     performer_data: EventPerformerCreate,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventPerformerResponse:
     """
@@ -954,6 +1010,9 @@ async def add_performer_to_event(
 
     Path Parameters:
         guid: Event GUID (evt_xxx format)
+
+    Args:
+        ctx: Tenant context with team_id
 
     Request Body:
         EventPerformerCreate with performer_guid and optional status
@@ -971,6 +1030,9 @@ async def add_performer_to_event(
         {"performer_guid": "prf_xxx", "status": "confirmed"}
     """
     try:
+        # Verify team ownership
+        event_service.get_by_guid(guid, team_id=ctx.team_id)
+
         event_performer = event_service.add_performer_to_event(
             event_guid=guid,
             performer_guid=performer_data.performer_guid,
@@ -1013,6 +1075,7 @@ async def update_event_performer(
     guid: str,
     performer_guid: str,
     update_data: EventPerformerUpdate,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> EventPerformerResponse:
     """
@@ -1021,6 +1084,9 @@ async def update_event_performer(
     Path Parameters:
         guid: Event GUID (evt_xxx format)
         performer_guid: Performer GUID (prf_xxx format)
+
+    Args:
+        ctx: Tenant context with team_id
 
     Request Body:
         EventPerformerUpdate with new status
@@ -1033,6 +1099,9 @@ async def update_event_performer(
         {"status": "cancelled"}
     """
     try:
+        # Verify team ownership
+        event_service.get_by_guid(guid, team_id=ctx.team_id)
+
         event_performer = event_service.update_performer_status(
             event_guid=guid,
             performer_guid=performer_guid,
@@ -1062,6 +1131,7 @@ async def update_event_performer(
 async def remove_performer_from_event(
     guid: str,
     performer_guid: str,
+    ctx: TenantContext = Depends(require_auth),
     event_service: EventService = Depends(get_event_service),
 ) -> None:
     """
@@ -1071,6 +1141,9 @@ async def remove_performer_from_event(
         guid: Event GUID (evt_xxx format)
         performer_guid: Performer GUID (prf_xxx format)
 
+    Args:
+        ctx: Tenant context with team_id
+
     Returns:
         204 No Content on success
 
@@ -1078,6 +1151,9 @@ async def remove_performer_from_event(
         DELETE /api/events/evt_xxx/performers/prf_xxx
     """
     try:
+        # Verify team ownership
+        event_service.get_by_guid(guid, team_id=ctx.team_id)
+
         event_service.remove_performer_from_event(
             event_guid=guid,
             performer_guid=performer_guid,

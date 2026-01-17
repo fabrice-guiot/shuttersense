@@ -32,22 +32,27 @@ import tempfile
 _temp_base = tempfile.gettempdir()
 os.environ['PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS'] = f'{_temp_base},/tmp,/private/var,/var'
 
-# Disable rate limiter at import time to prevent rate limit exhaustion during tests
+# Disable rate limiters at import time to prevent rate limit exhaustion during tests
 from backend.src.main import limiter as _main_limiter
 _main_limiter.enabled = False
+from backend.src.api.tools import limiter as _tools_limiter
+_tools_limiter.enabled = False
 # Clear any existing rate limit state from previous runs
 # The limiter uses limits library which stores state in _storage
 try:
     if hasattr(_main_limiter, '_storage') and _main_limiter._storage is not None:
         _main_limiter._storage.reset()
+    if hasattr(_tools_limiter, '_storage') and _tools_limiter._storage is not None:
+        _tools_limiter._storage.reset()
 except Exception:
     pass  # Ignore errors during cleanup
 
-from backend.src.models import Base, Connector, Collection, AnalysisResult, Pipeline, Configuration
+from backend.src.models import Base, Connector, Collection, AnalysisResult, Pipeline, Configuration, Team, User, UserStatus, UserType
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.cache import FileListingCache
 from backend.src.utils.job_queue import JobQueue
 from backend.src.utils.websocket import ConnectionManager
+from backend.src.middleware.auth import TenantContext
 
 
 # ============================================================================
@@ -97,6 +102,69 @@ def test_db_session(test_session_factory):
     finally:
         session.rollback()
         session.close()
+
+
+# ============================================================================
+# Test Team and User Fixtures
+# ============================================================================
+
+@pytest.fixture(scope='function')
+def test_team(test_db_session):
+    """Create a test team for tenant isolation testing."""
+    team = Team(
+        name='Test Team',
+        slug='test-team',
+        is_active=True,
+    )
+    test_db_session.add(team)
+    test_db_session.commit()
+    test_db_session.refresh(team)
+    return team
+
+
+@pytest.fixture(scope='function')
+def test_user(test_db_session, test_team):
+    """Create a test user for authentication testing."""
+    user = User(
+        team_id=test_team.id,
+        email='test@example.com',
+        display_name='Test User',
+        status=UserStatus.ACTIVE,
+    )
+    test_db_session.add(user)
+    test_db_session.commit()
+    test_db_session.refresh(user)
+    return user
+
+
+@pytest.fixture(scope='function')
+def test_system_user(test_db_session, test_team):
+    """Create a test system user for API token testing."""
+    user = User(
+        team_id=test_team.id,
+        email='system-token-1@system.local',
+        display_name='System Token User',
+        status=UserStatus.ACTIVE,
+        user_type=UserType.SYSTEM,
+    )
+    test_db_session.add(user)
+    test_db_session.commit()
+    test_db_session.refresh(user)
+    return user
+
+
+@pytest.fixture(scope='function')
+def test_tenant_context(test_team, test_user):
+    """Create a TenantContext for authenticated tests."""
+    return TenantContext(
+        team_id=test_team.id,
+        team_guid=test_team.guid,
+        user_id=test_user.id,
+        user_guid=test_user.guid,
+        user_email=test_user.email,
+        is_super_admin=False,
+        is_api_token=False,
+    )
 
 
 # ============================================================================
@@ -180,9 +248,9 @@ def sample_connector_data():
 
 
 @pytest.fixture
-def sample_connector(test_db_session, test_encryptor, sample_connector_data):
+def sample_connector(test_db_session, test_encryptor, sample_connector_data, test_team):
     """Factory for creating sample Connector models in the database."""
-    def _create(**kwargs):
+    def _create(team_id=None, **kwargs):
         import json
         data = sample_connector_data(**kwargs)
         # Convert credentials dict to JSON string before encryption
@@ -194,7 +262,8 @@ def sample_connector(test_db_session, test_encryptor, sample_connector_data):
             type=data['type'],
             credentials=encrypted_creds,
             is_active=data['is_active'],
-            metadata_json=json.dumps(data['metadata']) if data['metadata'] else None
+            metadata_json=json.dumps(data['metadata']) if data['metadata'] else None,
+            team_id=team_id if team_id is not None else test_team.id,
         )
         test_db_session.add(connector)
         test_db_session.commit()
@@ -242,9 +311,9 @@ def sample_collection_data():
 
 
 @pytest.fixture
-def sample_collection(test_db_session, sample_collection_data):
+def sample_collection(test_db_session, sample_collection_data, test_team):
     """Factory for creating sample Collection models in the database."""
-    def _create(connector_guid=None, connector_id=None, **kwargs):
+    def _create(connector_guid=None, connector_id=None, team_id=None, **kwargs):
         import json
         from backend.src.services.guid import GuidService
 
@@ -267,7 +336,8 @@ def sample_collection(test_db_session, sample_collection_data):
             cache_ttl=data['cache_ttl'],
             is_accessible=data['is_accessible'],
             last_error=data['last_error'],
-            metadata_json=json.dumps(data['metadata']) if data['metadata'] else None
+            metadata_json=json.dumps(data['metadata']) if data['metadata'] else None,
+            team_id=team_id if team_id is not None else test_team.id,
         )
         test_db_session.add(collection)
         test_db_session.commit()
@@ -316,9 +386,9 @@ def sample_pipeline_data():
 
 
 @pytest.fixture
-def sample_pipeline(test_db_session, sample_pipeline_data):
+def sample_pipeline(test_db_session, sample_pipeline_data, test_team):
     """Factory for creating sample Pipeline models in the database."""
-    def _create(**kwargs):
+    def _create(team_id=None, **kwargs):
         data = sample_pipeline_data(**kwargs)
 
         pipeline = Pipeline(
@@ -330,6 +400,7 @@ def sample_pipeline(test_db_session, sample_pipeline_data):
             is_active=data['is_active'],
             is_default=data['is_default'],
             is_valid=data['is_valid'],
+            team_id=team_id if team_id is not None else test_team.id,
         )
         test_db_session.add(pipeline)
         test_db_session.commit()
@@ -414,10 +485,21 @@ def mock_smb_connection(mocker):
 # ============================================================================
 
 @pytest.fixture
-def test_client(test_db_session, test_session_factory, test_cache, test_job_queue, test_encryptor, test_websocket_manager):
-    """Create a test client for FastAPI application."""
+def test_client(test_db_session, test_session_factory, test_cache, test_job_queue, test_encryptor, test_websocket_manager, test_team, test_user):
+    """Create a test client for FastAPI application with mocked authentication."""
     from fastapi.testclient import TestClient
     from backend.src.main import app
+
+    # Create test tenant context for authentication
+    test_ctx = TenantContext(
+        team_id=test_team.id,
+        team_guid=test_team.guid,
+        user_id=test_user.id,
+        user_guid=test_user.guid,
+        user_email=test_user.email,
+        is_super_admin=False,
+        is_api_token=False,
+    )
 
     # Override dependencies
     def get_test_db():
@@ -438,6 +520,10 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     def get_test_websocket_manager():
         return test_websocket_manager
 
+    def get_test_auth():
+        """Return mock TenantContext for authenticated tests."""
+        return test_ctx
+
     def get_test_tool_service():
         """Create ToolService with test session factory for background tasks."""
         from backend.src.services.tool_service import ToolService
@@ -456,6 +542,7 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
         get_credential_encryptor as get_collection_encryptor
     )
     from backend.src.api.tools import get_websocket_manager, get_tool_service
+    from backend.src.middleware.auth import require_auth
 
     app.dependency_overrides[get_db] = get_test_db
     app.dependency_overrides[get_file_cache] = get_test_cache
@@ -463,6 +550,7 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     app.dependency_overrides[get_collection_encryptor] = get_test_encryptor
     app.dependency_overrides[get_websocket_manager] = get_test_websocket_manager
     app.dependency_overrides[get_tool_service] = get_test_tool_service
+    app.dependency_overrides[require_auth] = get_test_auth
 
     with TestClient(app) as client:
         yield client

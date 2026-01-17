@@ -15,7 +15,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, Boolean, Index
+from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, Boolean, Index, ForeignKey
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
@@ -83,6 +83,9 @@ class Connector(Base, GuidMixin):
 
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Tenant isolation
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
 
     # Core fields
     name = Column(String(255), unique=True, nullable=False, index=True)

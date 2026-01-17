@@ -28,6 +28,7 @@ Photo Administration toolbox - A comprehensive solution for analyzing, managing,
 - TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons (016-mobile-calendar-view)
 - N/A (frontend-only feature, uses existing event data from backend) (016-mobile-calendar-view)
 - Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React icons (018-event-deadline-calendar)
+- Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Authlib (OAuth), PyJWT, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (019-user-tenancy)
 
 ### Core Stack
 - **Python 3.10+** - Backend and CLI tools (required for match/case syntax)
@@ -42,12 +43,16 @@ Photo Administration toolbox - A comprehensive solution for analyzing, managing,
 - **pytest** - Testing framework
 - **Chart.js** - HTML report visualizations (via CDN)
 
-### Security Features (Phase 7)
+### Security Features (Phase 7 & 10)
+- **Authlib** - OAuth 2.0 authentication (Google, Microsoft)
+- **PyJWT** - API token generation and validation
 - **slowapi** - Rate limiting middleware
 - **Fernet encryption** - Encrypted credential storage
 - Security headers (CSP, X-Frame-Options, etc.)
 - SQL injection prevention via SQLAlchemy ORM
 - Credential access audit logging
+- Multi-tenant data isolation (team_id scoping)
+- Session-based auth (cookies) and API token auth (Bearer)
 
 ## Project Structure
 
@@ -309,6 +314,9 @@ Example: `col_01hgw2bbg0000000000000001`
 | Location | `loc_` | `loc_01hgw2bbg...` |
 | Organizer | `org_` | `org_01hgw2bbg...` |
 | Performer | `prf_` | `prf_01hgw2bbg...` |
+| Team | `tea_` | `tea_01hgw2bbg...` |
+| User | `usr_` | `usr_01hgw2bbg...` |
+| ApiToken | `tok_` | `tok_01hgw2bbg...` |
 
 **Key Files:**
 - `backend/src/services/guid.py` - GuidService for generation/validation
@@ -352,6 +360,52 @@ See `docs/domain-model.md` for the complete prefix table including planned entit
 - Minimal dependencies (PyYAML, Jinja2 for templates)
 - Straightforward data structures
 - Industry-standard tools (Jinja2 for templating)
+
+### 6. Multi-Tenancy and Authentication (Web Application) - Issue #73
+
+All Web Application features MUST enforce authentication and tenant isolation. This applies to backend APIs and frontend UI only; CLI tools remain independent.
+
+**Authentication Requirements:**
+- All API endpoints MUST require authentication EXCEPT: `/health`, `/api/version`, `/api/auth/*`
+- Authentication via session cookies (OAuth) or API tokens (Bearer header)
+- API tokens CANNOT access super admin endpoints (`/api/admin/*`)
+- Unauthenticated requests return 401 Unauthorized
+
+**Tenant Isolation Requirements:**
+- All data MUST be scoped to user's team (`team_id`)
+- Services MUST accept `TenantContext` and filter by `team_id`
+- Cross-team access returns 404 (not 403) to prevent information leakage
+- New entities auto-assigned to user's team
+
+**Backend Pattern:**
+```python
+from backend.src.middleware.tenant import TenantContext, get_tenant_context
+
+@router.get("/items")
+async def list_items(ctx: TenantContext = Depends(get_tenant_context)):
+    return service.list_items(team_id=ctx.team_id)
+```
+
+**Frontend Pattern:**
+```typescript
+// Wrap routes with ProtectedRoute
+<ProtectedRoute><ItemsPage /></ProtectedRoute>
+
+// Access user via useAuth hook
+const { user, isAuthenticated } = useAuth()
+```
+
+**Key Files:**
+- `backend/src/middleware/tenant.py` - TenantContext, get_tenant_context
+- `frontend/src/contexts/AuthContext.tsx` - Authentication context
+- `frontend/src/components/auth/ProtectedRoute.tsx` - Route protection
+
+**Entity Prefixes:**
+| Entity | Prefix |
+|--------|--------|
+| Team | `tea_` |
+| User | `usr_` |
+| ApiToken | `tok_` |
 
 ## Configuration
 
@@ -429,9 +483,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 019-user-tenancy: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Authlib (OAuth), PyJWT, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
 - 018-event-deadline-calendar: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React icons
 - 016-mobile-calendar-view: Added TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons
-- 015-page-layout-cleanup: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 

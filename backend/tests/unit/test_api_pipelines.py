@@ -40,7 +40,7 @@ def sample_pipeline_data():
 
 
 @pytest.fixture
-def sample_pipeline(test_db_session, sample_pipeline_data):
+def sample_pipeline(test_db_session, sample_pipeline_data, test_team):
     """Factory for creating sample Pipeline models in the database."""
     def _create(**kwargs):
         # Extract data-related kwargs for sample_pipeline_data
@@ -61,7 +61,8 @@ def sample_pipeline(test_db_session, sample_pipeline_data):
             is_active=kwargs.get("is_active", False),
             is_default=kwargs.get("is_default", False),
             is_valid=kwargs.get("is_valid", True),
-            validation_errors=kwargs.get("validation_errors", None)
+            validation_errors=kwargs.get("validation_errors", None),
+            team_id=kwargs.get("team_id", test_team.id)
         )
         test_db_session.add(pipeline)
         test_db_session.commit()

@@ -60,6 +60,22 @@ from backend.src.schemas.category import (
     CategoryListResponse,
     CategoryStatsResponse,
 )
+from backend.src.schemas.user import (
+    InviteUserRequest,
+    TeamInfo,
+    UserResponse,
+    UserListResponse,
+    UserStatsResponse,
+    user_to_response,
+)
+from backend.src.schemas.team import (
+    CreateTeamRequest,
+    TeamResponse,
+    TeamWithAdminResponse,
+    TeamListResponse,
+    TeamStatsResponse,
+    team_to_response,
+)
 
 __all__ = [
     # Collection schemas
@@ -113,4 +129,18 @@ __all__ = [
     "CategoryResponse",
     "CategoryListResponse",
     "CategoryStatsResponse",
+    # User schemas (Issue #73)
+    "InviteUserRequest",
+    "TeamInfo",
+    "UserResponse",
+    "UserListResponse",
+    "UserStatsResponse",
+    "user_to_response",
+    # Team schemas (Issue #73)
+    "CreateTeamRequest",
+    "TeamResponse",
+    "TeamWithAdminResponse",
+    "TeamListResponse",
+    "TeamStatsResponse",
+    "team_to_response",
 ]

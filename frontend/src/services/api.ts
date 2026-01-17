@@ -80,6 +80,25 @@ api.interceptors.response.use(
     return response
   },
   (error: AxiosError<ApiErrorResponse>) => {
+    // Handle 401 Unauthorized - redirect to login
+    // Skip redirect for auth endpoints to avoid redirect loops
+    const isAuthEndpoint = error.config?.url?.startsWith('/auth')
+    if (error.response?.status === 401 && !isAuthEndpoint) {
+      console.warn('[API] Session expired or not authenticated, redirecting to login')
+
+      // Store current path for redirect after login
+      const currentPath = window.location.pathname + window.location.search
+      if (currentPath !== '/login') {
+        sessionStorage.setItem('returnUrl', currentPath)
+      }
+
+      // Redirect to login page
+      window.location.href = '/login'
+
+      // Return a rejected promise that won't trigger error handlers
+      return new Promise(() => {})
+    }
+
     // Enhanced error message extraction
     const errorMessage =
       error.response?.data?.detail ||

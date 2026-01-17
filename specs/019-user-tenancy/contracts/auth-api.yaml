@@ -1,0 +1,254 @@
+openapi: 3.1.0
+info:
+  title: Photo Admin Auth API
+  description: OAuth authentication endpoints for photo-admin
+  version: 1.0.0
+
+paths:
+  /auth/login:
+    get:
+      summary: Initiate OAuth login
+      description: Redirects to OAuth provider for authentication
+      operationId: initiateLogin
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [google, microsoft]
+          description: OAuth provider to use
+        - name: redirect_uri
+          in: query
+          required: false
+          schema:
+            type: string
+          description: URL to redirect after successful login (default: /)
+      responses:
+        '302':
+          description: Redirect to OAuth provider
+        '400':
+          description: Invalid provider specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/callback/{provider}:
+    get:
+      summary: OAuth callback handler
+      description: Handles OAuth provider callback, validates user, creates session
+      operationId: handleOAuthCallback
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, microsoft]
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Authorization code from OAuth provider
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: State parameter for CSRF protection
+      responses:
+        '302':
+          description: Redirect to application (success) or login page (failure)
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Session cookie on success
+        '400':
+          description: Invalid state or authorization code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: User not found, inactive, or team inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
+  /auth/me:
+    get:
+      summary: Get current user info
+      description: Returns authenticated user's profile and session info
+      operationId: getCurrentUser
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      responses:
+        '200':
+          description: Current user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      summary: Logout current user
+      description: Clears session cookie and invalidates session
+      operationId: logout
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Successfully logged out
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Cleared session cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Successfully logged out"
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      summary: Refresh session
+      description: Extends session expiration (sliding session)
+      operationId: refreshSession
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Session refreshed
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Updated session cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          description: Session expired or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: photo_admin_session
+      description: Session cookie set after OAuth login
+    bearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: API token for programmatic access
+
+  schemas:
+    CurrentUserResponse:
+      type: object
+      required:
+        - guid
+        - email
+        - team_guid
+        - team_name
+        - is_super_admin
+      properties:
+        guid:
+          type: string
+          example: "usr_01hgw2bbg0000000000000001"
+          description: User GUID
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        first_name:
+          type: string
+          nullable: true
+          example: "John"
+        last_name:
+          type: string
+          nullable: true
+          example: "Doe"
+        display_name:
+          type: string
+          nullable: true
+          example: "John Doe"
+        picture_url:
+          type: string
+          nullable: true
+          example: "https://lh3.googleusercontent.com/..."
+        status:
+          type: string
+          enum: [pending, active, deactivated]
+          example: "active"
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        team_guid:
+          type: string
+          example: "ten_01hgw2bbg0000000000000001"
+        team_name:
+          type: string
+          example: "My Photography Studio"
+        is_super_admin:
+          type: boolean
+          example: false
+
+    AuthErrorResponse:
+      type: object
+      required:
+        - error
+        - error_code
+      properties:
+        error:
+          type: string
+          example: "Account not found"
+        error_code:
+          type: string
+          enum:
+            - USER_NOT_FOUND
+            - USER_INACTIVE
+            - TEAM_INACTIVE
+            - INVALID_OAUTH_STATE
+            - OAUTH_PROVIDER_ERROR
+          example: "USER_NOT_FOUND"
+        message:
+          type: string
+          example: "No account found for this email. Contact your administrator."
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          example: "Invalid request"

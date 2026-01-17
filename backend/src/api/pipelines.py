@@ -30,6 +30,7 @@ from backend.src.schemas.pipelines import (
 from backend.src.services.pipeline_service import PipelineService
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
 from backend.src.utils.logging_config import get_logger
+from backend.src.middleware.auth import require_auth, TenantContext
 
 
 logger = get_logger("api")
@@ -59,6 +60,7 @@ def get_pipeline_service(db: Session = Depends(get_db)) -> PipelineService:
     summary="List all pipelines"
 )
 def list_pipelines(
+    ctx: TenantContext = Depends(require_auth),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     is_default: Optional[bool] = Query(None, description="Filter by default status"),
     is_valid: Optional[bool] = Query(None, description="Filter by validation status"),
@@ -68,6 +70,7 @@ def list_pipelines(
     List all pipelines with optional filters.
 
     Args:
+        ctx: Tenant context with team_id
         is_active: Filter by active status
         is_default: Filter by default status
         is_valid: Filter by validation status
@@ -75,7 +78,7 @@ def list_pipelines(
     Returns:
         List of pipeline summaries
     """
-    items = service.list(is_active=is_active, is_default=is_default, is_valid=is_valid)
+    items = service.list(team_id=ctx.team_id, is_active=is_active, is_default=is_default, is_valid=is_valid)
     return PipelineListResponse(items=items)
 
 
@@ -85,6 +88,7 @@ def list_pipelines(
     summary="Get pipeline statistics"
 )
 def get_stats(
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineStatsResponse:
     """
@@ -92,10 +96,13 @@ def get_stats(
 
     Returns totals, active count, and default pipeline info for dashboard KPIs.
 
+    Args:
+        ctx: Tenant context with team_id
+
     Returns:
         Statistics including total, valid count, active count, and default pipeline
     """
-    return service.get_stats()
+    return service.get_stats(team_id=ctx.team_id)
 
 
 # ============================================================================
@@ -110,6 +117,7 @@ def get_stats(
 )
 def create_pipeline(
     request: PipelineCreateRequest,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -120,6 +128,7 @@ def create_pipeline(
 
     Args:
         request: Pipeline creation data
+        ctx: Tenant context with team_id
 
     Returns:
         Created pipeline
@@ -136,7 +145,8 @@ def create_pipeline(
             name=request.name,
             description=request.description,
             nodes=nodes,
-            edges=edges
+            edges=edges,
+            team_id=ctx.team_id
         )
     except ConflictError as e:
         raise HTTPException(
@@ -152,6 +162,7 @@ def create_pipeline(
 )
 def get_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -159,6 +170,7 @@ def get_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Full pipeline details including nodes, edges, and validation status
@@ -168,7 +180,7 @@ def get_pipeline(
         404: Pipeline not found
     """
     try:
-        return service.get_by_guid(guid)
+        return service.get_by_guid(guid, team_id=ctx.team_id)
     except ValueError as e:
         logger.warning(f"Invalid GUID: {guid} - {str(e)}")
         raise HTTPException(
@@ -190,6 +202,7 @@ def get_pipeline(
 def update_pipeline(
     guid: str,
     request: PipelineUpdateRequest,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -201,6 +214,7 @@ def update_pipeline(
     Args:
         guid: Pipeline GUID (pip_xxx format)
         request: Update data
+        ctx: Tenant context with team_id
 
     Returns:
         Updated pipeline
@@ -212,7 +226,7 @@ def update_pipeline(
     """
     try:
         # Get pipeline by GUID
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
 
         # Convert Pydantic models to dicts if provided
         nodes = [n.model_dump() for n in request.nodes] if request.nodes else None
@@ -250,6 +264,7 @@ def update_pipeline(
 )
 def delete_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> DeleteResponse:
     """
@@ -260,6 +275,7 @@ def delete_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Confirmation with deleted GUID
@@ -271,7 +287,7 @@ def delete_pipeline(
     """
     try:
         # Get pipeline by GUID
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         deleted_guid = service.delete(pipeline.id)
         logger.info(f"Pipeline {guid} deleted")
         return DeleteResponse(
@@ -306,6 +322,7 @@ def delete_pipeline(
 )
 def activate_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -317,6 +334,7 @@ def activate_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Activated pipeline
@@ -326,7 +344,7 @@ def activate_pipeline(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.activate(pipeline.id)
     except ValueError as e:
         raise HTTPException(
@@ -352,6 +370,7 @@ def activate_pipeline(
 )
 def deactivate_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -361,6 +380,7 @@ def deactivate_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Deactivated pipeline
@@ -370,7 +390,7 @@ def deactivate_pipeline(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.deactivate(pipeline.id)
     except ValueError as e:
         raise HTTPException(
@@ -391,6 +411,7 @@ def deactivate_pipeline(
 )
 def set_default_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -402,6 +423,7 @@ def set_default_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Pipeline with is_default=True
@@ -411,7 +433,7 @@ def set_default_pipeline(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.set_default(pipeline.id)
     except ValueError as e:
         raise HTTPException(
@@ -437,6 +459,7 @@ def set_default_pipeline(
 )
 def unset_default_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -446,6 +469,7 @@ def unset_default_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Pipeline with is_default=False
@@ -455,7 +479,7 @@ def unset_default_pipeline(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.unset_default(pipeline.id)
     except ValueError as e:
         raise HTTPException(
@@ -480,6 +504,7 @@ def unset_default_pipeline(
 )
 def validate_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> ValidationResult:
     """
@@ -490,6 +515,7 @@ def validate_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Validation result with errors if any
@@ -499,7 +525,7 @@ def validate_pipeline(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.validate(pipeline.id)
     except ValueError as e:
         raise HTTPException(
@@ -524,6 +550,7 @@ def validate_pipeline(
 )
 def preview_filenames(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> FilenamePreviewResponse:
     """
@@ -534,6 +561,7 @@ def preview_filenames(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         Expected filenames
@@ -543,7 +571,7 @@ def preview_filenames(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.preview_filenames(pipeline_id=pipeline.id)
     except ValueError as e:
         raise HTTPException(
@@ -573,6 +601,7 @@ def preview_filenames(
 )
 def get_history(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> List[PipelineHistoryEntry]:
     """
@@ -582,6 +611,7 @@ def get_history(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         List of history entries
@@ -591,7 +621,7 @@ def get_history(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.get_history(pipeline.id)
     except ValueError as e:
         raise HTTPException(
@@ -613,6 +643,7 @@ def get_history(
 def get_version(
     guid: str,
     version: int,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -623,6 +654,7 @@ def get_version(
     Args:
         guid: Pipeline GUID (pip_xxx format)
         version: Version number to retrieve
+        ctx: Tenant context with team_id
 
     Returns:
         Pipeline data at that version
@@ -632,7 +664,7 @@ def get_version(
         404: Pipeline or version not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         return service.get_version(pipeline.id, version)
     except ValueError as e:
         raise HTTPException(
@@ -658,6 +690,7 @@ def get_version(
 )
 async def import_pipeline(
     file: UploadFile = File(..., description="YAML file to import"),
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -667,6 +700,7 @@ async def import_pipeline(
 
     Args:
         file: YAML file to import
+        ctx: Tenant context with team_id
 
     Returns:
         Created pipeline
@@ -678,7 +712,7 @@ async def import_pipeline(
     try:
         content = await file.read()
         yaml_content = content.decode("utf-8")
-        return service.import_from_yaml(yaml_content)
+        return service.import_from_yaml(yaml_content, team_id=ctx.team_id)
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -705,6 +739,7 @@ async def import_pipeline(
 )
 def export_pipeline(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> Response:
     """
@@ -714,6 +749,7 @@ def export_pipeline(
 
     Args:
         guid: Pipeline GUID (pip_xxx format)
+        ctx: Tenant context with team_id
 
     Returns:
         YAML file with Content-Disposition header
@@ -723,7 +759,7 @@ def export_pipeline(
         404: Pipeline not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         yaml_content = service.export_to_yaml(pipeline.id)
 
         # Generate safe filename
@@ -767,6 +803,7 @@ def export_pipeline(
 def export_pipeline_version(
     guid: str,
     version: int,
+    ctx: TenantContext = Depends(require_auth),
     service: PipelineService = Depends(get_pipeline_service)
 ) -> Response:
     """
@@ -777,6 +814,7 @@ def export_pipeline_version(
     Args:
         guid: Pipeline GUID (pip_xxx format)
         version: Version number to export
+        ctx: Tenant context with team_id
 
     Returns:
         YAML file with Content-Disposition header
@@ -786,7 +824,7 @@ def export_pipeline_version(
         404: Pipeline or version not found
     """
     try:
-        pipeline = service._get_pipeline_by_guid(guid)
+        pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
         yaml_content = service.export_version_to_yaml(pipeline.id, version)
 
         # Generate safe filename with version

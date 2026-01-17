@@ -1,0 +1,544 @@
+openapi: 3.1.0
+info:
+  title: Photo Admin Teams API (Super Admin)
+  description: Team management endpoints for super administrators
+  version: 1.0.0
+
+paths:
+  /api/admin/teams:
+    get:
+      summary: List all teams
+      description: Returns all teams in the system (super admin only)
+      operationId: listTeams
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by active status
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search by team name
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create team
+      description: Create a new team with an initial admin user
+      operationId: createTeam
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '201':
+          description: Team created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          description: Invalid request or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Team name or admin email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/teams/stats:
+    get:
+      summary: Get team statistics
+      description: Returns platform-wide team KPIs (super admin only)
+      operationId: getTeamStats
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Team statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatsResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/teams/{guid}:
+    get:
+      summary: Get team by GUID
+      description: Returns team details with user count
+      operationId: getTeam
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ten_[a-z0-9]{26}$'
+          description: Team GUID
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      summary: Update team
+      description: Update team details
+      operationId: updateTeam
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ten_[a-z0-9]{26}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamRequest'
+      responses:
+        '200':
+          description: Team updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Team name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/teams/{guid}/deactivate:
+    post:
+      summary: Deactivate team
+      description: Deactivate a team (blocks all member logins)
+      operationId: deactivateTeam
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ten_[a-z0-9]{26}$'
+      responses:
+        '200':
+          description: Team deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/teams/{guid}/reactivate:
+    post:
+      summary: Reactivate team
+      description: Reactivate a deactivated team (allows member logins)
+      operationId: reactivateTeam
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ten_[a-z0-9]{26}$'
+      responses:
+        '200':
+          description: Team reactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/teams/{guid}/users:
+    get:
+      summary: List team users
+      description: Returns all users in a specific team (super admin only)
+      operationId: listTeamUsers
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ten_[a-z0-9]{26}$'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, active, deactivated]
+      responses:
+        '200':
+          description: List of users in team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamUserListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: photo_admin_session
+
+  schemas:
+    TeamResponse:
+      type: object
+      required:
+        - guid
+        - name
+        - slug
+        - is_active
+        - user_count
+        - created_at
+        - updated_at
+      properties:
+        guid:
+          type: string
+          example: "ten_01hgw2bbg0000000000000001"
+        name:
+          type: string
+          example: "Acme Photography Studio"
+        slug:
+          type: string
+          example: "acme-photography-studio"
+        is_active:
+          type: boolean
+          example: true
+        settings:
+          type: object
+          nullable: true
+          description: Team-level settings (JSON)
+        user_count:
+          type: integer
+          example: 5
+          description: Number of users in team
+        active_user_count:
+          type: integer
+          example: 4
+          description: Number of active users
+        pending_user_count:
+          type: integer
+          example: 1
+          description: Number of pending users
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TeamListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamResponse'
+        total:
+          type: integer
+          example: 10
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+
+    TeamStatsResponse:
+      type: object
+      required:
+        - total_teams
+        - active_teams
+        - inactive_teams
+        - total_users_all_teams
+      properties:
+        total_teams:
+          type: integer
+          example: 10
+        active_teams:
+          type: integer
+          example: 8
+        inactive_teams:
+          type: integer
+          example: 2
+        total_users_all_teams:
+          type: integer
+          example: 150
+
+    TeamUserListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              guid:
+                type: string
+              email:
+                type: string
+              display_name:
+                type: string
+                nullable: true
+              status:
+                type: string
+                enum: [pending, active, deactivated]
+              last_login_at:
+                type: string
+                format: date-time
+                nullable: true
+        total:
+          type: integer
+
+    CreateTeamRequest:
+      type: object
+      required:
+        - name
+        - admin_email
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "New Photography Studio"
+        admin_email:
+          type: string
+          format: email
+          example: "admin@newstudio.com"
+          description: Email for the initial admin user (will be created as pending)
+        admin_first_name:
+          type: string
+          maxLength: 100
+          example: "Studio"
+        admin_last_name:
+          type: string
+          maxLength: 100
+          example: "Admin"
+
+    UpdateTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        settings:
+          type: object
+          description: Team-level settings (JSON)
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string

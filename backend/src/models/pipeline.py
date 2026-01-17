@@ -15,7 +15,7 @@ Design Rationale:
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Index, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Index, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
@@ -86,6 +86,9 @@ class Pipeline(Base, GuidMixin):
 
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Tenant isolation
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
 
     # Core fields
     name = Column(String(255), unique=True, nullable=False, index=True)

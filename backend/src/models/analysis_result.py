@@ -78,6 +78,9 @@ class AnalysisResult(Base, GuidMixin):
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
 
+    # Tenant isolation
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
+
     # Foreign keys
     collection_id = Column(
         Integer,

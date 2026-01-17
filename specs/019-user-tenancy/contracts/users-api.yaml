@@ -1,0 +1,484 @@
+openapi: 3.1.0
+info:
+  title: Photo Admin Users API
+  description: User management endpoints for team administrators
+  version: 1.0.0
+
+paths:
+  /api/users:
+    get:
+      summary: List team users
+      description: Returns all users in the authenticated user's team
+      operationId: listUsers
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, active, deactivated]
+          description: Filter by user status
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search by name or email
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Invite user
+      description: Create a new user invitation (status=pending)
+      operationId: inviteUser
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteUserRequest'
+      responses:
+        '201':
+          description: User invitation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Invalid request or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already exists (in any team)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/stats:
+    get:
+      summary: Get user statistics
+      description: Returns KPIs for TopHeader display
+      operationId: getUserStats
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      responses:
+        '200':
+          description: User statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStatsResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/{guid}:
+    get:
+      summary: Get user by GUID
+      description: Returns user details
+      operationId: getUser
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^usr_[a-z0-9]{26}$'
+          description: User GUID
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found (or different team)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      summary: Update user
+      description: Update user details (limited fields)
+      operationId: updateUser
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^usr_[a-z0-9]{26}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete pending user
+      description: Remove a pending (never logged in) user invitation
+      operationId: deleteUser
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^usr_[a-z0-9]{26}$'
+      responses:
+        '204':
+          description: User deleted
+        '400':
+          description: Cannot delete non-pending user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/{guid}/deactivate:
+    post:
+      summary: Deactivate user
+      description: Deactivate a user (prevents login)
+      operationId: deactivateUser
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^usr_[a-z0-9]{26}$'
+      responses:
+        '200':
+          description: User deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Cannot deactivate self
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/{guid}/reactivate:
+    post:
+      summary: Reactivate user
+      description: Reactivate a deactivated user (allows login)
+      operationId: reactivateUser
+      security:
+        - sessionCookie: []
+        - bearerToken: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^usr_[a-z0-9]{26}$'
+      responses:
+        '200':
+          description: User reactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: photo_admin_session
+    bearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserResponse:
+      type: object
+      required:
+        - guid
+        - email
+        - status
+        - is_active
+        - team_guid
+        - created_at
+        - updated_at
+      properties:
+        guid:
+          type: string
+          example: "usr_01hgw2bbg0000000000000001"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        first_name:
+          type: string
+          nullable: true
+          example: "John"
+        last_name:
+          type: string
+          nullable: true
+          example: "Doe"
+        display_name:
+          type: string
+          nullable: true
+          example: "John Doe"
+        picture_url:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, active, deactivated]
+        is_active:
+          type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        oauth_provider:
+          type: string
+          nullable: true
+          example: "google"
+        team_guid:
+          type: string
+          example: "ten_01hgw2bbg0000000000000001"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponse'
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+
+    UserStatsResponse:
+      type: object
+      required:
+        - total_users
+        - active_users
+        - pending_users
+        - deactivated_users
+      properties:
+        total_users:
+          type: integer
+          example: 15
+        active_users:
+          type: integer
+          example: 10
+        pending_users:
+          type: integer
+          example: 3
+        deactivated_users:
+          type: integer
+          example: 2
+
+    InviteUserRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "newuser@example.com"
+        first_name:
+          type: string
+          maxLength: 100
+          example: "Jane"
+        last_name:
+          type: string
+          maxLength: 100
+          example: "Smith"
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          maxLength: 100
+          nullable: true
+        last_name:
+          type: string
+          maxLength: 100
+          nullable: true
+        display_name:
+          type: string
+          maxLength: 255
+          nullable: true
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string

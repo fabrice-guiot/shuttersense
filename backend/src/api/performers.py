@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.middleware.auth import require_auth, TenantContext
 from backend.src.schemas.performer import (
     PerformerCreate,
     PerformerUpdate,
@@ -67,6 +68,7 @@ def get_performer_service(db: Session = Depends(get_db)) -> PerformerService:
     description="Get aggregated statistics for all performers",
 )
 async def get_performer_stats(
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> PerformerStatsResponse:
     """
@@ -89,11 +91,11 @@ async def get_performer_stats(
         }
     """
     try:
-        stats = performer_service.get_stats()
+        stats = performer_service.get_stats(team_id=ctx.team_id)
 
         logger.info(
             "Retrieved performer stats",
-            extra={"total_count": stats["total_count"]},
+            extra={"total_count": stats["total_count"], "team_id": ctx.team_id},
         )
 
         return PerformerStatsResponse(**stats)
@@ -115,6 +117,7 @@ async def get_performer_stats(
 async def get_performers_by_category(
     category_guid: str,
     search: Optional[str] = Query(None, description="Search term for name"),
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> List[PerformerResponse]:
     """
@@ -141,13 +144,14 @@ async def get_performers_by_category(
     """
     try:
         performers = performer_service.get_by_category(
+            team_id=ctx.team_id,
             category_guid=category_guid,
             search=search,
         )
 
         logger.info(
             f"Listed {len(performers)} performers for category",
-            extra={"category_guid": category_guid, "count": len(performers)},
+            extra={"category_guid": category_guid, "count": len(performers), "team_id": ctx.team_id},
         )
 
         return [
@@ -185,6 +189,7 @@ async def list_performers(
     ),
     limit: int = Query(100, ge=1, le=500, description="Maximum results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> PerformerListResponse:
     """
@@ -206,6 +211,7 @@ async def list_performers(
     """
     try:
         performers, total = performer_service.list(
+            team_id=ctx.team_id,
             category_guid=category_guid,
             search=search,
             limit=limit,
@@ -218,6 +224,7 @@ async def list_performers(
                 "total": total,
                 "category_filter": category_guid,
                 "search": search,
+                "team_id": ctx.team_id,
             },
         )
 
@@ -253,6 +260,7 @@ async def list_performers(
 )
 async def create_performer(
     performer: PerformerCreate,
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> PerformerResponse:
     """
@@ -282,6 +290,7 @@ async def create_performer(
         created_performer = performer_service.create(
             name=performer.name,
             category_guid=performer.category_guid,
+            team_id=ctx.team_id,
             website=performer.website,
             instagram_handle=performer.instagram_handle,
             additional_info=performer.additional_info,
@@ -289,7 +298,7 @@ async def create_performer(
 
         logger.info(
             f"Created performer: {performer.name}",
-            extra={"guid": created_performer.guid},
+            extra={"guid": created_performer.guid, "team_id": ctx.team_id},
         )
 
         return PerformerResponse(
@@ -326,6 +335,7 @@ async def create_performer(
 )
 async def get_performer(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> PerformerResponse:
     """
@@ -344,11 +354,11 @@ async def get_performer(
         GET /api/performers/prf_01hgw2bbg0000000000000001
     """
     try:
-        performer = performer_service.get_by_guid(guid)
+        performer = performer_service.get_by_guid(guid, team_id=ctx.team_id)
 
         logger.info(
             f"Retrieved performer: {performer.name}",
-            extra={"guid": guid},
+            extra={"guid": guid, "team_id": ctx.team_id},
         )
 
         return PerformerResponse(
@@ -372,6 +382,7 @@ async def get_performer(
 async def update_performer(
     guid: str,
     performer_update: PerformerUpdate,
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> PerformerResponse:
     """
@@ -402,6 +413,7 @@ async def update_performer(
     try:
         updated_performer = performer_service.update(
             guid=guid,
+            team_id=ctx.team_id,
             name=performer_update.name,
             category_guid=performer_update.category_guid,
             website=performer_update.website,
@@ -411,7 +423,7 @@ async def update_performer(
 
         logger.info(
             f"Updated performer: {updated_performer.name}",
-            extra={"guid": guid},
+            extra={"guid": guid, "team_id": ctx.team_id},
         )
 
         return PerformerResponse(
@@ -448,6 +460,7 @@ async def update_performer(
 )
 async def delete_performer(
     guid: str,
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> None:
     """
@@ -474,9 +487,9 @@ async def delete_performer(
         "Cannot delete performer 'Blue Angels': associated with 3 event(s)"
     """
     try:
-        performer_service.delete(guid)
+        performer_service.delete(guid, team_id=ctx.team_id)
 
-        logger.info(f"Deleted performer", extra={"guid": guid})
+        logger.info(f"Deleted performer", extra={"guid": guid, "team_id": ctx.team_id})
 
     except NotFoundError:
         logger.warning(f"Performer not found for deletion: {guid}")
@@ -509,6 +522,7 @@ async def delete_performer(
 async def validate_category_match(
     guid: str,
     event_category_guid: str,
+    ctx: TenantContext = Depends(require_auth),
     performer_service: PerformerService = Depends(get_performer_service),
 ) -> dict:
     """
@@ -537,6 +551,7 @@ async def validate_category_match(
         matches = performer_service.validate_category_match(
             performer_guid=guid,
             event_category_guid=event_category_guid,
+            team_id=ctx.team_id,
         )
 
         logger.info(
@@ -545,6 +560,7 @@ async def validate_category_match(
                 "performer_guid": guid,
                 "event_category_guid": event_category_guid,
                 "matches": matches,
+                "team_id": ctx.team_id,
             },
         )
 

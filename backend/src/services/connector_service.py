@@ -62,15 +62,17 @@ class ConnectorService:
         name: str,
         type: ConnectorType,
         credentials: Dict[str, Any],
+        team_id: int,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Connector:
         """
         Create a new connector with encrypted credentials.
 
         Args:
-            name: User-friendly connector name (must be unique)
+            name: User-friendly connector name (must be unique within team)
             type: Connector type (S3, GCS, SMB)
             credentials: Decrypted credentials dictionary
+            team_id: Team ID for tenant isolation (from TenantContext)
             metadata: Optional user-defined metadata
 
         Returns:
@@ -82,7 +84,7 @@ class ConnectorService:
 
         Example:
             >>> credentials = {"aws_access_key_id": "...", "aws_secret_access_key": "..."}
-            >>> connector = service.create_connector("My AWS", ConnectorType.S3, credentials)
+            >>> connector = service.create_connector("My AWS", ConnectorType.S3, credentials, team_id=ctx.team_id)
         """
         try:
             # Encrypt credentials
@@ -92,11 +94,12 @@ class ConnectorService:
             # Convert metadata to JSON string if provided
             metadata_json = json.dumps(metadata) if metadata else None
 
-            # Create connector
+            # Create connector with team_id for tenant isolation
             connector = Connector(
                 name=name,
                 type=type,
                 credentials=encrypted_credentials,
+                team_id=team_id,
                 metadata_json=metadata_json,
                 is_active=True
             )
@@ -164,26 +167,37 @@ class ConnectorService:
         return connector
 
     def get_by_guid(
-        self, guid: str, decrypt_credentials: bool = False
+        self, guid: str, team_id: Optional[int] = None, decrypt_credentials: bool = False
     ) -> Optional[Connector]:
         """
-        Get connector by GUID.
+        Get connector by GUID with optional tenant filtering.
+
+        If team_id is provided, returns None if connector belongs to different team.
+        This ensures cross-team GUID access returns 404 (not 403) for security.
 
         Args:
             guid: Connector GUID (e.g., "con_01hgw...")
+            team_id: Team ID for tenant isolation (from TenantContext). If None,
+                     returns connector regardless of team (for internal use only).
             decrypt_credentials: If True, decrypt and attach credentials
 
         Returns:
-            Connector instance or None if not found
+            Connector instance or None if not found (or belongs to different team)
 
         Raises:
             ValueError: If GUID format is invalid or prefix doesn't match "con"
 
         Example:
-            >>> connector = service.get_by_guid("con_01hgw2bbg...")
+            >>> connector = service.get_by_guid("con_01hgw2bbg...", team_id=ctx.team_id)
         """
         uuid_value = GuidService.parse_identifier(guid, expected_prefix="con")
-        connector = self.db.query(Connector).filter(Connector.uuid == uuid_value).first()
+        query = self.db.query(Connector).filter(Connector.uuid == uuid_value)
+
+        # Filter by team_id if provided (for tenant isolation)
+        if team_id is not None:
+            query = query.filter(Connector.team_id == team_id)
+
+        connector = query.first()
         if connector and decrypt_credentials:
             # SECURITY AUDIT LOG: Log credential decryption access
             logger.info(
@@ -201,13 +215,17 @@ class ConnectorService:
 
     def list_connectors(
         self,
+        team_id: int,
         type_filter: Optional[ConnectorType] = None,
         active_only: bool = False
     ) -> List[Connector]:
         """
         List connectors with optional filtering.
 
+        All results are filtered to the specified team for tenant isolation.
+
         Args:
+            team_id: Team ID for tenant isolation (from TenantContext)
             type_filter: Filter by connector type (S3, GCS, SMB)
             active_only: If True, only return active connectors
 
@@ -215,11 +233,12 @@ class ConnectorService:
             List of Connector instances
 
         Example:
-            >>> connectors = service.list_connectors(type_filter=ConnectorType.S3, active_only=True)
+            >>> connectors = service.list_connectors(team_id=ctx.team_id, type_filter=ConnectorType.S3, active_only=True)
             >>> for conn in connectors:
             ...     print(f"{conn.name} ({conn.type.value})")
         """
-        query = self.db.query(Connector)
+        # Always filter by team_id for tenant isolation
+        query = self.db.query(Connector).filter(Connector.team_id == team_id)
 
         if type_filter:
             query = query.filter(Connector.type == type_filter)
@@ -435,26 +454,29 @@ class ConnectorService:
     # KPI Statistics Methods (Issue #37)
     # ============================================================================
 
-    def get_connector_stats(self) -> Dict[str, int]:
+    def get_connector_stats(self, team_id: int) -> Dict[str, int]:
         """
-        Get aggregated statistics for all connectors.
+        Get aggregated statistics for connectors in a team.
 
         Returns KPIs for the Connectors page topband:
-        - total_connectors: Count of all connectors
+        - total_connectors: Count of all connectors in team
         - active_connectors: Count of connectors where is_active=true
+
+        Args:
+            team_id: Team ID for tenant isolation (from TenantContext)
 
         Returns:
             Dict with total_connectors and active_connectors
 
         Example:
-            >>> stats = service.get_connector_stats()
+            >>> stats = service.get_connector_stats(team_id=ctx.team_id)
             >>> print(f"Total: {stats['total_connectors']}, Active: {stats['active_connectors']}")
         """
-        # Query aggregated stats
+        # Query aggregated stats filtered by team_id
         result = self.db.query(
             func.count(Connector.id).label('total_connectors'),
             func.count(Connector.id).filter(Connector.is_active == True).label('active_connectors')
-        ).first()
+        ).filter(Connector.team_id == team_id).first()
 
         stats = {
             'total_connectors': result.total_connectors,

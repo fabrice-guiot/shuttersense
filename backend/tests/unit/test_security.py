@@ -98,7 +98,7 @@ class TestSQLInjectionPrevention:
                 # The injection attempt should be treated as literal text
                 # and not execute as SQL
 
-    def test_collection_name_with_special_chars(self, test_client, test_db_session):
+    def test_collection_name_with_special_chars(self, test_client, test_db_session, test_team):
         """Test that collection names with special characters are handled safely."""
         from backend.src.models import Collection
 
@@ -109,7 +109,8 @@ class TestSQLInjectionPrevention:
             type="local",
             location="/test/path",
             state="live",
-            is_accessible=True
+            is_accessible=True,
+            team_id=test_team.id
         )
         test_db_session.add(collection)
         test_db_session.commit()

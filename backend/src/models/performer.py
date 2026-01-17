@@ -67,6 +67,9 @@ class Performer(Base, GuidMixin):
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
 
+    # Tenant isolation
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
+
     # Foreign key to category
     category_id = Column(
         Integer,

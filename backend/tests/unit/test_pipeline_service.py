@@ -41,7 +41,7 @@ def pipeline_service(test_db_session):
 
 
 @pytest.fixture
-def sample_pipeline(test_db_session, sample_nodes, sample_edges):
+def sample_pipeline(test_db_session, sample_nodes, sample_edges, test_team):
     """Factory for creating sample Pipeline models."""
     def _create(
         name="Test Pipeline",
@@ -50,7 +50,8 @@ def sample_pipeline(test_db_session, sample_nodes, sample_edges):
         edges=None,
         is_active=False,
         is_valid=True,
-        version=1
+        version=1,
+        team_id=None,
     ):
         pipeline = Pipeline(
             name=name,
@@ -59,7 +60,8 @@ def sample_pipeline(test_db_session, sample_nodes, sample_edges):
             edges_json=edges or sample_edges,
             is_active=is_active,
             is_valid=is_valid,
-            version=version
+            version=version,
+            team_id=team_id if team_id is not None else test_team.id,
         )
         test_db_session.add(pipeline)
         test_db_session.commit()
@@ -71,13 +73,14 @@ def sample_pipeline(test_db_session, sample_nodes, sample_edges):
 class TestPipelineServiceCRUD:
     """Tests for CRUD operations."""
 
-    def test_create_pipeline(self, pipeline_service, sample_nodes, sample_edges):
+    def test_create_pipeline(self, pipeline_service, sample_nodes, sample_edges, test_team):
         """Test creating a new pipeline."""
         result = pipeline_service.create(
             name="New Pipeline",
             description="New description",
             nodes=sample_nodes,
-            edges=sample_edges
+            edges=sample_edges,
+            team_id=test_team.id
         )
 
         assert result.guid is not None
@@ -88,7 +91,7 @@ class TestPipelineServiceCRUD:
         assert result.is_active is False
         assert len(result.nodes) == 4
 
-    def test_create_pipeline_duplicate_name(self, pipeline_service, sample_pipeline, sample_nodes, sample_edges):
+    def test_create_pipeline_duplicate_name(self, pipeline_service, sample_pipeline, sample_nodes, sample_edges, test_team):
         """Test error when creating pipeline with duplicate name."""
         sample_pipeline(name="Existing")
 
@@ -96,7 +99,8 @@ class TestPipelineServiceCRUD:
             pipeline_service.create(
                 name="Existing",
                 nodes=sample_nodes,
-                edges=sample_edges
+                edges=sample_edges,
+                team_id=test_team.id
             )
         assert "already exists" in str(exc_info.value).lower()
 
@@ -114,33 +118,33 @@ class TestPipelineServiceCRUD:
         with pytest.raises(NotFoundError):
             pipeline_service.get(99999)
 
-    def test_list_pipelines(self, pipeline_service, sample_pipeline):
+    def test_list_pipelines(self, pipeline_service, sample_pipeline, test_team):
         """Test listing all pipelines."""
         sample_pipeline(name="List Test 1")
         sample_pipeline(name="List Test 2")
 
-        results = pipeline_service.list()
+        results = pipeline_service.list(team_id=test_team.id)
 
         assert len(results) >= 2
         names = [r.name for r in results]
         assert "List Test 1" in names
         assert "List Test 2" in names
 
-    def test_list_pipelines_filter_active(self, pipeline_service, sample_pipeline):
+    def test_list_pipelines_filter_active(self, pipeline_service, sample_pipeline, test_team):
         """Test filtering pipelines by active status."""
         sample_pipeline(name="Active", is_active=True)
         sample_pipeline(name="Inactive", is_active=False)
 
-        results = pipeline_service.list(is_active=True)
+        results = pipeline_service.list(team_id=test_team.id, is_active=True)
 
         assert all(r.is_active for r in results)
 
-    def test_list_pipelines_filter_valid(self, pipeline_service, sample_pipeline):
+    def test_list_pipelines_filter_valid(self, pipeline_service, sample_pipeline, test_team):
         """Test filtering pipelines by validation status."""
         sample_pipeline(name="Valid", is_valid=True)
         sample_pipeline(name="Invalid", is_valid=False)
 
-        results = pipeline_service.list(is_valid=True)
+        results = pipeline_service.list(team_id=test_team.id, is_valid=True)
 
         assert all(r.is_valid for r in results)
 
@@ -597,7 +601,7 @@ class TestPipelineServiceHistory:
 class TestPipelineServiceImportExport:
     """Tests for YAML import/export."""
 
-    def test_import_from_yaml(self, pipeline_service):
+    def test_import_from_yaml(self, pipeline_service, test_team):
         """Test importing pipeline from YAML string."""
         yaml_content = """
 name: Imported Pipeline
@@ -623,18 +627,18 @@ edges:
   - from: raw
     to: done
 """
-        result = pipeline_service.import_from_yaml(yaml_content)
+        result = pipeline_service.import_from_yaml(yaml_content, team_id=test_team.id)
 
         assert result.name == "Imported Pipeline"
         assert result.description == "Imported from YAML"
         assert len(result.nodes) == 3
 
-    def test_import_from_yaml_invalid(self, pipeline_service):
+    def test_import_from_yaml_invalid(self, pipeline_service, test_team):
         """Test error when importing invalid YAML."""
         yaml_content = "invalid: yaml: content: {"
 
         with pytest.raises(ServiceValidationError):
-            pipeline_service.import_from_yaml(yaml_content)
+            pipeline_service.import_from_yaml(yaml_content, team_id=test_team.id)
 
     def test_export_to_yaml(self, pipeline_service, sample_pipeline):
         """Test exporting pipeline to YAML string."""
@@ -655,9 +659,9 @@ edges:
 class TestPipelineServiceStats:
     """Tests for statistics."""
 
-    def test_get_stats_empty(self, pipeline_service):
+    def test_get_stats_empty(self, pipeline_service, test_team):
         """Test stats with no pipelines."""
-        result = pipeline_service.get_stats()
+        result = pipeline_service.get_stats(team_id=test_team.id)
 
         assert result.total_pipelines == 0
         assert result.valid_pipelines == 0
@@ -665,7 +669,7 @@ class TestPipelineServiceStats:
         assert result.default_pipeline_guid is None
         assert result.default_pipeline_name is None
 
-    def test_get_stats_with_data(self, pipeline_service, sample_pipeline, test_db_session):
+    def test_get_stats_with_data(self, pipeline_service, sample_pipeline, test_db_session, test_team):
         """Test stats with pipelines."""
         p1 = sample_pipeline(name="Valid Active Default", is_valid=True, is_active=True)
         # Set as default manually
@@ -676,7 +680,7 @@ class TestPipelineServiceStats:
         sample_pipeline(name="Valid Inactive", is_valid=True, is_active=False)
         sample_pipeline(name="Invalid", is_valid=False, is_active=False)
 
-        result = pipeline_service.get_stats()
+        result = pipeline_service.get_stats(team_id=test_team.id)
 
         assert result.total_pipelines >= 4
         assert result.valid_pipelines >= 3

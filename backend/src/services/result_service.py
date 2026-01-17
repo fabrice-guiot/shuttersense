@@ -141,6 +141,7 @@ class ResultService:
 
     def list_results(
         self,
+        team_id: int,
         collection_guid: Optional[str] = None,
         tool: Optional[str] = None,
         status: Optional[ResultStatus] = None,
@@ -155,6 +156,7 @@ class ResultService:
         List analysis results with filtering and pagination.
 
         Args:
+            team_id: Team ID for tenant isolation
             collection_guid: Filter by collection GUID (col_xxx)
             tool: Filter by tool type
             status: Filter by result status
@@ -171,7 +173,7 @@ class ResultService:
         # Build base query with optional collection join (LEFT JOIN for display_graph results)
         query = self.db.query(AnalysisResult).outerjoin(
             Collection, AnalysisResult.collection_id == Collection.id
-        )
+        ).filter(AnalysisResult.team_id == team_id)
 
         # Apply filters
         if collection_guid:
@@ -243,12 +245,13 @@ class ResultService:
 
         return summaries, total
 
-    def get_result_by_guid(self, guid: str) -> Optional[AnalysisResult]:
+    def get_result_by_guid(self, guid: str, team_id: Optional[int] = None) -> Optional[AnalysisResult]:
         """
         Get result by GUID.
 
         Args:
             guid: Result GUID (e.g., "res_01hgw...")
+            team_id: Optional team ID for tenant isolation
 
         Returns:
             AnalysisResult instance or None if not found
@@ -257,17 +260,21 @@ class ResultService:
             ValueError: If GUID format is invalid or prefix doesn't match "res"
 
         Example:
-            >>> result = service.get_result_by_guid("res_01hgw2bbg...")
+            >>> result = service.get_result_by_guid("res_01hgw2bbg...", team_id=1)
         """
         uuid_value = GuidService.parse_identifier(guid, expected_prefix="res")
-        return self.db.query(AnalysisResult).filter(AnalysisResult.uuid == uuid_value).first()
+        query = self.db.query(AnalysisResult).filter(AnalysisResult.uuid == uuid_value)
+        if team_id is not None:
+            query = query.filter(AnalysisResult.team_id == team_id)
+        return query.first()
 
-    def get_result(self, result_id: int) -> AnalysisResultResponse:
+    def get_result(self, result_id: int, team_id: Optional[int] = None) -> AnalysisResultResponse:
         """
         Get analysis result details.
 
         Args:
             result_id: Result ID
+            team_id: Optional team ID for tenant isolation
 
         Returns:
             Full result details including tool-specific data
@@ -275,9 +282,10 @@ class ResultService:
         Raises:
             NotFoundError: If result doesn't exist
         """
-        result = self.db.query(AnalysisResult).filter(
-            AnalysisResult.id == result_id
-        ).first()
+        query = self.db.query(AnalysisResult).filter(AnalysisResult.id == result_id)
+        if team_id is not None:
+            query = query.filter(AnalysisResult.team_id == team_id)
+        result = query.first()
 
         if not result:
             raise NotFoundError("Result", result_id)
@@ -318,12 +326,13 @@ class ResultService:
             created_at=result.created_at,
         )
 
-    def delete_result(self, result_id: int) -> str:
+    def delete_result(self, result_id: int, team_id: Optional[int] = None) -> str:
         """
         Delete an analysis result.
 
         Args:
             result_id: Result ID to delete
+            team_id: Optional team ID for tenant isolation
 
         Returns:
             GUID of deleted result
@@ -331,9 +340,10 @@ class ResultService:
         Raises:
             NotFoundError: If result doesn't exist
         """
-        result = self.db.query(AnalysisResult).filter(
-            AnalysisResult.id == result_id
-        ).first()
+        query = self.db.query(AnalysisResult).filter(AnalysisResult.id == result_id)
+        if team_id is not None:
+            query = query.filter(AnalysisResult.team_id == team_id)
+        result = query.first()
 
         if not result:
             raise NotFoundError("Result", result_id)
@@ -345,12 +355,13 @@ class ResultService:
         logger.info(f"Deleted result {deleted_guid}")
         return deleted_guid
 
-    def get_report(self, result_id: int) -> Optional[str]:
+    def get_report(self, result_id: int, team_id: Optional[int] = None) -> Optional[str]:
         """
         Get HTML report for a result.
 
         Args:
             result_id: Result ID
+            team_id: Optional team ID for tenant isolation
 
         Returns:
             HTML report content if available
@@ -358,9 +369,10 @@ class ResultService:
         Raises:
             NotFoundError: If result doesn't exist or has no report
         """
-        result = self.db.query(AnalysisResult).filter(
-            AnalysisResult.id == result_id
-        ).first()
+        query = self.db.query(AnalysisResult).filter(AnalysisResult.id == result_id)
+        if team_id is not None:
+            query = query.filter(AnalysisResult.team_id == team_id)
+        result = query.first()
 
         if not result:
             raise NotFoundError("Result", result_id)
@@ -370,7 +382,7 @@ class ResultService:
 
         return result.report_html
 
-    def get_report_with_metadata(self, result_id: int) -> Dict[str, Any]:
+    def get_report_with_metadata(self, result_id: int, team_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Get HTML report with metadata for filename generation.
 
@@ -380,6 +392,7 @@ class ResultService:
 
         Args:
             result_id: Result ID
+            team_id: Optional team ID for tenant isolation
 
         Returns:
             Dictionary with 'html', 'tool', 'collection_name', 'collection_id',
@@ -388,9 +401,10 @@ class ResultService:
         Raises:
             NotFoundError: If result doesn't exist or has no report
         """
-        result = self.db.query(AnalysisResult).filter(
-            AnalysisResult.id == result_id
-        ).first()
+        query = self.db.query(AnalysisResult).filter(AnalysisResult.id == result_id)
+        if team_id is not None:
+            query = query.filter(AnalysisResult.team_id == team_id)
+        result = query.first()
 
         if not result:
             raise NotFoundError("Result", result_id)
@@ -422,22 +436,29 @@ class ResultService:
             "timestamp": timestamp_str,
         }
 
-    def get_stats(self) -> ResultStatsResponse:
+    def get_stats(self, team_id: int) -> ResultStatsResponse:
         """
         Get aggregate statistics for results.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Statistics including totals, counts by status, and by tool
         """
         # Total results
-        total = self.db.query(func.count(AnalysisResult.id)).scalar() or 0
+        total = self.db.query(func.count(AnalysisResult.id)).filter(
+            AnalysisResult.team_id == team_id
+        ).scalar() or 0
 
         # Count by status
         completed = self.db.query(func.count(AnalysisResult.id)).filter(
+            AnalysisResult.team_id == team_id,
             AnalysisResult.status == ResultStatus.COMPLETED
         ).scalar() or 0
 
         failed = self.db.query(func.count(AnalysisResult.id)).filter(
+            AnalysisResult.team_id == team_id,
             AnalysisResult.status == ResultStatus.FAILED
         ).scalar() or 0
 
@@ -445,12 +466,16 @@ class ResultService:
         tool_counts = self.db.query(
             AnalysisResult.tool,
             func.count(AnalysisResult.id)
+        ).filter(
+            AnalysisResult.team_id == team_id
         ).group_by(AnalysisResult.tool).all()
 
         by_tool = {tool: count for tool, count in tool_counts}
 
         # Last run time
-        last_result = self.db.query(AnalysisResult).order_by(
+        last_result = self.db.query(AnalysisResult).filter(
+            AnalysisResult.team_id == team_id
+        ).order_by(
             desc(AnalysisResult.completed_at)
         ).first()
 

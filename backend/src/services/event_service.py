@@ -53,19 +53,25 @@ class EventService:
         """
         self.db = db
 
-    def get_by_guid(self, guid: str, include_deleted: bool = False) -> Event:
+    def get_by_guid(
+        self,
+        guid: str,
+        include_deleted: bool = False,
+        team_id: Optional[int] = None
+    ) -> Event:
         """
         Get an event by GUID.
 
         Args:
             guid: Event GUID (evt_xxx format)
             include_deleted: If True, include soft-deleted events
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Event instance with relationships loaded
 
         Raises:
-            NotFoundError: If event not found
+            NotFoundError: If event not found or belongs to different team
         """
         # Validate GUID format
         if not GuidService.validate_guid(guid, "evt"):
@@ -87,6 +93,9 @@ class EventService:
             )
             .filter(Event.uuid == uuid_value)
         )
+
+        if team_id is not None:
+            query = query.filter(Event.team_id == team_id)
 
         if not include_deleted:
             query = query.filter(Event.deleted_at.is_(None))
@@ -124,6 +133,7 @@ class EventService:
 
     def list(
         self,
+        team_id: int,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         category_guid: Optional[str] = None,
@@ -136,6 +146,7 @@ class EventService:
         List events with optional filtering.
 
         Args:
+            team_id: Team ID for tenant isolation
             start_date: Start of date range (inclusive)
             end_date: End of date range (inclusive)
             category_guid: Filter by category GUID
@@ -151,7 +162,7 @@ class EventService:
             joinedload(Event.category),
             joinedload(Event.series),
             joinedload(Event.location),
-        )
+        ).filter(Event.team_id == team_id)
 
         # Exclude soft-deleted unless requested
         if not include_deleted:
@@ -205,13 +216,14 @@ class EventService:
 
         return query.all()
 
-    def list_by_month(self, year: int, month: int, include_deleted: bool = False) -> List[Event]:
+    def list_by_month(self, team_id: int, year: int, month: int, include_deleted: bool = False) -> List[Event]:
         """
         List events for a specific month.
 
         Convenience method for calendar views.
 
         Args:
+            team_id: Team ID for tenant isolation
             year: Year (e.g., 2026)
             month: Month (1-12)
             include_deleted: If True, include soft-deleted events
@@ -231,14 +243,18 @@ class EventService:
         last_day = last_day - timedelta(days=1)
 
         return self.list(
+            team_id=team_id,
             start_date=first_day,
             end_date=last_day,
             include_deleted=include_deleted,
         )
 
-    def get_stats(self) -> dict:
+    def get_stats(self, team_id: int) -> dict:
         """
         Get event statistics for KPIs.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Dictionary with event statistics:
@@ -254,29 +270,38 @@ class EventService:
         else:
             first_of_next_month = date(today.year, today.month + 1, 1)
 
-        # Base query for non-deleted events
+        # Base query for non-deleted events filtered by team
         base_query = self.db.query(func.count(Event.id)).filter(
+            Event.team_id == team_id,
             Event.deleted_at.is_(None)
         )
 
         total = base_query.scalar()
 
         upcoming = (
-            base_query.filter(
+            self.db.query(func.count(Event.id)).filter(
+                Event.team_id == team_id,
+                Event.deleted_at.is_(None),
                 Event.event_date >= today,
                 Event.status.in_(["future", "confirmed"]),
             ).scalar()
         )
 
         this_month = (
-            base_query.filter(
+            self.db.query(func.count(Event.id)).filter(
+                Event.team_id == team_id,
+                Event.deleted_at.is_(None),
                 Event.event_date >= first_of_month,
                 Event.event_date < first_of_next_month,
             ).scalar()
         )
 
         attended = (
-            base_query.filter(Event.attendance == "attended").scalar()
+            self.db.query(func.count(Event.id)).filter(
+                Event.team_id == team_id,
+                Event.deleted_at.is_(None),
+                Event.attendance == "attended"
+            ).scalar()
         )
 
         return {
@@ -286,18 +311,23 @@ class EventService:
             "attended_count": attended or 0,
         }
 
-    def get_series_by_guid(self, guid: str) -> EventSeries:
+    def get_series_by_guid(
+        self,
+        guid: str,
+        team_id: Optional[int] = None
+    ) -> EventSeries:
         """
         Get an event series by GUID.
 
         Args:
             guid: Series GUID (ser_xxx format)
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             EventSeries instance with events loaded
 
         Raises:
-            NotFoundError: If series not found
+            NotFoundError: If series not found or belongs to different team
         """
         if not GuidService.validate_guid(guid, "ser"):
             raise NotFoundError("EventSeries", guid)
@@ -307,12 +337,16 @@ class EventService:
         except ValueError:
             raise NotFoundError("EventSeries", guid)
 
-        series = (
+        query = (
             self.db.query(EventSeries)
             .options(joinedload(EventSeries.category))
             .filter(EventSeries.uuid == uuid_value)
-            .first()
         )
+
+        if team_id is not None:
+            query = query.filter(EventSeries.team_id == team_id)
+
+        series = query.first()
 
         if not series:
             raise NotFoundError("EventSeries", guid)
@@ -574,6 +608,7 @@ class EventService:
 
     def create(
         self,
+        team_id: int,
         title: str,
         category_guid: str,
         event_date: date,
@@ -596,6 +631,7 @@ class EventService:
         Create a new standalone event.
 
         Args:
+            team_id: Team ID for tenant isolation
             title: Event title
             category_guid: Category GUID (cat_xxx)
             event_date: Date of the event
@@ -644,6 +680,7 @@ class EventService:
 
         # Create event
         event = Event(
+            team_id=team_id,
             title=title,
             description=description,
             category_id=category.id,
@@ -678,6 +715,7 @@ class EventService:
 
     def create_series(
         self,
+        team_id: int,
         title: str,
         category_guid: str,
         event_dates: List[date],
@@ -700,6 +738,7 @@ class EventService:
         Create a new event series with individual events.
 
         Args:
+            team_id: Team ID for tenant isolation
             title: Series title (shared by all events)
             category_guid: Category GUID (cat_xxx)
             event_dates: List of dates (minimum 2)
@@ -758,6 +797,7 @@ class EventService:
 
         # Create series
         series = EventSeries(
+            team_id=team_id,
             title=title,
             description=description,
             category_id=category.id,
@@ -778,6 +818,7 @@ class EventService:
         # Create individual events
         for i, event_date in enumerate(sorted_dates, start=1):
             event = Event(
+                team_id=team_id,
                 series_id=series.id,
                 sequence_number=i,
                 # These inherit from series via effective_* properties
@@ -1291,6 +1332,7 @@ class EventService:
             Created Event instance
         """
         deadline_entry = Event(
+            team_id=series.team_id,
             series_id=series.id,
             sequence_number=None,  # Not part of series sequence
             title=f"{series.title} - Deadline",
@@ -1442,6 +1484,7 @@ class EventService:
             Created Event instance
         """
         deadline_entry = Event(
+            team_id=event.team_id,
             parent_event_id=event.id,
             sequence_number=None,
             title=f"{event.title} - Deadline",

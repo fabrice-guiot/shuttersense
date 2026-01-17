@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.middleware.auth import require_auth, TenantContext
 from backend.src.schemas.trends import (
     PhotoStatsTrendResponse,
     PhotoPairingTrendResponse,
@@ -58,6 +59,7 @@ def get_trend_service(db: Session = Depends(get_db)) -> TrendService:
     summary="Get PhotoStats trends"
 )
 def get_photostats_trends(
+    ctx: TenantContext = Depends(require_auth),
     collection_ids: Optional[str] = Query(
         None,
         description="Comma-separated collection IDs"
@@ -88,6 +90,7 @@ def get_photostats_trends(
         PhotoStats trend data grouped by collection
     """
     return service.get_photostats_trends(
+        team_id=ctx.team_id,
         collection_ids=collection_ids,
         from_date=from_date,
         to_date=to_date,
@@ -105,6 +108,7 @@ def get_photostats_trends(
     summary="Get Photo Pairing trends"
 )
 def get_photo_pairing_trends(
+    ctx: TenantContext = Depends(require_auth),
     collection_ids: Optional[str] = Query(
         None,
         description="Comma-separated collection IDs"
@@ -135,6 +139,7 @@ def get_photo_pairing_trends(
         Photo Pairing trend data grouped by collection
     """
     return service.get_photo_pairing_trends(
+        team_id=ctx.team_id,
         collection_ids=collection_ids,
         from_date=from_date,
         to_date=to_date,
@@ -152,6 +157,7 @@ def get_photo_pairing_trends(
     summary="Get Pipeline Validation trends"
 )
 def get_pipeline_validation_trends(
+    ctx: TenantContext = Depends(require_auth),
     collection_ids: Optional[str] = Query(
         None,
         description="Comma-separated collection IDs"
@@ -194,6 +200,7 @@ def get_pipeline_validation_trends(
         Pipeline Validation trend data grouped by collection
     """
     return service.get_pipeline_validation_trends(
+        team_id=ctx.team_id,
         collection_ids=collection_ids,
         pipeline_id=pipeline_id,
         pipeline_version=pipeline_version,
@@ -213,6 +220,7 @@ def get_pipeline_validation_trends(
     summary="Get Display Graph trends"
 )
 def get_display_graph_trends(
+    ctx: TenantContext = Depends(require_auth),
     pipeline_ids: Optional[str] = Query(
         None,
         description="Comma-separated pipeline IDs"
@@ -243,6 +251,7 @@ def get_display_graph_trends(
         Display Graph trend data grouped by pipeline
     """
     return service.get_display_graph_trends(
+        team_id=ctx.team_id,
         pipeline_ids=pipeline_ids,
         from_date=from_date,
         to_date=to_date,
@@ -260,6 +269,7 @@ def get_display_graph_trends(
     summary="Get trend summary"
 )
 def get_trend_summary(
+    ctx: TenantContext = Depends(require_auth),
     collection_id: Optional[int] = Query(
         None,
         gt=0,
@@ -279,4 +289,4 @@ def get_trend_summary(
     Returns:
         Trend summary with direction indicators and latest timestamps
     """
-    return service.get_trend_summary(collection_id=collection_id)
+    return service.get_trend_summary(team_id=ctx.team_id, collection_id=collection_id)

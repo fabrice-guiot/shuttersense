@@ -13,11 +13,12 @@ from backend.src.models import AnalysisResult, ResultStatus, Pipeline
 
 
 @pytest.fixture
-def sample_pipeline(test_db_session):
+def sample_pipeline(test_db_session, test_team):
     """Factory for creating sample Pipeline models in the database."""
     def _create(
         name="Test Pipeline",
         is_active=True,
+        team_id=None,
         **kwargs
     ):
         pipeline = Pipeline(
@@ -28,6 +29,7 @@ def sample_pipeline(test_db_session):
             version=1,
             is_active=is_active,
             is_valid=True,
+            team_id=team_id if team_id is not None else test_team.id,
             **kwargs
         )
         test_db_session.add(pipeline)
@@ -38,7 +40,7 @@ def sample_pipeline(test_db_session):
 
 
 @pytest.fixture
-def sample_photostats_result(test_db_session, sample_collection):
+def sample_photostats_result(test_db_session, sample_collection, test_team):
     """Factory for creating sample PhotoStats results."""
     def _create(
         collection_id=None,
@@ -47,6 +49,7 @@ def sample_photostats_result(test_db_session, sample_collection):
         total_files=100,
         total_size=1000000,
         completed_at=None,
+        team_id=None,
         **kwargs
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -76,6 +79,7 @@ def sample_photostats_result(test_db_session, sample_collection):
                 },
                 files_scanned=total_files,
                 issues_found=orphaned_images_count + orphaned_xmp_count,
+                team_id=team_id if team_id is not None else test_team.id,
                 **kwargs
             )
             test_db_session.add(result)
@@ -86,7 +90,7 @@ def sample_photostats_result(test_db_session, sample_collection):
 
 
 @pytest.fixture
-def sample_photo_pairing_result(test_db_session, sample_collection):
+def sample_photo_pairing_result(test_db_session, sample_collection, test_team):
     """Factory for creating sample Photo Pairing results."""
     def _create(
         collection_id=None,
@@ -94,6 +98,7 @@ def sample_photo_pairing_result(test_db_session, sample_collection):
         image_count=200,
         camera_usage=None,
         completed_at=None,
+        team_id=None,
         **kwargs
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -125,6 +130,7 @@ def sample_photo_pairing_result(test_db_session, sample_collection):
                 },
                 files_scanned=image_count,
                 issues_found=0,
+                team_id=team_id if team_id is not None else test_team.id,
                 **kwargs
             )
             test_db_session.add(result)
@@ -135,7 +141,7 @@ def sample_photo_pairing_result(test_db_session, sample_collection):
 
 
 @pytest.fixture
-def sample_pipeline_validation_result(test_db_session, sample_collection, sample_pipeline):
+def sample_pipeline_validation_result(test_db_session, sample_collection, sample_pipeline, test_team):
     """Factory for creating sample Pipeline Validation results."""
     def _create(
         collection_id=None,
@@ -144,6 +150,7 @@ def sample_pipeline_validation_result(test_db_session, sample_collection, sample
         partial_count=15,
         inconsistent_count=5,
         completed_at=None,
+        team_id=None,
         **kwargs
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -179,6 +186,7 @@ def sample_pipeline_validation_result(test_db_session, sample_collection, sample
                 },
                 files_scanned=consistent_count + partial_count + inconsistent_count,
                 issues_found=inconsistent_count,
+                team_id=team_id if team_id is not None else test_team.id,
                 **kwargs
             )
             test_db_session.add(result)

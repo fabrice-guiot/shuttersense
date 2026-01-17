@@ -146,6 +146,9 @@ class Event(Base, GuidMixin):
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
 
+    # Tenant isolation
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
+
     # Series relationship
     series_id = Column(
         Integer,

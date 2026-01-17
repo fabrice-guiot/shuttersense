@@ -12,6 +12,7 @@ Design:
 - Pydantic validation for request/response
 - Session-based import workflow
 - Rate limiting on import endpoints (T168)
+- Tenant isolation via require_auth middleware
 
 Note: Route order matters! Specific routes (stats, export, import) must come
 before parameterized routes (/{category}, /{category}/{key}).
@@ -33,6 +34,7 @@ from backend.src.schemas.config import (
 from backend.src.services.config_service import ConfigService
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
 from backend.src.utils.logging_config import get_logger
+from backend.src.middleware.auth import require_auth, TenantContext
 
 
 logger = get_logger("api")
@@ -65,6 +67,7 @@ def get_config_service(db: Session = Depends(get_db)) -> ConfigService:
     summary="Get configuration statistics"
 )
 def get_stats(
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> ConfigStatsResponse:
     """
@@ -72,10 +75,13 @@ def get_stats(
 
     Returns totals, category counts, and source breakdown for dashboard KPIs.
 
+    Args:
+        ctx: Tenant context with team_id
+
     Returns:
         Statistics including total items, cameras, methods, and source breakdown
     """
-    return service.get_stats()
+    return service.get_stats(team_id=ctx.team_id)
 
 
 # ============================================================================
@@ -88,6 +94,7 @@ def get_stats(
     summary="Get event status options"
 )
 def get_event_statuses(
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> EventStatusesResponse:
     """
@@ -97,10 +104,13 @@ def get_event_statuses(
     and forms. Each status has a key (used in code), label (for display),
     and display_order (for sorting).
 
+    Args:
+        ctx: Tenant context with team_id
+
     Returns:
         List of event statuses ordered by display_order
     """
-    statuses = service.get_event_statuses()
+    statuses = service.get_event_statuses(team_id=ctx.team_id)
     return EventStatusesResponse(
         statuses=[EventStatusItem(**s) for s in statuses]
     )
@@ -115,16 +125,20 @@ def get_event_statuses(
     summary="Export configuration as YAML"
 )
 def export_config(
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> Response:
     """
     Export all configuration as a YAML file.
 
+    Args:
+        ctx: Tenant context with team_id
+
     Returns:
         YAML file download
     """
     try:
-        yaml_content = service.export_to_yaml()
+        yaml_content = service.export_to_yaml(team_id=ctx.team_id)
 
         return Response(
             content=yaml_content,
@@ -157,6 +171,7 @@ def export_config(
 async def start_import(
     request: Request,  # Required for rate limiter
     file: UploadFile = File(...),
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> ImportSessionResponse:
     """
@@ -167,6 +182,7 @@ async def start_import(
 
     Args:
         file: YAML configuration file
+        ctx: Tenant context with team_id
 
     Returns:
         Import session with conflicts
@@ -175,7 +191,7 @@ async def start_import(
         content = await file.read()
         yaml_content = content.decode("utf-8")
 
-        session = service.start_import(yaml_content, filename=file.filename)
+        session = service.start_import(yaml_content, team_id=ctx.team_id, filename=file.filename)
 
         return ImportSessionResponse(
             session_id=session["session_id"],
@@ -206,6 +222,7 @@ async def start_import(
 )
 def get_import_session(
     session_id: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> ImportSessionResponse:
     """
@@ -213,6 +230,7 @@ def get_import_session(
 
     Args:
         session_id: Session UUID
+        ctx: Tenant context with team_id
 
     Returns:
         Import session details
@@ -244,6 +262,7 @@ def get_import_session(
 def resolve_import(
     session_id: str,
     request: ConflictResolutionRequest,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> ImportResultResponse:
     """
@@ -252,6 +271,7 @@ def resolve_import(
     Args:
         session_id: Session UUID
         request: Conflict resolutions
+        ctx: Tenant context with team_id
 
     Returns:
         Import result
@@ -291,6 +311,7 @@ def resolve_import(
 )
 def cancel_import(
     session_id: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> dict:
     """
@@ -298,6 +319,7 @@ def cancel_import(
 
     Args:
         session_id: Session UUID
+        ctx: Tenant context with team_id
 
     Returns:
         Confirmation
@@ -322,6 +344,7 @@ def cancel_import(
     summary="Get all configuration"
 )
 def get_all_config(
+    ctx: TenantContext = Depends(require_auth),
     category: Optional[str] = Query(None, description="Filter by category"),
     service: ConfigService = Depends(get_config_service)
 ) -> ConfigurationResponse:
@@ -329,13 +352,14 @@ def get_all_config(
     Get all configuration organized by category.
 
     Args:
+        ctx: Tenant context with team_id
         category: Optional filter by category (extensions, cameras, processing_methods)
 
     Returns:
         Configuration organized by category
     """
     try:
-        all_config = service.get_all()
+        all_config = service.get_all(team_id=ctx.team_id)
 
         if category:
             # Filter to specific category
@@ -377,6 +401,7 @@ def get_all_config(
 )
 def get_category_config(
     category: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> CategoryConfigResponse:
     """
@@ -384,12 +409,13 @@ def get_category_config(
 
     Args:
         category: Configuration category
+        ctx: Tenant context with team_id
 
     Returns:
         Category with its configuration items
     """
     try:
-        items = service.get_category(category)
+        items = service.get_category(category, team_id=ctx.team_id)
         return CategoryConfigResponse(category=category, items=items)
     except ValidationError as e:
         raise HTTPException(
@@ -416,6 +442,7 @@ def get_category_config(
 def get_config_value(
     category: str,
     key: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> ConfigItemResponse:
     """
@@ -424,11 +451,12 @@ def get_config_value(
     Args:
         category: Configuration category
         key: Configuration key
+        ctx: Tenant context with team_id
 
     Returns:
         Configuration item
     """
-    result = service.get(category, key)
+    result = service.get(category, key, team_id=ctx.team_id)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -447,6 +475,7 @@ def create_config_value(
     category: str,
     key: str,
     request: ConfigItemCreate,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> ConfigItemResponse:
     """
@@ -456,6 +485,7 @@ def create_config_value(
         category: Configuration category (from path)
         key: Configuration key (from path)
         request: Configuration data
+        ctx: Tenant context with team_id
 
     Returns:
         Created configuration item
@@ -465,6 +495,7 @@ def create_config_value(
             category=category,
             key=key,
             value=request.value,
+            team_id=ctx.team_id,
             description=request.description
         )
     except ValidationError as e:
@@ -494,6 +525,7 @@ def update_config_value(
     category: str,
     key: str,
     request: ConfigItemUpdate,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> ConfigItemResponse:
     """
@@ -503,6 +535,7 @@ def update_config_value(
         category: Configuration category
         key: Configuration key
         request: Update data
+        ctx: Tenant context with team_id
 
     Returns:
         Updated configuration item
@@ -511,6 +544,7 @@ def update_config_value(
         return service.update(
             category=category,
             key=key,
+            team_id=ctx.team_id,
             value=request.value,
             description=request.description
         )
@@ -540,6 +574,7 @@ def update_config_value(
 def delete_config_value(
     category: str,
     key: str,
+    ctx: TenantContext = Depends(require_auth),
     service: ConfigService = Depends(get_config_service)
 ) -> DeleteResponse:
     """
@@ -548,12 +583,13 @@ def delete_config_value(
     Args:
         category: Configuration category
         key: Configuration key
+        ctx: Tenant context with team_id
 
     Returns:
         Deletion confirmation
     """
     try:
-        deleted_id = service.delete(category, key)
+        deleted_id = service.delete(category, key, team_id=ctx.team_id)
         return DeleteResponse(
             message="Configuration deleted successfully",
             deleted_id=deleted_id

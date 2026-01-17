@@ -14,7 +14,7 @@ Design Rationale:
 
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Index
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Index, ForeignKey
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
@@ -66,6 +66,9 @@ class Category(Base, GuidMixin):
 
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Tenant isolation
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
 
     # Core fields
     name = Column(String(100), unique=True, nullable=False, index=True)

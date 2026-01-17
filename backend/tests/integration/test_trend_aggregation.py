@@ -13,7 +13,7 @@ from backend.src.models import AnalysisResult, ResultStatus, Pipeline, Collectio
 
 
 @pytest.fixture
-def setup_trend_data(test_db_session, sample_collection):
+def setup_trend_data(test_db_session, sample_collection, test_team):
     """
     Set up comprehensive trend test data.
 
@@ -39,7 +39,8 @@ def setup_trend_data(test_db_session, sample_collection):
         edges_json=[],
         version=1,
         is_active=True,
-        is_valid=True
+        is_valid=True,
+        team_id=test_team.id
     )
     test_db_session.add(pipeline)
     test_db_session.commit()
@@ -66,7 +67,8 @@ def setup_trend_data(test_db_session, sample_collection):
                     "total_size": 10000000 + i * 100000
                 },
                 files_scanned=1000 + i * 10,
-                issues_found=15 - i
+                issues_found=15 - i,
+                team_id=test_team.id
             )
             test_db_session.add(result)
             results.append(result)
@@ -88,7 +90,8 @@ def setup_trend_data(test_db_session, sample_collection):
                         "XY7Z": 200 + i * 40
                     }
                 },
-                files_scanned=400 + i * 80
+                files_scanned=400 + i * 80,
+                team_id=test_team.id
             )
             test_db_session.add(result)
             results.append(result)
@@ -116,7 +119,8 @@ def setup_trend_data(test_db_session, sample_collection):
                     }
                 },
                 files_scanned=total,
-                issues_found=inconsistent
+                issues_found=inconsistent,
+                team_id=test_team.id
             )
             test_db_session.add(result)
             results.append(result)
@@ -313,7 +317,7 @@ class TestTrendAggregationIntegration:
 class TestTrendCalculationAccuracy:
     """Tests for trend direction calculation accuracy."""
 
-    def test_improving_orphaned_trend(self, test_client, test_db_session, sample_collection):
+    def test_improving_orphaned_trend(self, test_client, test_db_session, sample_collection, test_team):
         """Test that decreasing orphaned files shows improving trend."""
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(
@@ -338,7 +342,8 @@ class TestTrendCalculationAccuracy:
                     "orphaned_xmp": [],
                     "total_files": 100,
                     "total_size": 1000000
-                }
+                },
+                team_id=test_team.id
             )
             test_db_session.add(result)
 
@@ -355,7 +360,7 @@ class TestTrendCalculationAccuracy:
         # Decreasing orphaned files = improving
         assert data["orphaned_trend"] == "improving"
 
-    def test_degrading_consistency_trend(self, test_client, test_db_session, sample_collection):
+    def test_degrading_consistency_trend(self, test_client, test_db_session, sample_collection, test_team):
         """Test that decreasing consistency shows degrading trend."""
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(
@@ -372,7 +377,8 @@ class TestTrendCalculationAccuracy:
             edges_json=[],
             version=1,
             is_active=True,
-            is_valid=True
+            is_valid=True,
+            team_id=test_team.id
         )
         test_db_session.add(pipeline)
         test_db_session.commit()
@@ -397,7 +403,8 @@ class TestTrendCalculationAccuracy:
                         "PARTIAL": 5,
                         "INCONSISTENT": 100 - consistent - 5
                     }
-                }
+                },
+                team_id=test_team.id
             )
             test_db_session.add(result)
 

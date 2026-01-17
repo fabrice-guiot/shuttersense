@@ -36,11 +36,11 @@ class TestToolExecutionFlow:
             collection_response = test_client.post('/api/collections', json=collection_data)
             assert collection_response.status_code == 201
             collection = collection_response.json()
-            collection_id = collection['id']
+            collection_guid = collection['guid']
 
             # Step 2: Run PhotoStats tool
             run_response = test_client.post('/api/tools/run', json={
-                'collection_id': collection_id,
+                'collection_guid': collection_guid,
                 'tool': 'photostats'
             })
             assert run_response.status_code == 202
@@ -48,7 +48,7 @@ class TestToolExecutionFlow:
 
             # Step 3: Verify job is created with expected fields
             assert job['id'] is not None
-            assert job['collection_id'] == collection_id
+            assert job['collection_guid'] == collection_guid
             assert job['tool'] == 'photostats'
             # Status can be queued, running, completed, or failed
             assert job['status'] in ['queued', 'running', 'completed', 'failed']
@@ -88,7 +88,7 @@ class TestToolExecutionFlow:
 
         connector_response = test_client.post('/api/connectors', json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()['id']
+        connector_guid = connector_response.json()['guid']
 
         # Step 2: Create collection (will be inaccessible)
         collection_data = {
@@ -96,7 +96,7 @@ class TestToolExecutionFlow:
             'type': 's3',
             'location': 's3://bucket/photos',
             'state': 'live',
-            'connector_id': connector_id
+            'connector_guid': connector_guid
         }
 
         collection_response = test_client.post('/api/collections', json=collection_data)
@@ -106,7 +106,7 @@ class TestToolExecutionFlow:
 
         # Step 3: Attempt to run tool -> should fail
         run_response = test_client.post('/api/tools/run', json={
-            'collection_id': collection['id'],
+            'collection_guid': collection['guid'],
             'tool': 'photostats'
         })
         assert run_response.status_code == 422
@@ -133,18 +133,18 @@ class TestToolExecutionFlow:
 
             collection_response = test_client.post('/api/collections', json=collection_data)
             assert collection_response.status_code == 201
-            collection_id = collection_response.json()['id']
+            collection_guid = collection_response.json()['guid']
 
             # Step 2: Verify we can run different tools on same collection
             run1_response = test_client.post('/api/tools/run', json={
-                'collection_id': collection_id,
+                'collection_guid': collection_guid,
                 'tool': 'photostats'
             })
             assert run1_response.status_code == 202
 
             # Running a different tool on the same collection should work
             run2_response = test_client.post('/api/tools/run', json={
-                'collection_id': collection_id,
+                'collection_guid': collection_guid,
                 'tool': 'photo_pairing'
             })
             assert run2_response.status_code == 202
@@ -173,11 +173,11 @@ class TestToolExecutionFlow:
             }
 
             collection_response = test_client.post('/api/collections', json=collection_data)
-            collection_id = collection_response.json()['id']
+            collection_guid = collection_response.json()['guid']
 
             # Step 2: Run tool
             run_response = test_client.post('/api/tools/run', json={
-                'collection_id': collection_id,
+                'collection_guid': collection_guid,
                 'tool': 'photostats'
             })
             assert run_response.status_code == 202
@@ -244,11 +244,11 @@ class TestToolExecutionFlow:
                 'state': 'live'
             }
             collection_response = test_client.post('/api/collections', json=collection_data)
-            collection_id = collection_response.json()['id']
+            collection_guid = collection_response.json()['guid']
 
             # Step 2: Run photostats
             test_client.post('/api/tools/run', json={
-                'collection_id': collection_id,
+                'collection_guid': collection_guid,
                 'tool': 'photostats'
             })
 
@@ -266,14 +266,14 @@ class TestToolExecutionFlow:
                 assert job['tool'] == 'photostats'
 
             # Step 5: List with collection filter
-            list_by_collection = test_client.get(f'/api/tools/jobs?collection_id={collection_id}')
+            list_by_collection = test_client.get(f'/api/tools/jobs?collection_guid={collection_guid}')
             assert list_by_collection.status_code == 200
 
 
 class TestResultsApiFlow:
     """Integration tests for results API - T053"""
 
-    def test_results_list_with_filters(self, test_client, test_db_session, sample_collection):
+    def test_results_list_with_filters(self, test_client, test_db_session, sample_collection, test_team):
         """
         Test listing results with various filters
         """
@@ -292,7 +292,8 @@ class TestResultsApiFlow:
             duration_seconds=60,
             files_scanned=100,
             issues_found=5,
-            results_json={'total_files': 100}
+            results_json={'total_files': 100},
+            team_id=test_team.id
         )
         result2 = AnalysisResult(
             collection_id=collection.id,
@@ -303,7 +304,8 @@ class TestResultsApiFlow:
             duration_seconds=30,
             files_scanned=80,
             issues_found=2,
-            results_json={'group_count': 40}
+            results_json={'group_count': 40},
+            team_id=test_team.id
         )
         result3 = AnalysisResult(
             collection_id=collection.id,
@@ -315,7 +317,8 @@ class TestResultsApiFlow:
             files_scanned=0,
             issues_found=0,
             error_message='Test error',
-            results_json={}
+            results_json={},
+            team_id=test_team.id
         )
 
         test_db_session.add_all([result1, result2, result3])
@@ -344,10 +347,10 @@ class TestResultsApiFlow:
             assert item['status'] == 'FAILED'
 
         # Test filter by collection
-        list_by_collection = test_client.get(f'/api/results?collection_id={collection.id}')
+        list_by_collection = test_client.get(f'/api/results?collection_guid={collection.guid}')
         assert list_by_collection.status_code == 200
 
-    def test_get_single_result(self, test_client, test_db_session, sample_collection):
+    def test_get_single_result(self, test_client, test_db_session, sample_collection, test_team):
         """
         Test getting a single result with full details
         """
@@ -370,23 +373,24 @@ class TestResultsApiFlow:
                 'total_size': 500000,
                 'orphaned_images': ['orphan1.jpg'],
                 'orphaned_xmp': []
-            }
+            },
+            team_id=test_team.id
         )
         test_db_session.add(result)
         test_db_session.commit()
 
         # Get the result
-        get_response = test_client.get(f'/api/results/{result.id}')
+        get_response = test_client.get(f'/api/results/{result.guid}')
         assert get_response.status_code == 200
         result_data = get_response.json()
 
-        assert result_data['id'] == result.id
+        assert result_data['guid'] == result.guid
         assert result_data['tool'] == 'photostats'
         assert result_data['status'] == 'COMPLETED'
         assert 'results' in result_data
         assert result_data['results']['total_files'] == 100
 
-    def test_delete_result(self, test_client, test_db_session, sample_collection):
+    def test_delete_result(self, test_client, test_db_session, sample_collection, test_team):
         """
         Test deleting a result
         """
@@ -403,21 +407,22 @@ class TestResultsApiFlow:
             duration_seconds=60,
             files_scanned=100,
             issues_found=0,
-            results_json={}
+            results_json={},
+            team_id=test_team.id
         )
         test_db_session.add(result)
         test_db_session.commit()
-        result_id = result.id
+        result_guid = result.guid
 
         # Delete the result
-        delete_response = test_client.delete(f'/api/results/{result_id}')
+        delete_response = test_client.delete(f'/api/results/{result_guid}')
         assert delete_response.status_code == 200
 
         # Verify it's deleted
-        get_response = test_client.get(f'/api/results/{result_id}')
+        get_response = test_client.get(f'/api/results/{result_guid}')
         assert get_response.status_code == 404
 
-    def test_get_results_stats(self, test_client, test_db_session, sample_collection):
+    def test_get_results_stats(self, test_client, test_db_session, sample_collection, test_team):
         """
         Test getting results statistics
         """
@@ -431,19 +436,19 @@ class TestResultsApiFlow:
                 collection_id=collection.id, tool='photostats', status='COMPLETED',
                 started_at=datetime.utcnow(), completed_at=datetime.utcnow(),
                 duration_seconds=60, files_scanned=100, issues_found=5,
-                results_json={}
+                results_json={}, team_id=test_team.id
             ),
             AnalysisResult(
                 collection_id=collection.id, tool='photo_pairing', status='COMPLETED',
                 started_at=datetime.utcnow(), completed_at=datetime.utcnow(),
                 duration_seconds=30, files_scanned=80, issues_found=2,
-                results_json={}
+                results_json={}, team_id=test_team.id
             ),
             AnalysisResult(
                 collection_id=collection.id, tool='photostats', status='FAILED',
                 started_at=datetime.utcnow(), completed_at=datetime.utcnow(),
                 duration_seconds=5, files_scanned=0, issues_found=0,
-                error_message='Error', results_json={}
+                error_message='Error', results_json={}, team_id=test_team.id
             ),
         ]
         test_db_session.add_all(results)
@@ -495,11 +500,11 @@ class TestCollectionStatsUpdate:
 
             collection_response = test_client.post('/api/collections', json=collection_data)
             assert collection_response.status_code == 201
-            collection_id = collection_response.json()['id']
+            collection_guid = collection_response.json()['guid']
 
             # Step 2: Run PhotoStats tool
             run_response = test_client.post('/api/tools/run', json={
-                'collection_id': collection_id,
+                'collection_guid': collection_guid,
                 'tool': 'photostats'
             })
             assert run_response.status_code == 202
@@ -509,7 +514,7 @@ class TestCollectionStatsUpdate:
 
             # Step 3: Get collection and check stats
             # The stats update happens asynchronously, so we need to check results
-            get_collection = test_client.get(f'/api/collections/{collection_id}')
+            get_collection = test_client.get(f'/api/collections/{collection_guid}')
             assert get_collection.status_code == 200
             # Collection stats will be updated by the background task
 
@@ -546,7 +551,7 @@ class TestRemoteCollectionToolExecution:
 
         connector_response = test_client.post('/api/connectors', json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()['id']
+        connector_guid = connector_response.json()['guid']
 
         # Step 2: Create S3 collection
         collection_data = {
@@ -554,13 +559,13 @@ class TestRemoteCollectionToolExecution:
             'type': 's3',
             'location': 's3://my-bucket/photos',
             'state': 'live',
-            'connector_id': connector_id
+            'connector_guid': connector_guid
         }
 
         collection_response = test_client.post('/api/collections', json=collection_data)
         assert collection_response.status_code == 201
         collection = collection_response.json()
-        collection_id = collection['id']
+        collection_guid = collection['guid']
 
         # Step 3: Mock FileListingFactory to return sample files
         sample_files = [
@@ -579,7 +584,7 @@ class TestRemoteCollectionToolExecution:
 
         # Step 4: Run PhotoStats tool
         run_response = test_client.post('/api/tools/run', json={
-            'collection_id': collection_id,
+            'collection_guid': collection_guid,
             'tool': 'photostats'
         })
         assert run_response.status_code == 202
@@ -587,7 +592,7 @@ class TestRemoteCollectionToolExecution:
 
         # Step 5: Verify job was created
         assert job['id'] is not None
-        assert job['collection_id'] == collection_id
+        assert job['collection_guid'] == collection_guid
         assert job['tool'] == 'photostats'
 
         # Get job status to verify it processed
@@ -624,7 +629,7 @@ class TestRemoteCollectionToolExecution:
 
         connector_response = test_client.post('/api/connectors', json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()['id']
+        connector_guid = connector_response.json()['guid']
 
         # Step 2: Create SMB collection
         collection_data = {
@@ -632,13 +637,13 @@ class TestRemoteCollectionToolExecution:
             'type': 'smb',
             'location': '\\\\server\\share\\photos',
             'state': 'live',
-            'connector_id': connector_id
+            'connector_guid': connector_guid
         }
 
         collection_response = test_client.post('/api/collections', json=collection_data)
         assert collection_response.status_code == 201
         collection = collection_response.json()
-        collection_id = collection['id']
+        collection_guid = collection['guid']
 
         # Step 3: Mock FileListingFactory to return sample files
         # Files that form pairs (same stem, different extensions)
@@ -658,7 +663,7 @@ class TestRemoteCollectionToolExecution:
 
         # Step 4: Run Photo Pairing tool
         run_response = test_client.post('/api/tools/run', json={
-            'collection_id': collection_id,
+            'collection_guid': collection_guid,
             'tool': 'photo_pairing'
         })
         assert run_response.status_code == 202
@@ -666,7 +671,7 @@ class TestRemoteCollectionToolExecution:
 
         # Step 5: Verify job was created
         assert job['id'] is not None
-        assert job['collection_id'] == collection_id
+        assert job['collection_guid'] == collection_guid
         assert job['tool'] == 'photo_pairing'
 
         # Get job status to verify it processed
@@ -700,19 +705,19 @@ class TestRemoteCollectionToolExecution:
 
         connector_response = test_client.post('/api/connectors', json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()['id']
+        connector_guid = connector_response.json()['guid']
 
         collection_data = {
             'name': 'Adapter Verification Collection',
             'type': 's3',
             'location': 's3://test-bucket/photos',
             'state': 'live',
-            'connector_id': connector_id
+            'connector_guid': connector_guid
         }
 
         collection_response = test_client.post('/api/collections', json=collection_data)
         assert collection_response.status_code == 201
-        collection_id = collection_response.json()['id']
+        collection_guid = collection_response.json()['guid']
 
         # Track if FileListingFactory was called
         sample_files = [
@@ -727,7 +732,7 @@ class TestRemoteCollectionToolExecution:
 
         # Run tool
         run_response = test_client.post('/api/tools/run', json={
-            'collection_id': collection_id,
+            'collection_guid': collection_guid,
             'tool': 'photostats'
         })
         assert run_response.status_code == 202

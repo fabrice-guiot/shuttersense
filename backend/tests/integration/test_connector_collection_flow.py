@@ -39,7 +39,7 @@ class TestConnectorCollectionFlow:
         connector_response = test_client.post("/api/connectors", json=connector_data)
         assert connector_response.status_code == 201
         connector = connector_response.json()
-        connector_id = connector["id"]
+        connector_guid = connector["guid"]
 
         # Step 2: Create collection (references connector)
         collection_data = {
@@ -47,42 +47,42 @@ class TestConnectorCollectionFlow:
             "type": "s3",
             "location": "s3://test-bucket/photos",
             "state": "live",
-            "connector_id": connector_id
+            "connector_guid": connector_guid
         }
 
         collection_response = test_client.post("/api/collections", json=collection_data)
         assert collection_response.status_code == 201
         collection = collection_response.json()
-        collection_id = collection["id"]
+        collection_guid = collection["guid"]
 
         # Verify collection references connector
-        assert collection["connector_id"] == connector_id
+        assert collection["connector"]["guid"] == connector_guid
 
         # Step 3: Attempt to delete connector -> should fail with 409
-        delete_connector_attempt = test_client.delete(f"/api/connectors/{connector_id}")
+        delete_connector_attempt = test_client.delete(f"/api/connectors/{connector_guid}")
         assert delete_connector_attempt.status_code == 409
         error_detail = delete_connector_attempt.json()["detail"]
         assert "collection(s) reference it" in error_detail
         assert "1 collection(s)" in error_detail  # Should mention count
 
         # Verify connector still exists
-        get_connector_response = test_client.get(f"/api/connectors/{connector_id}")
+        get_connector_response = test_client.get(f"/api/connectors/{connector_guid}")
         assert get_connector_response.status_code == 200
 
         # Step 4: Delete collection
-        delete_collection_response = test_client.delete(f"/api/collections/{collection_id}")
+        delete_collection_response = test_client.delete(f"/api/collections/{collection_guid}")
         assert delete_collection_response.status_code == 204
 
         # Verify collection is deleted
-        get_collection_response = test_client.get(f"/api/collections/{collection_id}")
+        get_collection_response = test_client.get(f"/api/collections/{collection_guid}")
         assert get_collection_response.status_code == 404
 
         # Step 5: Delete connector -> should succeed now
-        delete_connector_final = test_client.delete(f"/api/connectors/{connector_id}")
+        delete_connector_final = test_client.delete(f"/api/connectors/{connector_guid}")
         assert delete_connector_final.status_code == 204
 
         # Verify connector is deleted
-        get_connector_final = test_client.get(f"/api/connectors/{connector_id}")
+        get_connector_final = test_client.get(f"/api/connectors/{connector_guid}")
         assert get_connector_final.status_code == 404
 
     def test_multiple_collections_protection(self, test_client):
@@ -121,43 +121,43 @@ class TestConnectorCollectionFlow:
 
         connector_response = test_client.post("/api/connectors", json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()["id"]
+        connector_guid = connector_response.json()["guid"]
 
         # Step 2: Create 3 collections
-        collection_ids = []
+        collection_guids = []
         for i in range(3):
             collection_data = {
                 "name": f"GCS Collection {i+1}",
                 "type": "gcs",
                 "location": f"gs://bucket{i+1}/photos",
                 "state": "live",
-                "connector_id": connector_id
+                "connector_guid": connector_guid
             }
             response = test_client.post("/api/collections", json=collection_data)
             assert response.status_code == 201
-            collection_ids.append(response.json()["id"])
+            collection_guids.append(response.json()["guid"])
 
         # Step 3: Attempt to delete connector -> should fail with count=3
-        delete_attempt_1 = test_client.delete(f"/api/connectors/{connector_id}")
+        delete_attempt_1 = test_client.delete(f"/api/connectors/{connector_guid}")
         assert delete_attempt_1.status_code == 409
         assert "3 collection(s)" in delete_attempt_1.json()["detail"]
 
         # Step 4: Delete 2 collections
         for i in range(2):
-            response = test_client.delete(f"/api/collections/{collection_ids[i]}")
+            response = test_client.delete(f"/api/collections/{collection_guids[i]}")
             assert response.status_code == 204
 
         # Step 5: Attempt to delete connector -> should still fail with count=1
-        delete_attempt_2 = test_client.delete(f"/api/connectors/{connector_id}")
+        delete_attempt_2 = test_client.delete(f"/api/connectors/{connector_guid}")
         assert delete_attempt_2.status_code == 409
         assert "1 collection(s)" in delete_attempt_2.json()["detail"]
 
         # Step 6: Delete last collection
-        response = test_client.delete(f"/api/collections/{collection_ids[2]}")
+        response = test_client.delete(f"/api/collections/{collection_guids[2]}")
         assert response.status_code == 204
 
         # Step 7: Delete connector -> should succeed
-        delete_final = test_client.delete(f"/api/connectors/{connector_id}")
+        delete_final = test_client.delete(f"/api/connectors/{connector_guid}")
         assert delete_final.status_code == 204
 
     def test_local_collection_no_connector_required(self, test_client):
@@ -182,19 +182,19 @@ class TestConnectorCollectionFlow:
             response = test_client.post("/api/collections", json=collection_data)
             assert response.status_code == 201
             collection = response.json()
-            collection_id = collection["id"]
+            collection_guid = collection["guid"]
 
             # Step 2: Verify creation
-            assert collection["connector_id"] is None
+            assert collection["connector"] is None
             assert collection["type"] == "local"
             assert collection["is_accessible"] is True
 
             # Step 3: Delete collection
-            delete_response = test_client.delete(f"/api/collections/{collection_id}")
+            delete_response = test_client.delete(f"/api/collections/{collection_guid}")
             assert delete_response.status_code == 204
 
             # Step 4: Verify deletion
-            get_response = test_client.get(f"/api/collections/{collection_id}")
+            get_response = test_client.get(f"/api/collections/{collection_guid}")
             assert get_response.status_code == 404
 
 
@@ -225,7 +225,7 @@ class TestRemoteCollectionAccessibility:
 
         connector_response = test_client.post("/api/connectors", json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()["id"]
+        connector_guid = connector_response.json()["guid"]
 
         # Mock S3 adapter to simulate authentication failure
         mock_adapter = mocker.patch('backend.src.services.connector_service.S3Adapter')
@@ -240,13 +240,13 @@ class TestRemoteCollectionAccessibility:
             "type": "s3",
             "location": "s3://nonexistent-bucket/photos",
             "state": "live",
-            "connector_id": connector_id
+            "connector_guid": connector_guid
         }
 
         collection_response = test_client.post("/api/collections", json=collection_data)
         assert collection_response.status_code == 201  # Should succeed
         collection = collection_response.json()
-        collection_id = collection["id"]
+        collection_guid = collection["guid"]
 
         # Step 3: Verify is_accessible=false
         assert collection["is_accessible"] is False
@@ -257,7 +257,7 @@ class TestRemoteCollectionAccessibility:
         assert "Authentication failed" in collection["last_error"] or "does not exist" in collection["last_error"]
 
         # Step 5: Test collection accessibility -> should return failure
-        test_response = test_client.post(f"/api/collections/{collection_id}/test")
+        test_response = test_client.post(f"/api/collections/{collection_guid}/test")
         assert test_response.status_code == 200
         test_result = test_response.json()
         assert test_result["success"] is False
@@ -295,7 +295,7 @@ class TestRemoteCollectionAccessibility:
 
         connector_response = test_client.post("/api/connectors", json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()["id"]
+        connector_guid = connector_response.json()["guid"]
 
         # Mock GCS adapter to simulate authentication failure
         mock_adapter = mocker.patch('backend.src.services.connector_service.GCSAdapter')
@@ -310,7 +310,7 @@ class TestRemoteCollectionAccessibility:
             "type": "gcs",
             "location": "gs://nonexistent-bucket/photos",
             "state": "live",
-            "connector_id": connector_id
+            "connector_guid": connector_guid
         }
 
         collection_response = test_client.post("/api/collections", json=collection_data)
@@ -345,7 +345,7 @@ class TestRemoteCollectionAccessibility:
 
         connector_response = test_client.post("/api/connectors", json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()["id"]
+        connector_guid = connector_response.json()["guid"]
 
         # Mock SMB adapter to simulate connection failure
         mock_adapter = mocker.patch('backend.src.services.connector_service.SMBAdapter')
@@ -360,7 +360,7 @@ class TestRemoteCollectionAccessibility:
             "type": "smb",
             "location": "//invalid.server.com/photos",
             "state": "live",
-            "connector_id": connector_id
+            "connector_guid": connector_guid
         }
 
         collection_response = test_client.post("/api/collections", json=collection_data)
@@ -400,7 +400,7 @@ class TestRemoteCollectionAccessibility:
 
         connector_response = test_client.post("/api/connectors", json=connector_data)
         assert connector_response.status_code == 201
-        connector_id = connector_response.json()["id"]
+        connector_guid = connector_response.json()["guid"]
 
         # Step 2: Create collection (should be accessible)
         collection_data = {
@@ -408,13 +408,13 @@ class TestRemoteCollectionAccessibility:
             "type": "s3",
             "location": "s3://test-bucket/photos",
             "state": "live",
-            "connector_id": connector_id
+            "connector_guid": connector_guid
         }
 
         collection_response = test_client.post("/api/collections", json=collection_data)
         assert collection_response.status_code == 201
         collection = collection_response.json()
-        collection_id = collection["id"]
+        collection_guid = collection["guid"]
 
         assert collection["is_accessible"] is True
         assert collection["last_error"] is None
@@ -427,13 +427,13 @@ class TestRemoteCollectionAccessibility:
         )
 
         # Step 4: Test collection -> should fail
-        test_response = test_client.post(f"/api/collections/{collection_id}/test")
+        test_response = test_client.post(f"/api/collections/{collection_guid}/test")
         assert test_response.status_code == 200
         test_result = test_response.json()
         assert test_result["success"] is False
 
         # Step 5: Verify collection status updated
-        get_response = test_client.get(f"/api/collections/{collection_id}")
+        get_response = test_client.get(f"/api/collections/{collection_guid}")
         updated_collection = get_response.json()
         assert updated_collection["is_accessible"] is False
         assert updated_collection["last_error"] is not None

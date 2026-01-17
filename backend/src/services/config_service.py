@@ -77,6 +77,7 @@ class ConfigService:
         category: str,
         key: str,
         value: Any,
+        team_id: int,
         description: Optional[str] = None,
         source: ConfigSource = ConfigSource.DATABASE
     ) -> ConfigItemResponse:
@@ -87,6 +88,7 @@ class ConfigService:
             category: Configuration category (extensions, cameras, processing_methods)
             key: Configuration key within category
             value: Configuration value (any JSON-serializable type)
+            team_id: Team ID for tenant isolation
             description: Optional human-readable description
             source: Source of configuration (database or yaml_import)
 
@@ -95,7 +97,7 @@ class ConfigService:
 
         Raises:
             ValidationError: If category is invalid
-            ConflictError: If category/key combination already exists
+            ConflictError: If category/key combination already exists for this team
         """
         # Validate category
         if category not in VALID_CATEGORIES:
@@ -104,10 +106,11 @@ class ConfigService:
                 f"Valid categories: {', '.join(VALID_CATEGORIES)}"
             )
 
-        # Check for duplicate
+        # Check for duplicate within team
         existing = self.db.query(Configuration).filter(
             Configuration.category == category,
-            Configuration.key == key
+            Configuration.key == key,
+            Configuration.team_id == team_id
         ).first()
 
         if existing:
@@ -121,7 +124,8 @@ class ConfigService:
             key=key,
             value_json=value,
             description=description,
-            source=source
+            source=source,
+            team_id=team_id
         )
 
         self.db.add(config)
@@ -130,48 +134,67 @@ class ConfigService:
 
         logger.info(
             f"Created configuration {category}.{key}",
-            extra={"category": category, "key": key, "source": source.value}
+            extra={"category": category, "key": key, "source": source.value, "team_id": team_id}
         )
 
         return self._to_response(config)
 
-    def get(self, category: str, key: str) -> Optional[ConfigItemResponse]:
+    def get(
+        self,
+        category: str,
+        key: str,
+        team_id: Optional[int] = None
+    ) -> Optional[ConfigItemResponse]:
         """
         Get configuration by category and key.
 
         Args:
             category: Configuration category
             key: Configuration key
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Configuration item or None if not found
         """
-        config = self.db.query(Configuration).filter(
+        query = self.db.query(Configuration).filter(
             Configuration.category == category,
             Configuration.key == key
-        ).first()
+        )
+        if team_id is not None:
+            query = query.filter(Configuration.team_id == team_id)
+
+        config = query.first()
 
         if not config:
             return None
 
         return self._to_response(config)
 
-    def get_by_id(self, config_id: int) -> ConfigItemResponse:
+    def get_by_id(
+        self,
+        config_id: int,
+        team_id: Optional[int] = None
+    ) -> ConfigItemResponse:
         """
         Get configuration by ID.
 
         Args:
             config_id: Configuration item ID
+            team_id: Team ID for tenant isolation (if provided, filters by team)
 
         Returns:
             Configuration item
 
         Raises:
-            NotFoundError: If configuration doesn't exist
+            NotFoundError: If configuration doesn't exist or belongs to different team
         """
-        config = self.db.query(Configuration).filter(
+        query = self.db.query(Configuration).filter(
             Configuration.id == config_id
-        ).first()
+        )
+        if team_id is not None:
+            query = query.filter(Configuration.team_id == team_id)
+
+        config = query.first()
 
         if not config:
             raise NotFoundError("Configuration", config_id)
@@ -180,18 +203,20 @@ class ConfigService:
 
     def list(
         self,
+        team_id: int,
         category_filter: Optional[str] = None
     ) -> List[ConfigItemResponse]:
         """
-        List all configuration items.
+        List all configuration items for a team.
 
         Args:
+            team_id: Team ID for tenant isolation
             category_filter: Optional category to filter by
 
         Returns:
             List of configuration items
         """
-        query = self.db.query(Configuration)
+        query = self.db.query(Configuration).filter(Configuration.team_id == team_id)
 
         if category_filter:
             if category_filter not in VALID_CATEGORIES:
@@ -209,6 +234,7 @@ class ConfigService:
         self,
         category: str,
         key: str,
+        team_id: int,
         value: Optional[Any] = None,
         description: Optional[str] = None
     ) -> ConfigItemResponse:
@@ -218,6 +244,7 @@ class ConfigService:
         Args:
             category: Configuration category
             key: Configuration key
+            team_id: Team ID for tenant isolation
             value: New value (optional)
             description: New description (optional)
 
@@ -225,11 +252,12 @@ class ConfigService:
             Updated configuration item
 
         Raises:
-            NotFoundError: If configuration doesn't exist
+            NotFoundError: If configuration doesn't exist or belongs to different team
         """
         config = self.db.query(Configuration).filter(
             Configuration.category == category,
-            Configuration.key == key
+            Configuration.key == key,
+            Configuration.team_id == team_id
         ).first()
 
         if not config:
@@ -252,23 +280,25 @@ class ConfigService:
 
         return self._to_response(config)
 
-    def delete(self, category: str, key: str) -> int:
+    def delete(self, category: str, key: str, team_id: int) -> int:
         """
         Delete a configuration item.
 
         Args:
             category: Configuration category
             key: Configuration key
+            team_id: Team ID for tenant isolation
 
         Returns:
             ID of deleted configuration
 
         Raises:
-            NotFoundError: If configuration doesn't exist
+            NotFoundError: If configuration doesn't exist or belongs to different team
         """
         config = self.db.query(Configuration).filter(
             Configuration.category == category,
-            Configuration.key == key
+            Configuration.key == key,
+            Configuration.team_id == team_id
         ).first()
 
         if not config:
@@ -289,9 +319,12 @@ class ConfigService:
     # Get All Configuration
     # =========================================================================
 
-    def get_all(self) -> Dict[str, Dict[str, Any]]:
+    def get_all(self, team_id: int) -> Dict[str, Dict[str, Any]]:
         """
-        Get all configuration organized by category.
+        Get all configuration organized by category for a team.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Dictionary with categories as keys
@@ -303,7 +336,9 @@ class ConfigService:
             "event_statuses": {}
         }
 
-        configs = self.db.query(Configuration).all()
+        configs = self.db.query(Configuration).filter(
+            Configuration.team_id == team_id
+        ).all()
 
         for config in configs:
             if config.category == "extensions":
@@ -317,12 +352,13 @@ class ConfigService:
 
         return result
 
-    def get_category(self, category: str) -> List[ConfigItemResponse]:
+    def get_category(self, category: str, team_id: int) -> List[ConfigItemResponse]:
         """
         Get all configuration items for a category.
 
         Args:
             category: Configuration category
+            team_id: Team ID for tenant isolation
 
         Returns:
             List of configuration items in category
@@ -333,17 +369,21 @@ class ConfigService:
         if category not in VALID_CATEGORIES:
             raise ValidationError(f"Invalid category: {category}")
 
-        return self.list(category_filter=category)
+        return self.list(team_id=team_id, category_filter=category)
 
-    def get_event_statuses(self) -> List[Dict[str, Any]]:
+    def get_event_statuses(self, team_id: int) -> List[Dict[str, Any]]:
         """
         Get event statuses ordered by their display_order value.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             List of status objects with key, label, and display_order
         """
         configs = self.db.query(Configuration).filter(
-            Configuration.category == "event_statuses"
+            Configuration.category == "event_statuses",
+            Configuration.team_id == team_id
         ).all()
 
         # Each status value_json contains: {"label": "...", "display_order": N}
@@ -367,17 +407,21 @@ class ConfigService:
     # Default extension keys that must always exist
     DEFAULT_EXTENSION_KEYS = ["photo_extensions", "metadata_extensions", "require_sidecar"]
 
-    def seed_default_extensions(self) -> None:
+    def seed_default_extensions(self, team_id: int) -> None:
         """
-        Ensure the default extension keys exist with empty arrays.
+        Ensure the default extension keys exist with empty arrays for a team.
 
         This method is idempotent - it only creates keys that don't exist.
         Called on application startup to ensure extensions are always editable.
+
+        Args:
+            team_id: Team ID for tenant isolation
         """
         for key in self.DEFAULT_EXTENSION_KEYS:
             existing = self.db.query(Configuration).filter(
                 Configuration.category == "extensions",
-                Configuration.key == key
+                Configuration.key == key,
+                Configuration.team_id == team_id
             ).first()
 
             if not existing:
@@ -386,10 +430,11 @@ class ConfigService:
                     key=key,
                     value_json=[],
                     description=f"Default {key.replace('_', ' ')}",
-                    source=ConfigSource.DATABASE
+                    source=ConfigSource.DATABASE,
+                    team_id=team_id
                 )
                 self.db.add(config)
-                logger.info(f"Seeded default extension key: {key}")
+                logger.info(f"Seeded default extension key: {key} for team {team_id}")
 
         self.db.commit()
 
@@ -400,6 +445,7 @@ class ConfigService:
     def start_import(
         self,
         yaml_content: str,
+        team_id: int,
         filename: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -407,6 +453,7 @@ class ConfigService:
 
         Args:
             yaml_content: YAML configuration content
+            team_id: Team ID for tenant isolation
             filename: Original filename (optional)
 
         Returns:
@@ -428,7 +475,7 @@ class ConfigService:
         items = self._parse_yaml_config(data)
 
         # Detect conflicts
-        conflicts = self.detect_conflicts(data)
+        conflicts = self.detect_conflicts(data, team_id)
 
         # Create session with GUID format
         session_id = GuidService.generate_guid("imp")
@@ -443,7 +490,8 @@ class ConfigService:
             "items": items,
             "total_items": len(items),
             "new_items": len(items) - len(conflicts),
-            "conflicts": conflicts
+            "conflicts": conflicts,
+            "team_id": team_id
         }
 
         logger.info(
@@ -451,7 +499,8 @@ class ConfigService:
             extra={
                 "session_id": session_id,
                 "total_items": len(items),
-                "conflicts": len(conflicts)
+                "conflicts": len(conflicts),
+                "team_id": team_id
             }
         )
 
@@ -502,6 +551,7 @@ class ConfigService:
             ValidationError: If unresolved conflicts remain
         """
         session = self.get_import_session(session_id)
+        team_id = session["team_id"]
 
         # Build resolution map
         resolution_map = {
@@ -539,7 +589,8 @@ class ConfigService:
             # Apply the item
             existing = self.db.query(Configuration).filter(
                 Configuration.category == category,
-                Configuration.key == key
+                Configuration.key == key,
+                Configuration.team_id == team_id
             ).first()
 
             if existing:
@@ -550,7 +601,8 @@ class ConfigService:
                     category=category,
                     key=key,
                     value_json=value,
-                    source=ConfigSource.YAML_IMPORT
+                    source=ConfigSource.YAML_IMPORT,
+                    team_id=team_id
                 )
                 self.db.add(config)
 
@@ -566,7 +618,8 @@ class ConfigService:
             extra={
                 "session_id": session_id,
                 "items_imported": items_imported,
-                "items_skipped": items_skipped
+                "items_skipped": items_skipped,
+                "team_id": team_id
             }
         )
 
@@ -594,12 +647,13 @@ class ConfigService:
 
         logger.info(f"Cancelled import session {session_id}")
 
-    def detect_conflicts(self, yaml_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def detect_conflicts(self, yaml_data: Dict[str, Any], team_id: int) -> List[Dict[str, Any]]:
         """
         Detect conflicts between YAML data and existing configuration.
 
         Args:
             yaml_data: Parsed YAML configuration
+            team_id: Team ID for tenant isolation
 
         Returns:
             List of conflicts
@@ -609,7 +663,7 @@ class ConfigService:
         # Check extensions
         for ext_key in ["photo_extensions", "metadata_extensions", "require_sidecar"]:
             if ext_key in yaml_data:
-                existing = self.get("extensions", ext_key)
+                existing = self.get("extensions", ext_key, team_id=team_id)
                 if existing and existing.value != yaml_data[ext_key]:
                     conflicts.append({
                         "category": "extensions",
@@ -623,7 +677,7 @@ class ConfigService:
         # Check camera mappings
         if "camera_mappings" in yaml_data:
             for camera_id, camera_info in yaml_data["camera_mappings"].items():
-                existing = self.get("cameras", camera_id)
+                existing = self.get("cameras", camera_id, team_id=team_id)
                 if existing and existing.value != camera_info:
                     conflicts.append({
                         "category": "cameras",
@@ -637,7 +691,7 @@ class ConfigService:
         # Check processing methods
         if "processing_methods" in yaml_data:
             for method_code, description in yaml_data["processing_methods"].items():
-                existing = self.get("processing_methods", method_code)
+                existing = self.get("processing_methods", method_code, team_id=team_id)
                 if existing and existing.value != description:
                     conflicts.append({
                         "category": "processing_methods",
@@ -654,14 +708,17 @@ class ConfigService:
     # Export Operations
     # =========================================================================
 
-    def export_to_yaml(self) -> str:
+    def export_to_yaml(self, team_id: int) -> str:
         """
-        Export all configuration to YAML format.
+        Export all configuration to YAML format for a team.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             YAML string
         """
-        all_config = self.get_all()
+        all_config = self.get_all(team_id)
 
         # Build YAML structure matching config.yaml format
         yaml_data = {}
@@ -685,34 +742,44 @@ class ConfigService:
     # Statistics
     # =========================================================================
 
-    def get_stats(self) -> ConfigStatsResponse:
+    def get_stats(self, team_id: int) -> ConfigStatsResponse:
         """
         Get configuration statistics for dashboard KPIs.
+
+        Args:
+            team_id: Team ID for tenant isolation
 
         Returns:
             Statistics including counts and source breakdown
         """
-        total = self.db.query(func.count(Configuration.id)).scalar() or 0
+        total = self.db.query(func.count(Configuration.id)).filter(
+            Configuration.team_id == team_id
+        ).scalar() or 0
 
         cameras = self.db.query(func.count(Configuration.id)).filter(
+            Configuration.team_id == team_id,
             Configuration.category == "cameras"
         ).scalar() or 0
 
         methods = self.db.query(func.count(Configuration.id)).filter(
+            Configuration.team_id == team_id,
             Configuration.category == "processing_methods"
         ).scalar() or 0
 
         # Source breakdown
         database_count = self.db.query(func.count(Configuration.id)).filter(
+            Configuration.team_id == team_id,
             Configuration.source == ConfigSource.DATABASE
         ).scalar() or 0
 
         yaml_count = self.db.query(func.count(Configuration.id)).filter(
+            Configuration.team_id == team_id,
             Configuration.source == ConfigSource.YAML_IMPORT
         ).scalar() or 0
 
         # Last import timestamp
         last_import = self.db.query(func.max(Configuration.updated_at)).filter(
+            Configuration.team_id == team_id,
             Configuration.source == ConfigSource.YAML_IMPORT
         ).scalar()
 
