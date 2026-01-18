@@ -25,6 +25,7 @@ from backend.src.models.mixins import GuidMixin
 if TYPE_CHECKING:
     from backend.src.models.user import User
     from backend.src.models.api_token import ApiToken
+    from backend.src.models.agent import Agent
 
 
 class Team(Base, GuidMixin):
@@ -97,6 +98,12 @@ class Team(Base, GuidMixin):
     )
     api_tokens = relationship(
         "ApiToken",
+        back_populates="team",
+        lazy="dynamic",
+        cascade="all, delete-orphan"
+    )
+    agents = relationship(
+        "Agent",
         back_populates="team",
         lazy="dynamic",
         cascade="all, delete-orphan"

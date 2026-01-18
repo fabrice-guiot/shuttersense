@@ -36,6 +36,20 @@ class ConnectorType(enum.Enum):
     SMB = "smb"
 
 
+class CredentialLocation(str, enum.Enum):
+    """
+    Credential storage location enumeration.
+
+    Specifies where connector credentials are stored:
+    - SERVER: Encrypted on server (default, current behavior)
+    - AGENT: Only on agent(s), NOT on server
+    - PENDING: No credentials yet, awaiting configuration
+    """
+    SERVER = "server"
+    AGENT = "agent"
+    PENDING = "pending"
+
+
 class Connector(Base, GuidMixin):
     """
     Remote storage connector model.
@@ -49,6 +63,7 @@ class Connector(Base, GuidMixin):
         guid: GUID string property (con_xxx, inherited from GuidMixin)
         name: User-friendly name (e.g., "Personal AWS Account", "Work GCS Project")
         type: Connector type (S3, GCS, SMB)
+        credential_location: Where credentials are stored (server/agent/pending)
         credentials: Encrypted JSON string containing authentication credentials
         metadata_json: Optional user-defined metadata (tags, notes)
         is_active: Whether connector is active (for soft deactivation)
@@ -91,8 +106,17 @@ class Connector(Base, GuidMixin):
     name = Column(String(255), unique=True, nullable=False, index=True)
     type = Column(Enum(ConnectorType, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
 
+    # Credential storage location (server/agent/pending)
+    credential_location = Column(
+        Enum(CredentialLocation, name="credential_location", create_constraint=True),
+        default=CredentialLocation.SERVER,
+        nullable=False,
+        index=True
+    )
+
     # Credentials (encrypted with Fernet via CredentialEncryptor)
-    credentials = Column(Text, nullable=False)
+    # Note: When credential_location=AGENT, this may be empty/null
+    credentials = Column(Text, nullable=True)  # Changed to nullable for AGENT/PENDING modes
 
     # Optional metadata
     metadata_json = Column(Text, nullable=True)  # JSON string for flexibility
@@ -124,6 +148,36 @@ class Connector(Base, GuidMixin):
         Index("idx_connector_active", "is_active"),
     )
 
+    @property
+    def has_server_credentials(self) -> bool:
+        """
+        Check if credentials are stored on the server.
+
+        Returns:
+            True if credential_location is SERVER
+        """
+        return self.credential_location == CredentialLocation.SERVER
+
+    @property
+    def requires_agent_credentials(self) -> bool:
+        """
+        Check if this connector requires agent-side credentials.
+
+        Returns:
+            True if credential_location is AGENT
+        """
+        return self.credential_location == CredentialLocation.AGENT
+
+    @property
+    def is_pending_configuration(self) -> bool:
+        """
+        Check if this connector is awaiting credential configuration.
+
+        Returns:
+            True if credential_location is PENDING
+        """
+        return self.credential_location == CredentialLocation.PENDING
+
     def __repr__(self) -> str:
         """String representation for debugging."""
         return (
@@ -131,6 +185,7 @@ class Connector(Base, GuidMixin):
             f"id={self.id}, "
             f"name='{self.name}', "
             f"type={self.type.value}, "
+            f"credential_location={self.credential_location.value}, "
             f"is_active={self.is_active}"
             f")>"
         )

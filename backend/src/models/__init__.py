@@ -36,8 +36,13 @@ class ToolType(enum.Enum):
 # This is required for Alembic autogenerate to detect models
 
 # Connector and Collection models (User Story 1)
-from backend.src.models.connector import Connector, ConnectorType
+from backend.src.models.connector import Connector, ConnectorType, CredentialLocation
 from backend.src.models.collection import Collection, CollectionType, CollectionState
+
+# Agent models (Issue #90 - Distributed Agent Architecture)
+from backend.src.models.agent import Agent, AgentStatus
+from backend.src.models.agent_registration_token import AgentRegistrationToken
+from backend.src.models.job import Job, JobStatus
 
 # Pipeline models (must be imported before AnalysisResult due to FK reference)
 from backend.src.models.pipeline import Pipeline
@@ -81,10 +86,17 @@ __all__ = [
     # Connector
     "Connector",
     "ConnectorType",
+    "CredentialLocation",
     # Collection
     "Collection",
     "CollectionType",
     "CollectionState",
+    # Agent (Issue #90)
+    "Agent",
+    "AgentStatus",
+    "AgentRegistrationToken",
+    "Job",
+    "JobStatus",
     # Pipeline
     "Pipeline",
     "PipelineHistory",

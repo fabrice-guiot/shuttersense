@@ -390,8 +390,8 @@ def custom_openapi():
     }
 
     # Apply security globally to all endpoints except public ones
-    # Public endpoints: /health, /api/version, /api/auth/*
-    public_paths = {"/health", "/api/version"}
+    # Public endpoints: /health, /api/version, /api/auth/*, /api/agent/v1/register
+    public_paths = {"/health", "/api/version", "/api/agent/v1/register"}
     public_prefixes = ["/api/auth/"]
 
     for path, path_item in openapi_schema.get("paths", {}).items():
@@ -611,6 +611,10 @@ app.include_router(tokens_router.router)
 
 # Admin routes (super admin only)
 app.include_router(admin_teams_router, prefix="/api/admin")
+
+# Agent API routes (Issue #90 - Distributed Agent Architecture)
+from backend.src.api.agent import router as agent_router
+app.include_router(agent_router)
 
 
 # ============================================================================

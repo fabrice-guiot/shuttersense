@@ -76,11 +76,18 @@ class Collection(Base, GuidMixin):
         is_accessible: Whether collection is currently accessible
         last_error: Last error message from accessibility test
         metadata_json: Optional user-defined metadata (tags, notes, custom fields)
+        bound_agent_id: Agent bound to this LOCAL collection (FK to agents)
+        auto_refresh: Enable auto-refresh scheduling (default true)
+        refresh_interval_hours: Hours between refreshes (NULL = no auto-refresh)
+        last_refresh_at: Last completed refresh timestamp
+        next_refresh_at: Next scheduled refresh time
         created_at: Creation timestamp
         updated_at: Last update timestamp
         connector: Related connector (many-to-one, NULL for local)
         pipeline: Related pipeline (many-to-one, NULL = use default)
+        bound_agent: Bound agent for LOCAL collections (many-to-one)
         analysis_results: Related analysis results (one-to-many, cascade delete)
+        jobs: Related jobs (one-to-many)
 
     Location Format:
         LOCAL: /absolute/path/to/photos
@@ -165,6 +172,20 @@ class Collection(Base, GuidMixin):
     file_count = Column(Integer, nullable=True)  # Total number of files
     image_count = Column(Integer, nullable=True)  # Number of images after grouping
 
+    # Agent binding (for LOCAL collections)
+    bound_agent_id = Column(
+        Integer,
+        ForeignKey("agents.id", name="fk_collections_bound_agent_id"),
+        nullable=True,
+        index=True
+    )
+
+    # Auto-refresh configuration
+    auto_refresh = Column(Boolean, default=True, nullable=False)
+    refresh_interval_hours = Column(Integer, nullable=True)  # NULL = no auto-refresh
+    last_refresh_at = Column(DateTime, nullable=True)
+    next_refresh_at = Column(DateTime, nullable=True, index=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -177,10 +198,20 @@ class Collection(Base, GuidMixin):
     # Relationships
     connector = relationship("Connector", back_populates="collections")
     pipeline = relationship("Pipeline", back_populates="collections")
+    bound_agent = relationship(
+        "Agent",
+        back_populates="bound_collections",
+        lazy="joined"
+    )
     analysis_results = relationship(
         "AnalysisResult",
         back_populates="collection",
         cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
+    jobs = relationship(
+        "Job",
+        back_populates="collection",
         lazy="dynamic"
     )
 
@@ -190,6 +221,51 @@ class Collection(Base, GuidMixin):
         Index("idx_collection_type", "type"),
         Index("idx_collection_accessible", "is_accessible"),
     )
+
+    @property
+    def is_local(self) -> bool:
+        """
+        Check if this is a local collection.
+
+        Returns:
+            True if collection type is LOCAL
+        """
+        return self.type == CollectionType.LOCAL
+
+    @property
+    def requires_bound_agent(self) -> bool:
+        """
+        Check if this collection requires a bound agent.
+
+        LOCAL collections require a bound agent for job execution.
+
+        Returns:
+            True if collection is LOCAL type
+        """
+        return self.type == CollectionType.LOCAL
+
+    @property
+    def has_bound_agent(self) -> bool:
+        """
+        Check if this collection has a bound agent.
+
+        Returns:
+            True if bound_agent_id is set
+        """
+        return self.bound_agent_id is not None
+
+    @property
+    def is_auto_refresh_enabled(self) -> bool:
+        """
+        Check if auto-refresh is enabled and configured.
+
+        Auto-refresh requires both auto_refresh=True and
+        refresh_interval_hours to be set.
+
+        Returns:
+            True if auto-refresh is fully configured
+        """
+        return self.auto_refresh and self.refresh_interval_hours is not None
 
     def get_effective_cache_ttl(self) -> int:
         """
