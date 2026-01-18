@@ -39,7 +39,7 @@ Key capabilities:
 - Agent runs without admin/root privileges
 - Heartbeat every 30 seconds, offline after 90 seconds
 **Scale/Scope**:
-- 11 user stories (4 P0, 4 P1, 3 P2)
+- 11 user stories (4 P0, 5 P1, 2 P2)
 - 80+ functional requirements (FR-100 through FR-600)
 - 5 new/enhanced database entities
 - 15+ new API endpoints

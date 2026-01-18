@@ -68,7 +68,7 @@
 
 ### Tests for Core Services
 
-- [ ] T022 Unit tests for AgentService in `backend/tests/unit/services/test_agent_service.py` (registration, heartbeat, SYSTEM user creation, offline detection)
+- [ ] T022 Unit tests for AgentService in `backend/tests/unit/services/test_agent_service.py` (registration, heartbeat, SYSTEM user creation, offline detection, job retry logic with max_retries)
 - [ ] T023 [P] Unit tests for agent authentication dependency in `backend/tests/unit/api/test_agent_auth.py` (valid key, invalid key, revoked agent)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
@@ -197,7 +197,7 @@
 - [ ] T082 [US4] Create WebSocket handler for agent progress in `backend/src/ws/agent_progress.py` at `/ws/agent/jobs/{job_guid}/progress`
 - [ ] T083 [US4] Implement server-to-frontend progress proxy in `backend/src/ws/agent_progress.py`
 - [ ] T084 [US4] Verify HMAC signature in job completion handler in `backend/src/api/agent/routes.py`
-- [ ] T085 [US4] Handle agent offline detection in AgentService (release jobs after 90s) in `backend/src/services/agent_service.py`
+- [ ] T085 [US4] Handle agent offline detection in AgentService (release jobs after 90s, increment retry_count, check max_retries before re-queuing) in `backend/src/services/agent_service.py`
 - [ ] T086 [US4] Create ConfigLoader protocol in `backend/src/services/config_loader.py` (interface definition)
 - [ ] T087 [P] [US4] Create YamlConfigLoader in `backend/src/services/config_loader.py` (existing implementation refactor)
 - [ ] T088 [P] [US4] Create DatabaseConfigLoader in `backend/src/services/config_loader.py` (existing implementation refactor)

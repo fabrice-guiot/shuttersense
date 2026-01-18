@@ -31,7 +31,7 @@ This is not a backward compatibility consideration - this feature is being imple
 - No fallback to server-side execution exists or will be implemented
 - Any future async processing features MUST be designed for agent execution
 
-This constraint will be documented in the project constitution (`docs/constitution.md`) and `CLAUDE.md` upon feature completion.
+This constraint will be documented in the project constitution (`.specify/memory/constitution.md`) and `CLAUDE.md` upon feature completion.
 
 ---
 
