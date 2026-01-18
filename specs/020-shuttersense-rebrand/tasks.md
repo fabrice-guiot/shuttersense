@@ -126,6 +126,12 @@
 - [x] T041 [P] [US5] Update PHOTO_ADMIN_SPA_DIST_PATH to SHUSAI_SPA_DIST_PATH in backend/src/utils/security_settings.py
 - [x] T042 [US5] Update backend/.env.example with all new SHUSAI_ variable names
 - [x] T042b [US5] Update SHUSAI_DB_URL in backend/src/db/database.py and migrations/env.py
+- [x] T042c [P] [US5] Update SHUSAI_DB_URL references in photo_stats.py help text
+- [x] T042d [P] [US5] Update SHUSAI_DB_URL references in photo_pairing.py help text
+- [x] T042e [P] [US5] Update SHUSAI_DB_URL references in pipeline_validation.py help text
+- [x] T042f [P] [US5] Update SHUSAI_DB_URL references in utils/config_manager.py
+- [x] T042g [US5] Update web_server.py with SHUSAI_* environment variables and ShutterSense branding
+- [x] T042h [US5] Update setup_master_key.py with SHUSAI_MASTER_KEY and ~/.shusai_master_key.txt
 
 **Checkpoint**: Environment variables use SHUSAI_ prefix consistently
 
@@ -139,13 +145,20 @@
 
 ### Implementation
 
-- [ ] T043 [P] Update module docstring in backend/src/main.py (comments referencing photo-admin)
-- [ ] T044 [P] Update module docstring in backend/src/middleware/__init__.py
-- [ ] T045 [P] Update module docstring in backend/src/config/__init__.py
-- [ ] T046 [P] Update module docstring in backend/src/auth/__init__.py
-- [ ] T047 [P] Update module docstring in backend/src/models/__init__.py
-- [ ] T048 [P] Update module docstring in backend/src/utils/__init__.py
-- [ ] T049 [P] Update comment in backend/src/services/api.ts (if exists, otherwise skip)
+- [x] T043 [P] Update module docstring in backend/src/main.py (comments referencing photo-admin)
+- [x] T044 [P] Update module docstring in backend/src/middleware/__init__.py
+- [x] T045 [P] Update module docstring in backend/src/config/__init__.py
+- [x] T046 [P] Update module docstring in backend/src/auth/__init__.py
+- [x] T047 [P] Update module docstring in backend/src/models/__init__.py
+- [x] T048 [P] Update module docstring in backend/src/utils/__init__.py
+- [x] T049 [P] Update comment in backend/src/services/api.ts (if exists, otherwise skip) - N/A (frontend file)
+- [x] T049b [P] Update backend/src/config/settings.py docstring
+- [x] T049c [P] Update backend/src/config/session.py docstring and session cookie name (shusai_session)
+- [x] T049d [P] Update backend/src/scripts/__init__.py docstring
+- [x] T049e [P] Update backend/src/scripts/seed_first_team.py messages
+- [x] T049f [P] Update backend/src/services/geocoding_service.py user agent (shuttersense-geocoder/1.0)
+- [x] T049g [P] Update backend/src/utils/logging_config.py logger prefix (shusai.*)
+- [x] T049h [P] Update backend/src/utils/pipeline_adapter.py author attribution
 
 **Checkpoint**: Backend code comments use ShutterSense branding
 
@@ -159,8 +172,10 @@
 
 ### Implementation
 
-- [ ] T050 [P] Update comment in frontend/src/services/api.ts referencing photo-admin backend
-- [ ] T051 [P] Update download filename from "photo-admin-config" to "shuttersense-config" in frontend/src/hooks/useConfig.ts
+- [x] T050 [P] Update comment in frontend/src/services/api.ts referencing photo-admin backend
+- [x] T051 [P] Update download filename from "photo-admin-config" to "shuttersense-config" in frontend/src/hooks/useConfig.ts
+- [x] T051b [P] Update frontend/src/App.tsx module comment header
+- [x] T051c [P] Update frontend/src/components/layout/MainLayout.tsx default pageTitle and comment
 
 **Checkpoint**: Frontend code uses ShutterSense branding
 
@@ -174,11 +189,11 @@
 
 ### Implementation
 
-- [ ] T052 [P] Update docstrings/comments in backend/tests/conftest.py
-- [ ] T053 [P] Update docstrings/comments in backend/tests/unit/test_crypto.py
-- [ ] T054 [P] Update docstrings/comments in backend/tests/unit/test_security_settings.py
-- [ ] T055 [P] Update docstrings/comments in tests/test_photo_stats.py
-- [ ] T056 [P] Update docstrings/comments in tests/test_photo_pairing.py
+- [x] T052 [P] Update environment variables in backend/tests/conftest.py (SHUSAI_MASTER_KEY, SHUSAI_DB_URL, SHUSAI_AUTHORIZED_LOCAL_ROOTS)
+- [x] T053 [P] Update environment variable references in backend/tests/unit/test_crypto.py (SHUSAI_MASTER_KEY)
+- [x] T054 [P] Update environment variable references in backend/tests/unit/test_security_settings.py (SHUSAI_MASTER_KEY, SHUSAI_DB_URL)
+- [x] T055 [P] Update tests/test_config_manager.py (SHUSAI_DB_URL)
+- [x] T056 [P] Update tests/test_version.py (SHUSAI_VERSION)
 
 **Checkpoint**: Test files use ShutterSense branding
 
@@ -192,9 +207,11 @@
 
 - [ ] T057 [US3] Update "photo-admin Development Guidelines" header to "ShutterSense.ai Development Guidelines" in CLAUDE.md
 - [ ] T058 [US3] Update "Photo Administration toolbox" description to "ShutterSense.ai" in CLAUDE.md
-- [ ] T059 [US3] Search/replace remaining "photo-admin" references in CLAUDE.md manual sections
+- [x] T059 [US3] Update SHUSAI_VERSION references in CLAUDE.md (CI/CD Integration section)
 
-**Checkpoint**: CLAUDE.md reflects ShutterSense.ai branding
+**Note**: The header and project overview in CLAUDE.md are auto-generated by speckit tooling. Manual updates to these sections may be overwritten. Remaining "photo-admin" references in auto-generated sections will be updated when specs are regenerated.
+
+**Checkpoint**: CLAUDE.md reflects ShutterSense.ai branding (partial - auto-generated sections pending)
 
 ---
 
