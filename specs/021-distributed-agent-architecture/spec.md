@@ -20,7 +20,31 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Agent Registration and Setup (Priority: P0)
+### User Story 1 - Agent Pool Status in Header (Priority: P0)
+
+**As** a user, **I want to** see the current status of the agent pool at a glance in the top header, **so that** I immediately know if agents are available to execute jobs.
+
+**Why this priority**: Agents are critical to the application - jobs will not run without at least one agent. Users need constant, immediate visibility into agent pool health without navigating away from their current page.
+
+**Independent Test**: Can be fully tested by observing the agent status icon in the header and verifying it updates in real-time as agents come online, go offline, or start/complete jobs.
+
+**Acceptance Scenarios**:
+
+1. **Given** I am on any page in the application, **When** I look at the top header bar, **Then** I see an agent status icon positioned between the notification bell and the user card
+
+2. **Given** all registered agents are offline (or no agents exist), **When** I look at the agent status icon, **Then** I see a red "Offline" badge indicating no agents are available
+
+3. **Given** at least one agent is online but no jobs are currently running, **When** I look at the agent status icon, **Then** I see a blue badge with the number of idle agents (e.g., "3" for 3 idle agents)
+
+4. **Given** at least one agent is currently executing a job, **When** I look at the agent status icon, **Then** I see a green badge with the number of currently running jobs (e.g., "2" for 2 jobs running)
+
+5. **Given** an agent's status changes (online/offline/starts job/completes job), **When** I am on any page, **Then** the header badge updates in real-time via WebSocket without page refresh
+
+6. **Given** I click the agent status icon, **When** navigating, **Then** I am taken to the Agent List page (this is the exclusive entry point to the agent list)
+
+---
+
+### User Story 2 - Agent Registration and Setup (Priority: P0)
 
 **As** a team administrator, **I want to** register an agent running on my local machine, **so that** jobs can be executed on my own hardware instead of the central server.
 
@@ -30,11 +54,11 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 **Acceptance Scenarios**:
 
-1. **Given** I have access to the Settings page, **When** I click "Generate Registration Token", **Then** a one-time registration token is created and displayed (expires in 24 hours)
+1. **Given** I am on the Agent List page (accessed via header icon), **When** I click "Generate Registration Token", **Then** a one-time registration token is created and displayed (expires in 24 hours)
 
 2. **Given** I have downloaded the agent binary and have a valid registration token, **When** I run `shuttersense-agent register --server <url> --token <token> --name "My Workstation"`, **Then** the agent registers with the server and receives an API key (shown once)
 
-3. **Given** I have a registered agent running, **When** I view the Agents list in Settings, **Then** I see the agent with its name, hostname, status (online/offline), capabilities, and last heartbeat timestamp
+3. **Given** I have a registered agent running, **When** I view the Agent List (via header icon), **Then** I see the agent with its name, hostname, status (online/offline), capabilities, and last heartbeat timestamp
 
 4. **Given** I have a running agent, **When** the agent sends heartbeats every 30 seconds, **Then** the server updates the agent's last_heartbeat and status
 
@@ -42,9 +66,11 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 6. **Given** I have a registered agent in the UI, **When** I click "Delete Agent", **Then** the agent is removed and its API key is revoked
 
+7. **Given** I look at the sidebar menu or Settings page, **When** I search for agent-related navigation, **Then** I find NO sidebar entry and NO Settings tab for agents (header icon is the exclusive entry point)
+
 ---
 
-### User Story 2 - Local Collection with Agent Binding (Priority: P0)
+### User Story 3 - Local Collection with Agent Binding (Priority: P0)
 
 **As** a photographer, **I want to** analyze my local photo collection via an agent, **so that** I don't need to upload files to the cloud.
 
@@ -68,7 +94,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 3 - Job Distribution and Execution (Priority: P0)
+### User Story 4 - Job Distribution and Execution (Priority: P0)
 
 **As** a team user, **I want** jobs to be automatically distributed to capable agents, **so that** analysis runs on the most appropriate hardware without manual intervention.
 
@@ -94,7 +120,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 4 - Connector Credential Modes (Priority: P1)
+### User Story 5 - Connector Credential Modes (Priority: P1)
 
 **As** a team administrator, **I want to** choose where connector credentials are stored (server vs agent), **so that** I can balance convenience with security requirements.
 
@@ -118,7 +144,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 5 - Agent Credential Configuration via CLI (Priority: P1)
+### User Story 6 - Agent Credential Configuration via CLI (Priority: P1)
 
 **As** an agent operator, **I want to** configure connector credentials locally via CLI, **so that** credentials never leave my machine.
 
@@ -142,7 +168,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 6 - SMB/Network Share via Agent (Priority: P1)
+### User Story 7 - SMB/Network Share via Agent (Priority: P1)
 
 **As** a photographer with NAS storage, **I want to** analyze photos on my local SMB share via an agent, **so that** I don't need to copy files to cloud storage.
 
@@ -160,7 +186,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 7 - Job Queue Visibility and Management (Priority: P1)
+### User Story 8 - Job Queue Visibility and Management (Priority: P1)
 
 **As** a team administrator, **I want to** see all queued and running jobs across agents, **so that** I can monitor workload and troubleshoot issues.
 
@@ -182,11 +208,11 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 8 - Agent Health Monitoring (Priority: P2)
+### User Story 9 - Agent Health Monitoring (Priority: P1)
 
-**As** a team administrator, **I want to** monitor agent health and resource usage, **so that** I can identify performance bottlenecks.
+**As** a team administrator, **I want to** monitor agent health and resource usage from the Agent List page, **so that** I can identify performance bottlenecks and troubleshoot issues.
 
-**Why this priority**: Monitoring enables proactive management but is not required for core functionality.
+**Why this priority**: Since agents are critical to application functionality and the Agent List is accessed via the prominent header icon, detailed monitoring capabilities are essential for operational management.
 
 **Independent Test**: Can be fully tested by viewing the agent dashboard and verifying real-time status updates.
 
@@ -202,7 +228,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 9 - Multi-Agent Job Distribution (Priority: P2)
+### User Story 10 - Multi-Agent Job Distribution (Priority: P2)
 
 **As** a studio owner with multiple workstations, **I want to** run agents on multiple machines, **so that** jobs are distributed across available compute.
 
@@ -220,7 +246,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
-### User Story 10 - Automatic Collection Refresh Scheduling (Priority: P2)
+### User Story 11 - Automatic Collection Refresh Scheduling (Priority: P2)
 
 **As** a team administrator, **I want** collection analysis to automatically re-run based on a configurable TTL, **so that** KPIs stay fresh without manual intervention.
 
@@ -393,6 +419,21 @@ This feature enables distributed job execution on user-owned hardware instead of
 - **FR-540.11**: Tools MUST accept ConfigLoader parameter instead of assuming config source
 - **FR-540.12**: Implementation MUST be backward compatible with existing CLI and server usage
 
+#### Header Agent Pool Status (FR-600)
+
+- **FR-600.1**: Top header MUST display an agent status icon between the notification bell and user card
+- **FR-600.2**: Agent status icon MUST be visible on every page of the application
+- **FR-600.3**: Agent status icon MUST display a colored badge indicating pool status
+- **FR-600.4**: Badge MUST show RED with "Offline" text when all agents are offline or no agents exist
+- **FR-600.5**: Badge MUST show BLUE with count of idle agents when agents are online but no jobs are running
+- **FR-600.6**: Badge MUST show GREEN with count of running jobs when at least one agent is executing a job
+- **FR-600.7**: Badge status MUST update in real-time via WebSocket without page refresh
+- **FR-600.8**: Clicking the agent status icon MUST navigate to the Agent List page
+- **FR-600.9**: Agent List page MUST be accessible ONLY via the header icon (no sidebar entry, no Settings tab)
+- **FR-600.10**: Agent registration token generation MUST be available from the Agent List page
+- **FR-600.11**: WebSocket MUST broadcast agent pool status changes to all connected frontend clients
+- **FR-600.12**: Backend MUST provide `/api/agents/pool-status` endpoint returning current pool state (online_count, idle_count, running_jobs_count)
+
 ---
 
 ### Key Entities
@@ -423,6 +464,8 @@ This feature enables distributed job execution on user-owned hardware instead of
 - **SC-008**: 100% of agent-only connector credentials remain on agent hardware (never transmitted to server)
 - **SC-009**: Users can complete agent registration and first job execution within 10 minutes following documentation
 - **SC-010**: System handles 1000 jobs per hour throughput with persistent queue
+- **SC-011**: Header agent status badge updates within 2 seconds of any agent status change (online/offline/job start/job complete)
+- **SC-012**: Users can access the Agent List from any page in one click via the header icon
 
 ---
 
