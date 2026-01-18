@@ -1,10 +1,10 @@
-# photo-admin Development Guidelines
+# ShutterSense.ai Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-01-09
 
 ## Project Overview
 
-Photo Administration toolbox - A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
+ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
 
 ### CLI Tools
 
