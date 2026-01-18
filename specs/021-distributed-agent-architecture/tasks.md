@@ -46,30 +46,30 @@
 
 ### Models
 
-- [ ] T009 Create Agent SQLAlchemy model in `backend/src/models/agent.py` with GuidMixin, AgentStatus enum
-- [ ] T010 [P] Create AgentRegistrationToken SQLAlchemy model in `backend/src/models/agent_registration_token.py` with GuidMixin
-- [ ] T011 Enhance Job model with agent routing fields in `backend/src/models/job.py` (bound_agent_id, agent_id, required_capabilities_json, scheduled_for, signing_secret_hash)
-- [ ] T012 Enhance JobStatus enum with SCHEDULED, ASSIGNED states in `backend/src/models/job.py`
-- [ ] T013 [P] Enhance Connector model with credential_location field in `backend/src/models/connector.py`
-- [ ] T014 [P] Enhance Collection model with agent binding fields in `backend/src/models/collection.py` (bound_agent_id, auto_refresh, refresh_interval_hours)
+- [x] T009 Create Agent SQLAlchemy model in `backend/src/models/agent.py` with GuidMixin, AgentStatus enum
+- [x] T010 [P] Create AgentRegistrationToken SQLAlchemy model in `backend/src/models/agent_registration_token.py` with GuidMixin
+- [x] T011 Enhance Job model with agent routing fields in `backend/src/models/job.py` (bound_agent_id, agent_id, required_capabilities_json, scheduled_for, signing_secret_hash)
+- [x] T012 Enhance JobStatus enum with SCHEDULED, ASSIGNED states in `backend/src/models/job.py`
+- [x] T013 [P] Enhance Connector model with credential_location field in `backend/src/models/connector.py`
+- [x] T014 [P] Enhance Collection model with agent binding fields in `backend/src/models/collection.py` (bound_agent_id, auto_refresh, refresh_interval_hours)
 
 ### Tests for Models
 
-- [ ] T015 [P] Unit tests for Agent model in `backend/tests/unit/models/test_agent.py` (GUID generation, status enum, validation)
-- [ ] T016 [P] Unit tests for AgentRegistrationToken model in `backend/tests/unit/models/test_agent_registration_token.py` (expiration, usage)
-- [ ] T017 [P] Unit tests for enhanced Job model in `backend/tests/unit/models/test_job_agent_fields.py` (new fields, status transitions)
+- [x] T015 [P] Unit tests for Agent model in `backend/tests/unit/models/test_agent.py` (GUID generation, status enum, validation)
+- [x] T016 [P] Unit tests for AgentRegistrationToken model in `backend/tests/unit/models/test_agent_registration_token.py` (expiration, usage)
+- [x] T017 [P] Unit tests for enhanced Job model in `backend/tests/unit/models/test_job_agent_fields.py` (new fields, status transitions)
 
 ### Core Services and API Infrastructure
 
-- [ ] T018 Create AgentService in `backend/src/services/agent_service.py` with registration, heartbeat, SYSTEM user creation
-- [ ] T019 [P] Add Agent Pydantic schemas in `backend/src/api/agent/schemas.py` (registration, heartbeat, responses)
-- [ ] T020 [P] Create agent API router mount in `backend/src/main.py` at `/api/agent/v1`
-- [ ] T021 Create agent authentication dependency in `backend/src/api/agent/dependencies.py` (API key validation from Bearer token)
+- [x] T018 Create AgentService in `backend/src/services/agent_service.py` with registration, heartbeat, SYSTEM user creation
+- [x] T019 [P] Add Agent Pydantic schemas in `backend/src/api/agent/schemas.py` (registration, heartbeat, responses)
+- [x] T020 [P] Create agent API router mount in `backend/src/main.py` at `/api/agent/v1`
+- [x] T021 Create agent authentication dependency in `backend/src/api/agent/dependencies.py` (API key validation from Bearer token)
 
 ### Tests for Core Services
 
-- [ ] T022 Unit tests for AgentService in `backend/tests/unit/services/test_agent_service.py` (registration, heartbeat, SYSTEM user creation, offline detection, job retry logic with max_retries)
-- [ ] T023 [P] Unit tests for agent authentication dependency in `backend/tests/unit/api/test_agent_auth.py` (valid key, invalid key, revoked agent)
+- [x] T022 Unit tests for AgentService in `backend/tests/unit/test_agent_service.py` (registration, heartbeat, SYSTEM user creation, offline detection)
+- [x] T023 [P] Unit tests for agent authentication dependency in `backend/tests/unit/test_agent_auth.py` (valid key, invalid key, revoked agent)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
