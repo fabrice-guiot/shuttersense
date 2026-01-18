@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Photo Administration Statistics Tool
+ShutterSense Photo Statistics Tool
 Scans folders containing DNG, TIFF, CR3, and XMP files and generates statistics.
 
 Copyright (C) 2024 Fabrice Guiot
@@ -473,7 +473,7 @@ def main():
         current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
 
     parser = argparse.ArgumentParser(
-        description="""PhotoStats - Analyze photo collections for orphaned files and sidecar issues.
+        description="""ShutterSense PhotoStats - Analyze photo collections for orphaned files and sidecar issues.
 
 Scans folders containing DNG, TIFF, CR3, and XMP files, analyzes file pairing,
 and generates comprehensive HTML reports with statistics and visualizations.""",

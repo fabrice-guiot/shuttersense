@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Photo Processing Pipeline Validation Tool
+ShutterSense Pipeline Validation Tool
 
 Validates photo collections against user-defined processing workflows (pipelines)
 defined as directed graphs of nodes. Integrates with Photo Pairing Tool to obtain
@@ -17,7 +17,7 @@ Usage:
     python3 pipeline_validation.py <folder_path> --force-regenerate
     python3 pipeline_validation.py --help
 
-Author: photo-admin project
+Author: ShutterSense.ai
 License: AGPL-3.0
 Version: 1.0.0
 """
@@ -315,7 +315,7 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser(
         prog='pipeline_validation',
-        description='Photo Processing Pipeline Validation Tool',
+        description='ShutterSense Pipeline Validation Tool',
         epilog=f"""
 Examples:
   # Validate photo collection against pipeline

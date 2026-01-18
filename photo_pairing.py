@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Photo Pairing Tool - Analyze photo filenames and generate analytics reports
+ShutterSense Photo Pairing Tool - Analyze photo filenames and generate analytics reports
 
 This tool analyzes photo collections based on filename patterns to:
 - Group related files (same photo in different formats)
@@ -719,7 +719,7 @@ def main():
         current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
 
     parser = argparse.ArgumentParser(
-        description="""Photo Pairing - Analyze photo filename patterns and group related files.
+        description="""ShutterSense Photo Pairing - Analyze photo filename patterns and group related files.
 
 Validates filenames against naming conventions, tracks camera usage, identifies
 processing methods, and generates interactive HTML reports with comprehensive analytics.""",
