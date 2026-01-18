@@ -217,7 +217,7 @@ class TestDatabaseModeInit:
     def test_database_mode_from_env_var(self, yaml_config_file, monkeypatch):
         """Test database mode detection from environment variable."""
         # Without env var, should use file mode
-        monkeypatch.delenv("PHOTO_ADMIN_DB_URL", raising=False)
+        monkeypatch.delenv("SHUSAI_DB_URL", raising=False)
         config = PhotoAdminConfig(config_path=yaml_config_file)
         assert config.is_database_mode is False
 
