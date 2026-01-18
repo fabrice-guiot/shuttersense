@@ -10,7 +10,6 @@ import {
   LayoutGrid,
   Workflow,
   FolderOpen,
-  Archive,
   Settings,
   X,
   ChevronLeft,
@@ -143,10 +142,19 @@ export function Sidebar({
       {/* Logo / Header */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
         <div className="flex items-center gap-2">
-          <Archive className="h-6 w-6 text-sidebar-primary" />
-          <span className="text-lg font-semibold text-sidebar-foreground">
-            Photo Admin
-          </span>
+          <img
+            src="/logo.svg"
+            alt="ShutterSense.ai"
+            className="h-8 w-auto"
+            onError={(e) => {
+              // Fallback to PNG if SVG fails
+              const target = e.target as HTMLImageElement
+              if (!target.src.endsWith('.png')) {
+                target.src = '/logo.png'
+              }
+            }}
+          />
+          <span className="text-sm font-semibold text-sidebar-foreground">ShutterSense.ai</span>
         </div>
         {/* Header buttons: Pin (for collapsed state) or Close (for mobile menu) */}
         <div className="flex items-center gap-1">

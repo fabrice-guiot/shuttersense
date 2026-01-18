@@ -13,7 +13,7 @@ import { OAuthButton } from '@/components/auth/OAuthButton'
 import { useAuth } from '@/hooks/useAuth'
 import { getProviders } from '@/services/auth'
 import { AUTH_ERROR_MESSAGES, type OAuthProvider, type AuthErrorCode } from '@/contracts/api/auth-api'
-import { AlertCircle, Camera, Loader2 } from 'lucide-react'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { AUTH_RETURN_URL_KEY } from '@/components/auth/AuthRedirectHandler'
 
 // ============================================================================
@@ -84,14 +84,21 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md bg-[#020409]">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Camera className="h-6 w-6 text-primary" />
+          <div className="mx-auto mb-4">
+            <picture>
+              <source srcSet="/logo-login.webp" type="image/webp" />
+              <img
+                src="/logo-login.png"
+                alt="ShutterSense.ai"
+                className="h-24 w-24 object-contain"
+              />
+            </picture>
           </div>
-          <CardTitle className="text-2xl">Photo Admin</CardTitle>
+          <CardTitle className="text-2xl">ShutterSense.ai</CardTitle>
           <CardDescription>
-            Sign in to manage your photo collections
+            Capture. Process. Analyze.
           </CardDescription>
         </CardHeader>
 

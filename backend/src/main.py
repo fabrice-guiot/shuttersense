@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import ValidationError
@@ -266,15 +267,16 @@ async def lifespan(app: FastAPI):
 init_logging()
 
 # Create FastAPI application
+# Note: docs_url and redoc_url are set to None to use custom endpoints with favicon
 app = FastAPI(
-    title="Photo Admin API",
-    description="Backend API for photo-admin web application. "
+    title="ShutterSense.ai API",
+    description="Backend API for ShutterSense.ai - Capture. Process. Analyze. "
                 "Supports remote photo collection management, pipeline configuration, "
                 "and analysis tool execution with persistent result storage.",
     version=__version__,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,
+    redoc_url=None,
     openapi_url="/openapi.json",
 )
 
@@ -414,6 +416,29 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
+# ============================================================================
+# Custom Documentation Endpoints with Favicon
+# ============================================================================
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    """Serve Swagger UI with custom favicon."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url or "/openapi.json",
+        title=f"{app.title} - Swagger UI",
+        swagger_favicon_url="/favicon.svg"
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc_html():
+    """Serve ReDoc with custom favicon."""
+    return get_redoc_html(
+        openapi_url=app.openapi_url or "/openapi.json",
+        title=f"{app.title} - ReDoc",
+        redoc_favicon_url="/favicon.svg"
+    )
+
+
 # Exception handlers
 
 
@@ -533,7 +558,7 @@ async def health_check() -> Dict[str, Any]:
     """
     return {
         "status": "healthy",
-        "service": "photo-admin-backend",
+        "service": "shuttersense-backend",
         "version": __version__,
     }
 
@@ -541,7 +566,7 @@ async def health_check() -> Dict[str, Any]:
 @app.get("/api/version", tags=["System"])
 async def get_version() -> Dict[str, str]:
     """
-    Get the current version of the photo-admin application.
+    Get the current version of the ShutterSense.ai application.
 
     This endpoint returns the version number synchronized with GitHub release tags.
     The version is automatically determined from Git tags during development and

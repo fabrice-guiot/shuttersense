@@ -1,7 +1,7 @@
 {
-  "name": "photo-admin-frontend",
+  "name": "shuttersense-frontend",
   "version": "1.0.0",
-  "description": "Photo Administration Web UI",
+  "description": "ShutterSense.ai Web UI - Capture. Process. Analyze.",
   "private": true,
   "type": "module",
   "scripts": {

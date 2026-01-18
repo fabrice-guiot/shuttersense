@@ -27,16 +27,16 @@
 
 **⚠️ DEPENDENCY**: User must provide logo source files before this phase can begin
 
-- [ ] T001 Create frontend/public/ directory for logo assets
-- [ ] T002 [P] Add logo.svg (primary sidebar logo, scalable) to frontend/public/logo.svg
-- [ ] T003 [P] Add logo.png (sidebar fallback, 200x50 / 400x100 @2x) to frontend/public/logo.png
-- [ ] T004 [P] Add logo-login.png (login page 3D logo, 512x512+) to frontend/public/logo-login.png
-- [ ] T005 [P] Add logo-login.webp (login page optimized) to frontend/public/logo-login.webp
-- [ ] T006 [P] Add favicon.ico (16/32/48 multi-res) to frontend/public/favicon.ico
-- [ ] T007 [P] Add favicon-192.png (Android Chrome icon) to frontend/public/favicon-192.png
-- [ ] T008 [P] Add apple-touch-icon.png (iOS icon, 180x180) to frontend/public/apple-touch-icon.png
-- [ ] T009 [P] Add favicon.svg (modern browsers) to frontend/public/favicon.svg
-- [ ] T010 [P] Add og-image.png (social sharing, 1200x630) to frontend/public/og-image.png
+- [x] T001 Create frontend/public/ directory for logo assets
+- [x] T002 [P] Add logo.svg (primary sidebar logo, scalable) to frontend/public/logo.svg
+- [x] T003 [P] Add logo.png (sidebar fallback, 200x50 / 400x100 @2x) to frontend/public/logo.png
+- [x] T004 [P] Add logo-login.png (login page 3D logo, 512x512+) to frontend/public/logo-login.png
+- [x] T005 [P] Add logo-login.webp (login page optimized) to frontend/public/logo-login.webp
+- [x] T006 [P] Add favicon.ico (16/32/48 multi-res) to frontend/public/favicon.ico
+- [x] T007 [P] Add favicon-192.png (Android Chrome icon) to frontend/public/favicon-192.png
+- [x] T008 [P] Add apple-touch-icon.png (iOS icon, 180x180) to frontend/public/apple-touch-icon.png
+- [x] T009 [P] Add favicon.svg (modern browsers) to frontend/public/favicon.svg
+- [x] T010 [P] Add og-image.png (social sharing, 1200x630) to frontend/public/og-image.png
 
 **Checkpoint**: All visual assets are in place - user story implementation can now begin
 
@@ -54,15 +54,15 @@
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Update page title from "Photo Admin" to "ShutterSense.ai" in frontend/index.html
-- [ ] T012 [US1] Add favicon links (ico, svg, apple-touch-icon, png-192) to frontend/index.html head section
-- [ ] T013 [US1] Add Open Graph meta tags (og:title, og:description, og:image) to frontend/index.html
-- [ ] T014 [US1] Update package name from "photo-admin-frontend" to "shuttersense-frontend" in frontend/package.json
-- [ ] T015 [US1] Update package description to "ShutterSense.ai Web UI" in frontend/package.json
-- [ ] T016 [US1] Update sidebar component to display logo.svg from public/ in frontend/src/components/layout/Sidebar.tsx
-- [ ] T017 [US1] Update login page to display logo-login.png with WebP fallback in frontend/src/pages/LoginPage.tsx (or equivalent auth component)
-- [ ] T018 [US1] Update FastAPI app title to "ShutterSense.ai API" in backend/src/main.py
-- [ ] T019 [US1] Update FastAPI app description to include ShutterSense.ai branding in backend/src/main.py
+- [x] T011 [US1] Update page title from "Photo Admin" to "ShutterSense.ai" in frontend/index.html
+- [x] T012 [US1] Add favicon links (ico, svg, apple-touch-icon, png-192) to frontend/index.html head section
+- [x] T013 [US1] Add Open Graph meta tags (og:title, og:description, og:image) to frontend/index.html
+- [x] T014 [US1] Update package name from "photo-admin-frontend" to "shuttersense-frontend" in frontend/package.json
+- [x] T015 [US1] Update package description to "ShutterSense.ai Web UI" in frontend/package.json
+- [x] T016 [US1] Update sidebar component to display logo.svg from public/ in frontend/src/components/layout/Sidebar.tsx
+- [x] T017 [US1] Update login page to display logo-login.png with WebP fallback in frontend/src/pages/LoginPage.tsx (or equivalent auth component)
+- [x] T018 [US1] Update FastAPI app title to "ShutterSense.ai API" in backend/src/main.py
+- [x] T019 [US1] Update FastAPI app description to include ShutterSense.ai branding in backend/src/main.py
 
 **Checkpoint**: Visual branding is complete - application displays ShutterSense.ai identity
 
