@@ -9,7 +9,7 @@ This tool implements tasks T010-T014 from the implementation plan:
 - T010: Interactive key generation using Fernet.generate_key()
 - T011: Platform-specific environment variable instructions
 - T012: Key validation function (Fernet format)
-- T013: Option to save key to ~/.photo_admin_master_key.txt with chmod 600
+- T013: Option to save key to ~/.shusai_master_key.txt with chmod 600
 - T014: Warnings about key loss consequences
 
 Usage:
@@ -35,8 +35,8 @@ except ImportError:
 class MasterKeyManager:
     """Manages master encryption key generation and configuration"""
 
-    ENV_VAR_NAME = "PHOTO_ADMIN_MASTER_KEY"
-    DEFAULT_KEY_FILE = Path.home() / ".photo_admin_master_key.txt"
+    ENV_VAR_NAME = "SHUSAI_MASTER_KEY"
+    DEFAULT_KEY_FILE = Path.home() / ".shusai_master_key.txt"
 
     def __init__(self):
         self.platform_name = platform.system()
@@ -141,12 +141,12 @@ class MasterKeyManager:
 
         Args:
             key: Encryption key to save
-            filepath: Path to save key (default: ~/.photo_admin_master_key.txt)
+            filepath: Path to save key (default: ~/.shusai_master_key.txt)
 
         Returns:
             tuple: (success, message)
 
-        Task: T013 - Option to save key to ~/.photo_admin_master_key.txt with chmod 600
+        Task: T013 - Option to save key to ~/.shusai_master_key.txt with chmod 600
         """
         if filepath is None:
             filepath = self.DEFAULT_KEY_FILE
@@ -179,24 +179,24 @@ class MasterKeyManager:
         warnings = []
 
         warnings.append(f"\n{'!'*70}")
-        warnings.append("⚠️  CRITICAL: MASTER KEY SECURITY WARNINGS")
+        warnings.append("CRITICAL: MASTER KEY SECURITY WARNINGS")
         warnings.append(f"{'!'*70}\n")
 
         warnings.append("CONSEQUENCES OF KEY LOSS:")
         warnings.append("-" * 70)
-        warnings.append("❌ ALL encrypted credentials will become PERMANENTLY UNRECOVERABLE")
-        warnings.append("❌ Remote collections (S3, GCS, SMB) will become INACCESSIBLE")
-        warnings.append("❌ You will need to RECREATE ALL CONNECTORS with new credentials")
-        warnings.append("❌ Historical analysis results may become UNUSABLE")
+        warnings.append("- ALL encrypted credentials will become PERMANENTLY UNRECOVERABLE")
+        warnings.append("- Remote collections (S3, GCS, SMB) will become INACCESSIBLE")
+        warnings.append("- You will need to RECREATE ALL CONNECTORS with new credentials")
+        warnings.append("- Historical analysis results may become UNUSABLE")
         warnings.append("")
 
         warnings.append("SECURITY BEST PRACTICES:")
         warnings.append("-" * 70)
-        warnings.append("✓ NEVER commit this key to version control")
-        warnings.append("✓ STORE a backup copy in a secure password manager")
-        warnings.append("✓ DO NOT share this key via email or chat")
-        warnings.append("✓ PROTECT the key file with strict permissions (chmod 600)")
-        warnings.append("✓ ROTATE the key periodically (use --rotate flag)")
+        warnings.append("- NEVER commit this key to version control")
+        warnings.append("- STORE a backup copy in a secure password manager")
+        warnings.append("- DO NOT share this key via email or chat")
+        warnings.append("- PROTECT the key file with strict permissions (chmod 600)")
+        warnings.append("- ROTATE the key periodically (use --rotate flag)")
         warnings.append("")
 
         warnings.append("KEY ROTATION:")
@@ -241,13 +241,13 @@ class MasterKeyManager:
         This is the main entry point that combines all tasks T010-T014.
         """
         print("\n" + "="*70)
-        print("Photo Admin - Master Encryption Key Setup")
+        print("ShutterSense - Master Encryption Key Setup")
         print("="*70 + "\n")
 
         # Check for existing key
         exists, existing_key, source = self.check_existing_key()
         if exists:
-            print(f"⚠️  Existing key detected in {source}")
+            print(f"Existing key detected in {source}")
             print("\nOptions:")
             print("  1. Keep existing key and show setup instructions")
             print("  2. Generate a new key (will invalidate existing credentials)")
@@ -259,14 +259,14 @@ class MasterKeyManager:
                     # Validate and show instructions for existing key
                     is_valid, error = self.validate_key(existing_key)
                     if not is_valid:
-                        print(f"\n❌ Existing key is invalid: {error}")
+                        print(f"\nExisting key is invalid: {error}")
                         print("Generating new key...\n")
                         break
-                    print("\n✓ Existing key is valid")
+                    print("\nExisting key is valid")
                     print(self.get_platform_instructions(existing_key))
                     return
                 elif choice == "2":
-                    print("\n⚠️  WARNING: Generating a new key will make existing encrypted")
+                    print("\nWARNING: Generating a new key will make existing encrypted")
                     print("credentials unrecoverable. Continue? (yes/no): ", end="")
                     confirm = input().strip().lower()
                     if confirm not in ("yes", "y"):
@@ -287,11 +287,11 @@ class MasterKeyManager:
         # Validate key (T012)
         is_valid, error = self.validate_key(key_str)
         if not is_valid:
-            print(f"\n❌ Generated key validation failed: {error}")
+            print(f"\nGenerated key validation failed: {error}")
             print("This should not happen. Please report this issue.")
             sys.exit(1)
 
-        print("✓ Key generated successfully\n")
+        print("Key generated successfully\n")
 
         # Display the key
         print("="*70)
@@ -311,18 +311,18 @@ class MasterKeyManager:
         if save_choice in ("yes", "y"):
             success, message = self.save_key_to_file(key_str)
             if success:
-                print(f"\n✓ {message}\n")
+                print(f"\n{message}\n")
             else:
-                print(f"\n❌ {message}\n")
+                print(f"\n{message}\n")
 
         # Show platform instructions (T011)
         print(self.get_platform_instructions(key_str))
 
-        print("\n✓ Setup complete!")
+        print("\nSetup complete!")
         print("\nNext steps:")
         print("1. Set the environment variable as shown above")
         print("2. Verify with: python3 web_server.py (will check for the key)")
-        print("3. Start using the photo-admin web application\n")
+        print("3. Start using the ShutterSense web application\n")
 
     def validate_existing_key(self):
         """Validate an existing key from environment or file."""
@@ -333,7 +333,7 @@ class MasterKeyManager:
         exists, key_value, source = self.check_existing_key()
 
         if not exists:
-            print(f"❌ No master key found in:")
+            print(f"No master key found in:")
             print(f"   - Environment variable: {self.ENV_VAR_NAME}")
             print(f"   - Key file: {self.DEFAULT_KEY_FILE}")
             print("\nRun without --validate flag to generate a new key.")
@@ -344,10 +344,10 @@ class MasterKeyManager:
         is_valid, error = self.validate_key(key_value)
 
         if is_valid:
-            print("✓ Key is valid and properly formatted")
+            print("Key is valid and properly formatted")
             print(f"\nKey preview: {key_value[:20]}...{key_value[-20:]}")
         else:
-            print(f"❌ Key validation failed: {error}")
+            print(f"Key validation failed: {error}")
             print("\nGenerate a new key with: python3 setup_master_key.py")
             sys.exit(1)
 
@@ -355,7 +355,7 @@ class MasterKeyManager:
 def main():
     """Main entry point for the master key setup tool."""
     parser = argparse.ArgumentParser(
-        description="Photo Admin Master Encryption Key Setup Tool",
+        description="ShutterSense Master Encryption Key Setup Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
