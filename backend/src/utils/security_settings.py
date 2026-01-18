@@ -6,12 +6,12 @@ These settings establish allowlists for filesystem access, providing defense
 against path traversal attacks.
 
 Environment Variables:
-    PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
+    SHUSAI_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
         paths for local collections (e.g., "/photos,/media,~/Pictures").
         User-provided collection paths must be subpaths of one of these roots.
         If not set, local collections are disabled for security.
 
-    PHOTO_ADMIN_SPA_DIST_PATH: Path to the SPA distribution directory.
+    SHUSAI_SPA_DIST_PATH: Path to the SPA distribution directory.
         If not set, defaults to frontend/dist relative to project root.
         Static file serving is restricted to this directory.
 
@@ -36,8 +36,8 @@ logger = get_logger("services")
 
 
 # Environment variable names
-ENV_AUTHORIZED_LOCAL_ROOTS = "PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS"
-ENV_SPA_DIST_PATH = "PHOTO_ADMIN_SPA_DIST_PATH"
+ENV_AUTHORIZED_LOCAL_ROOTS = "SHUSAI_AUTHORIZED_LOCAL_ROOTS"
+ENV_SPA_DIST_PATH = "SHUSAI_SPA_DIST_PATH"
 
 
 @lru_cache(maxsize=1)
@@ -45,7 +45,7 @@ def get_authorized_local_roots() -> List[Path]:
     """
     Get the list of authorized root paths for local collections.
 
-    Parses the PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS environment variable,
+    Parses the SHUSAI_AUTHORIZED_LOCAL_ROOTS environment variable,
     which should contain comma-separated paths. Each path is:
     - Expanded (~ -> home directory)
     - Resolved to absolute path
@@ -55,7 +55,7 @@ def get_authorized_local_roots() -> List[Path]:
         List of authorized root Path objects. Empty list if not configured.
 
     Example:
-        # Set env var: PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS="/photos,/media,~/Pictures"
+        # Set env var: SHUSAI_AUTHORIZED_LOCAL_ROOTS="/photos,/media,~/Pictures"
         >>> roots = get_authorized_local_roots()
         >>> print(roots)
         [PosixPath('/photos'), PosixPath('/media'), PosixPath('/home/user/Pictures')]
@@ -176,7 +176,7 @@ def get_spa_dist_path() -> Path:
     """
     Get the configured SPA distribution directory path.
 
-    Returns the path from PHOTO_ADMIN_SPA_DIST_PATH environment variable,
+    Returns the path from SHUSAI_SPA_DIST_PATH environment variable,
     or defaults to frontend/dist relative to the project root.
 
     Returns:

@@ -1,5 +1,5 @@
 """
-FastAPI application entry point for photo-admin backend.
+FastAPI application entry point for ShutterSense backend.
 
 This module initializes the FastAPI application with:
 - Application state (FileListingCache, JobQueue, CredentialEncryptor)
@@ -13,12 +13,12 @@ The application serves both the REST API (under /api/) and the React SPA
 from the same server, enabling single-port HTTPS deployment.
 
 Environment Variables:
-    PHOTO_ADMIN_MASTER_KEY: Master encryption key (required)
-    PHOTO_ADMIN_ENV: Environment (production/development, default: development)
-    PHOTO_ADMIN_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL, default: INFO)
-    PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
+    SHUSAI_MASTER_KEY: Master encryption key (required)
+    SHUSAI_ENV: Environment (production/development, default: development)
+    SHUSAI_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL, default: INFO)
+    SHUSAI_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
         paths for local collections (security - required for local collections)
-    PHOTO_ADMIN_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
+    SHUSAI_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
 """
 
 import os
@@ -172,7 +172,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 def validate_master_key() -> None:
     """
-    Validate that PHOTO_ADMIN_MASTER_KEY environment variable is set.
+    Validate that SHUSAI_MASTER_KEY environment variable is set.
 
     Raises:
         SystemExit: If master key is not set or invalid
@@ -181,12 +181,12 @@ def validate_master_key() -> None:
         This function is called during application startup to fail fast
         if the encryption key is missing.
     """
-    master_key = os.environ.get("PHOTO_ADMIN_MASTER_KEY")
+    master_key = os.environ.get("SHUSAI_MASTER_KEY")
 
     if not master_key:
         print(
             "\n" + "=" * 70,
-            "\nERROR: PHOTO_ADMIN_MASTER_KEY environment variable is not set.",
+            "\nERROR: SHUSAI_MASTER_KEY environment variable is not set.",
             "\n\nThe master encryption key is required to encrypt/decrypt remote",
             "\nstorage credentials stored in the database.",
             "\n\nTo set up the master key, run:",
@@ -203,7 +203,7 @@ def validate_master_key() -> None:
     except Exception as e:
         print(
             "\n" + "=" * 70,
-            "\nERROR: PHOTO_ADMIN_MASTER_KEY is invalid.",
+            "\nERROR: SHUSAI_MASTER_KEY is invalid.",
             f"\n\nEncryption validation failed: {e}",
             "\n\nThe key must be a valid Fernet key (44 characters, base64-encoded).",
             "\n\nTo generate a new key, run:",
@@ -231,10 +231,10 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger = get_logger("api")
-    logger.info("Starting photo-admin backend application")
+    logger.info("Starting ShutterSense backend application")
 
     # Validate master key
-    logger.info("Validating PHOTO_ADMIN_MASTER_KEY environment variable")
+    logger.info("Validating SHUSAI_MASTER_KEY environment variable")
     validate_master_key()
     logger.info("Master key validation successful")
 
@@ -617,7 +617,7 @@ app.include_router(admin_teams_router, prefix="/api/admin")
 # SPA Static Files Configuration
 # ============================================================================
 # Security: Use centralized security settings for SPA path configuration
-# The SPA dist path can be configured via PHOTO_ADMIN_SPA_DIST_PATH env var
+# The SPA dist path can be configured via SHUSAI_SPA_DIST_PATH env var
 # All static file paths are validated to prevent path traversal attacks
 from backend.src.utils.security_settings import (
     get_spa_dist_path,

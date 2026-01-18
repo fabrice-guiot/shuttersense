@@ -118,13 +118,14 @@
 
 ### Implementation for User Story 5
 
-- [ ] T036 [P] [US5] Update PHOTO_ADMIN_MASTER_KEY to SHUSAI_MASTER_KEY in backend/src/utils/crypto.py
-- [ ] T037 [P] [US5] Update PHOTO_ADMIN_LOG_LEVEL to SHUSAI_LOG_LEVEL in backend/src/utils/logging_config.py
-- [ ] T038 [P] [US5] Update PHOTO_ADMIN_LOG_DIR to SHUSAI_LOG_DIR in backend/src/utils/logging_config.py
-- [ ] T039 [P] [US5] Update PHOTO_ADMIN_ENV to SHUSAI_ENV in backend/src/utils/logging_config.py
-- [ ] T040 [P] [US5] Update PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS to SHUSAI_AUTHORIZED_LOCAL_ROOTS in backend/src/utils/security_settings.py
-- [ ] T041 [P] [US5] Update PHOTO_ADMIN_SPA_DIST_PATH to SHUSAI_SPA_DIST_PATH in backend/src/utils/security_settings.py
-- [ ] T042 [US5] Update backend/.env.example with all new SHUSAI_ variable names
+- [x] T036 [P] [US5] Update PHOTO_ADMIN_MASTER_KEY to SHUSAI_MASTER_KEY in backend/src/utils/crypto.py
+- [x] T037 [P] [US5] Update PHOTO_ADMIN_LOG_LEVEL to SHUSAI_LOG_LEVEL in backend/src/utils/logging_config.py
+- [x] T038 [P] [US5] Update PHOTO_ADMIN_LOG_DIR to SHUSAI_LOG_DIR in backend/src/utils/logging_config.py
+- [x] T039 [P] [US5] Update PHOTO_ADMIN_ENV to SHUSAI_ENV in backend/src/utils/logging_config.py
+- [x] T040 [P] [US5] Update PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS to SHUSAI_AUTHORIZED_LOCAL_ROOTS in backend/src/utils/security_settings.py
+- [x] T041 [P] [US5] Update PHOTO_ADMIN_SPA_DIST_PATH to SHUSAI_SPA_DIST_PATH in backend/src/utils/security_settings.py
+- [x] T042 [US5] Update backend/.env.example with all new SHUSAI_ variable names
+- [x] T042b [US5] Update SHUSAI_DB_URL in backend/src/db/database.py and migrations/env.py
 
 **Checkpoint**: Environment variables use SHUSAI_ prefix consistently
 

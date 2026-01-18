@@ -857,7 +857,7 @@ class CollectionService:
         1. Is under an authorized root directory (allowlist-based security)
         2. Exists and is readable
 
-        The authorized roots are configured via the PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS
+        The authorized roots are configured via the SHUSAI_AUTHORIZED_LOCAL_ROOTS
         environment variable. This provides defense against path traversal attacks.
 
         Args:
