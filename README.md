@@ -1,12 +1,16 @@
-# photo-admin
+# ShutterSense.ai
+
+<p align="center">
+  <img src="frontend/public/og-image.png" alt="ShutterSense.ai - Capture. Process. Analyze." width="600">
+</p>
 
 [![Tests](https://github.com/fabrice-guiot/photo-admin/actions/workflows/test.yml/badge.svg)](https://github.com/fabrice-guiot/photo-admin/actions/workflows/test.yml)
 
-Photo Administration toolbox - A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
+A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
 
 ## Overview
 
-photo-admin provides two main components:
+ShutterSense provides two main components:
 
 1. **CLI Tools** - Python utilities for photo collection analysis
 2. **Web Application** - Modern React/FastAPI application for remote collection management
@@ -51,8 +55,8 @@ python pipeline_validation.py /path/to/photos
 # Backend
 cd backend
 pip install -r requirements.txt
-export PHOTO_ADMIN_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-export PHOTO_ADMIN_DB_URL="postgresql://user:pass@localhost:5432/photo_admin"
+export SHUSAI_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+export SHUSAI_DB_URL="postgresql://user:pass@localhost:5432/shuttersense"
 alembic upgrade head
 uvicorn src.main:app --reload
 
@@ -86,7 +90,7 @@ Product requirement documents are stored in [docs/prd/](docs/prd/) for feature p
 ## Project Structure
 
 ```
-photo-admin/
+shuttersense/
 ├── photo_stats.py              # PhotoStats CLI tool
 ├── photo_pairing.py            # Photo Pairing CLI tool
 ├── pipeline_validation.py      # Pipeline Validation CLI tool
@@ -140,7 +144,7 @@ See [CLAUDE.md](CLAUDE.md) for development guidelines and coding standards.
 - **Google Cloud Storage** - GCS bucket integration
 - **SMB/CIFS** - Network share access
 
-### Calendar Events (Issue #39)
+### Calendar Events
 
 Plan and track photo-related events with comprehensive management:
 - **Events** - Create standalone events or event series with multiple dates

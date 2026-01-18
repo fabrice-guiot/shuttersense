@@ -96,15 +96,15 @@
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Rewrite README.md with ShutterSense.ai branding, tagline "Capture. Process. Analyze.", and production URL
-- [ ] T028 [US3] Update CHANGELOG.md header from "photo-admin" to "ShutterSense.ai"
-- [ ] T029 [P] [US3] Update docs/installation.md - replace all photo-admin references with ShutterSense
-- [ ] T030 [P] [US3] Update docs/configuration.md - replace all photo-admin references with ShutterSense
-- [ ] T031 [P] [US3] Update docs/photostats.md - replace all photo-admin references with ShutterSense
-- [ ] T032 [P] [US3] Update docs/photo-pairing.md - replace all photo-admin references with ShutterSense
-- [ ] T033 [P] [US3] Update docs/pipeline-validation.md - replace all photo-admin references with ShutterSense
-- [ ] T034 [P] [US3] Update backend/README.md - replace all photo-admin references with ShutterSense
-- [ ] T035 [P] [US3] Update config/README.md - replace all photo-admin references with ShutterSense
+- [x] T027 [US3] Rewrite README.md with ShutterSense.ai branding, tagline "Capture. Process. Analyze.", and production URL
+- [x] T028 [US3] Update CHANGELOG.md header from "photo-admin" to "ShutterSense.ai"
+- [x] T029 [P] [US3] Update docs/installation.md - replace all photo-admin references with ShutterSense
+- [x] T030 [P] [US3] Update docs/configuration.md - replace all photo-admin references with ShutterSense
+- [x] T031 [P] [US3] Update docs/photostats.md - replace all photo-admin references with ShutterSense
+- [x] T032 [P] [US3] Update docs/photo-pairing.md - replace all photo-admin references with ShutterSense
+- [x] T033 [P] [US3] Update docs/pipeline-validation.md - replace all photo-admin references with ShutterSense
+- [x] T034 [P] [US3] Update backend/README.md - replace all photo-admin references with ShutterSense
+- [x] T035 [P] [US3] Update config/README.md - replace all photo-admin references with ShutterSense
 
 **Checkpoint**: All documentation uses ShutterSense.ai branding
 

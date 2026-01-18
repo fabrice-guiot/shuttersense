@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to photo-admin will be documented in this file.
+All notable changes to ShutterSense.ai will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -85,7 +85,7 @@ These standalone CLI tools were available prior to v1.0.0:
 
 ## Migration from CLI-only Usage
 
-If you were using photo-admin as CLI tools only:
+If you were using ShutterSense as CLI tools only:
 
 1. **No changes required** - CLI tools continue to work as before
 2. **Optional database** - CLI tools can now read config from PostgreSQL
@@ -94,7 +94,7 @@ If you were using photo-admin as CLI tools only:
 To enable database configuration for CLI tools:
 
 ```bash
-export PHOTO_ADMIN_DB_URL="postgresql://user:pass@localhost:5432/photo_admin"
+export SHUSAI_DB_URL="postgresql://user:pass@localhost:5432/shuttersense"
 ```
 
 ---

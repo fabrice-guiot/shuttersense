@@ -1,6 +1,6 @@
-# Photo Admin Backend
+# ShutterSense Backend
 
-FastAPI backend for the photo-admin web application. Supports remote photo collection management, pipeline configuration, and analysis tool execution with persistent result storage.
+FastAPI backend for the ShutterSense web application. Supports remote photo collection management, pipeline configuration, and analysis tool execution with persistent result storage.
 
 ## Features
 
@@ -95,12 +95,12 @@ backend/
 3. **Set environment variables**:
    ```bash
    # Required
-   export PHOTO_ADMIN_MASTER_KEY="your-fernet-key-here"
-   export PHOTO_ADMIN_DB_URL="postgresql://user:password@localhost:5432/photo_admin"
+   export SHUSAI_MASTER_KEY="your-fernet-key-here"
+   export SHUSAI_DB_URL="postgresql://user:password@localhost:5432/shuttersense"
 
    # Optional
-   export PHOTO_ADMIN_ENV="development"  # or "production"
-   export PHOTO_ADMIN_LOG_LEVEL="INFO"   # DEBUG/INFO/WARNING/ERROR/CRITICAL
+   export SHUSAI_ENV="development"  # or "production"
+   export SHUSAI_LOG_LEVEL="INFO"   # DEBUG/INFO/WARNING/ERROR/CRITICAL
    ```
 
    To generate a master key:
@@ -335,22 +335,22 @@ alembic history
 
 ### Required
 
-- `PHOTO_ADMIN_MASTER_KEY` - Fernet encryption key for credential storage (44 chars, base64)
-- `PHOTO_ADMIN_DB_URL` - PostgreSQL connection URL
+- `SHUSAI_MASTER_KEY` - Fernet encryption key for credential storage (44 chars, base64)
+- `SHUSAI_DB_URL` - PostgreSQL connection URL
 
 ### Optional
 
-- `PHOTO_ADMIN_ENV` - Environment name (default: `development`)
-- `PHOTO_ADMIN_LOG_LEVEL` - Logging level (default: `INFO`)
+- `SHUSAI_ENV` - Environment name (default: `development`)
+- `SHUSAI_LOG_LEVEL` - Logging level (default: `INFO`)
 
 ### Example `.env` file
 
 ```bash
 # backend/.env
-PHOTO_ADMIN_MASTER_KEY=your-fernet-key-here
-PHOTO_ADMIN_DB_URL=postgresql://photo_admin:password@localhost:5432/photo_admin
-PHOTO_ADMIN_ENV=development
-PHOTO_ADMIN_LOG_LEVEL=DEBUG
+SHUSAI_MASTER_KEY=your-fernet-key-here
+SHUSAI_DB_URL=postgresql://shuttersense:password@localhost:5432/shuttersense
+SHUSAI_ENV=development
+SHUSAI_LOG_LEVEL=DEBUG
 ```
 
 Load with:
@@ -486,8 +486,8 @@ mypy backend/src
 
 ```bash
 # Ensure test environment variables are set
-export PHOTO_ADMIN_MASTER_KEY="test_key_12345678901234567890123456789012"
-export PHOTO_ADMIN_DB_URL="sqlite:///:memory:"
+export SHUSAI_MASTER_KEY="test_key_12345678901234567890123456789012"
+export SHUSAI_DB_URL="sqlite:///:memory:"
 
 # Run tests
 python -m pytest tests/
@@ -507,7 +507,7 @@ python -m pytest tests/ --cov=backend.src --cov-report=term-missing
 
 ```bash
 # Ensure you're running from the repository root
-cd /path/to/photo-admin
+cd /path/to/shuttersense
 python -m pytest backend/tests/
 ```
 
@@ -518,7 +518,7 @@ python -m pytest backend/tests/
 pg_isready
 
 # Verify connection URL
-psql $PHOTO_ADMIN_DB_URL
+psql $SHUSAI_DB_URL
 
 # Run migrations
 cd backend
