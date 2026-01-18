@@ -1,5 +1,5 @@
 """
-Configuration module for photo-admin backend.
+Configuration module for ShutterSense backend.
 
 Provides centralized configuration for:
 - OAuth providers (Google, Microsoft)

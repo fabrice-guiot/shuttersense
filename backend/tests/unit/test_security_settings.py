@@ -377,8 +377,8 @@ class TestCollectionPathSecurity:
             with patch.dict(os.environ, {}, clear=True):
                 os.environ.pop(ENV_AUTHORIZED_LOCAL_ROOTS, None)
                 # Keep required env vars
-                os.environ['PHOTO_ADMIN_MASTER_KEY'] = 'test-key-for-testing-123'
-                os.environ['PHOTO_ADMIN_DB_URL'] = 'sqlite:///:memory:'
+                os.environ['SHUSAI_MASTER_KEY'] = 'test-key-for-testing-123'
+                os.environ['SHUSAI_DB_URL'] = 'sqlite:///:memory:'
                 clear_security_settings_cache()
 
                 result = service.create_collection(

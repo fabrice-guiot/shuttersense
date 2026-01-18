@@ -1,5 +1,5 @@
 """
-Version management for photo-admin toolbox.
+Version management for ShutterSense toolbox.
 
 This module provides a single source of truth for version information across
 all CLI tools, backend API, and frontend. It automatically determines the version
@@ -13,7 +13,7 @@ Version Format:
 Usage:
     from version import __version__
 
-    print(f"photo-admin version {__version__}")
+    print(f"ShutterSense version {__version__}")
 """
 
 import subprocess
@@ -103,7 +103,7 @@ def _get_fallback_version() -> str:
     """
     # Try to get version from environment variable (useful for CI/CD)
     import os
-    env_version = os.environ.get('PHOTO_ADMIN_VERSION')
+    env_version = os.environ.get('SHUSAI_VERSION')
     if env_version:
         return env_version
 
@@ -113,7 +113,7 @@ def _get_fallback_version() -> str:
 
 def get_version() -> str:
     """
-    Get the current version of photo-admin.
+    Get the current version of ShutterSense.
 
     This function caches the result to avoid repeated subprocess calls.
     The version is determined from Git tags with the following logic:

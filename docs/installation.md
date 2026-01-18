@@ -1,6 +1,6 @@
 # Installation
 
-This guide covers installing the photo-admin toolbox, including CLI tools and the web application.
+This guide covers installing the ShutterSense toolbox, including CLI tools and the web application.
 
 ## Requirements
 
@@ -55,11 +55,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set required environment variables
-export PHOTO_ADMIN_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-export PHOTO_ADMIN_DB_URL="postgresql://user:password@localhost:5432/photo_admin"
+export SHUSAI_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+export SHUSAI_DB_URL="postgresql://user:password@localhost:5432/shuttersense"
 
 # Create database and run migrations
-createdb photo_admin  # Or use your PostgreSQL admin tool
+createdb shuttersense  # Or use your PostgreSQL admin tool
 alembic upgrade head
 
 # Start the backend server
@@ -93,15 +93,15 @@ The frontend will be available at http://localhost:3000
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `PHOTO_ADMIN_MASTER_KEY` | Fernet key for credential encryption | Generate with Python (see above) |
-| `PHOTO_ADMIN_DB_URL` | PostgreSQL connection URL | `postgresql://user:pass@localhost:5432/photo_admin` |
+| `SHUSAI_MASTER_KEY` | Fernet key for credential encryption | Generate with Python (see above) |
+| `SHUSAI_DB_URL` | PostgreSQL connection URL | `postgresql://user:pass@localhost:5432/shuttersense` |
 
 ### Optional
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PHOTO_ADMIN_ENV` | Environment name | `development` |
-| `PHOTO_ADMIN_LOG_LEVEL` | Logging level | `INFO` |
+| `SHUSAI_ENV` | Environment name | `development` |
+| `SHUSAI_LOG_LEVEL` | Logging level | `INFO` |
 
 ## Verify Installation
 
@@ -146,7 +146,7 @@ python --version
 ### Database Connection
 If you see database connection errors:
 1. Verify PostgreSQL is running: `pg_isready`
-2. Check connection URL: `psql $PHOTO_ADMIN_DB_URL`
+2. Check connection URL: `psql $SHUSAI_DB_URL`
 3. Run migrations: `cd backend && alembic upgrade head`
 
 ### Master Key Issues

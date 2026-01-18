@@ -38,7 +38,7 @@ class TestCredentialEncryptorInitialization:
 
     def test_init_from_environment(self):
         """Test initialization with master key from environment variable."""
-        # The test environment already has PHOTO_ADMIN_MASTER_KEY set
+        # The test environment already has SHUSAI_MASTER_KEY set
         encryptor = CredentialEncryptor()
 
         assert encryptor.cipher is not None
@@ -50,12 +50,12 @@ class TestCredentialEncryptorInitialization:
     def test_init_missing_master_key(self, monkeypatch):
         """Test initialization fails when master key is not available."""
         # Remove the environment variable
-        monkeypatch.delenv('PHOTO_ADMIN_MASTER_KEY', raising=False)
+        monkeypatch.delenv('SHUSAI_MASTER_KEY', raising=False)
 
         with pytest.raises(ValueError) as exc_info:
             CredentialEncryptor()
 
-        assert "PHOTO_ADMIN_MASTER_KEY environment variable not set" in str(exc_info.value)
+        assert "SHUSAI_MASTER_KEY environment variable not set" in str(exc_info.value)
         assert "setup_master_key.py" in str(exc_info.value)
 
     def test_init_invalid_master_key_format(self):
@@ -147,7 +147,7 @@ class TestDecryption:
             test_encryptor.decrypt(invalid_ciphertext)
 
         assert "Invalid master key or corrupted/tampered ciphertext" in str(exc_info.value)
-        assert "PHOTO_ADMIN_MASTER_KEY" in str(exc_info.value)
+        assert "SHUSAI_MASTER_KEY" in str(exc_info.value)
 
     def test_decrypt_with_wrong_key(self, test_encryptor):
         """Test decrypting with a different master key raises InvalidToken."""
@@ -339,13 +339,13 @@ class TestErrorMessages:
 
     def test_missing_env_var_error_message(self, monkeypatch):
         """Test error message for missing environment variable is helpful."""
-        monkeypatch.delenv('PHOTO_ADMIN_MASTER_KEY', raising=False)
+        monkeypatch.delenv('SHUSAI_MASTER_KEY', raising=False)
 
         with pytest.raises(ValueError) as exc_info:
             CredentialEncryptor()
 
         error_msg = str(exc_info.value)
-        assert "PHOTO_ADMIN_MASTER_KEY" in error_msg
+        assert "SHUSAI_MASTER_KEY" in error_msg
         assert "environment variable not set" in error_msg
         assert "setup_master_key.py" in error_msg
 
@@ -366,5 +366,5 @@ class TestErrorMessages:
 
         error_msg = str(exc_info.value)
         assert "Invalid master key or corrupted/tampered ciphertext" in error_msg
-        assert "PHOTO_ADMIN_MASTER_KEY" in error_msg
+        assert "SHUSAI_MASTER_KEY" in error_msg
         assert "setup_master_key.py --rotate" in error_msg

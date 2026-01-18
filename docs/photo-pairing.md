@@ -169,7 +169,7 @@ The generated HTML report includes:
 
 ## Configuration
 
-The tool uses the shared `PhotoAdminConfig` configuration system.
+The tool uses the shared ShutterSense configuration system.
 
 ### Config File Location
 

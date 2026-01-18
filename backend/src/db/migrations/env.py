@@ -42,8 +42,8 @@ except ImportError:
     target_metadata = None
 
 # Override sqlalchemy.url with environment variable if set
-if os.environ.get("PHOTO_ADMIN_DB_URL"):
-    config.set_main_option("sqlalchemy.url", os.environ["PHOTO_ADMIN_DB_URL"])
+if os.environ.get("SHUSAI_DB_URL"):
+    config.set_main_option("sqlalchemy.url", os.environ["SHUSAI_DB_URL"])
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

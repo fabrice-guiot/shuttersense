@@ -1,5 +1,5 @@
 /**
- * Axios API instance configured for photo-admin backend
+ * Axios API instance configured for ShutterSense backend
  *
  * Base configuration for all API calls to the FastAPI backend
  */

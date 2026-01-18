@@ -1,6 +1,6 @@
 # Configuration Directory
 
-This directory contains configuration files for the photo-admin tool.
+This directory contains configuration files for the ShutterSense CLI tools.
 
 ## Files
 

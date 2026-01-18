@@ -11,7 +11,7 @@ Key Components:
 - Graph traversal algorithms (with support for loops, branching, pairing nodes)
 - Validation logic for classifying image status
 
-Author: photo-admin project
+Author: ShutterSense.ai
 License: AGPL-3.0
 Version: 1.0.0
 """

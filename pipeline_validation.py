@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Photo Processing Pipeline Validation Tool
+ShutterSense Pipeline Validation Tool
 
 Validates photo collections against user-defined processing workflows (pipelines)
 defined as directed graphs of nodes. Integrates with Photo Pairing Tool to obtain
@@ -17,7 +17,7 @@ Usage:
     python3 pipeline_validation.py <folder_path> --force-regenerate
     python3 pipeline_validation.py --help
 
-Author: photo-admin project
+Author: ShutterSense.ai
 License: AGPL-3.0
 Version: 1.0.0
 """
@@ -307,15 +307,15 @@ def parse_arguments():
         argparse.Namespace: Parsed arguments
     """
     # Determine current configuration mode for help text
-    db_url = os.environ.get('PHOTO_ADMIN_DB_URL')
+    db_url = os.environ.get('SHUSAI_DB_URL')
     if db_url:
-        current_mode = "  ** CURRENT: Database mode (PHOTO_ADMIN_DB_URL is set) **"
+        current_mode = "  ** CURRENT: Database mode (SHUSAI_DB_URL is set) **"
     else:
-        current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
+        current_mode = "  ** CURRENT: File mode (SHUSAI_DB_URL is not set) **"
 
     parser = argparse.ArgumentParser(
         prog='pipeline_validation',
-        description='Photo Processing Pipeline Validation Tool',
+        description='ShutterSense Pipeline Validation Tool',
         epilog=f"""
 Examples:
   # Validate photo collection against pipeline
@@ -334,12 +334,12 @@ Configuration:
 {current_mode}
 
   Database Mode (when web UI is available):
-    Set PHOTO_ADMIN_DB_URL environment variable to use shared database config.
+    Set SHUSAI_DB_URL environment variable to use shared database config.
     Uses the default pipeline defined in the web UI Pipelines page.
-    Example: export PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
+    Example: export SHUSAI_DB_URL=postgresql://user:pass@host/db
 
   File Mode (standalone usage):
-    If PHOTO_ADMIN_DB_URL is not set, uses config/config.yaml by default.
+    If SHUSAI_DB_URL is not set, uses config/config.yaml by default.
     Use --config to specify a custom configuration file path.
     Pipeline is defined in the processing_pipelines section of the config file.
 

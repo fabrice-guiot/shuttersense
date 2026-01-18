@@ -46,7 +46,7 @@ def signal_handler(signum, frame):
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Seed the first team and admin user for photo-admin.",
+        description="Seed the first team and admin user for ShutterSense.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -258,7 +258,7 @@ def main():
         sys.exit(1)
 
     print("=" * 50)
-    print("Photo-Admin: First Team Seed Script")
+    print("ShutterSense: First Team Seed Script")
     print("=" * 50)
 
     team_guid, user_guid = seed_first_team(

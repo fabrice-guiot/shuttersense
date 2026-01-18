@@ -1,5 +1,5 @@
 """
-Authentication module for photo-admin backend.
+Authentication module for ShutterSense backend.
 
 This module provides OAuth 2.0 authentication with PKCE support
 for Google and Microsoft providers using Authlib.

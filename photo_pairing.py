@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Photo Pairing Tool - Analyze photo filenames and generate analytics reports
+ShutterSense Photo Pairing Tool - Analyze photo filenames and generate analytics reports
 
 This tool analyzes photo collections based on filename patterns to:
 - Group related files (same photo in different formats)
@@ -712,14 +712,14 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     # Determine current configuration mode for help text
-    db_url = os.environ.get('PHOTO_ADMIN_DB_URL')
+    db_url = os.environ.get('SHUSAI_DB_URL')
     if db_url:
-        current_mode = "  ** CURRENT: Database mode (PHOTO_ADMIN_DB_URL is set) **"
+        current_mode = "  ** CURRENT: Database mode (SHUSAI_DB_URL is set) **"
     else:
-        current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
+        current_mode = "  ** CURRENT: File mode (SHUSAI_DB_URL is not set) **"
 
     parser = argparse.ArgumentParser(
-        description="""Photo Pairing - Analyze photo filename patterns and group related files.
+        description="""ShutterSense Photo Pairing - Analyze photo filename patterns and group related files.
 
 Validates filenames against naming conventions, tracks camera usage, identifies
 processing methods, and generates interactive HTML reports with comprehensive analytics.""",
@@ -747,13 +747,13 @@ Configuration:
 {current_mode}
 
   Database Mode (when web UI is available):
-    Set PHOTO_ADMIN_DB_URL environment variable to use shared database config.
+    Set SHUSAI_DB_URL environment variable to use shared database config.
     This enables configuration changes made in the web UI to be used by CLI tools.
     New camera/method prompts will be saved to the database for web UI access.
-    Example: export PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
+    Example: export SHUSAI_DB_URL=postgresql://user:pass@host/db
 
   File Mode (standalone usage):
-    If PHOTO_ADMIN_DB_URL is not set, the tool searches for config files:
+    If SHUSAI_DB_URL is not set, the tool searches for config files:
       1. config/config.yaml (current directory)
       2. config.yaml (current directory)
       3. ~/.photo_stats_config.yaml (home directory)

@@ -22,15 +22,15 @@ from cryptography.fernet import Fernet
 _TEST_MASTER_KEY = Fernet.generate_key().decode('utf-8')
 
 # Set test environment variables before importing app modules
-os.environ['PHOTO_ADMIN_MASTER_KEY'] = _TEST_MASTER_KEY
-os.environ['PHOTO_ADMIN_DB_URL'] = 'sqlite:///:memory:'
+os.environ['SHUSAI_MASTER_KEY'] = _TEST_MASTER_KEY
+os.environ['SHUSAI_DB_URL'] = 'sqlite:///:memory:'
 
 # Allow temp directories for testing (covers both macOS and Linux paths)
 # macOS: /private/var/folders (resolved) and /var/folders (symlink)
 # Linux: /tmp
 import tempfile
 _temp_base = tempfile.gettempdir()
-os.environ['PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS'] = f'{_temp_base},/tmp,/private/var,/var'
+os.environ['SHUSAI_AUTHORIZED_LOCAL_ROOTS'] = f'{_temp_base},/tmp,/private/var,/var'
 
 # Disable rate limiters at import time to prevent rate limit exhaustion during tests
 from backend.src.main import limiter as _main_limiter

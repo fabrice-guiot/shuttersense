@@ -2,7 +2,7 @@
 """
 Configuration Manager for Photo Administration Tools
 
-This module provides configuration loading and management for the photo-admin toolbox.
+This module provides configuration loading and management for the ShutterSense.ai toolbox.
 It handles YAML configuration files with automatic discovery, interactive creation,
 and user prompts for missing camera/method mappings.
 
@@ -46,13 +46,13 @@ except ImportError:
 
 class PhotoAdminConfig:
     """
-    Manages configuration loading and updates for photo-admin tools.
+    Manages configuration loading and updates for ShutterSense.ai tools.
 
     Supports two modes:
     - File mode (default): Configuration stored in YAML file
     - Database mode: Configuration stored in PostgreSQL database
 
-    The mode is determined by the presence of PHOTO_ADMIN_DB_URL environment variable
+    The mode is determined by the presence of SHUSAI_DB_URL environment variable
     or explicit db_url parameter. Database mode requires SQLAlchemy.
 
     Example:
@@ -60,7 +60,7 @@ class PhotoAdminConfig:
         config = PhotoAdminConfig()
 
         # Database mode (via environment variable)
-        # Set PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
+        # Set SHUSAI_DB_URL=postgresql://user:pass@host/db
         config = PhotoAdminConfig()
 
         # Database mode (explicit)
@@ -75,7 +75,7 @@ class PhotoAdminConfig:
             config_path: Optional explicit path to config file.
                         If None, will search standard locations.
             db_url: Optional database connection URL. If provided, uses database mode.
-                   Can also be set via PHOTO_ADMIN_DB_URL environment variable.
+                   Can also be set via SHUSAI_DB_URL environment variable.
             use_database: Optional boolean to force database mode (True) or file mode (False).
                          If None, auto-detect based on db_url or environment variable.
 
@@ -84,7 +84,7 @@ class PhotoAdminConfig:
         """
         self._config_path = None
         self._db_session = None
-        self._db_url = db_url or os.environ.get('PHOTO_ADMIN_DB_URL')
+        self._db_url = db_url or os.environ.get('SHUSAI_DB_URL')
         self._use_database = use_database
 
         # Determine configuration mode
@@ -107,7 +107,7 @@ class PhotoAdminConfig:
         if not self._db_url:
             raise RuntimeError(
                 "Database URL required for database mode. "
-                "Set PHOTO_ADMIN_DB_URL environment variable or pass db_url parameter."
+                "Set SHUSAI_DB_URL environment variable or pass db_url parameter."
             )
 
         # Create database session
@@ -319,7 +319,7 @@ class PhotoAdminConfig:
             str: Description of where configuration is being loaded from
         """
         if self._use_database:
-            return f"Using database configuration (PHOTO_ADMIN_DB_URL is set)"
+            return f"Using database configuration (SHUSAI_DB_URL is set)"
         elif self._config_path:
             return f"Using file configuration: {self._config_path}"
         else:
@@ -391,7 +391,7 @@ class PhotoAdminConfig:
             print("\nError: Configuration template file not found.")
             print("The tool does not appear to be properly installed.")
             print("Please refer to the README for installation instructions:")
-            print("  https://github.com/fabrice-guiot/photo-admin/blob/main/README.md")
+            print("  https://github.com/fabrice-guiot/shuttersense/blob/main/README.md")
             sys.exit(1)
 
         # Determine where to create the config file

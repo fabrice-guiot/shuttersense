@@ -1,5 +1,5 @@
 """
-Session management configuration for photo-admin.
+Session management configuration for ShutterSense.
 
 Uses Starlette's SessionMiddleware with signed cookies.
 Configuration is loaded from environment variables.
@@ -41,7 +41,7 @@ class SessionSettings(BaseSettings):
 
     # Cookie configuration
     session_cookie_name: str = Field(
-        default="photo_admin_session",
+        default="shusai_session",
         validation_alias="SESSION_COOKIE_NAME"
     )
 

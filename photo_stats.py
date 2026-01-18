@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Photo Administration Statistics Tool
+ShutterSense Photo Statistics Tool
 Scans folders containing DNG, TIFF, CR3, and XMP files and generates statistics.
 
 Copyright (C) 2024 Fabrice Guiot
@@ -466,14 +466,14 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     # Determine current configuration mode for help text
-    db_url = os.environ.get('PHOTO_ADMIN_DB_URL')
+    db_url = os.environ.get('SHUSAI_DB_URL')
     if db_url:
-        current_mode = "  ** CURRENT: Database mode (PHOTO_ADMIN_DB_URL is set) **"
+        current_mode = "  ** CURRENT: Database mode (SHUSAI_DB_URL is set) **"
     else:
-        current_mode = "  ** CURRENT: File mode (PHOTO_ADMIN_DB_URL is not set) **"
+        current_mode = "  ** CURRENT: File mode (SHUSAI_DB_URL is not set) **"
 
     parser = argparse.ArgumentParser(
-        description="""PhotoStats - Analyze photo collections for orphaned files and sidecar issues.
+        description="""ShutterSense PhotoStats - Analyze photo collections for orphaned files and sidecar issues.
 
 Scans folders containing DNG, TIFF, CR3, and XMP files, analyzes file pairing,
 and generates comprehensive HTML reports with statistics and visualizations.""",
@@ -493,12 +493,12 @@ Configuration:
 {current_mode}
 
   Database Mode (when web UI is available):
-    Set PHOTO_ADMIN_DB_URL environment variable to use shared database config.
+    Set SHUSAI_DB_URL environment variable to use shared database config.
     This enables configuration changes made in the web UI to be used by CLI tools.
-    Example: export PHOTO_ADMIN_DB_URL=postgresql://user:pass@host/db
+    Example: export SHUSAI_DB_URL=postgresql://user:pass@host/db
 
   File Mode (standalone usage):
-    If PHOTO_ADMIN_DB_URL is not set, the tool searches for config files:
+    If SHUSAI_DB_URL is not set, the tool searches for config files:
       1. config/config.yaml (current directory)
       2. config.yaml (current directory)
       3. ~/.photo_stats_config.yaml (home directory)

@@ -1,5 +1,5 @@
 """
-FastAPI application entry point for photo-admin backend.
+FastAPI application entry point for ShutterSense backend.
 
 This module initializes the FastAPI application with:
 - Application state (FileListingCache, JobQueue, CredentialEncryptor)
@@ -13,12 +13,12 @@ The application serves both the REST API (under /api/) and the React SPA
 from the same server, enabling single-port HTTPS deployment.
 
 Environment Variables:
-    PHOTO_ADMIN_MASTER_KEY: Master encryption key (required)
-    PHOTO_ADMIN_ENV: Environment (production/development, default: development)
-    PHOTO_ADMIN_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL, default: INFO)
-    PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
+    SHUSAI_MASTER_KEY: Master encryption key (required)
+    SHUSAI_ENV: Environment (production/development, default: development)
+    SHUSAI_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL, default: INFO)
+    SHUSAI_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
         paths for local collections (security - required for local collections)
-    PHOTO_ADMIN_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
+    SHUSAI_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
 """
 
 import os
@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import ValidationError
@@ -171,7 +172,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 def validate_master_key() -> None:
     """
-    Validate that PHOTO_ADMIN_MASTER_KEY environment variable is set.
+    Validate that SHUSAI_MASTER_KEY environment variable is set.
 
     Raises:
         SystemExit: If master key is not set or invalid
@@ -180,12 +181,12 @@ def validate_master_key() -> None:
         This function is called during application startup to fail fast
         if the encryption key is missing.
     """
-    master_key = os.environ.get("PHOTO_ADMIN_MASTER_KEY")
+    master_key = os.environ.get("SHUSAI_MASTER_KEY")
 
     if not master_key:
         print(
             "\n" + "=" * 70,
-            "\nERROR: PHOTO_ADMIN_MASTER_KEY environment variable is not set.",
+            "\nERROR: SHUSAI_MASTER_KEY environment variable is not set.",
             "\n\nThe master encryption key is required to encrypt/decrypt remote",
             "\nstorage credentials stored in the database.",
             "\n\nTo set up the master key, run:",
@@ -202,7 +203,7 @@ def validate_master_key() -> None:
     except Exception as e:
         print(
             "\n" + "=" * 70,
-            "\nERROR: PHOTO_ADMIN_MASTER_KEY is invalid.",
+            "\nERROR: SHUSAI_MASTER_KEY is invalid.",
             f"\n\nEncryption validation failed: {e}",
             "\n\nThe key must be a valid Fernet key (44 characters, base64-encoded).",
             "\n\nTo generate a new key, run:",
@@ -230,10 +231,10 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger = get_logger("api")
-    logger.info("Starting photo-admin backend application")
+    logger.info("Starting ShutterSense backend application")
 
     # Validate master key
-    logger.info("Validating PHOTO_ADMIN_MASTER_KEY environment variable")
+    logger.info("Validating SHUSAI_MASTER_KEY environment variable")
     validate_master_key()
     logger.info("Master key validation successful")
 
@@ -254,27 +255,28 @@ async def lifespan(app: FastAPI):
     # for proper tenant isolation.
     logger.info("Skipping global configuration seeding (tenant-specific data is seeded per-team)")
 
-    logger.info("Photo-admin backend started successfully")
+    logger.info("ShutterSense backend started successfully")
 
     yield
 
     # Shutdown
-    logger.info("Shutting down photo-admin backend application")
+    logger.info("Shutting down ShutterSense backend application")
 
 
 # Initialize logging before creating app
 init_logging()
 
 # Create FastAPI application
+# Note: docs_url and redoc_url are set to None to use custom endpoints with favicon
 app = FastAPI(
-    title="Photo Admin API",
-    description="Backend API for photo-admin web application. "
+    title="ShutterSense.ai API",
+    description="Backend API for ShutterSense.ai - Capture. Process. Analyze. "
                 "Supports remote photo collection management, pipeline configuration, "
                 "and analysis tool execution with persistent result storage.",
     version=__version__,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,
+    redoc_url=None,
     openapi_url="/openapi.json",
 )
 
@@ -414,6 +416,29 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
+# ============================================================================
+# Custom Documentation Endpoints with Favicon
+# ============================================================================
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    """Serve Swagger UI with custom favicon."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url or "/openapi.json",
+        title=f"{app.title} - Swagger UI",
+        swagger_favicon_url="/favicon.svg"
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc_html():
+    """Serve ReDoc with custom favicon."""
+    return get_redoc_html(
+        openapi_url=app.openapi_url or "/openapi.json",
+        title=f"{app.title} - ReDoc",
+        redoc_favicon_url="/favicon.svg"
+    )
+
+
 # Exception handlers
 
 
@@ -533,7 +558,7 @@ async def health_check() -> Dict[str, Any]:
     """
     return {
         "status": "healthy",
-        "service": "photo-admin-backend",
+        "service": "shuttersense-backend",
         "version": __version__,
     }
 
@@ -541,7 +566,7 @@ async def health_check() -> Dict[str, Any]:
 @app.get("/api/version", tags=["System"])
 async def get_version() -> Dict[str, str]:
     """
-    Get the current version of the photo-admin application.
+    Get the current version of the ShutterSense.ai application.
 
     This endpoint returns the version number synchronized with GitHub release tags.
     The version is automatically determined from Git tags during development and
@@ -592,7 +617,7 @@ app.include_router(admin_teams_router, prefix="/api/admin")
 # SPA Static Files Configuration
 # ============================================================================
 # Security: Use centralized security settings for SPA path configuration
-# The SPA dist path can be configured via PHOTO_ADMIN_SPA_DIST_PATH env var
+# The SPA dist path can be configured via SHUSAI_SPA_DIST_PATH env var
 # All static file paths are validated to prevent path traversal attacks
 from backend.src.utils.security_settings import (
     get_spa_dist_path,

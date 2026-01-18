@@ -1,5 +1,5 @@
 """
-Utility modules for photo-admin backend.
+Utility modules for ShutterSense backend.
 
 This package contains shared utilities used across the application:
 - crypto: Credential encryption/decryption (Fernet)

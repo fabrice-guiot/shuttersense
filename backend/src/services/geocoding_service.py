@@ -55,7 +55,7 @@ class GeocodingService:
     """
 
     # Default user agent for Nominatim (required by usage policy)
-    DEFAULT_USER_AGENT = "photo-admin-geocoder/1.0"
+    DEFAULT_USER_AGENT = "shuttersense-geocoder/1.0"
 
     # Nominatim timeout in seconds
     DEFAULT_TIMEOUT = 10

@@ -2,7 +2,7 @@
 Database connection and session management.
 
 This module provides SQLAlchemy engine configuration for PostgreSQL
-with connection pooling optimized for the photo-admin application.
+with connection pooling optimized for the ShutterSense application.
 """
 
 import os
@@ -24,8 +24,8 @@ if env_path.exists():
 
 # Database URL from environment variable
 DATABASE_URL = os.environ.get(
-    "PHOTO_ADMIN_DB_URL",
-    "postgresql://user:password@localhost:5432/photo_admin"
+    "SHUSAI_DB_URL",
+    "postgresql://user:password@localhost:5432/shuttersense"
 )
 
 

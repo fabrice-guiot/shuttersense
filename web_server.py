@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CLI tool to start the photo-admin FastAPI web server.
+CLI tool to start the ShutterSense FastAPI web server.
 
 This script provides a convenient command-line interface to start the
 FastAPI backend server using uvicorn. It validates the master encryption
@@ -13,14 +13,14 @@ Usage:
     python3 web_server.py --reload           # Enable auto-reload for development
 
 Environment Variables:
-    PHOTO_ADMIN_MASTER_KEY: Master encryption key (required)
-    PHOTO_ADMIN_DB_URL: PostgreSQL database URL
-    PHOTO_ADMIN_ENV: Environment (production/development, default: development)
-    PHOTO_ADMIN_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+    SHUSAI_MASTER_KEY: Master encryption key (required)
+    SHUSAI_DB_URL: PostgreSQL database URL
+    SHUSAI_ENV: Environment (production/development, default: development)
+    SHUSAI_LOG_LEVEL: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
 
 Example:
     # Start development server with auto-reload
-    export PHOTO_ADMIN_MASTER_KEY="your-key-here"
+    export SHUSAI_MASTER_KEY="your-key-here"
     python3 web_server.py --reload
 
     # Start production server on custom port
@@ -63,7 +63,7 @@ def load_env_file() -> None:
 
 def validate_master_key() -> None:
     """
-    Validate that PHOTO_ADMIN_MASTER_KEY environment variable is set.
+    Validate that SHUSAI_MASTER_KEY environment variable is set.
 
     Exits with error code 1 if the master key is not set, providing
     clear instructions on how to set it up.
@@ -71,12 +71,12 @@ def validate_master_key() -> None:
     Raises:
         SystemExit: If master key is not set
     """
-    master_key = os.environ.get("PHOTO_ADMIN_MASTER_KEY")
+    master_key = os.environ.get("SHUSAI_MASTER_KEY")
 
     if not master_key:
         print(
             "\n" + "=" * 70,
-            "\nERROR: PHOTO_ADMIN_MASTER_KEY environment variable is not set.",
+            "\nERROR: SHUSAI_MASTER_KEY environment variable is not set.",
             "\n\nThe master encryption key is required to start the web server.",
             "\nThis key is used to encrypt/decrypt remote storage credentials",
             "\nstored in the database.",
@@ -84,9 +84,9 @@ def validate_master_key() -> None:
             "\n  python3 setup_master_key.py",
             "\n\nThis will guide you through generating and configuring the key.",
             "\n\nAfter running setup_master_key.py, set the environment variable:",
-            "\n  export PHOTO_ADMIN_MASTER_KEY='your-key-here'",
+            "\n  export SHUSAI_MASTER_KEY='your-key-here'",
             "\n\nOr add it to your shell configuration file (~/.bashrc, ~/.zshrc):",
-            "\n  echo 'export PHOTO_ADMIN_MASTER_KEY=\"your-key-here\"' >> ~/.bashrc",
+            "\n  echo 'export SHUSAI_MASTER_KEY=\"your-key-here\"' >> ~/.bashrc",
             "\n" + "=" * 70 + "\n",
             file=sys.stderr
         )
@@ -106,7 +106,7 @@ def parse_arguments() -> argparse.Namespace:
         --reload: Enable auto-reload for development (default: False)
     """
     parser = argparse.ArgumentParser(
-        description="Start the photo-admin FastAPI web server",
+        description="Start the ShutterSense FastAPI web server",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -123,10 +123,10 @@ Examples:
   python3 web_server.py --host 0.0.0.0 --port 8000
 
 Environment Variables:
-  PHOTO_ADMIN_MASTER_KEY      Master encryption key (required)
-  PHOTO_ADMIN_DB_URL          PostgreSQL database URL
-  PHOTO_ADMIN_ENV             Environment (production/development)
-  PHOTO_ADMIN_LOG_LEVEL       Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+  SHUSAI_MASTER_KEY      Master encryption key (required)
+  SHUSAI_DB_URL          PostgreSQL database URL
+  SHUSAI_ENV             Environment (production/development)
+  SHUSAI_LOG_LEVEL       Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
 
 For more information, see docs/quickstart.md
         """
@@ -195,7 +195,7 @@ def main() -> None:
         sys.exit(2)
 
     # Print startup information
-    print(f"\nStarting photo-admin web server...")
+    print(f"\nStarting ShutterSense web server...")
     print(f"Host: {args.host}")
     print(f"Port: {args.port}")
     print(f"Auto-reload: {'enabled' if args.reload else 'disabled'}")

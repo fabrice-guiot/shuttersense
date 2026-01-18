@@ -1,10 +1,10 @@
-# photo-admin Development Guidelines
+# ShutterSense.ai Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-01-09
 
 ## Project Overview
 
-Photo Administration toolbox - A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
+ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
 
 ### CLI Tools
 
@@ -29,6 +29,8 @@ Photo Administration toolbox - A comprehensive solution for analyzing, managing,
 - N/A (frontend-only feature, uses existing event data from backend) (016-mobile-calendar-view)
 - Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React icons (018-event-deadline-calendar)
 - Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Authlib (OAuth), PyJWT, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (019-user-tenancy)
+- Python 3.10+ (Backend/CLI), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, React 18.3.1, Tailwind CSS 4.x, shadcn/ui (020-shuttersense-rebrand)
+- PostgreSQL 12+ (no schema changes needed for rebrand) (020-shuttersense-rebrand)
 
 ### Core Stack
 - **Python 3.10+** - Backend and CLI tools (required for match/case syntax)
@@ -90,7 +92,7 @@ The `version.py` module provides a single source of truth for version informatio
 - **Tagged releases**: Returns clean tag (e.g., `v1.2.3`)
 - **Development builds**: Returns tag with suffix (e.g., `v1.2.3-dev.5+a1b2c3d`)
 - **No tags**: Returns development version (e.g., `v0.0.0-dev+a1b2c3d`)
-- **No Git**: Falls back to `PHOTO_ADMIN_VERSION` environment variable or `v0.0.0-dev+unknown`
+- **No Git**: Falls back to `SHUSAI_VERSION` environment variable or `v0.0.0-dev+unknown`
 
 ### Version Display Locations
 
@@ -144,8 +146,8 @@ Example: `v1.2.3-dev.5+a1b2c3d` means:
 ### CI/CD Integration
 
 For CI/CD environments without Git:
-- Set `PHOTO_ADMIN_VERSION` environment variable
-- Example: `export PHOTO_ADMIN_VERSION=v1.5.0-build.42`
+- Set `SHUSAI_VERSION` environment variable
+- Example: `export SHUSAI_VERSION=v1.5.0-build.42`
 
 ### Creating Releases
 
@@ -483,9 +485,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 020-shuttersense-rebrand: Added Python 3.10+ (Backend/CLI), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, React 18.3.1, Tailwind CSS 4.x, shadcn/ui
 - 019-user-tenancy: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Authlib (OAuth), PyJWT, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
 - 018-event-deadline-calendar: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React icons
-- 016-mobile-calendar-view: Added TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 

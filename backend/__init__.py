@@ -1,5 +1,5 @@
 """
-Photo Admin Backend Package.
+ShutterSense.ai Backend Package.
 
-This package contains the FastAPI backend application for photo-admin.
+This package contains the FastAPI backend application for ShutterSense.ai.
 """

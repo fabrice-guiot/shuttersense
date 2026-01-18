@@ -295,7 +295,7 @@ class TestServiceInitialization:
     def test_default_user_agent(self):
         """Test default user agent is set."""
         service = GeocodingService()
-        assert service.user_agent == "photo-admin-geocoder/1.0"
+        assert service.user_agent == "shuttersense-geocoder/1.0"
 
     def test_custom_user_agent(self):
         """Test custom user agent can be provided."""

@@ -1,7 +1,7 @@
 """
 HTML Report Renderer using Jinja2 templates.
 
-This module provides centralized HTML report generation for all photo-admin tools,
+This module provides centralized HTML report generation for all ShutterSense.ai tools,
 ensuring consistent visual design across the toolbox.
 """
 
@@ -77,7 +77,7 @@ class ReportRenderer:
     Renders HTML reports using Jinja2 templates.
 
     This class provides a centralized way to generate consistent HTML reports
-    across all photo-admin tools.
+    across all ShutterSense.ai tools.
     """
 
     def __init__(self, template_dir: Optional[str] = None):

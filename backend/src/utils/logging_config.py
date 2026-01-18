@@ -1,5 +1,5 @@
 """
-Structured logging configuration for photo-admin backend.
+Structured logging configuration for ShutterSense backend.
 
 Provides JSON-formatted logging with file rotation for production environments
 and human-readable console logging for development.
@@ -82,10 +82,10 @@ def _get_log_level() -> int:
         Log level constant (logging.DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
     Environment Variables:
-        PHOTO_ADMIN_LOG_LEVEL: Log level string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-                               Defaults to INFO
+        SHUSAI_LOG_LEVEL: Log level string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                          Defaults to INFO
     """
-    level_str = os.environ.get("PHOTO_ADMIN_LOG_LEVEL", "INFO").upper()
+    level_str = os.environ.get("SHUSAI_LOG_LEVEL", "INFO").upper()
     return getattr(logging, level_str, logging.INFO)
 
 
@@ -97,10 +97,10 @@ def _get_log_dir() -> Path:
         Path to log directory
 
     Environment Variables:
-        PHOTO_ADMIN_LOG_DIR: Custom log directory path
-                             Defaults to ./logs (relative to CWD)
+        SHUSAI_LOG_DIR: Custom log directory path
+                        Defaults to ./logs (relative to CWD)
     """
-    log_dir_str = os.environ.get("PHOTO_ADMIN_LOG_DIR", "logs")
+    log_dir_str = os.environ.get("SHUSAI_LOG_DIR", "logs")
     log_dir = Path(log_dir_str)
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
@@ -114,19 +114,19 @@ def _is_production() -> bool:
         True if production, False if development
 
     Environment Variables:
-        PHOTO_ADMIN_ENV: Environment name (production, development, test)
-                         Defaults to development
+        SHUSAI_ENV: Environment name (production, development, test)
+                    Defaults to development
     """
-    env = os.environ.get("PHOTO_ADMIN_ENV", "development").lower()
+    env = os.environ.get("SHUSAI_ENV", "development").lower()
     return env == "production"
 
 
 def configure_logging() -> Dict[str, logging.Logger]:
     """
-    Configure structured logging for the photo-admin backend.
+    Configure structured logging for the ShutterSense backend.
 
     Behavior:
-    - Production (PHOTO_ADMIN_ENV=production):
+    - Production (SHUSAI_ENV=production):
       * JSON-formatted logs to files with rotation
       * Separate files per logger: api.log, services.log, tools.log, db.log
       * File rotation: 10MB max size, 5 backup files
@@ -157,7 +157,7 @@ def configure_logging() -> Dict[str, logging.Logger]:
     loggers = {}
 
     for logger_name in logger_names:
-        logger = logging.getLogger(f"photo_admin.{logger_name}")
+        logger = logging.getLogger(f"shusai.{logger_name}")
         logger.setLevel(log_level)
         logger.propagate = False  # Don't propagate to root logger
 

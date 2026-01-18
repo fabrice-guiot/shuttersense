@@ -18,7 +18,7 @@ class CredentialEncryptor:
     """
     Encrypts and decrypts credentials using Fernet symmetric encryption.
 
-    The master encryption key is loaded from the PHOTO_ADMIN_MASTER_KEY
+    The master encryption key is loaded from the SHUSAI_MASTER_KEY
     environment variable. This key must be generated using setup_master_key.py
     before using this class.
 
@@ -38,7 +38,7 @@ class CredentialEncryptor:
         - T017: decrypt() method using Fernet
     """
 
-    ENV_VAR_NAME = "PHOTO_ADMIN_MASTER_KEY"
+    ENV_VAR_NAME = "SHUSAI_MASTER_KEY"
 
     def __init__(self, master_key: Optional[str] = None):
         """
@@ -46,7 +46,7 @@ class CredentialEncryptor:
 
         Args:
             master_key: Optional master key. If not provided, loads from
-                       PHOTO_ADMIN_MASTER_KEY environment variable.
+                       SHUSAI_MASTER_KEY environment variable.
 
         Raises:
             ValueError: If master key is not provided and not found in environment
@@ -171,7 +171,7 @@ class CredentialEncryptor:
             # - Expired token (if TTL was set, which we don't use)
             raise InvalidToken(
                 "Decryption failed: Invalid master key or corrupted/tampered ciphertext. "
-                "Verify that PHOTO_ADMIN_MASTER_KEY matches the key used for encryption. "
+                "Verify that SHUSAI_MASTER_KEY matches the key used for encryption. "
                 "If the key was rotated, use setup_master_key.py --rotate to re-encrypt."
             )
         except Exception as e:

@@ -1,5 +1,5 @@
 """
-CLI scripts for photo-admin backend.
+CLI scripts for ShutterSense backend.
 
 This module contains command-line utilities for:
 - Database seeding and management
