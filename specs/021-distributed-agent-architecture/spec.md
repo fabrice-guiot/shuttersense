@@ -324,6 +324,19 @@ This constraint will be documented in the project constitution (`docs/constituti
 - **FR-100.7**: System MUST allow deletion of agents (revokes API key, reassigns queued jobs)
 - **FR-100.8**: Users MUST be able to rename agents from the UI
 
+#### Agent Auditability (FR-110)
+
+- **FR-110.1**: Upon registration, system MUST create a dedicated SYSTEM user for the agent
+- **FR-110.2**: Agent's SYSTEM user MUST have `full_name` set to "Agent: {agent name}"
+- **FR-110.3**: Agent's SYSTEM user MUST have `is_system=true` flag set
+- **FR-110.4**: Agent record MUST store `system_user_id` referencing the dedicated SYSTEM user
+- **FR-110.5**: Agent record MUST store `created_by_user_id` referencing the human user who registered the agent
+- **FR-110.6**: Records created by agent actions (e.g., AnalysisResult) MUST have `created_by` set to agent's SYSTEM user
+- **FR-110.7**: Records updated by agent actions MUST have `updated_by` set to agent's SYSTEM user
+- **FR-110.8**: When agent is renamed, system MUST update the SYSTEM user's `full_name` to match
+- **FR-110.9**: When agent is deleted, system MUST NOT delete the SYSTEM user (preserve audit history)
+- **FR-110.10**: This pattern MUST be consistent with the existing API token SYSTEM user pattern
+
 #### Job Distribution (FR-200)
 
 - **FR-200.1**: Jobs MUST persist to database (not in-memory queue)
@@ -459,7 +472,7 @@ This constraint will be documented in the project constitution (`docs/constituti
 
 ### Key Entities
 
-- **Agent**: A worker process running on user-owned hardware that executes jobs. Key attributes: guid, name, hostname, status (ONLINE/OFFLINE/ERROR/REVOKED), capabilities (array of strings), last_heartbeat, team_id. GUID prefix: `agt_`
+- **Agent**: A worker process running on user-owned hardware that executes jobs. Key attributes: guid, name, hostname, status (ONLINE/OFFLINE/ERROR/REVOKED), capabilities (array of strings), last_heartbeat, team_id, system_user_id (for audit trail), created_by_user_id. GUID prefix: `agt_`
 
 - **AgentRegistrationToken**: One-time token for agent registration. Key attributes: token_hash, team_id, created_by_user_id, is_used, expires_at. GUID prefix: `art_`
 
@@ -468,6 +481,8 @@ This constraint will be documented in the project constitution (`docs/constituti
 - **Connector** (enhanced): New attribute `credential_location` enum (SERVER, AGENT, PENDING)
 
 - **Collection** (enhanced): New attributes: bound_agent_id (for LOCAL type), auto_refresh, refresh_interval_hours
+
+- **User** (enhanced for agents): Agents create a dedicated SYSTEM user for audit purposes. The system user has `full_name` set to "Agent: {agent name}" and `is_system=true`. This follows the same pattern established for API tokens.
 
 ---
 
