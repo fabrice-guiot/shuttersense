@@ -1,5 +1,5 @@
 /**
- * Photo Admin Application
+ * ShutterSense Application
  *
  * Main application component with routing and layout
  */

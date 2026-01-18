@@ -240,7 +240,7 @@ export const useConfig = (autoFetch = true): UseConfigReturn => {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `photo-admin-config-${new Date().toISOString().split('T')[0]}.yaml`
+      link.download = `shuttersense-config-${new Date().toISOString().split('T')[0]}.yaml`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)

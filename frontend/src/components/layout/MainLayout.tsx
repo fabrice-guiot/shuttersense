@@ -26,7 +26,7 @@ export interface MainLayoutProps {
 
   /**
    * Optional page title for TopHeader
-   * If not provided, defaults to "Photo Admin"
+   * If not provided, defaults to "ShutterSense"
    */
   pageTitle?: string
 
@@ -63,7 +63,7 @@ interface MainLayoutInnerProps extends MainLayoutProps {
 
 function MainLayoutInner({
   children,
-  pageTitle = 'Photo Admin',
+  pageTitle = 'ShutterSense',
   pageIcon,
   pageHelp,
   className,
@@ -130,7 +130,7 @@ function MainLayoutInner({
  */
 export function MainLayout({
   children,
-  pageTitle = 'Photo Admin',
+  pageTitle = 'ShutterSense',
   pageIcon,
   pageHelp,
   className,
