@@ -18,6 +18,23 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ---
 
+## Architectural Constraint: Agent-Only Execution
+
+**CRITICAL**: This feature establishes a foundational architectural requirement:
+
+> **All asynchronous job processing MUST be executed by agents. The server MUST NOT execute any jobs directly.**
+
+This is not a backward compatibility consideration - this feature is being implemented before the first cloud deployment. From the moment this feature is released:
+
+- The server acts solely as coordinator (job queue, result storage, UI serving)
+- All tool execution (PhotoStats, Photo Pairing, Pipeline Validation) happens on agents
+- No fallback to server-side execution exists or will be implemented
+- Any future async processing features MUST be designed for agent execution
+
+This constraint will be documented in the project constitution (`docs/constitution.md`) and `CLAUDE.md` upon feature completion.
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Agent Pool Status in Header (Priority: P0)
@@ -140,7 +157,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 5. **Given** a connector has `credential_location=AGENT`, **When** a job requires this connector, **Then** only agents with local credentials for this connector can claim the job
 
-6. **Given** a connector has `credential_location=SERVER`, **When** no capable agents are online, **Then** the server can execute the job directly (for remote connectors)
+6. **Given** a connector has `credential_location=SERVER`, **When** no capable agents are online, **Then** the job remains queued until a capable agent comes online (server never executes jobs directly)
 
 ---
 
@@ -270,6 +287,8 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 ### Edge Cases
 
+- **No agents available**: Jobs remain in PENDING state indefinitely. Header badge shows red "Offline" status. UI displays clear messaging that an agent must be registered and running to execute jobs.
+
 - **Agent goes offline mid-job**: Job is released back to PENDING after 90 seconds without heartbeat. If bound agent, job waits for that agent. If capability-based, any capable agent can claim.
 
 - **Multiple agents claim same job**: Database locking (FOR UPDATE SKIP LOCKED) prevents race conditions. Only one agent gets the job.
@@ -285,6 +304,8 @@ This feature enables distributed job execution on user-owned hardware instead of
 - **Collection deleted while job running**: Job continues but result storage fails gracefully. Job marked COMPLETED with warning.
 
 - **Team A agent tries to access Team B job**: Rejected. All job queries are team-scoped. Cross-team access returns 404.
+
+- **User tries to run job without agents**: UI should prevent job creation or clearly warn that job will queue indefinitely until an agent is available.
 
 ---
 
@@ -309,7 +330,7 @@ This feature enables distributed job execution on user-owned hardware instead of
 - **FR-200.2**: Jobs MUST include `required_capabilities_json` array for routing
 - **FR-200.3**: Agent MUST claim jobs via polling (POST /jobs/claim)
 - **FR-200.4**: Job MUST be assigned to first capable agent that claims it (database locking)
-- **FR-200.5**: Server MAY execute job if no capable agent online (for server connectors only)
+- **FR-200.5**: Server MUST NOT execute any jobs directly; jobs MUST wait in queue until a capable agent is available
 - **FR-200.6**: Job MUST be reassigned if agent goes offline mid-execution
 - **FR-200.7**: Failed jobs MUST retry up to max_retries (default: 3)
 - **FR-200.8**: Job history MUST be retained for 90 days (configurable)
@@ -473,15 +494,16 @@ This feature enables distributed job execution on user-owned hardware instead of
 
 The following reasonable assumptions have been made based on the PRD and industry standards:
 
-1. **Agent Distribution**: Agent binaries will be provided for macOS 12+, Windows 10+, and Ubuntu 20.04+ as stated in the PRD
-2. **Database**: PostgreSQL will be used for job queue persistence initially (Redis optional for future scale)
-3. **Encryption**: Agent local credentials will use Fernet encryption (same as server-side)
-4. **Polling Interval**: Agent poll interval of 5 seconds, heartbeat every 30 seconds
-5. **Retry Policy**: Default max_retries of 3 with exponential backoff
-6. **Token Expiry**: Registration tokens expire in 24 hours
-7. **Agent Single-Job**: V1 agents execute one job at a time (concurrent execution deferred to v2)
-8. **Tool Bundling**: All three tools (PhotoStats, Photo Pairing, Pipeline Validation) are bundled with the agent
-9. **Backward Compatibility**: Server-side execution continues for existing remote connectors without agents
+1. **Pre-Release Implementation**: This feature is implemented before the first cloud deployment; no backward compatibility with server-side execution is required or supported
+2. **Agent Distribution**: Agent binaries will be provided for macOS 12+, Windows 10+, and Ubuntu 20.04+ as stated in the PRD
+3. **Database**: PostgreSQL will be used for job queue persistence initially (Redis optional for future scale)
+4. **Encryption**: Agent local credentials will use Fernet encryption (same as server-side)
+5. **Polling Interval**: Agent poll interval of 5 seconds, heartbeat every 30 seconds
+6. **Retry Policy**: Default max_retries of 3 with exponential backoff
+7. **Token Expiry**: Registration tokens expire in 24 hours
+8. **Agent Single-Job**: V1 agents execute one job at a time (concurrent execution deferred to v2)
+9. **Tool Bundling**: All three tools (PhotoStats, Photo Pairing, Pipeline Validation) are bundled with the agent
+10. **Agent Requirement**: Users MUST have at least one agent running to execute any jobs; this is a fundamental operational requirement
 
 ---
 
@@ -496,3 +518,26 @@ Based on the PRD, the following are explicitly out of scope:
 5. **Container Orchestration**: No Kubernetes/Docker Swarm integration (simple process model)
 6. **Desktop Application Integration**: Foundation laid but Lightroom/DxO/Photoshop integration deferred
 7. **Concurrent Jobs per Agent**: V1 is single-job; multiple concurrent jobs deferred to v2
+8. **Server-Side Job Execution**: The server will NEVER execute jobs; this is an architectural constraint, not a future feature
+
+---
+
+## Documentation Deliverables
+
+Upon completion of this feature, the following documentation MUST be updated:
+
+### Project Constitution (`docs/constitution.md`)
+
+Add a new architectural principle:
+
+> **Agent-Only Execution**: All asynchronous job processing in ShutterSense is executed exclusively by agents. The server acts as coordinator (job queue management, result storage, UI serving) but NEVER executes jobs directly. Any new feature requiring async processing MUST be designed for agent execution.
+
+### CLAUDE.md
+
+Update the Architecture Principles section to include:
+
+1. **Agent-Only Execution Principle**: Document that all jobs run on agents, never on server
+2. **Agent Entity**: Add `agt_` prefix to GUID table
+3. **AgentRegistrationToken Entity**: Add `art_` prefix to GUID table
+4. **Header Agent Status**: Document the header-based agent status indicator pattern
+5. **Agent List Navigation**: Document that Agent List is accessed exclusively via header icon (no sidebar/Settings entry)
