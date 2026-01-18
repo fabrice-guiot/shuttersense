@@ -50,8 +50,10 @@
 ### Documentation Requirements
 
 Upon feature completion, the following MUST be updated:
-- `docs/constitution.md` - Add Agent-Only Execution principle
+- `.specify/memory/constitution.md` - Add Agent-Only Execution principle
 - `CLAUDE.md` - Add agent architecture section, GUID prefixes, navigation pattern
+- `README.md` - Add prominent section about agent requirement with quick-start
+- `docs/agent-installation.md` (NEW) - Comprehensive agent installation guide
 
 ## Validation Summary
 

@@ -526,7 +526,7 @@ Based on the PRD, the following are explicitly out of scope:
 
 Upon completion of this feature, the following documentation MUST be updated:
 
-### Project Constitution (`docs/constitution.md`)
+### Project Constitution (`.specify/memory/constitution.md`)
 
 Add a new architectural principle:
 
@@ -541,3 +541,23 @@ Update the Architecture Principles section to include:
 3. **AgentRegistrationToken Entity**: Add `art_` prefix to GUID table
 4. **Header Agent Status**: Document the header-based agent status indicator pattern
 5. **Agent List Navigation**: Document that Agent List is accessed exclusively via header icon (no sidebar/Settings entry)
+
+### User Documentation
+
+#### README.md (root)
+
+Add a prominent section explaining:
+- ShutterSense requires at least one agent running to execute analysis jobs
+- Link to the agent installation guide
+- Quick-start instructions for getting an agent running
+
+#### docs/agent-installation.md (NEW)
+
+Create a comprehensive agent installation guide covering:
+- What agents are and why they're required
+- Downloading the agent binary (macOS, Windows, Linux)
+- Registering an agent with the server (token generation, CLI commands)
+- Starting the agent (foreground and background/daemon modes)
+- Configuring agent-local credentials for connectors
+- Troubleshooting common issues
+- Agent CLI command reference
