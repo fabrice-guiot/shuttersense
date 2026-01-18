@@ -1,5 +1,5 @@
 """
-SQLAlchemy models for photo-admin application.
+SQLAlchemy models for ShutterSense application.
 
 This module provides the declarative base class and imports all models
 to ensure they are registered with SQLAlchemy's metadata.

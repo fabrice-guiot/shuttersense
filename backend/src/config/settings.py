@@ -1,5 +1,5 @@
 """
-Application settings configuration for photo-admin.
+Application settings configuration for ShutterSense.
 
 Centralized settings loaded from environment variables.
 """

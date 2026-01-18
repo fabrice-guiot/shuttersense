@@ -255,12 +255,12 @@ async def lifespan(app: FastAPI):
     # for proper tenant isolation.
     logger.info("Skipping global configuration seeding (tenant-specific data is seeded per-team)")
 
-    logger.info("Photo-admin backend started successfully")
+    logger.info("ShutterSense backend started successfully")
 
     yield
 
     # Shutdown
-    logger.info("Shutting down photo-admin backend application")
+    logger.info("Shutting down ShutterSense backend application")
 
 
 # Initialize logging before creating app

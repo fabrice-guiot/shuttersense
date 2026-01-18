@@ -20,7 +20,7 @@ Edge Handling:
 - Backend: edges_json = [{"from": "node1", "to": "node2"}, ...]
 - CLI: Each node has an "output" list of node IDs it connects to
 
-Author: photo-admin project
+Author: ShutterSense project
 License: AGPL-3.0
 """
 

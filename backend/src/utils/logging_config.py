@@ -157,7 +157,7 @@ def configure_logging() -> Dict[str, logging.Logger]:
     loggers = {}
 
     for logger_name in logger_names:
-        logger = logging.getLogger(f"photo_admin.{logger_name}")
+        logger = logging.getLogger(f"shusai.{logger_name}")
         logger.setLevel(log_level)
         logger.propagate = False  # Don't propagate to root logger
 

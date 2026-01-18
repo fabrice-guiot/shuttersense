@@ -1,5 +1,5 @@
 """
-Middleware components for photo-admin backend.
+Middleware components for ShutterSense backend.
 
 This module provides:
 - TenantContext: Dataclass representing the current tenant context
