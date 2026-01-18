@@ -21,20 +21,20 @@
 
 ---
 
-## Phase 1: Setup (Shared Infrastructure)
+## Phase 1: Setup (Shared Infrastructure) ✅
 
 **Purpose**: Project initialization and database migrations
 
-- [ ] T001 Create `agent/` directory structure per plan.md project structure
-- [ ] T002 [P] Initialize agent Python package with `agent/pyproject.toml` and dependencies (httpx, websockets, pydantic, cryptography, click, pytest)
-- [ ] T003 [P] Create Alembic migration for Agent table in `backend/alembic/versions/xxx_add_agent_table.py`
-- [ ] T004 [P] Create Alembic migration for AgentRegistrationToken table in `backend/alembic/versions/xxx_add_agent_registration_token_table.py`
-- [ ] T005 [P] Create Alembic migration for Job table enhancements in `backend/alembic/versions/xxx_enhance_jobs_for_agents.py`
-- [ ] T006 [P] Create Alembic migration for Connector credential_location field in `backend/alembic/versions/xxx_add_connector_credential_location.py`
-- [ ] T007 [P] Create Alembic migration for Collection agent binding fields in `backend/alembic/versions/xxx_add_collection_agent_binding.py`
-- [ ] T008 [P] Create agent test configuration in `agent/tests/conftest.py` with pytest fixtures
+- [x] T001 Create `agent/` directory structure per plan.md project structure
+- [x] T002 [P] Initialize agent Python package with `agent/pyproject.toml` and dependencies (httpx, websockets, pydantic, cryptography, click, pytest)
+- [x] T003 [P] Create Alembic migration for Agent table in `backend/src/db/migrations/versions/032_create_agents_table.py`
+- [x] T004 [P] Create Alembic migration for AgentRegistrationToken table in `backend/src/db/migrations/versions/033_create_agent_registration_tokens_table.py`
+- [x] T005 [P] Create Alembic migration for Jobs table (persistent queue) in `backend/src/db/migrations/versions/034_create_jobs_table.py`
+- [x] T006 [P] Create Alembic migration for Connector credential_location field in `backend/src/db/migrations/versions/035_add_connector_credential_location.py`
+- [x] T007 [P] Create Alembic migration for Collection agent binding fields in `backend/src/db/migrations/versions/036_add_collection_agent_binding.py`
+- [x] T008 [P] Create agent test configuration in `agent/tests/conftest.py` with pytest fixtures
 
-**Checkpoint**: Database schema ready, agent package initialized with test infrastructure
+**Checkpoint**: Database schema ready, agent package initialized with test infrastructure ✅
 
 ---
 
