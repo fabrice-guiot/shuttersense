@@ -1780,7 +1780,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
   }),
 
   http.get(`${BASE_URL}/config/export`, () => {
-    const yamlContent = `# Photo Admin Configuration
+    const yamlContent = `# ShutterSense.ai Configuration
 extensions:
   photo_extensions: ${JSON.stringify(configData.extensions.photo_extensions)}
   metadata_extensions: ${JSON.stringify(configData.extensions.metadata_extensions)}
@@ -1795,7 +1795,7 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
     return new HttpResponse(yamlContent, {
       headers: {
         'Content-Type': 'application/x-yaml',
-        'Content-Disposition': 'attachment; filename="photo-admin-config.yaml"',
+        'Content-Disposition': 'attachment; filename="shuttersense-config.yaml"',
       },
     })
   }),

@@ -1,1 +1,1 @@
-# Test package for photo-admin
+# Test package for ShutterSense.ai

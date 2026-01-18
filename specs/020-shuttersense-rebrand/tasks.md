@@ -224,9 +224,9 @@
 ### Implementation
 
 - [x] T060 [US4] Update .github/workflows/*.yml if any contain hardcoded "photo-admin" references - No changes needed (workflow uses generic names)
-- [ ] T061 [US4] MANUAL: Rename GitHub repository from "photo-admin" to "shuttersense" (owner action)
-- [ ] T062 [US4] MANUAL: Update repository description to "ShutterSense.ai - Capture. Process. Analyze."
-- [ ] T063 [US4] MANUAL: Upload og-image.png as social preview image in GitHub settings
+- [x] T061 [US4] MANUAL: Rename GitHub repository from "photo-admin" to "shuttersense" (owner action)
+- [x] T062 [US4] MANUAL: Update repository description to "ShutterSense.ai - Capture. Process. Analyze."
+- [x] T063 [US4] MANUAL: Upload og-image.png as social preview image in GitHub settings
 
 **Checkpoint**: GitHub repository displays ShutterSense.ai branding
 
@@ -238,12 +238,12 @@
 
 ### Verification Tasks
 
-- [ ] T064 Run grep verification: `grep -r "photo-admin" . --include="*.py" --include="*.ts" --include="*.tsx" --include="*.md" --include="*.json" --include="*.html" --include="*.j2" | grep -v node_modules | grep -v .git | grep -v specs/`
-- [ ] T065 Run grep verification: `grep -r "PHOTO_ADMIN" . --include="*.py" --include="*.ts" --include="*.tsx" | grep -v node_modules | grep -v .git`
-- [ ] T066 Run backend tests: `cd backend && python -m pytest tests/ -v`
-- [ ] T067 Run frontend tests: `cd frontend && npm test`
-- [ ] T068 Verify favicon displays in Chrome, Firefox, Safari, Edge browsers
-- [ ] T069 Verify Open Graph tags work (use social media debugger tools)
+- [x] T064 Run grep verification: `grep -r "photo-admin" . --include="*.py" --include="*.ts" --include="*.tsx" --include="*.md" --include="*.json" --include="*.html" --include="*.j2" | grep -v node_modules | grep -v .git | grep -v specs/` - Fixed remaining references in tests, utils, and backend
+- [x] T065 Run grep verification: `grep -r "PHOTO_ADMIN" . --include="*.py" --include="*.ts" --include="*.tsx" | grep -v node_modules | grep -v .git` - No matches found
+- [x] T066 Run backend tests: `cd backend && python -m pytest tests/ -v` - 1403 passed
+- [x] T067 Run frontend tests: `cd frontend && npm test` - 652 passed
+- [ ] T068 MANUAL: Verify favicon displays in Chrome, Firefox, Safari, Edge browsers
+- [ ] T069 MANUAL: Verify Open Graph tags work (use social media debugger tools)
 
 **Checkpoint**: Complete rebrand verified - ready for deployment
 

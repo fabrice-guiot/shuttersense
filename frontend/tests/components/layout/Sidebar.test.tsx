@@ -50,7 +50,7 @@ describe('Sidebar', () => {
     it('renders the sidebar with navigation items', () => {
       renderSidebar()
 
-      expect(screen.getByText('Photo Admin')).toBeInTheDocument()
+      expect(screen.getByText('ShutterSense.ai')).toBeInTheDocument()
       expect(screen.getByText('Dashboard')).toBeInTheDocument()
       expect(screen.getByText('Events')).toBeInTheDocument()
       expect(screen.getByText('Collections')).toBeInTheDocument()

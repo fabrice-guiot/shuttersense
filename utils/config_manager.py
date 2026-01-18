@@ -2,7 +2,7 @@
 """
 Configuration Manager for Photo Administration Tools
 
-This module provides configuration loading and management for the photo-admin toolbox.
+This module provides configuration loading and management for the ShutterSense.ai toolbox.
 It handles YAML configuration files with automatic discovery, interactive creation,
 and user prompts for missing camera/method mappings.
 
@@ -46,7 +46,7 @@ except ImportError:
 
 class PhotoAdminConfig:
     """
-    Manages configuration loading and updates for photo-admin tools.
+    Manages configuration loading and updates for ShutterSense.ai tools.
 
     Supports two modes:
     - File mode (default): Configuration stored in YAML file
@@ -391,7 +391,7 @@ class PhotoAdminConfig:
             print("\nError: Configuration template file not found.")
             print("The tool does not appear to be properly installed.")
             print("Please refer to the README for installation instructions:")
-            print("  https://github.com/fabrice-guiot/photo-admin/blob/main/README.md")
+            print("  https://github.com/fabrice-guiot/shuttersense/blob/main/README.md")
             sys.exit(1)
 
         # Determine where to create the config file
