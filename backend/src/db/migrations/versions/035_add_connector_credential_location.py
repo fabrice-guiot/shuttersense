@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '035_connector_cred_loc'
-down_revision = '034_enhance_jobs'
+down_revision = '034_create_jobs'
 branch_labels = None
 depends_on = None
 
