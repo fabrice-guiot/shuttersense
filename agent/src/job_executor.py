@@ -670,12 +670,213 @@ class JobExecutor:
         Returns:
             JobResult with validation results
         """
-        # For now, collection validation is not fully implemented for agent execution
-        # This would require implementing the full validation flow from pipeline_validation.py
+        # Get pipeline data from config
+        pipeline_data = config.get("pipeline")
+        if not pipeline_data:
+            return JobResult(
+                success=False,
+                results={},
+                error_message="Pipeline data not found in job config"
+            )
+
+        # Create PipelineConfig from API data (outside executor to use self)
+        pipeline_config = self._create_pipeline_config_from_api(pipeline_data)
+
+        def run_collection_validation():
+            import tempfile
+            import yaml
+            import time
+            from pathlib import Path
+            from datetime import datetime
+
+            from pipeline_validation import (
+                load_or_generate_imagegroups,
+                flatten_imagegroups_to_specific_images,
+                add_metadata_files_to_specific_images,
+                build_report_context,
+            )
+            from utils.pipeline_processor import (
+                validate_all_images,
+                ValidationStatus,
+            )
+            from utils.report_renderer import ReportRenderer
+            from utils.config_manager import PhotoAdminConfig
+
+            # Report progress at start
+            self._sync_progress_callback(
+                stage="initializing",
+                percentage=0,
+                message="Initializing Pipeline Validation..."
+            )
+
+            # Write API config to temp YAML file for PhotoAdminConfig
+            config_yaml = {
+                'photo_extensions': config.get('photo_extensions', []),
+                'metadata_extensions': config.get('metadata_extensions', []),
+                'require_sidecar': config.get('require_sidecar', []),
+                'camera_mappings': config.get('camera_mappings', {}),
+                'processing_methods': config.get('processing_methods', {}),
+            }
+
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                suffix='.yaml',
+                delete=False
+            ) as config_file:
+                yaml.dump(config_yaml, config_file, default_flow_style=False)
+                config_path = config_file.name
+
+            try:
+                # Create PhotoAdminConfig from temp file
+                photo_config = PhotoAdminConfig(config_path=config_path)
+
+                folder_path = Path(collection_path)
+                scan_start = datetime.now()
+
+                # Report progress
+                self._sync_progress_callback(
+                    stage="loading",
+                    percentage=10,
+                    message="Loading Photo Pairing results..."
+                )
+
+                # Load or generate imagegroups
+                imagegroups = load_or_generate_imagegroups(folder_path, force_regenerate=False)
+
+                # Report progress
+                self._sync_progress_callback(
+                    stage="processing",
+                    percentage=30,
+                    message=f"Processing {len(imagegroups)} image groups..."
+                )
+
+                # Flatten imagegroups to specific images
+                specific_images = flatten_imagegroups_to_specific_images(imagegroups)
+
+                # Add metadata files
+                add_metadata_files_to_specific_images(specific_images, folder_path, photo_config)
+
+                # Report progress
+                self._sync_progress_callback(
+                    stage="validating",
+                    percentage=50,
+                    message=f"Validating {len(specific_images)} images..."
+                )
+
+                # Validate all images against pipeline
+                validation_results = validate_all_images(
+                    specific_images, pipeline_config, show_progress=False
+                )
+
+                scan_end = datetime.now()
+                scan_duration = (scan_end - scan_start).total_seconds()
+
+                # Calculate status counts
+                overall_status_counts = {
+                    ValidationStatus.CONSISTENT: 0,
+                    ValidationStatus.CONSISTENT_WITH_WARNING: 0,
+                    ValidationStatus.PARTIAL: 0,
+                    ValidationStatus.INCONSISTENT: 0,
+                }
+                termination_stats = {}
+
+                for result in validation_results:
+                    overall_status_counts[result.overall_status] = (
+                        overall_status_counts.get(result.overall_status, 0) + 1
+                    )
+
+                    for term_match in result.termination_matches:
+                        term_type = term_match.termination_type
+                        match_status = term_match.status
+
+                        if term_type not in termination_stats:
+                            termination_stats[term_type] = {
+                                'type': term_type,
+                                'consistent': 0,
+                                'warning': 0,
+                                'partial': 0,
+                                'inconsistent': 0
+                            }
+
+                        if match_status == ValidationStatus.CONSISTENT:
+                            termination_stats[term_type]['consistent'] += 1
+                        elif match_status == ValidationStatus.CONSISTENT_WITH_WARNING:
+                            termination_stats[term_type]['warning'] += 1
+                        elif match_status == ValidationStatus.PARTIAL:
+                            termination_stats[term_type]['partial'] += 1
+                        elif match_status == ValidationStatus.INCONSISTENT:
+                            termination_stats[term_type]['inconsistent'] += 1
+
+                # Report progress
+                self._sync_progress_callback(
+                    stage="generating",
+                    percentage=80,
+                    message="Generating report..."
+                )
+
+                # Build report context
+                context = build_report_context(
+                    validation_results=validation_results,
+                    scan_path=collection_path,
+                    scan_start=scan_start,
+                    scan_end=scan_end,
+                    pipeline=pipeline_config,
+                    config=photo_config,
+                    display_graph=False
+                )
+
+                # Render HTML report
+                renderer = ReportRenderer()
+                report_html = renderer.render_to_string(context)
+
+                # Build by_termination dict for results
+                by_termination = {}
+                for term_type, stats in termination_stats.items():
+                    by_termination[term_type] = {
+                        "CONSISTENT": stats['consistent'] + stats['warning'],
+                        "PARTIAL": stats['partial'],
+                        "INCONSISTENT": stats['inconsistent']
+                    }
+
+                # Build results dict matching server-side format
+                results = {
+                    "overall_status": {
+                        "CONSISTENT": (
+                            overall_status_counts[ValidationStatus.CONSISTENT] +
+                            overall_status_counts[ValidationStatus.CONSISTENT_WITH_WARNING]
+                        ),
+                        "PARTIAL": overall_status_counts[ValidationStatus.PARTIAL],
+                        "INCONSISTENT": overall_status_counts[ValidationStatus.INCONSISTENT]
+                    },
+                    "by_termination": by_termination,
+                    "invalid_files_count": 0,  # Pipeline validation doesn't track invalid files
+                    "scan_duration": scan_duration,
+                    "group_count": len(imagegroups),
+                    "image_count": len(specific_images),
+                }
+
+                # Calculate issues (PARTIAL + INCONSISTENT)
+                issues_count = (
+                    overall_status_counts[ValidationStatus.PARTIAL] +
+                    overall_status_counts[ValidationStatus.INCONSISTENT]
+                )
+
+                return results, report_html, len(specific_images), issues_count
+
+            finally:
+                # Clean up config temp file
+                Path(config_path).unlink(missing_ok=True)
+
+        results, report_html, files_scanned, issues_count = await loop.run_in_executor(
+            None, run_collection_validation
+        )
+
         return JobResult(
-            success=False,
-            results={},
-            error_message="Collection pipeline validation via agent is not yet implemented"
+            success=True,
+            results=results,
+            report_html=report_html,
+            files_scanned=files_scanned,
+            issues_found=issues_count,
         )
 
     def _create_pipeline_config_from_api(self, pipeline_data: Dict[str, Any]):
