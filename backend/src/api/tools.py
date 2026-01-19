@@ -26,6 +26,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.middleware.tenant import TenantContext, get_tenant_context
 from backend.src.schemas.tools import (
     ToolType, ToolMode, JobStatus, ToolRunRequest, JobResponse,
     QueueStatusResponse, ConflictResponse, RunAllToolsResponse
@@ -486,18 +487,20 @@ def cancel_job(
     summary="Get queue status"
 )
 def get_queue_status(
+    ctx: TenantContext = Depends(get_tenant_context),
     service: ToolService = Depends(get_tool_service)
 ) -> QueueStatusResponse:
     """
     Get queue statistics.
 
     Returns counts of jobs by status and the currently
-    running job ID if any.
+    running job ID if any. Includes both in-memory jobs
+    and database-persisted jobs for agent execution.
 
     Returns:
         Queue status with job counts
     """
-    stats = service.get_queue_status()
+    stats = service.get_queue_status(team_id=ctx.team_id)
     return QueueStatusResponse(**stats)
 
 

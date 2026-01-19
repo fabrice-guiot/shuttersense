@@ -695,10 +695,7 @@ class JobExecutor:
                 add_metadata_files_to_specific_images,
                 build_report_context,
             )
-            from utils.pipeline_processor import (
-                validate_all_images,
-                ValidationStatus,
-            )
+            from utils.pipeline_processor import ValidationStatus
             from utils.report_renderer import ReportRenderer
             from utils.config_manager import PhotoAdminConfig
 
@@ -756,22 +753,10 @@ class JobExecutor:
                 # Add metadata files
                 add_metadata_files_to_specific_images(specific_images, folder_path, photo_config)
 
-                # Report progress
-                self._sync_progress_callback(
-                    stage="validating",
-                    percentage=50,
-                    message=f"Validating {len(specific_images)} images..."
-                )
+                # Import validate_specific_image for granular progress reporting
+                from utils.pipeline_processor import validate_specific_image
 
-                # Validate all images against pipeline
-                validation_results = validate_all_images(
-                    specific_images, pipeline_config, show_progress=False
-                )
-
-                scan_end = datetime.now()
-                scan_duration = (scan_end - scan_start).total_seconds()
-
-                # Calculate status counts
+                # Initialize status counts
                 overall_status_counts = {
                     ValidationStatus.CONSISTENT: 0,
                     ValidationStatus.CONSISTENT_WITH_WARNING: 0,
@@ -779,8 +764,19 @@ class JobExecutor:
                     ValidationStatus.INCONSISTENT: 0,
                 }
                 termination_stats = {}
+                validation_results = []
 
-                for result in validation_results:
+                # Validate each image with progress updates (10% to 90% range)
+                total_images = len(specific_images)
+                last_broadcast_pct = 0
+
+                for idx, specific_image in enumerate(specific_images):
+                    result = validate_specific_image(
+                        specific_image, pipeline_config, show_progress=False
+                    )
+                    validation_results.append(result)
+
+                    # Update statistics as we go
                     overall_status_counts[result.overall_status] = (
                         overall_status_counts.get(result.overall_status, 0) + 1
                     )
@@ -807,10 +803,30 @@ class JobExecutor:
                         elif match_status == ValidationStatus.INCONSISTENT:
                             termination_stats[term_type]['inconsistent'] += 1
 
-                # Report progress
+                    # Report progress every 2% or every 50 images
+                    # Uses 10% to 90% range for validation (80% of total)
+                    current_pct = int((idx + 1) / total_images * 80) + 10 if total_images > 0 else 90
+                    if current_pct >= last_broadcast_pct + 2 or (idx + 1) % 50 == 0 or idx == total_images - 1:
+                        issues_so_far = (
+                            overall_status_counts[ValidationStatus.PARTIAL] +
+                            overall_status_counts[ValidationStatus.INCONSISTENT]
+                        )
+                        self._sync_progress_callback(
+                            stage="analyzing",
+                            percentage=current_pct,
+                            files_scanned=idx + 1,
+                            total_files=total_images,
+                            message=f"Validated {idx + 1}/{total_images} images, {issues_so_far} issues"
+                        )
+                        last_broadcast_pct = current_pct
+
+                scan_end = datetime.now()
+                scan_duration = (scan_end - scan_start).total_seconds()
+
+                # Report progress for report generation
                 self._sync_progress_callback(
                     stage="generating",
-                    percentage=80,
+                    percentage=92,
                     message="Generating report..."
                 )
 

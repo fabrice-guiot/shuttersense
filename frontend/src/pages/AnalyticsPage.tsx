@@ -88,11 +88,16 @@ export default function AnalyticsPage() {
   // Data Hooks
   // ============================================================================
 
-  // Queue status for stats (defined first so onJobComplete can use refetch)
+  // Queue status for stats (defined first so callbacks can use refetch)
   const { queueStatus, refetch: refetchQueueStatus } = useQueueStatus()
 
-  // Result stats (defined first so onJobComplete can use refetch)
+  // Result stats (defined first so callbacks can use refetch)
   const { stats: resultStats, refetch: refetchResultStats } = useResultStats()
+
+  // Callback when a job starts - refresh queue stats (queued -> running)
+  const handleJobStart = useCallback(() => {
+    refetchQueueStatus()
+  }, [refetchQueueStatus])
 
   // Callback when a job completes - refresh stats
   const handleJobComplete = useCallback(() => {
@@ -108,7 +113,7 @@ export default function AnalyticsPage() {
     fetchJobs,
     runTool,
     cancelJob
-  } = useTools({ useWebSocket: true, onJobComplete: handleJobComplete })
+  } = useTools({ useWebSocket: true, onJobStart: handleJobStart, onJobComplete: handleJobComplete })
 
   // Results data
   const {

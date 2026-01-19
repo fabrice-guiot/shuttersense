@@ -656,14 +656,67 @@ class ToolService:
         logger.info(f"Job {job_id} cancelled")
         return JobAdapter.to_response(job) if job else None
 
-    def get_queue_status(self) -> Dict[str, Any]:
+    def get_queue_status(self, team_id: Optional[int] = None) -> Dict[str, Any]:
         """
-        Get queue statistics.
+        Get queue statistics from both in-memory queue and database.
+
+        Combines counts from:
+        - In-memory JobQueue (for server-side executed jobs)
+        - Database Job table (for agent-executed jobs)
+
+        Args:
+            team_id: Optional team ID to filter by (for tenant isolation)
 
         Returns:
             Dictionary with job counts by status and current job ID
         """
-        return self._queue.get_queue_status()
+        from sqlalchemy import func
+
+        # Get in-memory queue status
+        inmemory_status = self._queue.get_queue_status()
+
+        # Query database for persistent job counts
+        # PENDING, SCHEDULED -> queued
+        # ASSIGNED, RUNNING -> running
+        db_query = self.db.query(
+            Job.status,
+            func.count(Job.id).label('count')
+        )
+
+        # Apply team filter if provided
+        if team_id is not None:
+            db_query = db_query.filter(Job.team_id == team_id)
+
+        db_counts = db_query.group_by(Job.status).all()
+
+        # Map database statuses to queue status categories
+        db_queued = 0
+        db_running = 0
+        db_completed = 0
+        db_failed = 0
+        db_cancelled = 0
+
+        for status, count in db_counts:
+            if status in (PersistentJobStatus.PENDING, PersistentJobStatus.SCHEDULED):
+                db_queued += count
+            elif status in (PersistentJobStatus.ASSIGNED, PersistentJobStatus.RUNNING):
+                db_running += count
+            elif status == PersistentJobStatus.COMPLETED:
+                db_completed += count
+            elif status == PersistentJobStatus.FAILED:
+                db_failed += count
+            elif status == PersistentJobStatus.CANCELLED:
+                db_cancelled += count
+
+        # Combine in-memory and database counts
+        return {
+            'queued_count': inmemory_status.get('queued_count', 0) + db_queued,
+            'running_count': inmemory_status.get('running_count', 0) + db_running,
+            'completed_count': inmemory_status.get('completed_count', 0) + db_completed,
+            'failed_count': inmemory_status.get('failed_count', 0) + db_failed,
+            'cancelled_count': inmemory_status.get('cancelled_count', 0) + db_cancelled,
+            'current_job_id': inmemory_status.get('current_job_id'),
+        }
 
     async def process_queue(self) -> None:
         """

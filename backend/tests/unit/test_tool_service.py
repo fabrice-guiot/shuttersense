@@ -265,32 +265,44 @@ class TestToolServiceQueueStatus:
         return collection
 
     def test_get_queue_status(self, mock_db, mock_collection, job_queue):
-        """Test getting queue status."""
-        # Set up mock to return collection first, then None for default pipeline query
-        def side_effect(model):
-            query_mock = Mock()
-            filter_mock = Mock()
-            if model == Collection:
-                filter_mock.first.return_value = mock_collection
-            else:
-                # Pipeline query returns None (no default pipeline)
-                filter_mock.first.return_value = None
-            query_mock.filter.return_value = filter_mock
-            return query_mock
+        """Test getting queue status with in-memory jobs."""
+        # Set up a more flexible mock that handles different query patterns
+        query_mock = Mock()
+        filter_mock = Mock()
+        group_mock = Mock()
 
-        mock_db.query.side_effect = side_effect
+        # Default behavior: return empty list for .all() and mock_collection for .first()
+        group_mock.all.return_value = []
+        filter_mock.first.return_value = mock_collection
+        filter_mock.group_by.return_value = group_mock
+
+        query_mock.filter.return_value = filter_mock
+        query_mock.group_by.return_value = group_mock
+
+        mock_db.query.return_value = query_mock
 
         service = ToolService(db=mock_db, job_queue=job_queue)
         service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
 
         status = service.get_queue_status()
 
+        # In-memory queue should have 1 queued job
         assert status["queued_count"] == 1
         assert status["running_count"] == 0
         assert status["completed_count"] == 0
 
     def test_queue_status_empty(self, mock_db, job_queue):
         """Test queue status with no jobs."""
+        # Mock the database query for get_queue_status
+        query_mock = Mock()
+        filter_mock = Mock()
+        group_mock = Mock()
+        group_mock.all.return_value = []  # No DB jobs
+        filter_mock.group_by.return_value = group_mock
+        query_mock.filter.return_value = filter_mock
+        query_mock.group_by.return_value = group_mock
+        mock_db.query.return_value = query_mock
+
         service = ToolService(db=mock_db, job_queue=job_queue)
         status = service.get_queue_status()
 
