@@ -11,8 +11,8 @@ import sys
 
 import click
 
-from agent.src.config import AgentConfig
-from agent.src.main import run_agent
+from src.config import AgentConfig
+from src.main import run_agent
 
 
 @click.command()

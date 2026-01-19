@@ -141,7 +141,7 @@ class AgentService:
         )
 
         self.db.add(token)
-        self.db.flush()
+        self.db.commit()
 
         logger.info(
             "Registration token created",
@@ -254,8 +254,8 @@ class AgentService:
             name=name,
             hostname=hostname,
             os_info=os_info,
-            status=AgentStatus.ONLINE,  # Start as online
-            last_heartbeat=datetime.utcnow(),
+            status=AgentStatus.OFFLINE,  # Start as offline until first heartbeat
+            last_heartbeat=None,  # No heartbeat received yet
             capabilities_json=capabilities_serialized,
             connectors_json="[]",  # Empty list serialized for SQLite compatibility
             api_key_hash=api_key_hash,
@@ -265,10 +265,11 @@ class AgentService:
         )
 
         self.db.add(agent)
-        self.db.flush()
+        self.db.flush()  # Flush to get agent.id for token update
 
         # Mark token as used
         token.mark_as_used(agent.id)
+        self.db.commit()  # Commit the entire registration transaction
 
         logger.info(
             "Agent registered",
@@ -398,12 +399,42 @@ class AgentService:
         if version is not None:
             agent.version = version
 
-        self.db.flush()
+        self.db.commit()
 
         logger.debug(
             "heartbeat_processed",
-            agent_guid=agent.guid,
-            status=agent.status.value
+            extra={
+                "agent_guid": agent.guid,
+                "status": agent.status.value
+            }
+        )
+
+        return agent
+
+    def disconnect_agent(self, agent: Agent) -> Agent:
+        """
+        Mark an agent as disconnected (graceful shutdown).
+
+        Called by the agent when it's shutting down gracefully. This immediately
+        marks the agent as OFFLINE and releases any assigned jobs.
+
+        Args:
+            agent: Agent that is disconnecting
+
+        Returns:
+            Updated agent
+        """
+        if agent.status == AgentStatus.REVOKED:
+            # Revoked agents stay revoked
+            return agent
+
+        agent.status = AgentStatus.OFFLINE
+        self._release_agent_jobs(agent)
+        self.db.commit()
+
+        logger.info(
+            "Agent disconnected gracefully",
+            extra={"agent_guid": agent.guid}
         )
 
         return agent
@@ -442,7 +473,7 @@ class AgentService:
                 }
             )
 
-        self.db.flush()
+        self.db.commit()
         return offline_agents
 
     def _release_agent_jobs(self, agent: Agent) -> int:
@@ -548,6 +579,9 @@ class AgentService:
         """
         List agents for a team.
 
+        Automatically checks for stale heartbeats and marks agents offline
+        before returning the list.
+
         Args:
             team_id: Team ID
             status: Optional status filter
@@ -556,6 +590,9 @@ class AgentService:
         Returns:
             List of agents
         """
+        # Update status of agents with stale heartbeats before listing
+        self.check_offline_agents(team_id)
+
         query = self.db.query(Agent).filter(Agent.team_id == team_id)
 
         if status:
@@ -597,7 +634,7 @@ class AgentService:
             agent.system_user.last_name = new_name
             agent.system_user.display_name = f"Agent: {new_name}"
 
-        self.db.flush()
+        self.db.commit()
 
         logger.info(
             "Agent renamed",
@@ -634,7 +671,7 @@ class AgentService:
         # Release any assigned jobs
         self._release_agent_jobs(agent)
 
-        self.db.flush()
+        self.db.commit()
 
         logger.warning(
             "Agent revoked",
@@ -671,7 +708,7 @@ class AgentService:
 
         # Delete the agent (SYSTEM user is preserved for audit trail)
         self.db.delete(agent)
-        self.db.flush()
+        self.db.commit()
 
         logger.info(
             "Agent deleted",
@@ -689,6 +726,9 @@ class AgentService:
         """
         Get agent pool status for the header badge.
 
+        Automatically checks for stale heartbeats and marks agents offline
+        before calculating the status.
+
         Args:
             team_id: Team ID
 
@@ -696,6 +736,9 @@ class AgentService:
             Dict with online_count, idle_count, running_jobs_count, status
         """
         from sqlalchemy import func
+
+        # Update status of agents with stale heartbeats before counting
+        self.check_offline_agents(team_id)
 
         # Count online agents
         online_count = self.db.query(func.count(Agent.id)).filter(

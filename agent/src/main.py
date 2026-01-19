@@ -13,9 +13,9 @@ import signal
 import sys
 from typing import Optional
 
-from agent.src import __version__
-from agent.src.config import AgentConfig
-from agent.src.api_client import (
+from src import __version__
+from src.config import AgentConfig
+from src.api_client import (
     AgentApiClient,
     AgentRevokedError,
     AuthenticationError,
@@ -83,6 +83,11 @@ class AgentRunner:
         Returns:
             Exit code (0 for success, non-zero for error)
         """
+        # Setup signal handlers in the async context for immediate response
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.request_shutdown)
+
         # Validate configuration
         if not self.config.is_registered:
             self.logger.error("Agent is not registered. Run 'shuttersense-agent register' first.")
@@ -117,6 +122,13 @@ class AgentRunner:
             return 3
         finally:
             if self._api_client:
+                # Notify server of graceful disconnect
+                try:
+                    self.logger.info("Notifying server of disconnect...")
+                    await self._api_client.disconnect()
+                    self.logger.info("Disconnected from server")
+                except Exception as e:
+                    self.logger.warning(f"Failed to notify server of disconnect: {e}")
                 await self._api_client.close()
 
     async def _main_loop(self) -> int:
@@ -206,14 +218,7 @@ def run_agent() -> int:
     # Create runner
     runner = AgentRunner(config)
 
-    # Setup signal handlers
-    def signal_handler(signum, frame):
-        runner.request_shutdown()
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    # Run the agent
+    # Run the agent (signal handlers are setup inside the async context)
     return asyncio.run(runner.run())
 
 

@@ -31,8 +31,8 @@ class TestRegistrationFlow:
         sample_capabilities,
     ):
         """Test the complete registration flow from start to finish."""
-        from agent.src.config import AgentConfig
-        from agent.src.api_client import AgentApiClient
+        from src.config import AgentConfig
+        from src.api_client import AgentApiClient
 
         # Create a fresh config
         config = AgentConfig(config_dir=temp_config_dir)
@@ -85,12 +85,12 @@ class TestRegistrationFlow:
         mock_api_key,
     ):
         """Test registration via CLI end-to-end."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             # Setup config mock
             mock_config = MagicMock()
@@ -150,7 +150,7 @@ class TestRegistrationFlow:
         mock_api_key,
     ):
         """Test that registration information persists after agent restart."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         # First registration
         config1 = AgentConfig(config_dir=temp_config_dir)
@@ -187,13 +187,13 @@ class TestRegistrationErrors:
         mock_registration_token,
     ):
         """Test registration when server is unreachable."""
-        from agent.cli.main import cli
-        from agent.src.api_client import ConnectionError as AgentConnectionError
+        from cli.main import cli
+        from src.api_client import ConnectionError as AgentConnectionError
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = False
@@ -228,13 +228,13 @@ class TestRegistrationErrors:
         temp_config_dir,
     ):
         """Test registration with an invalid token."""
-        from agent.cli.main import cli
-        from agent.src.api_client import RegistrationError
+        from cli.main import cli
+        from src.api_client import RegistrationError
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = False
@@ -277,8 +277,8 @@ class TestPostRegistration:
         heartbeat_response,
     ):
         """Test that heartbeat works after registration."""
-        from agent.src.config import AgentConfig
-        from agent.src.api_client import AgentApiClient
+        from src.config import AgentConfig
+        from src.api_client import AgentApiClient
 
         # Setup registered config
         config = AgentConfig(config_dir=temp_config_dir)
@@ -307,8 +307,8 @@ class TestPostRegistration:
         mock_api_key,
     ):
         """Test getting agent info after registration."""
-        from agent.src.config import AgentConfig
-        from agent.src.api_client import AgentApiClient
+        from src.config import AgentConfig
+        from src.api_client import AgentApiClient
 
         # Setup registered config
         config = AgentConfig(config_dir=temp_config_dir)

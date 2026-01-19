@@ -20,7 +20,7 @@ class TestAgentConfig:
 
     def test_default_config_values(self, temp_config_dir):
         """Test that default configuration values are set correctly."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config = AgentConfig(config_dir=temp_config_dir)
 
@@ -34,7 +34,7 @@ class TestAgentConfig:
 
     def test_load_config_from_file(self, agent_config_file, agent_config):
         """Test loading configuration from a YAML file."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config = AgentConfig(config_path=agent_config_file)
 
@@ -47,7 +47,7 @@ class TestAgentConfig:
 
     def test_save_config_to_file(self, temp_config_dir):
         """Test saving configuration to a YAML file."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config_path = temp_config_dir / "agent-config.yaml"
         config = AgentConfig(config_path=config_path)
@@ -68,7 +68,7 @@ class TestAgentConfig:
 
     def test_load_config_from_environment(self, temp_config_dir, monkeypatch):
         """Test that environment variables override file configuration."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         monkeypatch.setenv("SHUTTERSENSE_SERVER_URL", "http://env-server:8000")
         monkeypatch.setenv("SHUTTERSENSE_API_KEY", "agt_key_from_env")
@@ -82,7 +82,7 @@ class TestAgentConfig:
 
     def test_config_file_not_found_uses_defaults(self, temp_config_dir):
         """Test that missing config file uses default values."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         nonexistent_path = temp_config_dir / "nonexistent.yaml"
         config = AgentConfig(config_path=nonexistent_path)
@@ -93,7 +93,7 @@ class TestAgentConfig:
 
     def test_is_registered_property(self, temp_config_dir):
         """Test the is_registered property."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config = AgentConfig(config_dir=temp_config_dir)
 
@@ -110,7 +110,7 @@ class TestAgentConfig:
 
     def test_is_configured_property(self, temp_config_dir):
         """Test the is_configured property."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config = AgentConfig(config_dir=temp_config_dir)
 
@@ -123,7 +123,7 @@ class TestAgentConfig:
 
     def test_default_config_dir(self, clean_environment, monkeypatch):
         """Test that default config directory is platform-appropriate."""
-        from agent.src.config import get_default_config_dir
+        from src.config import get_default_config_dir
 
         # Should return a path in user's config directory
         config_dir = get_default_config_dir()
@@ -136,7 +136,7 @@ class TestConfigValidation:
 
     def test_invalid_server_url_format(self, temp_config_dir):
         """Test validation of server URL format."""
-        from agent.src.config import AgentConfig, ConfigValidationError
+        from src.config import AgentConfig, ConfigValidationError
 
         config = AgentConfig(config_dir=temp_config_dir)
         config.server_url = "not-a-valid-url"
@@ -148,7 +148,7 @@ class TestConfigValidation:
 
     def test_valid_server_url_formats(self, temp_config_dir):
         """Test that valid server URLs pass validation."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config = AgentConfig(config_dir=temp_config_dir)
 
@@ -159,7 +159,7 @@ class TestConfigValidation:
 
     def test_invalid_heartbeat_interval(self, temp_config_dir):
         """Test validation of heartbeat interval."""
-        from agent.src.config import AgentConfig, ConfigValidationError
+        from src.config import AgentConfig, ConfigValidationError
 
         config = AgentConfig(config_dir=temp_config_dir)
         config.server_url = "http://localhost:8000"
@@ -172,7 +172,7 @@ class TestConfigValidation:
 
     def test_invalid_poll_interval(self, temp_config_dir):
         """Test validation of poll interval."""
-        from agent.src.config import AgentConfig, ConfigValidationError
+        from src.config import AgentConfig, ConfigValidationError
 
         config = AgentConfig(config_dir=temp_config_dir)
         config.server_url = "http://localhost:8000"
@@ -189,7 +189,7 @@ class TestConfigPersistence:
 
     def test_update_registration_info(self, temp_config_dir):
         """Test updating registration information and saving."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config_path = temp_config_dir / "agent-config.yaml"
         config = AgentConfig(config_path=config_path)
@@ -211,7 +211,7 @@ class TestConfigPersistence:
 
     def test_clear_registration(self, temp_config_dir):
         """Test clearing registration information."""
-        from agent.src.config import AgentConfig
+        from src.config import AgentConfig
 
         config_path = temp_config_dir / "agent-config.yaml"
         config = AgentConfig(config_path=config_path)

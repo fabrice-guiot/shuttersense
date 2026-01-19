@@ -20,14 +20,14 @@ class TestAgentApiClient:
     @pytest.fixture
     def api_client(self, mock_server_url):
         """Create an API client instance for testing."""
-        from agent.src.api_client import AgentApiClient
+        from src.api_client import AgentApiClient
 
         return AgentApiClient(server_url=mock_server_url)
 
     @pytest.fixture
     def registered_api_client(self, mock_server_url, mock_api_key):
         """Create a registered API client instance for testing."""
-        from agent.src.api_client import AgentApiClient
+        from src.api_client import AgentApiClient
 
         return AgentApiClient(server_url=mock_server_url, api_key=mock_api_key)
 
@@ -66,7 +66,7 @@ class TestRegistration(TestAgentApiClient):
     @pytest.mark.asyncio
     async def test_register_invalid_token(self, api_client, mock_registration_token):
         """Test registration with invalid token."""
-        from agent.src.api_client import RegistrationError
+        from src.api_client import RegistrationError
 
         mock_response = MagicMock()
         mock_response.status_code = 400
@@ -90,7 +90,7 @@ class TestRegistration(TestAgentApiClient):
     @pytest.mark.asyncio
     async def test_register_expired_token(self, api_client):
         """Test registration with expired token."""
-        from agent.src.api_client import RegistrationError
+        from src.api_client import RegistrationError
 
         mock_response = MagicMock()
         mock_response.status_code = 400
@@ -112,7 +112,7 @@ class TestRegistration(TestAgentApiClient):
     @pytest.mark.asyncio
     async def test_register_network_error(self, api_client, mock_registration_token):
         """Test registration with network error."""
-        from agent.src.api_client import ConnectionError as AgentConnectionError
+        from src.api_client import ConnectionError as AgentConnectionError
 
         with patch.object(api_client, "_client") as mock_client:
             mock_client.post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
@@ -179,7 +179,7 @@ class TestHeartbeat(TestAgentApiClient):
     @pytest.mark.asyncio
     async def test_heartbeat_unauthorized(self, registered_api_client):
         """Test heartbeat with invalid API key."""
-        from agent.src.api_client import AuthenticationError
+        from src.api_client import AuthenticationError
 
         mock_response = MagicMock()
         mock_response.status_code = 401
@@ -194,7 +194,7 @@ class TestHeartbeat(TestAgentApiClient):
     @pytest.mark.asyncio
     async def test_heartbeat_agent_revoked(self, registered_api_client):
         """Test heartbeat when agent is revoked."""
-        from agent.src.api_client import AgentRevokedError
+        from src.api_client import AgentRevokedError
 
         mock_response = MagicMock()
         mock_response.status_code = 403
@@ -209,7 +209,7 @@ class TestHeartbeat(TestAgentApiClient):
     @pytest.mark.asyncio
     async def test_heartbeat_network_error(self, registered_api_client):
         """Test heartbeat with network error."""
-        from agent.src.api_client import ConnectionError as AgentConnectionError
+        from src.api_client import ConnectionError as AgentConnectionError
 
         with patch.object(registered_api_client, "_client") as mock_client:
             mock_client.post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
@@ -252,14 +252,14 @@ class TestClientConfiguration:
 
     def test_client_requires_server_url(self):
         """Test that client requires server URL."""
-        from agent.src.api_client import AgentApiClient
+        from src.api_client import AgentApiClient
 
         with pytest.raises(ValueError):
             AgentApiClient(server_url="")
 
     def test_client_sets_user_agent(self, mock_server_url):
         """Test that client sets appropriate User-Agent header."""
-        from agent.src.api_client import AgentApiClient
+        from src.api_client import AgentApiClient
 
         client = AgentApiClient(server_url=mock_server_url)
 
@@ -268,7 +268,7 @@ class TestClientConfiguration:
 
     def test_client_sets_auth_header_when_api_key_provided(self, mock_server_url, mock_api_key):
         """Test that client sets Authorization header when API key is provided."""
-        from agent.src.api_client import AgentApiClient
+        from src.api_client import AgentApiClient
 
         client = AgentApiClient(server_url=mock_server_url, api_key=mock_api_key)
 

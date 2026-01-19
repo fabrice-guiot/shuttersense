@@ -14,9 +14,9 @@ from typing import Optional
 
 import click
 
-from agent.src import __version__
-from agent.src.config import AgentConfig
-from agent.src.api_client import (
+from src import __version__
+from src.config import AgentConfig
+from src.api_client import (
     AgentApiClient,
     ConnectionError as AgentConnectionError,
     RegistrationError,

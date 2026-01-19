@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import httpx
 
-from agent.src import __version__
+from src import __version__
 
 
 # ============================================================================
@@ -291,6 +291,40 @@ class AgentApiClient:
         else:
             raise ApiError(
                 f"Get agent info failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    # -------------------------------------------------------------------------
+    # Disconnect
+    # -------------------------------------------------------------------------
+
+    async def disconnect(self) -> None:
+        """
+        Notify the server that the agent is disconnecting.
+
+        Called during graceful shutdown to immediately mark the agent as
+        offline on the server side.
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        try:
+            response = await self._client.post(f"{API_BASE_PATH}/disconnect")
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 204:
+            return
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise AuthenticationError("Agent not found", status_code=404)
+        else:
+            raise ApiError(
+                f"Disconnect failed with status {response.status_code}",
                 status_code=response.status_code,
             )
 

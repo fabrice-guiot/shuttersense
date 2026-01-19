@@ -146,11 +146,11 @@
 
 ### Backend Implementation for User Story 1
 
-- [ ] T056 [US1] Create GET `/api/agents/pool-status` endpoint in `backend/src/api/agents/routes.py` (online_count, idle_count, running_jobs_count)
-- [ ] T057 [US1] Create WebSocket handler for pool status in `backend/src/ws/agent_pool_status.py` at `/ws/agents/pool-status`
-- [ ] T058 [US1] Create pool status broadcast service in `backend/src/services/agent_pool_service.py` (broadcast on status changes)
-- [ ] T059 [US1] Trigger pool status broadcast from heartbeat endpoint in `backend/src/api/agent/routes.py`
-- [ ] T060 [US1] Trigger pool status broadcast from job status changes in `backend/src/services/job_service.py`
+- [x] T056 [US1] Create GET `/api/agent/v1/pool-status` endpoint in `backend/src/api/agent/routes.py` (online_count, idle_count, running_jobs_count)
+- [x] T057 [US1] Create WebSocket handler for pool status at `/api/agent/v1/ws/pool-status` in `backend/src/api/agent/routes.py`
+- [x] T058 [US1] Create pool status broadcast service in `backend/src/utils/websocket.py` (broadcast on status changes)
+- [x] T059 [US1] Trigger pool status broadcast from heartbeat endpoint in `backend/src/api/agent/routes.py`
+- [ ] T060 [US1] Trigger pool status broadcast from job status changes in `backend/src/services/job_service.py` (requires Phase 5)
 
 ### Frontend Tests for User Story 1
 
@@ -160,11 +160,11 @@
 
 ### Frontend Implementation for User Story 1
 
-- [ ] T064 [US1] Create AgentPoolStatus component in `frontend/src/components/layout/AgentPoolStatus.tsx` (icon, badge, click handler)
-- [ ] T065 [US1] Create useAgentPoolStatus hook in `frontend/src/hooks/useAgentPoolStatus.ts` (WebSocket subscription)
-- [ ] T066 [US1] Create AgentPoolContext in `frontend/src/contexts/AgentPoolContext.tsx` for global state
-- [ ] T067 [US1] Integrate AgentPoolStatus into TopHeader in `frontend/src/components/layout/TopHeader.tsx` (between bell and user card)
-- [ ] T068 [US1] Add navigation from AgentPoolStatus click to /agents route
+- [x] T064 [US1] Create AgentPoolStatus component in `frontend/src/components/layout/AgentPoolStatus.tsx` (icon, badge, click handler)
+- [x] T065 [US1] Create useAgentPoolStatus hook in `frontend/src/hooks/useAgentPoolStatus.ts` (WebSocket subscription)
+- [x] T066 [US1] Create AgentPoolContext in `frontend/src/contexts/AgentPoolContext.tsx` for global state
+- [x] T067 [US1] Integrate AgentPoolStatus into TopHeader in `frontend/src/components/layout/TopHeader.tsx` (between bell and user card)
+- [x] T068 [US1] Add navigation from AgentPoolStatus click to /agents route
 
 **Checkpoint**: Header shows real-time agent pool status badge
 

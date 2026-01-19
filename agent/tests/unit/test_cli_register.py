@@ -33,12 +33,12 @@ class TestRegisterCommand:
 
     def test_register_with_all_arguments(self, cli_runner, temp_config_dir, mock_registration_token, mock_agent_guid, mock_api_key):
         """Test register command with all required arguments."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             # Setup mocks
             mock_config = MagicMock()
@@ -70,7 +70,7 @@ class TestRegisterCommand:
 
     def test_register_requires_server_argument(self, cli_runner, mock_registration_token):
         """Test that register command requires --server argument."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
         result = cli_runner.invoke(cli, [
             "register",
@@ -83,7 +83,7 @@ class TestRegisterCommand:
 
     def test_register_requires_token_argument(self, cli_runner):
         """Test that register command requires --token argument."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
         result = cli_runner.invoke(cli, [
             "register",
@@ -96,12 +96,12 @@ class TestRegisterCommand:
 
     def test_register_uses_hostname_as_default_name(self, cli_runner, temp_config_dir, mock_registration_token, mock_agent_guid, mock_api_key):
         """Test that register uses hostname as default agent name."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = False
@@ -131,9 +131,9 @@ class TestRegisterCommand:
 
     def test_register_already_registered_warns(self, cli_runner, mock_registration_token):
         """Test that register warns if agent is already registered."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class:
+        with patch("cli.register.AgentConfig") as mock_config_class:
             mock_config = MagicMock()
             mock_config.is_registered = True
             mock_config.agent_guid = "agt_01hgw2bbg0000000000000001"
@@ -151,12 +151,12 @@ class TestRegisterCommand:
 
     def test_register_force_reregisters(self, cli_runner, temp_config_dir, mock_registration_token, mock_agent_guid, mock_api_key):
         """Test that --force flag allows re-registration."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = True
@@ -188,13 +188,13 @@ class TestRegisterCommand:
 
     def test_register_invalid_token_error(self, cli_runner, temp_config_dir):
         """Test register command with invalid token shows error."""
-        from agent.cli.main import cli
-        from agent.src.api_client import RegistrationError
+        from cli.main import cli
+        from src.api_client import RegistrationError
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = False
@@ -223,13 +223,13 @@ class TestRegisterCommand:
 
     def test_register_connection_error(self, cli_runner, temp_config_dir, mock_registration_token):
         """Test register command with connection error shows error."""
-        from agent.cli.main import cli
-        from agent.src.api_client import ConnectionError as AgentConnectionError
+        from cli.main import cli
+        from src.api_client import ConnectionError as AgentConnectionError
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = False
@@ -267,12 +267,12 @@ class TestRegisterCommandOutput:
 
     def test_register_shows_agent_guid_on_success(self, cli_runner, temp_config_dir, mock_registration_token, mock_agent_guid, mock_api_key):
         """Test that successful registration shows the agent GUID."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = False
@@ -306,12 +306,12 @@ class TestRegisterCommandOutput:
 
     def test_register_saves_config_on_success(self, cli_runner, temp_config_dir, mock_registration_token, mock_agent_guid, mock_api_key):
         """Test that successful registration saves the configuration."""
-        from agent.cli.main import cli
+        from cli.main import cli
 
-        with patch("agent.cli.register.AgentConfig") as mock_config_class, \
-             patch("agent.cli.register.AgentApiClient") as mock_client_class, \
-             patch("agent.cli.register.get_system_info") as mock_sys_info, \
-             patch("agent.cli.register.detect_capabilities") as mock_capabilities:
+        with patch("cli.register.AgentConfig") as mock_config_class, \
+             patch("cli.register.AgentApiClient") as mock_client_class, \
+             patch("cli.register.get_system_info") as mock_sys_info, \
+             patch("cli.register.detect_capabilities") as mock_capabilities:
 
             mock_config = MagicMock()
             mock_config.is_registered = False

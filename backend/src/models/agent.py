@@ -157,7 +157,7 @@ class Agent(Base, GuidMixin):
 
     # Authentication
     api_key_hash = Column(String(255), unique=True, nullable=False)
-    api_key_prefix = Column(String(10), nullable=False, index=True)
+    api_key_prefix = Column(String(20), nullable=False, index=True)  # "agt_key_" + 8 random chars
 
     # Version and attestation
     version = Column(String(50), nullable=True)

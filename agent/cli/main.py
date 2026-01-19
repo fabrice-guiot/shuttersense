@@ -9,7 +9,7 @@ Task: T041
 
 import click
 
-from agent.src import __version__
+from src import __version__
 
 
 @click.group()
@@ -30,8 +30,8 @@ def cli(ctx: click.Context) -> None:
 
 
 # Import and register subcommands
-from agent.cli.register import register  # noqa: E402
-from agent.cli.start import start  # noqa: E402
+from cli.register import register  # noqa: E402
+from cli.start import start  # noqa: E402
 
 cli.add_command(register)
 cli.add_command(start)
