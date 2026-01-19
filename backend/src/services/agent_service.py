@@ -746,16 +746,17 @@ class AgentService:
             Agent.status == AgentStatus.ONLINE
         ).scalar() or 0
 
-        # Count running jobs
+        # Count active jobs (ASSIGNED = claimed by agent, RUNNING = executing)
+        # Both count as "in progress" for the badge
         running_jobs_count = self.db.query(func.count(Job.id)).filter(
             Job.team_id == team_id,
-            Job.status == JobStatus.RUNNING
+            Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
         ).scalar() or 0
 
-        # Count idle agents (online agents not currently running a job)
+        # Count idle agents (online agents not currently working on a job)
         busy_agent_ids = self.db.query(Job.agent_id).filter(
             Job.team_id == team_id,
-            Job.status == JobStatus.RUNNING,
+            Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING]),
             Job.agent_id.isnot(None)
         ).subquery()
 

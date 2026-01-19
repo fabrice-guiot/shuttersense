@@ -149,6 +149,7 @@ async def run_tool(
     try:
         # Resolve collection_guid to internal ID if provided
         collection_id = None
+        collection = None  # May be None for display_graph mode
         if tool_request.collection_guid:
             try:
                 GuidService.parse_identifier(tool_request.collection_guid, expected_prefix="col")
@@ -175,10 +176,10 @@ async def run_tool(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=str(e)
                 )
-            # Look up pipeline by external_id
+            # Look up pipeline by uuid
             from sqlalchemy.orm import Session
             db: Session = collection_service.db
-            pipeline = db.query(Pipeline).filter(Pipeline.external_id == pipeline_uuid).first()
+            pipeline = db.query(Pipeline).filter(Pipeline.uuid == pipeline_uuid).first()
             if not pipeline:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -193,15 +194,21 @@ async def run_tool(
             mode=tool_request.mode
         )
 
-        # Start processing queue in background using asyncio.create_task
-        # This ensures the task runs truly asynchronously without blocking the response
-        asyncio.create_task(service.process_queue())
+        # Check if this job uses the in-memory queue (server-side execution)
+        # By default, all jobs go to the persistent queue for agents
+        # Only tool types explicitly whitelisted in INMEMORY_JOB_TYPES use in-memory queue
+        from backend.src.config.settings import get_settings
+        settings = get_settings()
+        is_inmemory_job = settings.is_inmemory_job_type(tool_request.tool.value)
 
-        # Log appropriately based on mode
-        if tool_request.mode == ToolMode.DISPLAY_GRAPH:
-            logger.info(f"Job {job.id} queued: {tool_request.tool.value} (display_graph) on pipeline {tool_request.pipeline_guid}")
+        # Only process in-memory queue for whitelisted tool types
+        if is_inmemory_job:
+            asyncio.create_task(service.process_queue())
+            logger.info(f"Job {job.id} queued: {tool_request.tool.value} on collection {tool_request.collection_guid} (in-memory server execution)")
+        elif tool_request.mode == ToolMode.DISPLAY_GRAPH:
+            logger.info(f"Job {job.id} queued: {tool_request.tool.value} (display_graph) on pipeline {tool_request.pipeline_guid} (agent execution)")
         else:
-            logger.info(f"Job {job.id} queued: {tool_request.tool.value} on collection {tool_request.collection_guid}")
+            logger.info(f"Job {job.id} queued: {tool_request.tool.value} on collection {tool_request.collection_guid} (agent execution)")
         return job
 
     except CollectionNotAccessibleError as e:

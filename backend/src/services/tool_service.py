@@ -23,6 +23,8 @@ from sqlalchemy.orm import Session
 from backend.src.models import (
     Collection, AnalysisResult, Pipeline, ResultStatus
 )
+from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+from backend.src.models.collection import CollectionType
 from backend.src.schemas.tools import (
     ToolType, ToolMode, JobStatus, ProgressData, JobResponse
 )
@@ -46,6 +48,74 @@ def _convert_status(queue_status: QueueJobStatus) -> JobStatus:
 def _convert_to_queue_status(schema_status: JobStatus) -> QueueJobStatus:
     """Convert schema JobStatus to JobQueue status."""
     return QueueJobStatus(schema_status.value)
+
+
+def _convert_db_job_status(db_status) -> JobStatus:
+    """Convert DB Job status to schema JobStatus.
+
+    Maps DB JobStatus enum values to API JobStatus:
+    - PENDING, SCHEDULED -> queued
+    - ASSIGNED, RUNNING -> running
+    - COMPLETED, FAILED, CANCELLED -> as-is
+    """
+    from backend.src.models.job import JobStatus as DBJobStatus
+
+    status_map = {
+        DBJobStatus.PENDING: JobStatus.QUEUED,
+        DBJobStatus.SCHEDULED: JobStatus.QUEUED,
+        DBJobStatus.ASSIGNED: JobStatus.RUNNING,  # Assigned = agent working on it
+        DBJobStatus.RUNNING: JobStatus.RUNNING,
+        DBJobStatus.COMPLETED: JobStatus.COMPLETED,
+        DBJobStatus.FAILED: JobStatus.FAILED,
+        DBJobStatus.CANCELLED: JobStatus.CANCELLED,
+    }
+    return status_map.get(db_status, JobStatus.QUEUED)
+
+
+def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
+    """Convert DB Job model to JobResponse.
+
+    Args:
+        job: Job model instance from database
+        position: Queue position (if applicable)
+
+    Returns:
+        JobResponse schema instance
+    """
+    # Convert progress dict to ProgressData if present
+    progress = None
+    if job.progress:
+        progress = ProgressData(
+            stage=job.progress.get("stage", "unknown"),
+            files_scanned=job.progress.get("files_scanned"),
+            total_files=job.progress.get("total_files"),
+            issues_found=job.progress.get("issues_found", 0),
+            percentage=job.progress.get("percentage", 0)
+        )
+
+    # Convert mode string to ToolMode enum if present
+    mode = ToolMode(job.mode) if job.mode else None
+
+    # Get GUIDs from relationships
+    collection_guid = job.collection.guid if job.collection else None
+    pipeline_guid = job.pipeline.guid if job.pipeline else None
+    result_guid = job.result.guid if job.result else None
+
+    return JobResponse(
+        id=job.guid,  # Use guid as the external ID
+        collection_guid=collection_guid,
+        tool=ToolType(job.tool),
+        mode=mode,
+        pipeline_guid=pipeline_guid,
+        status=_convert_db_job_status(job.status),
+        position=position,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        progress=progress,
+        error_message=job.error_message,
+        result_guid=result_guid,
+    )
 
 
 class JobAdapter:
@@ -142,8 +212,9 @@ class ToolService:
         """
         Queue a tool execution job.
 
-        Creates a new job and adds it to the execution queue.
-        If no job is currently running, starts execution immediately.
+        By default, jobs are persisted to the database for agent execution.
+        Only tool types explicitly listed in INMEMORY_JOB_TYPES environment
+        variable will use in-memory queue for server-side execution.
 
         Args:
             tool: Tool to run
@@ -158,6 +229,8 @@ class ToolService:
             ValueError: If collection doesn't exist or pipeline required but missing
             ConflictError: If same tool already running on collection
         """
+        from backend.src.config.settings import get_settings
+
         # Handle display_graph mode (pipeline-only validation)
         if tool == ToolType.PIPELINE_VALIDATION and mode == ToolMode.DISPLAY_GRAPH:
             return self._run_display_graph_tool(pipeline_id)
@@ -187,16 +260,6 @@ class ToolService:
             # For PhotoStats and PhotoPairing, capture pipeline info but don't require it
             resolved_pipeline_id, pipeline_version = self._get_pipeline_for_collection(collection)
 
-        # Check for existing job on same collection/tool
-        existing = self._queue.find_active_job(collection_id, tool.value)
-        if existing:
-            from backend.src.services.exceptions import ConflictError
-            raise ConflictError(
-                message=f"Tool {tool.value} is already running on collection {collection_id}",
-                existing_job_id=existing.id,
-                position=self._queue.get_position(existing.id)
-            )
-
         # Determine mode string for job
         mode_str = mode.value if mode else None
 
@@ -210,7 +273,33 @@ class ToolService:
             if pipeline:
                 pipeline_guid = pipeline.guid
 
-        # Create new job
+        # Check settings to determine job execution mode
+        settings = get_settings()
+
+        # DEFAULT: Create persistent job for agent execution
+        # Only use in-memory queue if tool type is explicitly whitelisted
+        if not settings.is_inmemory_job_type(tool.value):
+            return self._create_persistent_job(
+                collection=collection,
+                tool=tool,
+                mode_str=mode_str,
+                pipeline_id=resolved_pipeline_id,
+                pipeline_guid=pipeline_guid,
+                pipeline_version=pipeline_version,
+            )
+
+        # IN-MEMORY MODE: Tool type is whitelisted for server-side execution
+        # Check for existing job on same collection/tool in in-memory queue
+        existing = self._queue.find_active_job(collection_id, tool.value)
+        if existing:
+            from backend.src.services.exceptions import ConflictError
+            raise ConflictError(
+                message=f"Tool {tool.value} is already running on collection {collection_id}",
+                existing_job_id=existing.id,
+                position=self._queue.get_position(existing.id)
+            )
+
+        # Create new in-memory job for server-side execution
         job = AnalysisJob(
             id=create_job_id(),
             collection_id=collection_id,
@@ -223,14 +312,15 @@ class ToolService:
         )
         position = self._queue.enqueue(job)
 
-        logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_guid}")
+        logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_guid} (in-memory server execution)")
         return JobAdapter.to_response(job, position)
 
     def _run_display_graph_tool(self, pipeline_id: Optional[int]) -> JobResponse:
         """
-        Queue a display-graph mode pipeline validation job.
+        Queue a display-graph mode pipeline validation job for agent execution.
 
         This mode validates the pipeline definition without a collection.
+        Jobs are routed to the persistent queue for agents to claim.
 
         Args:
             pipeline_id: Pipeline ID to validate
@@ -240,7 +330,10 @@ class ToolService:
 
         Raises:
             ValueError: If pipeline_id not provided or pipeline is invalid
+            ConflictError: If job already exists for this pipeline
         """
+        from backend.src.services.exceptions import ConflictError
+
         if not pipeline_id:
             raise ValueError("pipeline_id is required for display_graph mode")
 
@@ -255,43 +348,166 @@ class ToolService:
         if not pipeline.is_valid:
             raise ValueError(f"Pipeline '{pipeline.name}' is not valid")
 
-        # Check for existing display_graph job on same pipeline
-        # Use a special key format for pipeline-only jobs
-        with self._queue._lock:
-            for job in self._queue._jobs.values():
-                if (job.tool == ToolType.PIPELINE_VALIDATION.value and
-                    job.mode == ToolMode.DISPLAY_GRAPH.value and
-                    job.pipeline_id == pipeline_id and
-                    job.status in (QueueJobStatus.QUEUED, QueueJobStatus.RUNNING)):
-                    from backend.src.services.exceptions import ConflictError
-                    raise ConflictError(
-                        message=f"Pipeline validation (display_graph) is already running for pipeline {pipeline_id}",
-                        existing_job_id=job.id,
-                        position=self._queue.get_position(job.id)
-                    )
+        # Check for existing active job in persistent queue
+        existing = self.db.query(Job).filter(
+            Job.pipeline_id == pipeline_id,
+            Job.tool == ToolType.PIPELINE_VALIDATION.value,
+            Job.mode == ToolMode.DISPLAY_GRAPH.value,
+            Job.status.in_([
+                PersistentJobStatus.PENDING,
+                PersistentJobStatus.SCHEDULED,
+                PersistentJobStatus.ASSIGNED,
+                PersistentJobStatus.RUNNING,
+            ])
+        ).first()
+
+        if existing:
+            raise ConflictError(
+                message=f"Pipeline validation (display_graph) is already running for pipeline {pipeline_id}",
+                existing_job_id=existing.guid,
+                position=None
+            )
 
         # Get pipeline GUID from model property
         pipeline_guid = pipeline.guid
 
-        # Create job without collection_id
-        job = AnalysisJob(
-            id=create_job_id(),
+        # Create persistent job for agent execution
+        # No bound_agent since this is pipeline-only - any agent can claim it
+        job = Job(
+            team_id=pipeline.team_id,
             collection_id=None,  # No collection for display_graph mode
-            collection_guid=None,
-            tool=ToolType.PIPELINE_VALIDATION.value,
             pipeline_id=pipeline.id,
-            pipeline_guid=pipeline_guid,
             pipeline_version=pipeline.version,
+            tool=ToolType.PIPELINE_VALIDATION.value,
             mode=ToolMode.DISPLAY_GRAPH.value,
+            status=PersistentJobStatus.PENDING,
+            bound_agent_id=None,  # Unbound - any agent can claim
+            required_capabilities=[ToolType.PIPELINE_VALIDATION.value],
         )
-        position = self._queue.enqueue(job)
 
-        logger.info(f"Job {job.id} queued for pipeline_validation (display_graph) on pipeline {pipeline_guid}")
-        return JobAdapter.to_response(job, position)
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+
+        logger.info(
+            f"Job {job.guid} created for pipeline_validation (display_graph) on pipeline {pipeline_guid} "
+            f"(agent execution, unbound)"
+        )
+
+        # Convert persistent Job to JobResponse
+        return JobResponse(
+            id=job.guid,
+            collection_guid=None,
+            tool=ToolType.PIPELINE_VALIDATION,
+            mode=ToolMode.DISPLAY_GRAPH,
+            pipeline_guid=pipeline_guid,
+            status=JobStatus.QUEUED,  # PENDING maps to QUEUED in API schema
+            position=None,  # Agent jobs don't have queue position
+            created_at=job.created_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            progress=None,
+            error_message=job.error_message,
+            result_guid=None,
+        )
+
+    def _create_persistent_job(
+        self,
+        collection: Collection,
+        tool: ToolType,
+        mode_str: Optional[str],
+        pipeline_id: Optional[int],
+        pipeline_guid: Optional[str],
+        pipeline_version: Optional[int],
+    ) -> JobResponse:
+        """
+        Create a persistent job in the database for agent execution.
+
+        This is the default job creation path. Jobs are stored in the
+        persistent job queue (Job model) and claimed by available agents.
+        For LOCAL collections with bound agents, the job is bound to that agent.
+
+        Args:
+            collection: The collection to analyze
+            tool: Tool to run
+            mode_str: Execution mode string
+            pipeline_id: Resolved pipeline ID
+            pipeline_guid: Pipeline GUID for response
+            pipeline_version: Pipeline version
+
+        Returns:
+            JobResponse with the created job details
+
+        Raises:
+            ConflictError: If same tool already running on collection
+        """
+        from backend.src.services.exceptions import ConflictError
+
+        # Check for existing active job in persistent queue
+        existing = self.db.query(Job).filter(
+            Job.collection_id == collection.id,
+            Job.tool == tool.value,
+            Job.status.in_([
+                PersistentJobStatus.PENDING,
+                PersistentJobStatus.SCHEDULED,
+                PersistentJobStatus.ASSIGNED,
+                PersistentJobStatus.RUNNING,
+            ])
+        ).first()
+
+        if existing:
+            raise ConflictError(
+                message=f"Tool {tool.value} is already running on collection {collection.id}",
+                existing_job_id=existing.guid,
+                position=None  # Persistent jobs don't have a simple queue position
+            )
+
+        # Create persistent job record
+        job = Job(
+            team_id=collection.team_id,
+            collection_id=collection.id,
+            pipeline_id=pipeline_id,
+            pipeline_version=pipeline_version,
+            tool=tool.value,
+            mode=mode_str,
+            status=PersistentJobStatus.PENDING,
+            bound_agent_id=collection.bound_agent_id,
+            required_capabilities=[tool.value],  # Basic capability requirement
+        )
+
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+
+        # Log job creation with binding info
+        binding_info = f"bound to agent {collection.bound_agent_id}" if collection.bound_agent_id else "unbound (any agent)"
+        logger.info(
+            f"Job {job.guid} created for {tool.value} on collection {collection.guid} "
+            f"(persistent queue, {binding_info})"
+        )
+
+        # Convert persistent Job to JobResponse
+        return JobResponse(
+            id=job.guid,
+            collection_guid=collection.guid,
+            tool=ToolType(tool.value),
+            mode=ToolMode(mode_str) if mode_str else None,
+            pipeline_guid=pipeline_guid,
+            status=JobStatus.QUEUED,  # PENDING maps to QUEUED in API schema
+            position=None,  # Agent jobs don't have queue position
+            created_at=job.created_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            progress=None,
+            error_message=job.error_message,
+            result_guid=None,
+        )
 
     def get_job(self, job_id: str) -> Optional[JobResponse]:
         """
         Get job by ID (GUID format: job_xxx).
+
+        Checks both in-memory queue and database for the job.
 
         Args:
             job_id: Job identifier in GUID format
@@ -299,11 +515,25 @@ class ToolService:
         Returns:
             Job response if found, None otherwise
         """
+        # First check in-memory queue
         job = self._queue.get_job(job_id)
-        if not job:
+        if job:
+            position = self._queue.get_position(job_id)
+            return JobAdapter.to_response(job, position)
+
+        # Then check database for persisted jobs
+        from backend.src.models.job import Job as DBJob
+
+        try:
+            job_uuid = DBJob.parse_guid(job_id)
+        except ValueError:
             return None
-        position = self._queue.get_position(job_id)
-        return JobAdapter.to_response(job, position)
+
+        db_job = self.db.query(DBJob).filter(DBJob.uuid == job_uuid).first()
+        if db_job:
+            return _db_job_to_response(db_job)
+
+        return None
 
     def list_jobs(
         self,
@@ -314,6 +544,8 @@ class ToolService:
         """
         List jobs with optional filtering.
 
+        Combines jobs from both in-memory queue and database.
+
         Args:
             status: Filter by job status
             collection_id: Filter by collection
@@ -322,11 +554,13 @@ class ToolService:
         Returns:
             List of matching job responses
         """
-        # Get all jobs from queue
-        queue_status = self._queue.get_queue_status()
-        all_jobs = []
+        from backend.src.models.job import Job as DBJob
+        from backend.src.models.job import JobStatus as DBJobStatus
 
-        # Access internal jobs dict (we need to iterate all jobs)
+        all_jobs = []
+        seen_job_ids = set()
+
+        # 1. Get jobs from in-memory queue
         with self._queue._lock:
             for job in self._queue._jobs.values():
                 # Apply filters
@@ -345,6 +579,43 @@ class ToolService:
                         pass
 
                 all_jobs.append(JobAdapter.to_response(job, position))
+                seen_job_ids.add(job.id)
+
+        # 2. Get jobs from database (persisted jobs for agents)
+        db_query = self.db.query(DBJob)
+
+        # Map API status to DB statuses for filtering
+        if status:
+            db_statuses = []
+            if status == JobStatus.QUEUED:
+                db_statuses = [DBJobStatus.PENDING, DBJobStatus.SCHEDULED]
+            elif status == JobStatus.RUNNING:
+                db_statuses = [DBJobStatus.ASSIGNED, DBJobStatus.RUNNING]
+            elif status == JobStatus.COMPLETED:
+                db_statuses = [DBJobStatus.COMPLETED]
+            elif status == JobStatus.FAILED:
+                db_statuses = [DBJobStatus.FAILED]
+            elif status == JobStatus.CANCELLED:
+                db_statuses = [DBJobStatus.CANCELLED]
+
+            if db_statuses:
+                db_query = db_query.filter(DBJob.status.in_(db_statuses))
+
+        if collection_id:
+            db_query = db_query.filter(DBJob.collection_id == collection_id)
+
+        if tool:
+            db_query = db_query.filter(DBJob.tool == tool.value)
+
+        # Order by created_at descending and limit to recent jobs
+        db_jobs = db_query.order_by(DBJob.created_at.desc()).limit(100).all()
+
+        for db_job in db_jobs:
+            # Skip if already in in-memory queue (avoid duplicates)
+            if db_job.guid in seen_job_ids:
+                continue
+
+            all_jobs.append(_db_job_to_response(db_job))
 
         # Sort by created_at descending
         return sorted(all_jobs, key=lambda j: j.created_at, reverse=True)
@@ -2487,7 +2758,24 @@ class ToolService:
         Returns:
             Created AnalysisResult
         """
+        # Get team_id from collection or pipeline (required for multi-tenancy)
+        team_id = None
+        if job.collection_id:
+            collection = db.query(Collection).filter(
+                Collection.id == job.collection_id
+            ).first()
+            if collection:
+                team_id = collection.team_id
+        elif job.pipeline_id:
+            # For display_graph mode (no collection), get team_id from pipeline
+            pipeline = db.query(Pipeline).filter(
+                Pipeline.id == job.pipeline_id
+            ).first()
+            if pipeline:
+                team_id = pipeline.team_id
+
         result = AnalysisResult(
+            team_id=team_id,
             collection_id=job.collection_id,
             tool=job.tool,  # AnalysisJob.tool is already a string
             pipeline_id=job.pipeline_id,
@@ -2518,7 +2806,24 @@ class ToolService:
         Returns:
             Created AnalysisResult
         """
+        # Get team_id from collection or pipeline (required for multi-tenancy)
+        team_id = None
+        if job.collection_id:
+            collection = db.query(Collection).filter(
+                Collection.id == job.collection_id
+            ).first()
+            if collection:
+                team_id = collection.team_id
+        elif job.pipeline_id:
+            # For display_graph mode (no collection), get team_id from pipeline
+            pipeline = db.query(Pipeline).filter(
+                Pipeline.id == job.pipeline_id
+            ).first()
+            if pipeline:
+                team_id = pipeline.team_id
+
         result = AnalysisResult(
+            team_id=team_id,
             collection_id=job.collection_id,
             tool=job.tool,  # AnalysisJob.tool is already a string
             pipeline_id=job.pipeline_id,

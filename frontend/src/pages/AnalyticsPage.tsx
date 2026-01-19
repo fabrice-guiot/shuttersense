@@ -243,6 +243,11 @@ export default function AnalyticsPage() {
       }
       return newParams
     })
+
+    // Refresh data when switching to reports tab (ensures new results are visible)
+    if (value === 'reports') {
+      refetchResults()
+    }
   }
 
   // Refresh only the selected tab
@@ -286,6 +291,7 @@ export default function AnalyticsPage() {
     setDetailOpen(true)
     setSearchParams({ tab: 'reports', id: resultGuid })
     setActiveTab('reports')
+    refetchResults() // Refresh to ensure the new result appears in table
   }
 
   // View result from table

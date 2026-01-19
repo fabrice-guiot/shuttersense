@@ -507,7 +507,8 @@ async def database_exception_handler(
             "path": request.url.path,
             "method": request.method,
             "error": str(exc),
-        }
+        },
+        exc_info=True,  # Include full traceback for debugging
     )
 
     return JSONResponse(

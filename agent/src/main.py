@@ -15,12 +15,15 @@ from typing import Optional
 
 from src import __version__
 from src.config import AgentConfig
+from src.capabilities import detect_capabilities
 from src.api_client import (
     AgentApiClient,
     AgentRevokedError,
     AuthenticationError,
     ConnectionError as AgentConnectionError,
 )
+from src.polling_loop import JobPollingLoop
+from src.job_executor import JobExecutor
 
 
 # ============================================================================
@@ -135,6 +138,78 @@ class AgentRunner:
         """
         Main heartbeat and polling loop.
 
+        Runs the heartbeat loop and job polling loop concurrently.
+
+        Returns:
+            Exit code
+        """
+        # Detect capabilities on startup (in case tools were added/upgraded)
+        self.logger.info("Detecting agent capabilities...")
+        capabilities = detect_capabilities()
+        self.logger.info(f"Detected capabilities: {capabilities}")
+
+        # Send initial heartbeat with capabilities and version to set agent status to ONLINE
+        # This ensures the agent can claim jobs immediately and has up-to-date capabilities/version
+        self.logger.info(f"Sending initial heartbeat (version: {__version__})...")
+        try:
+            await self._api_client.heartbeat(capabilities=capabilities, version=__version__)
+            self.logger.info("Initial heartbeat acknowledged, agent is now ONLINE")
+        except AgentRevokedError:
+            raise  # Re-raise to be handled by caller
+        except AuthenticationError:
+            raise  # Re-raise to be handled by caller
+        except Exception as e:
+            self.logger.warning(f"Initial heartbeat failed: {e}, continuing anyway...")
+
+        # Create job executor and polling loop
+        job_executor = JobExecutor(self._api_client)
+        polling_loop = JobPollingLoop(
+            api_client=self._api_client,
+            job_executor=job_executor,
+            poll_interval=5,  # Poll every 5 seconds when idle
+        )
+
+        # Start heartbeat and polling loops concurrently
+        heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        polling_task = asyncio.create_task(polling_loop.run())
+
+        try:
+            # Wait for either task to complete (or shutdown)
+            done, pending = await asyncio.wait(
+                [heartbeat_task, polling_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            # Check if any task failed
+            for task in done:
+                exc = task.exception()
+                if exc:
+                    raise exc
+                result = task.result()
+                if result != 0:
+                    return result
+
+        finally:
+            # Signal shutdown to both loops
+            self._shutdown_event.set()
+            polling_loop.request_shutdown()
+
+            # Cancel pending tasks
+            for task in [heartbeat_task, polling_task]:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+        self.logger.info("Agent stopped")
+        return 0
+
+    async def _heartbeat_loop(self) -> int:
+        """
+        Heartbeat loop for maintaining server connection.
+
         Returns:
             Exit code
         """
@@ -165,10 +240,10 @@ class AgentRunner:
                     return 4
 
             except AgentRevokedError:
-                raise  # Re-raise to be handled by run()
+                raise  # Re-raise to be handled by caller
 
             except AuthenticationError:
-                raise  # Re-raise to be handled by run()
+                raise  # Re-raise to be handled by caller
 
             except Exception as e:
                 consecutive_failures += 1
@@ -190,7 +265,6 @@ class AgentRunner:
                 # Normal timeout, continue loop
                 pass
 
-        self.logger.info("Agent stopped")
         return 0
 
     def request_shutdown(self) -> None:

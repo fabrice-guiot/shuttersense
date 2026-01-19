@@ -14,6 +14,7 @@ Design Rationale:
 """
 
 import enum
+import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
@@ -143,8 +144,9 @@ class Job(Base, GuidMixin):
     mode = Column(String(50), nullable=True)
 
     # Status and priority
+    # Use native_enum=False to store as string (matches migration's String(20) column)
     status = Column(
-        Enum(JobStatus, name="job_status", create_constraint=True),
+        Enum(JobStatus, native_enum=False),
         default=JobStatus.PENDING,
         nullable=False,
         index=True
@@ -281,7 +283,11 @@ class Job(Base, GuidMixin):
         Args:
             value: List of required capability strings
         """
-        self.required_capabilities_json = value
+        # Serialize for SQLite compatibility (uses Text variant)
+        if value is None:
+            self.required_capabilities_json = None
+        else:
+            self.required_capabilities_json = json.dumps(value)
 
     @property
     def progress(self) -> Optional[Dict[str, Any]]:
@@ -306,7 +312,11 @@ class Job(Base, GuidMixin):
         Args:
             value: Progress dictionary or None
         """
-        self.progress_json = value
+        # Serialize for SQLite compatibility (uses Text variant)
+        if value is None:
+            self.progress_json = None
+        else:
+            self.progress_json = json.dumps(value)
 
     @property
     def is_claimable(self) -> bool:

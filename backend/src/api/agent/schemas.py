@@ -364,3 +364,208 @@ class RegistrationTokenListResponse(BaseModel):
 
     tokens: List[RegistrationTokenListItem] = Field(default_factory=list)
     total_count: int = Field(..., description="Total number of tokens")
+
+
+# ============================================================================
+# Job Schemas (Phase 5)
+# ============================================================================
+
+class JobClaimResponse(BaseModel):
+    """Response schema for job claim."""
+
+    guid: str = Field(..., description="Job GUID (job_xxx)")
+    tool: str = Field(..., description="Tool to execute (photostats, photo_pairing, pipeline_validation)")
+    mode: Optional[str] = Field(None, description="Execution mode (e.g., 'collection')")
+    collection_guid: Optional[str] = Field(None, description="Collection GUID if applicable")
+    collection_path: Optional[str] = Field(None, description="Collection root path")
+    pipeline_guid: Optional[str] = Field(None, description="Pipeline GUID if applicable")
+    signing_secret: str = Field(..., description="Base64-encoded signing secret for result attestation")
+    priority: int = Field(..., description="Job priority")
+    retry_count: int = Field(..., description="Current retry attempt")
+    max_retries: int = Field(..., description="Maximum retry attempts")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "job_01hgw2bbg...",
+                "tool": "photostats",
+                "mode": "collection",
+                "collection_guid": "col_01hgw2bbg...",
+                "collection_path": "/Users/photos/collection",
+                "signing_secret": "base64-encoded-secret",
+                "priority": 0,
+                "retry_count": 0,
+                "max_retries": 3
+            }
+        }
+    }
+
+
+class JobProgressRequest(BaseModel):
+    """Request schema for job progress update."""
+
+    stage: str = Field(..., description="Current execution stage")
+    percentage: Optional[int] = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Progress percentage (0-100)"
+    )
+    files_scanned: Optional[int] = Field(None, description="Number of files scanned")
+    total_files: Optional[int] = Field(None, description="Total files to scan")
+    current_file: Optional[str] = Field(None, description="Currently processing file")
+    message: Optional[str] = Field(None, description="Progress message")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "stage": "scanning",
+                "percentage": 45,
+                "files_scanned": 1234,
+                "total_files": 5000,
+                "message": "Analyzing file patterns..."
+            }
+        }
+    }
+
+
+class JobCompleteRequest(BaseModel):
+    """Request schema for job completion."""
+
+    results: Dict[str, Any] = Field(..., description="Structured results dictionary")
+    report_html: Optional[str] = Field(None, description="HTML report content")
+    files_scanned: Optional[int] = Field(None, description="Total files scanned")
+    issues_found: Optional[int] = Field(None, description="Issues detected")
+    signature: str = Field(..., description="HMAC-SHA256 signature of results (hex-encoded)")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "results": {
+                    "total_files": 5000,
+                    "orphaned_files": 12,
+                    "missing_sidecars": 5
+                },
+                "files_scanned": 5000,
+                "issues_found": 17,
+                "signature": "abc123def456..."
+            }
+        }
+    }
+
+
+class JobFailRequest(BaseModel):
+    """Request schema for job failure."""
+
+    error_message: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="Error message describing the failure"
+    )
+    signature: Optional[str] = Field(None, description="Optional HMAC signature")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "error_message": "Failed to access collection path: Permission denied"
+            }
+        }
+    }
+
+
+class JobStatusResponse(BaseModel):
+    """Response schema for job status."""
+
+    guid: str = Field(..., description="Job GUID")
+    status: str = Field(..., description="Job status")
+    tool: str = Field(..., description="Tool name")
+    progress: Optional[Dict[str, Any]] = Field(None, description="Current progress")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class JobConfigData(BaseModel):
+    """Configuration data for job execution."""
+
+    photo_extensions: List[str] = Field(
+        ...,
+        description="List of recognized photo file extensions"
+    )
+    metadata_extensions: List[str] = Field(
+        ...,
+        description="List of metadata file extensions (e.g., .xmp)"
+    )
+    camera_mappings: Dict[str, List[Dict[str, Any]]] = Field(
+        ...,
+        description="Camera ID to camera info mappings"
+    )
+    processing_methods: Dict[str, str] = Field(
+        ...,
+        description="Processing method code to description mappings"
+    )
+    require_sidecar: List[str] = Field(
+        ...,
+        description="Extensions that require sidecar files"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "photo_extensions": [".dng", ".cr3", ".tiff"],
+                "metadata_extensions": [".xmp"],
+                "camera_mappings": {},
+                "processing_methods": {"HDR": "High Dynamic Range"},
+                "require_sidecar": [".cr3"]
+            }
+        }
+    }
+
+
+class PipelineData(BaseModel):
+    """Pipeline definition for job execution."""
+
+    guid: str = Field(..., description="Pipeline GUID (pip_xxx)")
+    name: str = Field(..., description="Pipeline name")
+    version: int = Field(..., description="Pipeline version number")
+    nodes: List[Dict[str, Any]] = Field(..., description="Pipeline node definitions")
+    edges: List[Dict[str, Any]] = Field(..., description="Pipeline edge connections")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "pip_01hgw2bbg...",
+                "name": "Standard RAW Workflow",
+                "version": 1,
+                "nodes": [
+                    {"id": "capture_1", "type": "capture", "properties": {}},
+                    {"id": "file_raw", "type": "file", "properties": {"extension": ".dng"}}
+                ],
+                "edges": [
+                    {"from": "capture_1", "to": "file_raw"}
+                ]
+            }
+        }
+    }
+
+
+class JobConfigResponse(BaseModel):
+    """Response schema for job-specific configuration."""
+
+    job_guid: str = Field(..., description="Job GUID this config is for")
+    config: JobConfigData = Field(..., description="Configuration data")
+    collection_path: Optional[str] = Field(
+        None,
+        description="Root path for the collection (if applicable)"
+    )
+    pipeline_guid: Optional[str] = Field(
+        None,
+        description="Pipeline GUID (if applicable)"
+    )
+    pipeline: Optional[PipelineData] = Field(
+        None,
+        description="Pipeline definition (if applicable)"
+    )

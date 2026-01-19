@@ -301,3 +301,67 @@ def sample_capabilities_with_connector() -> list[str]:
         "tool:pipeline_validation:1.0.0",
         "connector:con_01hgw2bbg0000000000000001",
     ]
+
+
+# ============================================================================
+# Job Claim Response Fixtures (Phase 5)
+# ============================================================================
+
+
+@pytest.fixture
+def sample_job_claim_response():
+    """Sample job claim response data."""
+    return {
+        "guid": "job_01hgw2bbg0000000000000001",
+        "tool": "photostats",
+        "mode": "collection",
+        "collection_guid": "col_01hgw2bbg0000000000000001",
+        "collection_path": "/tmp/test",
+        "pipeline_guid": None,
+        "signing_secret": "dGVzdC1zZWNyZXQtMzItYnl0ZXMtaGVyZSEh",  # base64 encoded
+        "priority": 0,
+        "retry_count": 0,
+        "max_retries": 3,
+    }
+
+
+@pytest.fixture
+def sample_config():
+    """Sample configuration data."""
+    return {
+        "photo_extensions": [".dng", ".cr3", ".tiff"],
+        "metadata_extensions": [".xmp"],
+        "camera_mappings": {
+            "AB3D": [{"name": "Canon EOS R5", "serial_number": "12345"}]
+        },
+        "processing_methods": {
+            "HDR": "High Dynamic Range",
+            "BW": "Black and White"
+        },
+        "require_sidecar": [".cr3"]
+    }
+
+
+@pytest.fixture
+def mock_api_client():
+    """Create a mock API client for job operations."""
+    client = MagicMock()
+    client.claim_job = AsyncMock(return_value=None)
+    client.update_job_progress = AsyncMock(return_value={"status": "ok"})
+    client.complete_job = AsyncMock(return_value={"status": "ok"})
+    client.fail_job = AsyncMock(return_value={"status": "ok"})
+    client.get_job_config = AsyncMock(return_value={
+        "config": {
+            "photo_extensions": [".dng", ".cr3"],
+            "metadata_extensions": [".xmp"],
+            "camera_mappings": {},
+            "processing_methods": {},
+            "require_sidecar": [".cr3"],
+        },
+        "collection_path": "/tmp/test",
+        "pipeline_guid": None,
+    })
+    client.heartbeat = AsyncMock(return_value={"server_time": "2024-01-01T00:00:00"})
+    client.disconnect = AsyncMock()
+    client.close = AsyncMock()
+    return client

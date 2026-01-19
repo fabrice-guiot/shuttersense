@@ -329,6 +329,269 @@ class AgentApiClient:
             )
 
     # -------------------------------------------------------------------------
+    # Job Operations
+    # -------------------------------------------------------------------------
+
+    async def claim_job(self) -> Optional[dict[str, Any]]:
+        """
+        Try to claim the next available job.
+
+        Returns:
+            Job data if a job was claimed, None if no jobs available
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            AgentRevokedError: If agent has been revoked
+            ConnectionError: If connection to server fails
+        """
+        try:
+            response = await self._client.post(f"{API_BASE_PATH}/jobs/claim")
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 204:
+            # No jobs available
+            return None
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 403:
+            # Check response body to distinguish between revoked and not online
+            try:
+                detail = response.json().get("detail", "")
+            except Exception:
+                detail = ""
+            if "revoked" in detail.lower():
+                raise AgentRevokedError("Agent has been revoked", status_code=403)
+            else:
+                # Agent not online or other 403 reason - treat as temporary error
+                raise ApiError(
+                    f"Access denied: {detail or 'Agent must be online'}",
+                    status_code=403,
+                )
+        else:
+            raise ApiError(
+                f"Job claim failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def update_job_progress(
+        self,
+        job_guid: str,
+        stage: str,
+        percentage: Optional[int] = None,
+        files_scanned: Optional[int] = None,
+        total_files: Optional[int] = None,
+        current_file: Optional[str] = None,
+        message: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Update progress for a running job.
+
+        Args:
+            job_guid: GUID of the job
+            stage: Current execution stage
+            percentage: Progress percentage (0-100)
+            files_scanned: Number of files scanned
+            total_files: Total files to scan
+            current_file: Currently processing file
+            message: Progress message
+
+        Returns:
+            Job status response
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        payload: dict[str, Any] = {"stage": stage}
+
+        if percentage is not None:
+            payload["percentage"] = percentage
+        if files_scanned is not None:
+            payload["files_scanned"] = files_scanned
+        if total_files is not None:
+            payload["total_files"] = total_files
+        if current_file is not None:
+            payload["current_file"] = current_file
+        if message is not None:
+            payload["message"] = message
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/progress",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        else:
+            raise ApiError(
+                f"Progress update failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def complete_job(
+        self,
+        job_guid: str,
+        results: dict[str, Any],
+        signature: str,
+        report_html: Optional[str] = None,
+        files_scanned: Optional[int] = None,
+        issues_found: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Complete a job with results.
+
+        Args:
+            job_guid: GUID of the job
+            results: Structured results dictionary
+            signature: HMAC-SHA256 signature of results
+            report_html: Optional HTML report content
+            files_scanned: Total files scanned
+            issues_found: Issues detected
+
+        Returns:
+            Job status response
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        payload: dict[str, Any] = {
+            "results": results,
+            "signature": signature,
+        }
+
+        if report_html is not None:
+            payload["report_html"] = report_html
+        if files_scanned is not None:
+            payload["files_scanned"] = files_scanned
+        if issues_found is not None:
+            payload["issues_found"] = issues_found
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/complete",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Job completion failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def fail_job(
+        self,
+        job_guid: str,
+        error_message: str,
+        signature: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Mark a job as failed.
+
+        Args:
+            job_guid: GUID of the job
+            error_message: Error description
+            signature: Optional HMAC signature
+
+        Returns:
+            Job status response
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        payload: dict[str, Any] = {"error_message": error_message}
+
+        if signature is not None:
+            payload["signature"] = signature
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/fail",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        else:
+            raise ApiError(
+                f"Job failure report failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def get_job_config(self, job_guid: str) -> dict[str, Any]:
+        """
+        Get configuration for a job.
+
+        Args:
+            job_guid: GUID of the job
+
+        Returns:
+            Job configuration including tool config and collection path
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        try:
+            response = await self._client.get(
+                f"{API_BASE_PATH}/jobs/{job_guid}/config"
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        elif response.status_code == 403:
+            raise ApiError("Job not assigned to this agent", status_code=403)
+        else:
+            raise ApiError(
+                f"Get job config failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
 

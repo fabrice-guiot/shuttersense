@@ -15,10 +15,11 @@ import asyncio
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from backend.src.utils.websocket import get_connection_manager
+from backend.src.services.tool_service import _db_job_to_response
 
 from backend.src.db.database import get_db
 from backend.src.middleware.tenant import TenantContext, get_tenant_context
@@ -40,8 +41,17 @@ from backend.src.api.agent.schemas import (
     AgentListResponse,
     AgentPoolStatusResponse,
     AgentUpdateRequest,
+    # Job schemas (Phase 5)
+    JobClaimResponse,
+    JobProgressRequest,
+    JobCompleteRequest,
+    JobFailRequest,
+    JobStatusResponse,
+    JobConfigData,
+    JobConfigResponse,
+    PipelineData,
 )
-from backend.src.api.agent.dependencies import AgentContext, get_agent_context
+from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
 
 # Create router with prefix and tags
@@ -256,6 +266,407 @@ async def disconnect_agent(
     )
 
     return None
+
+
+# ============================================================================
+# Job Endpoints (Agent Auth Required - Phase 5)
+# ============================================================================
+
+@router.post(
+    "/jobs/claim",
+    response_model=JobClaimResponse,
+    responses={204: {"description": "No jobs available"}},
+    summary="Claim next available job",
+    description="Claim the next available job for execution. Returns 204 if no jobs available."
+)
+async def claim_job(
+    ctx: AgentContext = Depends(require_online_agent),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Claim the next available job for the agent.
+
+    Uses FOR UPDATE SKIP LOCKED for atomic claiming. Requires the agent
+    to be in ONLINE status.
+
+    Returns 204 No Content if no jobs are available.
+    """
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+
+    coordinator = JobCoordinatorService(db)
+
+    # Get agent to retrieve capabilities
+    agent = service.get_agent_by_guid(ctx.agent_guid, ctx.team_id)
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    # Try to claim a job
+    result = coordinator.claim_job(
+        agent_id=ctx.agent_id,
+        team_id=ctx.team_id,
+        agent_capabilities=agent.capabilities,
+    )
+
+    if not result:
+        # No jobs available - return 204
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    job = result.job
+
+    # Build response with collection path if applicable
+    collection_guid = None
+    collection_path = None
+    if job.collection:
+        collection_guid = job.collection.guid
+        collection_path = job.collection.location
+
+    pipeline_guid = None
+    if job.pipeline:
+        pipeline_guid = job.pipeline.guid
+
+    # Broadcast updates
+    manager = get_connection_manager()
+
+    # Broadcast pool status update (job assigned = running)
+    pool_status = service.get_pool_status(ctx.team_id)
+    asyncio.create_task(
+        manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+    )
+
+    # Broadcast job update so frontend shows the job as running
+    job_response = _db_job_to_response(job)
+    asyncio.create_task(
+        manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+    )
+
+    return JobClaimResponse(
+        guid=job.guid,
+        tool=job.tool,
+        mode=job.mode,
+        collection_guid=collection_guid,
+        collection_path=collection_path,
+        pipeline_guid=pipeline_guid,
+        signing_secret=result.signing_secret,
+        priority=job.priority,
+        retry_count=job.retry_count,
+        max_retries=job.max_retries,
+    )
+
+
+@router.post(
+    "/jobs/{job_guid}/progress",
+    response_model=JobStatusResponse,
+    summary="Update job progress",
+    description="Update progress for a running job."
+)
+async def update_job_progress(
+    job_guid: str,
+    data: JobProgressRequest,
+    ctx: AgentContext = Depends(require_online_agent),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Update progress for a running job.
+
+    The job must be assigned to this agent. Progress updates are
+    broadcast to connected WebSocket clients.
+    """
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+
+    coordinator = JobCoordinatorService(db)
+
+    try:
+        # Build progress dict
+        progress = {
+            "stage": data.stage,
+            "percentage": data.percentage,
+            "files_scanned": data.files_scanned,
+            "total_files": data.total_files,
+            "current_file": data.current_file,
+            "message": data.message,
+        }
+        # Remove None values
+        progress = {k: v for k, v in progress.items() if v is not None}
+
+        job = coordinator.update_progress(
+            job_guid=job_guid,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            progress=progress,
+        )
+
+        # Broadcast updates
+        manager = get_connection_manager()
+
+        # Broadcast job progress to WebSocket clients
+        asyncio.create_task(
+            manager.broadcast_job_progress(ctx.team_id, job.guid, progress)
+        )
+
+        # Also broadcast full job update (for status changes like ASSIGNED -> RUNNING)
+        job_response = _db_job_to_response(job)
+        asyncio.create_task(
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+        )
+
+        return JobStatusResponse(
+            guid=job.guid,
+            status=job.status.value,
+            tool=job.tool,
+            progress=job.progress,
+            error_message=job.error_message,
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/jobs/{job_guid}/complete",
+    response_model=JobStatusResponse,
+    summary="Complete job with results",
+    description="Mark a job as completed and submit results."
+)
+async def complete_job(
+    job_guid: str,
+    data: JobCompleteRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Complete a job with results.
+
+    Creates an AnalysisResult record and links it to the job.
+    The signature must match the HMAC-SHA256 of the results using
+    the signing secret provided during claim.
+    """
+    from backend.src.services.job_coordinator_service import (
+        JobCoordinatorService,
+        JobCompletionData,
+    )
+
+    coordinator = JobCoordinatorService(db)
+
+    try:
+        completion_data = JobCompletionData(
+            results=data.results,
+            report_html=data.report_html,
+            files_scanned=data.files_scanned,
+            issues_found=data.issues_found,
+            signature=data.signature,
+        )
+
+        job = coordinator.complete_job(
+            job_guid=job_guid,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            completion_data=completion_data,
+        )
+
+        # Refresh job to get result relationship
+        db.refresh(job)
+
+        # Broadcast updates
+        manager = get_connection_manager()
+
+        # Broadcast pool status update (job completed)
+        pool_status = service.get_pool_status(ctx.team_id)
+        asyncio.create_task(
+            manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+        )
+
+        # Broadcast full job update so frontend updates the card
+        job_response = _db_job_to_response(job)
+        asyncio.create_task(
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+        )
+
+        return JobStatusResponse(
+            guid=job.guid,
+            status=job.status.value,
+            tool=job.tool,
+            progress=None,
+            error_message=None,
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/jobs/{job_guid}/fail",
+    response_model=JobStatusResponse,
+    summary="Mark job as failed",
+    description="Mark a job as failed with an error message."
+)
+async def fail_job(
+    job_guid: str,
+    data: JobFailRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark a job as failed.
+
+    The job must be assigned to this agent. Failed jobs may be
+    retried if retry_count < max_retries.
+    """
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+
+    coordinator = JobCoordinatorService(db)
+
+    try:
+        job = coordinator.fail_job(
+            job_guid=job_guid,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            error_message=data.error_message,
+            signature=data.signature,
+        )
+
+        # Refresh job to get result relationship
+        db.refresh(job)
+
+        # Broadcast updates
+        manager = get_connection_manager()
+
+        # Broadcast pool status update (job failed)
+        pool_status = service.get_pool_status(ctx.team_id)
+        asyncio.create_task(
+            manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+        )
+
+        # Broadcast full job update so frontend updates the card
+        job_response = _db_job_to_response(job)
+        asyncio.create_task(
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+        )
+
+        return JobStatusResponse(
+            guid=job.guid,
+            status=job.status.value,
+            tool=job.tool,
+            progress=None,
+            error_message=job.error_message,
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/jobs/{job_guid}/config",
+    response_model=JobConfigResponse,
+    summary="Get job-specific configuration",
+    description="Get configuration needed for executing a specific job."
+)
+async def get_job_config(
+    job_guid: str,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Get configuration for a specific job.
+
+    Returns the team configuration plus job-specific details like the
+    collection path. The requesting agent must be assigned to the job.
+    """
+    from backend.src.models.job import Job
+    from backend.src.services.config_loader import DatabaseConfigLoader
+
+    # Parse job GUID
+    try:
+        job_uuid = Job.parse_guid(job_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Get job
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id,
+    ).first()
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify agent is assigned to this job
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Get config from database
+    loader = DatabaseConfigLoader(team_id=ctx.team_id, db=db)
+
+    # Get collection path if applicable
+    collection_path = None
+    if job.collection:
+        collection_path = job.collection.location
+
+    # Get pipeline data if applicable
+    pipeline_guid = None
+    pipeline_data = None
+    if job.pipeline:
+        pipeline_guid = job.pipeline.guid
+        pipeline_data = PipelineData(
+            guid=job.pipeline.guid,
+            name=job.pipeline.name,
+            version=job.pipeline_version or job.pipeline.version,  # Use job's version or current
+            nodes=job.pipeline.nodes_json or [],
+            edges=job.pipeline.edges_json or [],
+        )
+
+    return JobConfigResponse(
+        job_guid=job.guid,
+        config=JobConfigData(
+            photo_extensions=loader.photo_extensions,
+            metadata_extensions=loader.metadata_extensions,
+            camera_mappings=loader.camera_mappings,
+            processing_methods=loader.processing_methods,
+            require_sidecar=loader.require_sidecar,
+        ),
+        collection_path=collection_path,
+        pipeline_guid=pipeline_guid,
+        pipeline=pipeline_data,
+    )
 
 
 # ============================================================================

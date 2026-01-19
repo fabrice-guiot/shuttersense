@@ -132,7 +132,7 @@
 
 ---
 
-## Phase 4: User Story 1 - Agent Pool Status in Header (Priority: P0)
+## Phase 4: User Story 1 - Agent Pool Status in Header (Priority: P0) ✅
 
 **Goal**: Users see agent pool status at a glance in top header, with real-time updates
 
@@ -150,7 +150,7 @@
 - [x] T057 [US1] Create WebSocket handler for pool status at `/api/agent/v1/ws/pool-status` in `backend/src/api/agent/routes.py`
 - [x] T058 [US1] Create pool status broadcast service in `backend/src/utils/websocket.py` (broadcast on status changes)
 - [x] T059 [US1] Trigger pool status broadcast from heartbeat endpoint in `backend/src/api/agent/routes.py`
-- [ ] T060 [US1] Trigger pool status broadcast from job status changes in `backend/src/services/job_service.py` (requires Phase 5)
+- [x] T060 [US1] Trigger pool status broadcast from job status changes in `backend/src/api/agent/routes.py` (claim, complete, fail)
 
 ### Frontend Tests for User Story 1
 
@@ -170,7 +170,7 @@
 
 ---
 
-## Phase 5: User Story 4 - Job Distribution and Execution (Priority: P0)
+## Phase 5: User Story 4 - Job Distribution and Execution (Priority: P0) ✅
 
 **Goal**: Jobs are automatically distributed to capable agents and executed with real-time progress
 
@@ -178,51 +178,51 @@
 
 ### Backend Tests for User Story 4
 
-- [ ] T069 [P] [US4] Unit tests for JobCoordinatorService in `backend/tests/unit/services/test_job_coordinator.py` (claim logic, capability matching, bound agent routing)
-- [ ] T070 [P] [US4] Unit tests for signing secret generation in `backend/tests/unit/services/test_job_signing.py` (generation, verification)
-- [ ] T071 [P] [US4] Unit tests for ConfigLoader protocol in `backend/tests/unit/services/test_config_loader.py` (interface compliance)
-- [ ] T072 [P] [US4] Integration tests for POST `/api/agent/v1/jobs/claim` in `backend/tests/integration/test_job_claim.py` (claim success, no jobs, capability mismatch)
-- [ ] T073 [P] [US4] Integration tests for POST `/api/agent/v1/jobs/{guid}/complete` in `backend/tests/integration/test_job_complete.py` (success, failed, HMAC verification)
-- [ ] T074 [P] [US4] Integration tests for job progress endpoints in `backend/tests/integration/test_job_progress.py` (REST fallback)
-- [ ] T075 [P] [US4] WebSocket tests for agent progress in `backend/tests/integration/test_agent_progress_ws.py` (connect, stream, proxy to frontend)
-- [ ] T076 [P] [US4] Integration tests for config API endpoints in `backend/tests/integration/test_config_api.py` (photo-extensions, camera-mappings, etc.)
+- [x] T069 [P] [US4] Unit tests for JobCoordinatorService in `backend/tests/unit/services/test_job_coordinator.py` (claim logic, capability matching, bound agent routing)
+- [x] T070 [P] [US4] Unit tests for signing secret generation in `backend/tests/unit/services/test_job_coordinator.py` (TestSigningSecret class)
+- [x] T071 [P] [US4] Unit tests for ConfigLoader protocol in `backend/tests/unit/services/test_config_loader.py` (interface compliance)
+- [x] T072 [P] [US4] Integration tests for POST `/api/agent/v1/jobs/claim` in `backend/tests/integration/test_job_claim.py` (claim success, no jobs, capability mismatch)
+- [x] T073 [P] [US4] Integration tests for POST `/api/agent/v1/jobs/{guid}/complete` in `backend/tests/integration/test_job_complete.py` (success, failed, HMAC verification)
+- [x] T074 [P] [US4] Integration tests for job progress endpoints in `backend/tests/integration/test_job_progress.py` (REST fallback)
+- [x] T075 [P] [US4] WebSocket tests for agent progress in `backend/tests/integration/test_agent_progress_ws.py` (connect, stream, proxy to frontend)
+- [x] T076 [P] [US4] Integration tests for config API endpoints in `backend/tests/integration/test_config_api.py` (photo-extensions, camera-mappings, etc.)
 
 ### Backend Implementation for User Story 4
 
-- [ ] T077 [US4] Create JobCoordinatorService in `backend/src/services/job_coordinator_service.py` (claim_job with FOR UPDATE SKIP LOCKED)
-- [ ] T078 [US4] Implement POST `/jobs/claim` endpoint in `backend/src/api/agent/routes.py` (capability matching, bound agent routing)
-- [ ] T079 [US4] Create job signing secret generation in `backend/src/services/job_coordinator_service.py` (HMAC secret per job)
-- [ ] T080 [US4] Implement POST `/jobs/{jobGuid}/complete` endpoint in `backend/src/api/agent/routes.py` (status update, result storage)
-- [ ] T081 [US4] Implement POST `/jobs/{jobGuid}/progress` endpoint (REST fallback) in `backend/src/api/agent/routes.py`
-- [ ] T082 [US4] Create WebSocket handler for agent progress in `backend/src/ws/agent_progress.py` at `/ws/agent/jobs/{job_guid}/progress`
-- [ ] T083 [US4] Implement server-to-frontend progress proxy in `backend/src/ws/agent_progress.py`
-- [ ] T084 [US4] Verify HMAC signature in job completion handler in `backend/src/api/agent/routes.py`
-- [ ] T085 [US4] Handle agent offline detection in AgentService (release jobs after 90s, increment retry_count, check max_retries before re-queuing) in `backend/src/services/agent_service.py`
-- [ ] T086 [US4] Create ConfigLoader protocol in `backend/src/services/config_loader.py` (interface definition)
-- [ ] T087 [P] [US4] Create YamlConfigLoader in `backend/src/services/config_loader.py` (existing implementation refactor)
-- [ ] T088 [P] [US4] Create DatabaseConfigLoader in `backend/src/services/config_loader.py` (existing implementation refactor)
-- [ ] T089 [US4] Create config API endpoints in `backend/src/api/config/routes.py` (photo-extensions, camera-mappings, processing-methods)
-- [ ] T090 [US4] Create job config endpoint GET `/api/jobs/{guid}/config` in `backend/src/api/jobs/routes.py`
+- [x] T077 [US4] Create JobCoordinatorService in `backend/src/services/job_coordinator_service.py` (claim_job with FOR UPDATE SKIP LOCKED)
+- [x] T078 [US4] Implement POST `/jobs/claim` endpoint in `backend/src/api/agent/routes.py` (capability matching, bound agent routing)
+- [x] T079 [US4] Create job signing secret generation in `backend/src/services/job_coordinator_service.py` (HMAC secret per job)
+- [x] T080 [US4] Implement POST `/jobs/{jobGuid}/complete` endpoint in `backend/src/api/agent/routes.py` (status update, result storage)
+- [x] T081 [US4] Implement POST `/jobs/{jobGuid}/progress` endpoint (REST fallback) in `backend/src/api/agent/routes.py`
+- [x] T082 [US4] Create WebSocket handler for agent progress in `backend/src/utils/websocket.py` (broadcast_job_progress, broadcast_global_job_update)
+- [x] T083 [US4] Implement server-to-frontend progress proxy in `backend/src/utils/websocket.py` (broadcast to global jobs channel)
+- [x] T084 [US4] Verify HMAC signature in job completion handler in `backend/src/services/job_coordinator_service.py`
+- [x] T085 [US4] Handle agent offline detection in AgentService (release jobs, increment retry_count) in `backend/src/services/agent_service.py`
+- [x] T086 [US4] Create ConfigLoader protocol in `backend/src/services/config_loader.py` (interface definition)
+- [x] T087 [P] [US4] Create FileConfigLoader in `backend/src/services/config_loader.py` (wraps PhotoAdminConfig)
+- [x] T088 [P] [US4] Create DatabaseConfigLoader in `backend/src/services/config_loader.py` (fetches from Configuration model)
+- [x] T089 [US4] Create job config endpoint GET `/api/agent/v1/jobs/{guid}/config` in `backend/src/api/agent/routes.py`
+- [x] T090 [US4] ToolService updated to list/get both in-memory and DB-persisted jobs in `backend/src/services/tool_service.py`
 
 ### Agent Tests for User Story 4
 
-- [ ] T091 [P] [US4] Unit tests for polling loop in `agent/tests/unit/test_polling_loop.py` (poll interval, claim handling, error recovery)
-- [ ] T092 [P] [US4] Unit tests for job executor in `agent/tests/unit/test_job_executor.py` (tool dispatch, progress callbacks, error handling)
-- [ ] T093 [P] [US4] Unit tests for progress reporter in `agent/tests/unit/test_progress_reporter.py` (WebSocket, REST fallback)
-- [ ] T094 [P] [US4] Unit tests for result signer in `agent/tests/unit/test_result_signer.py` (HMAC generation)
-- [ ] T095 [P] [US4] Unit tests for ApiConfigLoader in `agent/tests/unit/test_config_loader.py` (fetch, cache, error handling)
-- [ ] T096 [US4] Integration tests for job execution flow in `agent/tests/integration/test_job_execution.py` (claim, execute, complete)
+- [x] T091 [P] [US4] Unit tests for polling loop in `agent/tests/unit/test_polling_loop.py` (poll interval, claim handling, error recovery)
+- [x] T092 [P] [US4] Unit tests for job executor in `agent/tests/unit/test_job_executor.py` (tool dispatch, progress callbacks, error handling)
+- [x] T093 [P] [US4] Unit tests for progress reporter in `agent/tests/unit/test_progress_reporter.py` (WebSocket, REST fallback)
+- [x] T094 [P] [US4] Unit tests for result signer in `agent/tests/unit/test_result_signer.py` (HMAC generation)
+- [x] T095 [P] [US4] Unit tests for ApiConfigLoader in `agent/tests/unit/test_config_loader.py` (fetch, cache, error handling)
+- [x] T096 [US4] Integration tests for job execution flow in `agent/tests/integration/test_job_execution.py` (claim, execute, complete)
 
 ### Agent Implementation for User Story 4
 
-- [ ] T097 [US4] Create agent polling loop in `agent/src/polling_loop.py` (5-second poll interval, job claim)
-- [ ] T098 [US4] Create job executor in `agent/src/job_executor.py` (tool dispatch, progress callback)
-- [ ] T099 [US4] Create progress reporter in `agent/src/progress_reporter.py` (WebSocket with REST fallback)
-- [ ] T100 [US4] Implement HMAC result signing in `agent/src/result_signer.py`
-- [ ] T101 [US4] Create ApiConfigLoader in `agent/src/config_loader.py` (fetch from server API)
-- [ ] T102 [US4] Integrate ConfigLoader into tool execution in `agent/src/job_executor.py`
+- [x] T097 [US4] Create agent polling loop in `agent/src/polling_loop.py` (5-second poll interval, job claim)
+- [x] T098 [US4] Create job executor in `agent/src/job_executor.py` (tool dispatch, progress callback)
+- [x] T099 [US4] Create progress reporter in `agent/src/progress_reporter.py` (WebSocket with REST fallback)
+- [x] T100 [US4] Implement HMAC result signing in `agent/src/result_signer.py`
+- [x] T101 [US4] Create ApiConfigLoader in `agent/src/config_loader.py` (fetch from server API)
+- [x] T102 [US4] Integrate ConfigLoader into tool execution in `agent/src/job_executor.py`
 
-**Checkpoint**: Jobs can be claimed, executed, and results stored via agent
+**Checkpoint**: Jobs can be claimed, executed, and results stored via agent ✅
 
 ---
 

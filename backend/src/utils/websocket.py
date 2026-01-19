@@ -185,6 +185,34 @@ class ConnectionManager:
             "pool_status": pool_status
         })
 
+    async def broadcast_job_progress(
+        self, team_id: int, job_guid: str, progress: Dict[str, Any]
+    ) -> None:
+        """
+        Broadcast job progress update to all clients for a team.
+
+        This is used to push real-time job progress updates to clients
+        monitoring jobs (e.g., job detail page, tools page).
+
+        Args:
+            team_id: Team ID to broadcast to
+            job_guid: GUID of the job being updated
+            progress: Progress data (stage, percentage, files_scanned, etc.)
+        """
+        # Broadcast to job-specific channel
+        await self.broadcast(job_guid, {
+            "type": "job_progress",
+            "job_guid": job_guid,
+            "progress": progress
+        })
+
+        # Also broadcast to global jobs channel for tools page
+        await self.broadcast(self.GLOBAL_JOBS_CHANNEL, {
+            "type": "job_progress",
+            "job_guid": job_guid,
+            "progress": progress
+        })
+
     async def send_personal(
         self, job_id: str, websocket: WebSocket, data: Dict[str, Any]
     ) -> bool:

@@ -16,6 +16,7 @@ import click
 
 from src import __version__
 from src.config import AgentConfig
+from src.capabilities import detect_capabilities
 from src.api_client import (
     AgentApiClient,
     ConnectionError as AgentConnectionError,
@@ -60,39 +61,6 @@ def get_system_info() -> tuple[str, str]:
         os_info = f"{system} {release} ({machine})"
 
     return hostname, os_info
-
-
-def detect_capabilities() -> list[str]:
-    """
-    Detect agent capabilities.
-
-    Checks for available tools and storage access.
-
-    Returns:
-        List of capability strings
-    """
-    capabilities = []
-
-    # Always include local filesystem access
-    capabilities.append("local_filesystem")
-
-    # Check for tool availability
-    tools = [
-        ("photostats", "photo_stats"),
-        ("photo_pairing", "photo_pairing"),
-        ("pipeline_validation", "pipeline_validation"),
-    ]
-
-    for tool_name, module_name in tools:
-        try:
-            # Try to import the tool module
-            __import__(module_name)
-            capabilities.append(f"tool:{tool_name}:{__version__}")
-        except ImportError:
-            # Tool not available, skip
-            pass
-
-    return capabilities
 
 
 # ============================================================================

@@ -79,7 +79,8 @@ class TestJobRequiredCapabilities:
         """Test required_capabilities setter."""
         job = Job(tool="photostats")
         job.required_capabilities = ["tool:photostats:1.0.0"]
-        assert job.required_capabilities_json == ["tool:photostats:1.0.0"]
+        # Use property getter to verify - agnostic to internal JSON serialization
+        assert job.required_capabilities == ["tool:photostats:1.0.0"]
 
 
 class TestJobProgress:
@@ -101,7 +102,8 @@ class TestJobProgress:
         """Test progress setter."""
         job = Job(tool="photostats")
         job.progress = {"stage": "analyzing", "percentage": 75}
-        assert job.progress_json == {"stage": "analyzing", "percentage": 75}
+        # Use property getter to verify - agnostic to internal JSON serialization
+        assert job.progress == {"stage": "analyzing", "percentage": 75}
 
     def test_progress_setter_with_none(self):
         """Test progress setter with None."""
