@@ -814,9 +814,41 @@ class JobExecutor:
                     message="Generating report..."
                 )
 
+                # Convert ValidationResult objects to dictionaries for report functions
+                # (build_report_context expects dicts, not ValidationResult objects)
+                validation_results_dict = []
+                for result in validation_results:
+                    # Determine worst status across all terminations
+                    worst_status = ValidationStatus.CONSISTENT
+                    for term_match in result.termination_matches:
+                        if term_match.status.value > worst_status.value:
+                            worst_status = term_match.status
+
+                    # Convert termination matches to dictionaries
+                    termination_matches_dict = []
+                    for term_match in result.termination_matches:
+                        termination_matches_dict.append({
+                            'termination_type': term_match.termination_type,
+                            'status': term_match.status.name,
+                            'expected_files': term_match.expected_files,
+                            'actual_files': term_match.actual_files,
+                            'missing_files': term_match.missing_files,
+                            'extra_files': term_match.extra_files
+                        })
+
+                    # Extract group_id from base_filename
+                    group_id = f"{result.camera_id}{result.counter}"
+
+                    validation_results_dict.append({
+                        'unique_id': result.base_filename,
+                        'group_id': group_id,
+                        'status': worst_status.name,
+                        'termination_matches': termination_matches_dict
+                    })
+
                 # Build report context
                 context = build_report_context(
-                    validation_results=validation_results,
+                    validation_results=validation_results_dict,
                     scan_path=collection_path,
                     scan_start=scan_start,
                     scan_end=scan_end,
