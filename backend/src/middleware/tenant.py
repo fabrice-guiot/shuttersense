@@ -261,6 +261,70 @@ async def _authenticate_session(
     )
 
 
+async def get_websocket_tenant_context(
+    websocket,
+    db: Session
+) -> Optional[TenantContext]:
+    """
+    Extract tenant context from a WebSocket connection.
+
+    WebSocket connections have access to the same session as HTTP requests
+    when using Starlette's SessionMiddleware. This function extracts the
+    user_id from the session and builds a TenantContext.
+
+    Args:
+        websocket: WebSocket connection
+        db: Database session
+
+    Returns:
+        TenantContext if authenticated, None otherwise
+
+    Usage:
+        @router.websocket("/ws/something")
+        async def websocket_endpoint(
+            websocket: WebSocket,
+            db: Session = Depends(get_db)
+        ):
+            await websocket.accept()
+            ctx = await get_websocket_tenant_context(websocket, db)
+            if not ctx:
+                await websocket.close(code=4001, reason="Authentication required")
+                return
+            # Use ctx.team_id for tenant-scoped data
+    """
+    # Import here to avoid circular imports
+    from backend.src.models import User
+    from backend.src.config.super_admins import is_super_admin as check_super_admin
+
+    # Access session from WebSocket scope
+    session = websocket.session if hasattr(websocket, 'session') else {}
+    user_id = session.get("user_id")
+
+    if not user_id:
+        return None
+
+    # Lookup user
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active:
+        return None
+
+    # Check team is active
+    team = user.team
+    if not team or not team.is_active:
+        return None
+
+    # Build context
+    return TenantContext(
+        team_id=team.id,
+        team_guid=team.guid,
+        user_id=user.id,
+        user_guid=user.guid,
+        user_email=user.email,
+        is_super_admin=check_super_admin(user.email),
+        is_api_token=False
+    )
+
+
 def require_super_admin(ctx: TenantContext = Depends(get_tenant_context)) -> TenantContext:
     """
     Dependency that requires super admin privileges.

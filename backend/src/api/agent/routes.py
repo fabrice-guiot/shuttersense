@@ -11,11 +11,14 @@ API version: v1
 Base path: /api/agent/v1
 """
 
+import asyncio
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
+
+from backend.src.utils.websocket import get_connection_manager
 
 from backend.src.db.database import get_db
 from backend.src.middleware.tenant import TenantContext, get_tenant_context
@@ -107,6 +110,14 @@ async def register_agent(
             binary_checksum=data.binary_checksum,
         )
 
+        # Broadcast pool status update after registration
+        if result.agent.team_id:
+            pool_status = service.get_pool_status(result.agent.team_id)
+            manager = get_connection_manager()
+            asyncio.create_task(
+                manager.broadcast_agent_pool_status(result.agent.team_id, pool_status)
+            )
+
         return AgentRegistrationResponse(
             guid=result.agent.guid,
             api_key=result.api_key,
@@ -164,6 +175,13 @@ async def send_heartbeat(
         capabilities=data.capabilities,
         version=data.version,
         error_message=data.error_message,
+    )
+
+    # Broadcast pool status update to connected clients (T059)
+    pool_status = service.get_pool_status(ctx.team_id)
+    manager = get_connection_manager()
+    asyncio.create_task(
+        manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
     )
 
     return HeartbeatResponse(
@@ -383,6 +401,72 @@ async def get_pool_status(
     )
 
 
+@router.websocket("/ws/pool-status")
+async def pool_status_websocket(
+    websocket: WebSocket,
+    db: Session = Depends(get_db),
+):
+    """
+    WebSocket endpoint for real-time agent pool status updates.
+
+    Clients subscribe to receive pool status updates when agents come
+    online/offline, start/complete jobs, etc.
+
+    Authentication: Session-based (same as HTTP endpoints).
+    The team is derived from the authenticated user's session.
+
+    Issue #90 - Distributed Agent Architecture (Phase 4)
+    Task: T057
+    """
+    from backend.src.middleware.tenant import get_websocket_tenant_context
+
+    # Must accept the WebSocket connection BEFORE any validation
+    # Otherwise close() fails with 403 since connection isn't established
+    await websocket.accept()
+
+    # Authenticate using session (same as HTTP endpoints)
+    ctx = await get_websocket_tenant_context(websocket, db)
+    if not ctx:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    team_id = ctx.team_id
+    manager = get_connection_manager()
+    channel = manager.get_agent_pool_channel(team_id)
+
+    # Register this already-accepted connection to the channel
+    await manager.register_accepted(channel, websocket)
+
+    try:
+        # Send initial pool status
+        service = AgentService(db)
+        initial_status = service.get_pool_status(team_id)
+        await websocket.send_json({
+            "type": "agent_pool_status",
+            "pool_status": initial_status
+        })
+
+        # Keep connection alive and handle pings
+        while True:
+            try:
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=30.0
+                )
+                if data == "ping":
+                    await websocket.send_text("pong")
+            except asyncio.TimeoutError:
+                # Send heartbeat to keep connection alive
+                try:
+                    await websocket.send_json({"type": "heartbeat"})
+                except Exception:
+                    break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(channel, websocket)
+
+
 @router.get(
     "/{guid}",
     response_model=AgentResponse,
@@ -468,4 +552,12 @@ async def revoke_agent(
         )
 
     service.revoke_agent(agent, reason)
+
+    # Broadcast pool status update after revocation
+    pool_status = service.get_pool_status(ctx.team_id)
+    manager = get_connection_manager()
+    asyncio.create_task(
+        manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+    )
+
     return None

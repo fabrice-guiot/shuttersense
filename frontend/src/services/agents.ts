@@ -75,6 +75,32 @@ export const revokeAgent = async (guid: string, reason?: string): Promise<void> 
 // ============================================================================
 
 /**
+ * Build WebSocket URL for agent endpoints
+ * Uses the same base URL as the API client to ensure proper proxying
+ */
+const buildWebSocketUrl = (path: string): string => {
+  const baseUrl = api.defaults.baseURL || '/api'
+
+  // If baseUrl is relative, construct absolute WebSocket URL from current location
+  if (baseUrl.startsWith('/')) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${protocol}//${window.location.host}${baseUrl}${path}`
+  }
+
+  // If baseUrl is absolute, convert HTTP to WS
+  const wsUrl = baseUrl.replace(/^http/, 'ws')
+  return `${wsUrl}${path}`
+}
+
+/**
+ * Get WebSocket URL for agent pool status updates
+ * Returns the WebSocket URL for real-time pool status updates
+ */
+export const getPoolStatusWebSocketUrl = (): string => {
+  return buildWebSocketUrl(`${AGENT_API_PATH}/ws/pool-status`)
+}
+
+/**
  * Get agent pool status (for header badge)
  */
 export const getPoolStatus = async (): Promise<AgentPoolStatusResponse> => {

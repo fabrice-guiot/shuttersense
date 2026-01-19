@@ -81,6 +81,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        # Skip WebSocket connections - BaseHTTPMiddleware doesn't handle them properly
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+
         response = await call_next(request)
 
         # Prevent MIME type sniffing
@@ -150,6 +154,10 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        # Skip WebSocket connections - BaseHTTPMiddleware doesn't handle them properly
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+
         content_length = request.headers.get("content-length")
 
         if content_length:
@@ -309,6 +317,8 @@ else:
     cors_origins = [
         "http://localhost:3000",  # React dev server
         "http://127.0.0.1:3000",  # React dev server (alternative)
+        "http://localhost:8000",  # Backend serving SPA
+        "http://127.0.0.1:8000",  # Backend serving SPA (alternative)
     ]
 
 app.add_middleware(

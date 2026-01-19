@@ -28,8 +28,16 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        // Enable WebSocket proxying for /api/tools/ws/* endpoints
+        // Enable WebSocket proxying
         ws: true,
+        // Suppress EPIPE errors on WebSocket proxy (happens during page reload/HMR)
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            if ((err as NodeJS.ErrnoException).code !== 'EPIPE') {
+              console.error('Proxy error:', err)
+            }
+          })
+        },
       },
     },
   },

@@ -7,6 +7,7 @@
 
 import { useNavigate } from 'react-router-dom'
 import { Bell, Menu, HelpCircle, LogOut, User, Users, type LucideIcon } from 'lucide-react'
+import { AgentPoolStatus } from '@/components/layout/AgentPoolStatus'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -172,6 +173,9 @@ export function TopHeader({
             3
           </Badge>
         </button>
+
+        {/* Agent Pool Status (Issue #90) */}
+        <AgentPoolStatus />
 
         {/* User Profile Dropdown */}
         <DropdownMenu>
