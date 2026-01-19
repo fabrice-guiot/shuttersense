@@ -286,31 +286,32 @@ class JobExecutor:
                             # Clean up HTML temp file
                             Path(tmp_path).unlink(missing_ok=True)
 
-                    # Calculate issues (orphaned files)
-                    issues_found = (
-                        len(stats.get('orphaned_images', []))
-                        + len(stats.get('orphaned_xmp', []))
-                    )
+                    # Build results dict matching server-side schema
+                    # orphaned_images and orphaned_xmp must be arrays (not counts)
+                    # for frontend compatibility
+                    orphaned_images = stats.get('orphaned_images', [])
+                    orphaned_xmp = stats.get('orphaned_xmp', [])
 
-                    # Build results dict
                     results = {
                         'total_files': stats.get('total_files', 0),
                         'total_size': stats.get('total_size', 0),
-                        'paired_files': len(stats.get('paired_files', [])),
-                        'orphaned_images': len(stats.get('orphaned_images', [])),
-                        'orphaned_xmp': len(stats.get('orphaned_xmp', [])),
-                        'issues_found': issues_found,
                         'file_counts': dict(stats.get('file_counts', {})),
-                        'scan_time': stats.get('scan_time', 0),
+                        'orphaned_images': orphaned_images,
+                        'orphaned_xmp': orphaned_xmp,
                     }
 
-                    return results, report_html
+                    # Calculate issues count for JobResult
+                    issues_count = len(orphaned_images) + len(orphaned_xmp)
+
+                    return results, report_html, issues_count
 
                 finally:
                     # Clean up config temp file
                     Path(config_path).unlink(missing_ok=True)
 
-            results, report_html = await loop.run_in_executor(None, run_analysis)
+            results, report_html, issues_count = await loop.run_in_executor(
+                None, run_analysis
+            )
 
             if results:
                 return JobResult(
@@ -318,7 +319,7 @@ class JobExecutor:
                     results=results,
                     report_html=report_html,
                     files_scanned=results.get("total_files", 0),
-                    issues_found=results.get("issues_found", 0),
+                    issues_found=issues_count,
                 )
             else:
                 return JobResult(
