@@ -75,7 +75,7 @@
 
 ---
 
-## Phase 3: User Story 2 - Agent Registration and Setup (Priority: P0) 🎯 MVP
+## Phase 3: User Story 2 - Agent Registration and Setup (Priority: P0) ✅ MVP
 
 **Goal**: Team administrators can register agents running on their local machines
 
@@ -83,52 +83,52 @@
 
 ### Backend Tests for User Story 2
 
-- [ ] T024 [P] [US2] Unit tests for registration token service in `backend/tests/unit/services/test_registration_token.py` (creation, expiration, single-use)
-- [ ] T025 [P] [US2] Integration tests for POST `/api/agent/v1/register` in `backend/tests/integration/test_agent_registration.py` (success, invalid token, expired token)
-- [ ] T026 [P] [US2] Integration tests for POST `/api/agent/v1/heartbeat` in `backend/tests/integration/test_agent_heartbeat.py` (status update, capability refresh)
-- [ ] T027 [P] [US2] Integration tests for admin endpoints in `backend/tests/integration/test_agent_admin_api.py` (list, delete, rename, token generation)
+- [x] T024 [P] [US2] Unit tests for registration token service in `backend/tests/unit/services/test_registration_token.py` (creation, expiration, single-use)
+- [x] T025 [P] [US2] Integration tests for POST `/api/agent/v1/register` in `backend/tests/integration/test_agent_registration.py` (success, invalid token, expired token)
+- [x] T026 [P] [US2] Integration tests for POST `/api/agent/v1/heartbeat` in `backend/tests/integration/test_agent_heartbeat.py` (status update, capability refresh)
+- [x] T027 [P] [US2] Integration tests for admin endpoints in `backend/tests/integration/test_agent_admin_api.py` (list, delete, rename, token generation)
 
 ### Backend Implementation for User Story 2
 
-- [ ] T028 [US2] Implement POST `/register` endpoint in `backend/src/api/agent/routes.py` (token validation, agent creation, SYSTEM user creation, API key generation)
-- [ ] T029 [US2] Implement POST `/heartbeat` endpoint in `backend/src/api/agent/routes.py` (status update, capability refresh)
-- [ ] T030 [US2] Implement token generation service method in `backend/src/services/agent_service.py` (create_registration_token)
-- [ ] T031 [US2] Create admin endpoint POST `/api/agents/tokens` in `backend/src/api/agents/routes.py` for token generation from UI
-- [ ] T032 [P] [US2] Create admin endpoint GET `/api/agents` in `backend/src/api/agents/routes.py` for agent list
-- [ ] T033 [P] [US2] Create admin endpoint DELETE `/api/agents/{guid}` in `backend/src/api/agents/routes.py` for agent deletion
-- [ ] T034 [P] [US2] Create admin endpoint PATCH `/api/agents/{guid}` in `backend/src/api/agents/routes.py` for agent rename
+- [x] T028 [US2] Implement POST `/register` endpoint in `backend/src/api/agent/routes.py` (token validation, agent creation, SYSTEM user creation, API key generation)
+- [x] T029 [US2] Implement POST `/heartbeat` endpoint in `backend/src/api/agent/routes.py` (status update, capability refresh)
+- [x] T030 [US2] Implement token generation service method in `backend/src/services/agent_service.py` (create_registration_token)
+- [x] T031 [US2] Create admin endpoint POST `/api/agents/tokens` in `backend/src/api/agents/routes.py` for token generation from UI
+- [x] T032 [P] [US2] Create admin endpoint GET `/api/agents` in `backend/src/api/agents/routes.py` for agent list
+- [x] T033 [P] [US2] Create admin endpoint DELETE `/api/agents/{guid}` in `backend/src/api/agents/routes.py` for agent deletion
+- [x] T034 [P] [US2] Create admin endpoint PATCH `/api/agents/{guid}` in `backend/src/api/agents/routes.py` for agent rename
 
 ### Agent Tests for User Story 2
 
-- [ ] T035 [P] [US2] Unit tests for agent config module in `agent/tests/unit/test_config.py` (loading, saving, defaults)
-- [ ] T036 [P] [US2] Unit tests for agent API client in `agent/tests/unit/test_api_client.py` (register, heartbeat, error handling)
-- [ ] T037 [P] [US2] Unit tests for register CLI command in `agent/tests/unit/test_cli_register.py` (argument parsing, success flow, error handling)
-- [ ] T038 [US2] Integration tests for agent registration flow in `agent/tests/integration/test_registration.py` (end-to-end with mock server)
+- [x] T035 [P] [US2] Unit tests for agent config module in `agent/tests/unit/test_config.py` (loading, saving, defaults)
+- [x] T036 [P] [US2] Unit tests for agent API client in `agent/tests/unit/test_api_client.py` (register, heartbeat, error handling)
+- [x] T037 [P] [US2] Unit tests for register CLI command in `agent/tests/unit/test_cli_register.py` (argument parsing, success flow, error handling)
+- [x] T038 [US2] Integration tests for agent registration flow in `agent/tests/integration/test_registration.py` (end-to-end with mock server)
 
 ### Agent Implementation for User Story 2
 
-- [ ] T039 [US2] Create agent config module in `agent/src/config.py` (server URL, API key storage path, config file location)
-- [ ] T040 [US2] Create agent API client in `agent/src/api_client.py` (register, heartbeat methods)
-- [ ] T041 [US2] Create agent CLI entry point in `agent/cli/main.py` using click
-- [ ] T042 [US2] Implement `register` CLI command in `agent/cli/register.py` (--server, --token, --name flags)
-- [ ] T043 [US2] Implement agent main loop with heartbeat in `agent/src/main.py` (30-second heartbeat)
+- [x] T039 [US2] Create agent config module in `agent/src/config.py` (server URL, API key storage path, config file location)
+- [x] T040 [US2] Create agent API client in `agent/src/api_client.py` (register, heartbeat methods)
+- [x] T041 [US2] Create agent CLI entry point in `agent/cli/main.py` using click
+- [x] T042 [US2] Implement `register` CLI command in `agent/cli/register.py` (--server, --token, --name flags)
+- [x] T043 [US2] Implement agent main loop with heartbeat in `agent/src/main.py` (30-second heartbeat)
 
 ### Frontend Tests for User Story 2
 
-- [ ] T044 [P] [US2] Component tests for AgentListPage in `frontend/tests/components/agents/AgentListPage.test.tsx` (render, actions)
-- [ ] T045 [P] [US2] Component tests for RegistrationTokenDialog in `frontend/tests/components/agents/RegistrationTokenDialog.test.tsx` (generate, copy, close)
-- [ ] T046 [P] [US2] Component tests for AgentStatusBadge in `frontend/tests/components/agents/AgentStatusBadge.test.tsx` (all states)
-- [ ] T047 [P] [US2] Hook tests for useAgents in `frontend/tests/hooks/useAgents.test.ts` (fetch, error handling)
+- [x] T044 [P] [US2] Component tests for AgentListPage in `frontend/tests/components/agents/AgentsPage.test.tsx` (render, actions)
+- [x] T045 [P] [US2] Component tests for RegistrationTokenDialog in `frontend/tests/components/agents/RegistrationTokenDialog.test.tsx` (generate, copy, close)
+- [x] T046 [P] [US2] Component tests for AgentStatusBadge in `frontend/tests/components/agents/AgentStatusBadge.test.tsx` (all states)
+- [x] T047 [P] [US2] Hook tests for useAgents in `frontend/tests/hooks/useAgents.test.ts` (fetch, error handling)
 
 ### Frontend Implementation for User Story 2
 
-- [ ] T048 [US2] Create AgentListPage component in `frontend/src/pages/AgentsPage.tsx` (agent list, status badges, delete/rename actions)
-- [ ] T049 [P] [US2] Create RegistrationTokenDialog component in `frontend/src/components/agents/RegistrationTokenDialog.tsx`
-- [ ] T050 [P] [US2] Create AgentStatusBadge component in `frontend/src/components/agents/AgentStatusBadge.tsx` (online/offline/error/revoked)
-- [ ] T051 [US2] Create useAgents hook in `frontend/src/hooks/useAgents.ts` for agent list fetching
-- [ ] T052 [US2] Add route for AgentsPage in `frontend/src/App.tsx` at `/agents` (NO sidebar entry per spec)
+- [x] T048 [US2] Create AgentListPage component in `frontend/src/pages/AgentsPage.tsx` (agent list, status badges, delete/rename actions)
+- [x] T049 [P] [US2] Create RegistrationTokenDialog component in `frontend/src/components/agents/RegistrationTokenDialog.tsx`
+- [x] T050 [P] [US2] Create AgentStatusBadge component in `frontend/src/components/agents/AgentStatusBadge.tsx` (online/offline/error/revoked)
+- [x] T051 [US2] Create useAgents hook in `frontend/src/hooks/useAgents.ts` for agent list fetching
+- [x] T052 [US2] Add route for AgentsPage in `frontend/src/App.tsx` at `/agents` (NO sidebar entry per spec)
 
-**Checkpoint**: Agents can register via CLI and appear in web UI
+**Checkpoint**: Agents can register via CLI and appear in web UI ✅
 
 ---
 

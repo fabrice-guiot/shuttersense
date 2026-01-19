@@ -18,6 +18,7 @@ import {
   Calendar,
   BookOpen,
   User,
+  Bot,
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
@@ -41,6 +42,7 @@ import EventsPage from './pages/EventsPage'
 import DirectoryPage from './pages/DirectoryPage'
 import LoginPage from './pages/LoginPage'
 import ProfilePage from './pages/ProfilePage'
+import AgentsPage from './pages/AgentsPage'
 
 // ============================================================================
 // Route Configuration
@@ -159,6 +161,18 @@ function App() {
                 <ProtectedRoute>
                   <MainLayout pageTitle="Profile" pageIcon={User}>
                     <ProfilePage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Agents page - NOT in sidebar, accessed via header badge (Issue #90) */}
+            <Route
+              path="/agents"
+              element={
+                <ProtectedRoute>
+                  <MainLayout pageTitle="Agents" pageIcon={Bot} pageHelp="Manage distributed agents for local photo collection analysis">
+                    <AgentsPage />
                   </MainLayout>
                 </ProtectedRoute>
               }

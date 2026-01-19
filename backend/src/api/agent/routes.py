@@ -36,6 +36,7 @@ from backend.src.api.agent.schemas import (
     AgentResponse,
     AgentListResponse,
     AgentPoolStatusResponse,
+    AgentUpdateRequest,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context
 
@@ -210,6 +211,7 @@ async def create_registration_token(
     data: RegistrationTokenCreateRequest,
     ctx: TenantContext = Depends(get_tenant_context),
     service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
 ):
     """
     Create a one-time registration token.
@@ -226,13 +228,8 @@ async def create_registration_token(
 
     # Get creator email for response
     from backend.src.models import User
-    from backend.src.db.database import SessionLocal
-    db = SessionLocal()
-    try:
-        creator = db.query(User).filter(User.id == ctx.user_id).first()
-        creator_email = creator.email if creator else None
-    finally:
-        db.close()
+    creator = db.query(User).filter(User.id == ctx.user_id).first()
+    creator_email = creator.email if creator else None
 
     return RegistrationTokenResponse(
         guid=result.token.guid,
@@ -253,52 +250,47 @@ async def create_registration_token(
 )
 async def list_registration_tokens(
     ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
     include_used: bool = False,
 ):
     """List registration tokens for the current team."""
     from backend.src.models.agent_registration_token import AgentRegistrationToken
     from backend.src.models import User
-    from backend.src.db.database import SessionLocal
+    from backend.src.models.agent import Agent
 
-    db = SessionLocal()
-    try:
-        query = db.query(AgentRegistrationToken).filter(
-            AgentRegistrationToken.team_id == ctx.team_id
-        )
+    query = db.query(AgentRegistrationToken).filter(
+        AgentRegistrationToken.team_id == ctx.team_id
+    )
 
-        if not include_used:
-            query = query.filter(AgentRegistrationToken.is_used == False)
+    if not include_used:
+        query = query.filter(AgentRegistrationToken.is_used == False)
 
-        tokens = query.order_by(AgentRegistrationToken.created_at.desc()).all()
+    tokens = query.order_by(AgentRegistrationToken.created_at.desc()).all()
 
-        items = []
-        for token in tokens:
-            creator = db.query(User).filter(User.id == token.created_by_user_id).first()
-            # Get agent GUID if used
-            agent_guid = None
-            if token.used_by_agent_id:
-                from backend.src.models.agent import Agent
-                agent = db.query(Agent).filter(Agent.id == token.used_by_agent_id).first()
-                agent_guid = agent.guid if agent else None
+    items = []
+    for token in tokens:
+        creator = db.query(User).filter(User.id == token.created_by_user_id).first()
+        # Get agent GUID if used
+        agent_guid = None
+        if token.used_by_agent_id:
+            agent = db.query(Agent).filter(Agent.id == token.used_by_agent_id).first()
+            agent_guid = agent.guid if agent else None
 
-            items.append(RegistrationTokenListItem(
-                guid=token.guid,
-                name=token.name,
-                expires_at=token.expires_at,
-                is_valid=token.is_valid,
-                is_used=token.is_used,
-                used_by_agent_guid=agent_guid,
-                created_at=token.created_at,
-                created_by_email=creator.email if creator else None,
-            ))
+        items.append(RegistrationTokenListItem(
+            guid=token.guid,
+            name=token.name,
+            expires_at=token.expires_at,
+            is_valid=token.is_valid,
+            is_used=token.is_used,
+            used_by_agent_guid=agent_guid,
+            created_at=token.created_at,
+            created_by_email=creator.email if creator else None,
+        ))
 
-        return RegistrationTokenListResponse(
-            tokens=items,
-            total_count=len(items),
-        )
-    finally:
-        db.close()
+    return RegistrationTokenListResponse(
+        tokens=items,
+        total_count=len(items),
+    )
 
 
 @router.delete(
@@ -315,8 +307,17 @@ async def delete_registration_token(
     """Delete an unused registration token."""
     from backend.src.models.agent_registration_token import AgentRegistrationToken
 
+    # Parse GUID to get UUID for database query
+    try:
+        token_uuid = AgentRegistrationToken.parse_guid(guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registration token not found"
+        )
+
     token = db.query(AgentRegistrationToken).filter(
-        AgentRegistrationToken.guid == guid,
+        AgentRegistrationToken.uuid == token_uuid,
         AgentRegistrationToken.team_id == ctx.team_id,
     ).first()
 
@@ -394,7 +395,13 @@ async def get_agent(
     service: AgentService = Depends(get_agent_service),
 ):
     """Get details of a specific agent."""
-    agent = service.get_agent_by_guid(guid, ctx.team_id)
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -412,19 +419,25 @@ async def get_agent(
 )
 async def update_agent(
     guid: str,
-    name: str,
+    data: AgentUpdateRequest,
     ctx: TenantContext = Depends(get_tenant_context),
     service: AgentService = Depends(get_agent_service),
 ):
     """Update agent name."""
-    agent = service.get_agent_by_guid(guid, ctx.team_id)
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found"
         )
 
-    agent = service.rename_agent(agent, name)
+    agent = service.rename_agent(agent, data.name)
     return agent_to_response(agent)
 
 
@@ -441,7 +454,13 @@ async def revoke_agent(
     service: AgentService = Depends(get_agent_service),
 ):
     """Revoke an agent's access."""
-    agent = service.get_agent_by_guid(guid, ctx.team_id)
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

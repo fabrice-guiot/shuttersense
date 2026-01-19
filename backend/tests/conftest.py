@@ -543,6 +543,7 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     )
     from backend.src.api.tools import get_websocket_manager, get_tool_service
     from backend.src.middleware.auth import require_auth
+    from backend.src.middleware.tenant import get_tenant_context
 
     app.dependency_overrides[get_db] = get_test_db
     app.dependency_overrides[get_file_cache] = get_test_cache
@@ -551,6 +552,123 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     app.dependency_overrides[get_websocket_manager] = get_test_websocket_manager
     app.dependency_overrides[get_tool_service] = get_test_tool_service
     app.dependency_overrides[require_auth] = get_test_auth
+    app.dependency_overrides[get_tenant_context] = get_test_auth
+
+    with TestClient(app) as client:
+        yield client
+
+    # Clear overrides
+    app.dependency_overrides.clear()
+
+
+# Alias for test_client to match integration test naming convention
+@pytest.fixture
+def authenticated_client(test_client):
+    """Alias for test_client with authenticated user context."""
+    return test_client
+
+
+@pytest.fixture(scope='function')
+def other_team(test_db_session):
+    """Create a second test team for cross-team isolation testing."""
+    team = Team(
+        name='Other Team',
+        slug='other-team',
+        is_active=True,
+    )
+    test_db_session.add(team)
+    test_db_session.commit()
+    test_db_session.refresh(team)
+    return team
+
+
+@pytest.fixture(scope='function')
+def other_team_user(test_db_session, other_team):
+    """Create a test user for the other team."""
+    user = User(
+        team_id=other_team.id,
+        email='other@example.com',
+        display_name='Other User',
+        status=UserStatus.ACTIVE,
+    )
+    test_db_session.add(user)
+    test_db_session.commit()
+    test_db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def other_team_client(test_db_session, test_session_factory, test_cache, test_job_queue, test_encryptor, test_websocket_manager, other_team, other_team_user):
+    """Create a test client authenticated as a user from a different team.
+
+    Used for testing cross-team data isolation (should return 404 for other team's resources).
+    """
+    from fastapi.testclient import TestClient
+    from backend.src.main import app
+
+    # Create test tenant context for other team
+    other_ctx = TenantContext(
+        team_id=other_team.id,
+        team_guid=other_team.guid,
+        user_id=other_team_user.id,
+        user_guid=other_team_user.guid,
+        user_email=other_team_user.email,
+        is_super_admin=False,
+        is_api_token=False,
+    )
+
+    # Override dependencies
+    def get_test_db():
+        try:
+            yield test_db_session
+        finally:
+            pass
+
+    def get_test_cache():
+        return test_cache
+
+    def get_test_queue():
+        return test_job_queue
+
+    def get_test_encryptor():
+        return test_encryptor
+
+    def get_test_websocket_manager():
+        return test_websocket_manager
+
+    def get_test_auth():
+        """Return mock TenantContext for other team."""
+        return other_ctx
+
+    def get_test_tool_service():
+        """Create ToolService with test session factory for background tasks."""
+        from backend.src.services.tool_service import ToolService
+        return ToolService(
+            db=test_db_session,
+            websocket_manager=test_websocket_manager,
+            job_queue=test_job_queue,
+            session_factory=test_session_factory
+        )
+
+    # Import and override dependencies
+    from backend.src.db.database import get_db
+    from backend.src.api.connectors import get_credential_encryptor as get_connector_encryptor
+    from backend.src.api.collections import (
+        get_file_cache,
+        get_credential_encryptor as get_collection_encryptor
+    )
+    from backend.src.api.tools import get_websocket_manager, get_tool_service
+    from backend.src.middleware.auth import require_auth
+    from backend.src.middleware.tenant import get_tenant_context
+
+    app.dependency_overrides[get_db] = get_test_db
+    app.dependency_overrides[get_file_cache] = get_test_cache
+    app.dependency_overrides[get_connector_encryptor] = get_test_encryptor
+    app.dependency_overrides[get_collection_encryptor] = get_test_encryptor
+    app.dependency_overrides[get_websocket_manager] = get_test_websocket_manager
+    app.dependency_overrides[get_tool_service] = get_test_tool_service
+    app.dependency_overrides[require_auth] = get_test_auth
+    app.dependency_overrides[get_tenant_context] = get_test_auth
 
     with TestClient(app) as client:
         yield client

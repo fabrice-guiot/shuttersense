@@ -1,0 +1,134 @@
+/**
+ * Agent API service
+ *
+ * Handles all API calls related to distributed agents
+ *
+ * Issue #90 - Distributed Agent Architecture (Phase 3)
+ */
+
+import api from './api'
+import { validateGuid } from '@/utils/guid'
+import type {
+  Agent,
+  AgentListResponse,
+  AgentUpdateRequest,
+  AgentPoolStatusResponse,
+  AgentStatsResponse,
+  RegistrationToken,
+  RegistrationTokenCreateRequest,
+  RegistrationTokenListItem,
+  RegistrationTokenListResponse,
+} from '@/contracts/api/agent-api'
+
+// API base path for agent endpoints (admin endpoints)
+const AGENT_API_PATH = '/agent/v1'
+
+// ============================================================================
+// Agent CRUD Operations
+// ============================================================================
+
+/**
+ * List all agents for the current team
+ */
+export const listAgents = async (includeRevoked = false): Promise<Agent[]> => {
+  const params: Record<string, any> = {}
+  if (includeRevoked) params.include_revoked = true
+
+  const response = await api.get<AgentListResponse>(`${AGENT_API_PATH}`, { params })
+  return response.data.agents
+}
+
+/**
+ * Get a single agent by GUID
+ * @param guid - External ID (agt_xxx format)
+ */
+export const getAgent = async (guid: string): Promise<Agent> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'agt'))
+  const response = await api.get<Agent>(`${AGENT_API_PATH}/${safeGuid}`)
+  return response.data
+}
+
+/**
+ * Update an agent (rename)
+ * @param guid - External ID (agt_xxx format)
+ */
+export const updateAgent = async (guid: string, data: AgentUpdateRequest): Promise<Agent> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'agt'))
+  const response = await api.patch<Agent>(`${AGENT_API_PATH}/${safeGuid}`, data)
+  return response.data
+}
+
+/**
+ * Revoke an agent's access
+ * @param guid - External ID (agt_xxx format)
+ */
+export const revokeAgent = async (guid: string, reason?: string): Promise<void> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'agt'))
+  const params: Record<string, any> = {}
+  if (reason) params.reason = reason
+
+  await api.delete(`${AGENT_API_PATH}/${safeGuid}`, { params })
+}
+
+// ============================================================================
+// Agent Pool Status
+// ============================================================================
+
+/**
+ * Get agent pool status (for header badge)
+ */
+export const getPoolStatus = async (): Promise<AgentPoolStatusResponse> => {
+  const response = await api.get<AgentPoolStatusResponse>(`${AGENT_API_PATH}/pool-status`)
+  return response.data
+}
+
+/**
+ * Get agent statistics (for header KPIs)
+ */
+export const getAgentStats = async (): Promise<AgentStatsResponse> => {
+  // Derive stats from the list response
+  const agents = await listAgents()
+  return {
+    total_agents: agents.length,
+    online_agents: agents.filter(a => a.status === 'online').length,
+    offline_agents: agents.filter(a => a.status === 'offline').length,
+  }
+}
+
+// ============================================================================
+// Registration Token Operations
+// ============================================================================
+
+/**
+ * Create a new registration token
+ */
+export const createRegistrationToken = async (
+  data: RegistrationTokenCreateRequest = {}
+): Promise<RegistrationToken> => {
+  const response = await api.post<RegistrationToken>(`${AGENT_API_PATH}/tokens`, data)
+  return response.data
+}
+
+/**
+ * List registration tokens
+ */
+export const listRegistrationTokens = async (
+  includeUsed = false
+): Promise<RegistrationTokenListItem[]> => {
+  const params: Record<string, any> = {}
+  if (includeUsed) params.include_used = true
+
+  const response = await api.get<RegistrationTokenListResponse>(`${AGENT_API_PATH}/tokens`, {
+    params,
+  })
+  return response.data.tokens
+}
+
+/**
+ * Delete an unused registration token
+ * @param guid - Token GUID (art_xxx format)
+ */
+export const deleteRegistrationToken = async (guid: string): Promise<void> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'art'))
+  await api.delete(`${AGENT_API_PATH}/tokens/${safeGuid}`)
+}

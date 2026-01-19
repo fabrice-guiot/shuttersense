@@ -15,6 +15,7 @@ Security:
 """
 
 import hashlib
+import json
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
@@ -242,6 +243,10 @@ class AgentService:
         )
 
         # Create agent
+        # Serialize capabilities to JSON string for SQLite compatibility
+        capabilities_list = capabilities or []
+        capabilities_serialized = json.dumps(capabilities_list) if capabilities_list else "[]"
+
         agent = Agent(
             team_id=token.team_id,
             system_user_id=system_user.id,
@@ -251,7 +256,8 @@ class AgentService:
             os_info=os_info,
             status=AgentStatus.ONLINE,  # Start as online
             last_heartbeat=datetime.utcnow(),
-            capabilities_json=capabilities or [],
+            capabilities_json=capabilities_serialized,
+            connectors_json="[]",  # Empty list serialized for SQLite compatibility
             api_key_hash=api_key_hash,
             api_key_prefix=api_key_prefix,
             version=version,
@@ -386,7 +392,8 @@ class AgentService:
 
         # Update optional fields if provided
         if capabilities is not None:
-            agent.capabilities_json = capabilities
+            # Serialize capabilities to JSON string for SQLite compatibility
+            agent.capabilities_json = json.dumps(capabilities) if capabilities else "[]"
 
         if version is not None:
             agent.version = version
@@ -715,6 +722,12 @@ class AgentService:
             ~Agent.id.in_(busy_agent_ids)
         ).scalar() or 0
 
+        # Count offline agents (not online, not revoked)
+        offline_count = self.db.query(func.count(Agent.id)).filter(
+            Agent.team_id == team_id,
+            Agent.status == AgentStatus.OFFLINE
+        ).scalar() or 0
+
         # Determine overall status
         if online_count == 0:
             status = "offline"
@@ -725,6 +738,7 @@ class AgentService:
 
         return {
             "online_count": online_count,
+            "offline_count": offline_count,
             "idle_count": idle_count,
             "running_jobs_count": running_jobs_count,
             "status": status

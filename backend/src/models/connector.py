@@ -108,7 +108,7 @@ class Connector(Base, GuidMixin):
 
     # Credential storage location (server/agent/pending)
     credential_location = Column(
-        Enum(CredentialLocation, name="credential_location", create_constraint=True),
+        Enum(CredentialLocation, values_callable=lambda x: [e.value for e in x]),
         default=CredentialLocation.SERVER,
         nullable=False,
         index=True

@@ -226,7 +226,14 @@ class Agent(Base, GuidMixin):
         Args:
             value: List of capability strings
         """
-        self.capabilities_json = value
+        # For SQLite compatibility, serialize to JSON string
+        import json
+        if isinstance(value, list):
+            # Check if we're using SQLite (Text variant) - serialize to JSON string
+            # PostgreSQL JSONB handles lists natively
+            self.capabilities_json = json.dumps(value) if value else "[]"
+        else:
+            self.capabilities_json = value
 
     @property
     def connector_guids(self) -> List[str]:
@@ -251,7 +258,12 @@ class Agent(Base, GuidMixin):
         Args:
             value: List of connector GUID strings
         """
-        self.connectors_json = value
+        # For SQLite compatibility, serialize to JSON string
+        import json
+        if isinstance(value, list):
+            self.connectors_json = json.dumps(value) if value else "[]"
+        else:
+            self.connectors_json = value
 
     @property
     def is_online(self) -> bool:

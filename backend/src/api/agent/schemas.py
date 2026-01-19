@@ -236,6 +236,25 @@ class AgentListResponse(BaseModel):
     }
 
 
+class AgentUpdateRequest(BaseModel):
+    """Request schema for updating an agent."""
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="New agent display name"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "name": "Production Studio Mac"
+            }
+        }
+    }
+
+
 class AgentPoolStatusResponse(BaseModel):
     """Response schema for agent pool status (header badge)."""
 
