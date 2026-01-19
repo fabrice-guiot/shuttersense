@@ -215,6 +215,7 @@ class JobExecutor:
 
             def run_analysis():
                 import tempfile
+                import yaml
                 from pathlib import Path
                 from photo_stats import PhotoStats
 
@@ -225,66 +226,89 @@ class JobExecutor:
                     message="Initializing PhotoStats..."
                 )
 
-                # Create PhotoStats instance with folder_path
-                # Note: PhotoStats uses its own config discovery (file-based)
-                # The API-provided config is not used here as PhotoStats
-                # doesn't support receiving config as a dict
-                analyzer = PhotoStats(folder_path=collection_path)
-
-                # Report progress before scanning
-                self._sync_progress_callback(
-                    stage="scanning",
-                    percentage=10,
-                    message=f"Scanning {collection_path}..."
-                )
-
-                # Run analysis (scan_folder is the actual method)
-                stats = analyzer.scan_folder()
-
-                # Report progress before report generation
-                self._sync_progress_callback(
-                    stage="generating",
-                    percentage=80,
-                    message="Generating report..."
-                )
-
-                # Generate HTML report to a temp file and read content
-                report_html = None
-                if stats:
-                    with tempfile.NamedTemporaryFile(
-                        mode='w',
-                        suffix='.html',
-                        delete=False
-                    ) as tmp_file:
-                        tmp_path = tmp_file.name
-
-                    try:
-                        analyzer.generate_html_report(tmp_path)
-                        with open(tmp_path, 'r', encoding='utf-8') as f:
-                            report_html = f.read()
-                    finally:
-                        # Clean up temp file
-                        Path(tmp_path).unlink(missing_ok=True)
-
-                # Calculate issues (orphaned files)
-                issues_found = (
-                    len(stats.get('orphaned_images', []))
-                    + len(stats.get('orphaned_xmp', []))
-                )
-
-                # Build results dict
-                results = {
-                    'total_files': stats.get('total_files', 0),
-                    'total_size': stats.get('total_size', 0),
-                    'paired_files': len(stats.get('paired_files', [])),
-                    'orphaned_images': len(stats.get('orphaned_images', [])),
-                    'orphaned_xmp': len(stats.get('orphaned_xmp', [])),
-                    'issues_found': issues_found,
-                    'file_counts': dict(stats.get('file_counts', {})),
-                    'scan_time': stats.get('scan_time', 0),
+                # Write API config to a temp YAML file for PhotoStats to use
+                # PhotoStats uses PhotoAdminConfig which reads from YAML files
+                config_yaml = {
+                    'photo_extensions': config.get('photo_extensions', []),
+                    'metadata_extensions': config.get('metadata_extensions', []),
+                    'require_sidecar': config.get('require_sidecar', []),
+                    'camera_mappings': config.get('camera_mappings', {}),
+                    'processing_methods': config.get('processing_methods', {}),
                 }
 
-                return results, report_html
+                with tempfile.NamedTemporaryFile(
+                    mode='w',
+                    suffix='.yaml',
+                    delete=False
+                ) as config_file:
+                    yaml.dump(config_yaml, config_file, default_flow_style=False)
+                    config_path = config_file.name
+
+                try:
+                    # Create PhotoStats instance with folder_path and API config
+                    analyzer = PhotoStats(
+                        folder_path=collection_path,
+                        config_path=config_path
+                    )
+
+                    # Report progress before scanning
+                    self._sync_progress_callback(
+                        stage="scanning",
+                        percentage=10,
+                        message=f"Scanning {collection_path}..."
+                    )
+
+                    # Run analysis (scan_folder is the actual method)
+                    stats = analyzer.scan_folder()
+
+                    # Report progress before report generation
+                    self._sync_progress_callback(
+                        stage="generating",
+                        percentage=80,
+                        message="Generating report..."
+                    )
+
+                    # Generate HTML report to a temp file and read content
+                    report_html = None
+                    if stats:
+                        with tempfile.NamedTemporaryFile(
+                            mode='w',
+                            suffix='.html',
+                            delete=False
+                        ) as tmp_file:
+                            tmp_path = tmp_file.name
+
+                        try:
+                            analyzer.generate_html_report(tmp_path)
+                            with open(tmp_path, 'r', encoding='utf-8') as f:
+                                report_html = f.read()
+                        finally:
+                            # Clean up HTML temp file
+                            Path(tmp_path).unlink(missing_ok=True)
+
+                    # Calculate issues (orphaned files)
+                    issues_found = (
+                        len(stats.get('orphaned_images', []))
+                        + len(stats.get('orphaned_xmp', []))
+                    )
+
+                    # Build results dict
+                    results = {
+                        'total_files': stats.get('total_files', 0),
+                        'total_size': stats.get('total_size', 0),
+                        'paired_files': len(stats.get('paired_files', [])),
+                        'orphaned_images': len(stats.get('orphaned_images', [])),
+                        'orphaned_xmp': len(stats.get('orphaned_xmp', [])),
+                        'issues_found': issues_found,
+                        'file_counts': dict(stats.get('file_counts', {})),
+                        'scan_time': stats.get('scan_time', 0),
+                    }
+
+                    return results, report_html
+
+                finally:
+                    # Clean up config temp file
+                    Path(config_path).unlink(missing_ok=True)
 
             results, report_html = await loop.run_in_executor(None, run_analysis)
 
@@ -347,7 +371,6 @@ class JobExecutor:
                     calculate_analytics,
                     generate_html_report
                 )
-                from utils.config_manager import PhotoAdminConfig
 
                 # Report progress at start
                 self._sync_progress_callback(
@@ -356,9 +379,11 @@ class JobExecutor:
                     message="Initializing Photo Pairing..."
                 )
 
-                # Load config (PhotoPairing uses file-based config)
-                config_manager = PhotoAdminConfig()
-                extensions = set(config_manager.photo_extensions)
+                # Use API-provided config directly
+                # photo_pairing functions accept these as parameters
+                extensions = set(config.get('photo_extensions', []))
+                camera_mappings = config.get('camera_mappings', {})
+                processing_methods = config.get('processing_methods', {})
 
                 folder_path = Path(collection_path)
                 start_time = time.time()
@@ -370,7 +395,7 @@ class JobExecutor:
                     message=f"Scanning {collection_path}..."
                 )
 
-                # Scan folder for files
+                # Scan folder for files using API config extensions
                 files = list(scan_folder(folder_path, extensions))
 
                 # Report progress
@@ -393,11 +418,11 @@ class JobExecutor:
                     message="Calculating analytics..."
                 )
 
-                # Calculate analytics
+                # Calculate analytics using API config mappings
                 analytics = calculate_analytics(
                     imagegroups,
-                    config_manager.camera_mappings,
-                    config_manager.processing_methods
+                    camera_mappings,
+                    processing_methods
                 )
 
                 scan_duration = time.time() - start_time
