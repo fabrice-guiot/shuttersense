@@ -173,7 +173,8 @@ class TestAgentServiceRegistration:
         assert result.agent.name == "Test Agent"
         assert result.agent.hostname == "test-host.local"
         assert result.agent.os_info == "macOS 14.0"
-        assert result.agent.status == AgentStatus.ONLINE
+        assert result.agent.status == AgentStatus.OFFLINE  # Starts offline until first heartbeat
+        assert result.agent.last_heartbeat is None  # No heartbeat yet
         assert "local_filesystem" in result.agent.capabilities
         assert result.agent.team_id == test_team.id
 
@@ -202,7 +203,7 @@ class TestAgentServiceRegistration:
 
         assert system_user is not None
         assert system_user.user_type == UserType.SYSTEM
-        assert "@agent.local" in system_user.email
+        assert "@system.shuttersense.local" in system_user.email
 
     def test_register_agent_marks_token_used(
         self, test_db_session, test_team, test_user
@@ -280,16 +281,23 @@ class TestAgentServiceHeartbeat:
             name="Test Agent",
         )
 
-        old_heartbeat = reg_result.agent.last_heartbeat
+        # Agent starts with no heartbeat
+        assert reg_result.agent.last_heartbeat is None
+
+        # Process first heartbeat
+        service.process_heartbeat(reg_result.agent)
+        first_heartbeat = reg_result.agent.last_heartbeat
+
+        assert first_heartbeat is not None
 
         # Wait a tiny bit to ensure timestamp changes
         import time
         time.sleep(0.01)
 
-        # Process heartbeat
+        # Process second heartbeat
         service.process_heartbeat(reg_result.agent)
 
-        assert reg_result.agent.last_heartbeat > old_heartbeat
+        assert reg_result.agent.last_heartbeat > first_heartbeat
 
     def test_process_heartbeat_updates_status(
         self, test_db_session, test_team, test_user
@@ -361,7 +369,8 @@ class TestAgentServiceOfflineDetection:
             name="Test Agent",
         )
 
-        # Set last_heartbeat to past threshold
+        # Bring agent online via heartbeat, then make it stale
+        service.process_heartbeat(reg_result.agent, status=AgentStatus.ONLINE)
         reg_result.agent.last_heartbeat = (
             datetime.utcnow() - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS + 10)
         )
@@ -389,7 +398,8 @@ class TestAgentServiceOfflineDetection:
             name="Test Agent",
         )
 
-        # Ensure heartbeat is recent
+        # Bring agent online via heartbeat with recent timestamp
+        service.process_heartbeat(reg_result.agent, status=AgentStatus.ONLINE)
         reg_result.agent.last_heartbeat = datetime.utcnow()
         test_db_session.commit()
 
@@ -544,7 +554,9 @@ class TestAgentServiceManagement:
     def test_get_agent_by_guid_wrong_team(
         self, test_db_session, test_team, test_user
     ):
-        """Test that agents from other teams are not accessible."""
+        """Test that agents from other teams are not accessible (returns 404)."""
+        from backend.src.services.exceptions import NotFoundError
+
         service = AgentService(test_db_session)
 
         token_result = service.create_registration_token(
@@ -556,10 +568,9 @@ class TestAgentServiceManagement:
             name="Test Agent",
         )
 
-        # Try to get with wrong team_id
-        agent = service.get_agent_by_guid(reg_result.agent.guid, test_team.id + 999)
-
-        assert agent is None
+        # Try to get with wrong team_id - should raise NotFoundError (prevents info leak)
+        with pytest.raises(NotFoundError):
+            service.get_agent_by_guid(reg_result.agent.guid, test_team.id + 999)
 
 
 class TestAgentServicePoolStatus:
@@ -583,15 +594,18 @@ class TestAgentServicePoolStatus:
         """Test pool status with online agents."""
         service = AgentService(test_db_session)
 
-        # Create an online agent
+        # Create and register an agent
         token_result = service.create_registration_token(
             team_id=test_team.id,
             created_by_user_id=test_user.id,
         )
-        service.register_agent(
+        reg_result = service.register_agent(
             plaintext_token=token_result.plaintext_token,
             name="Test Agent",
         )
+
+        # Bring agent online via heartbeat
+        service.process_heartbeat(reg_result.agent, status=AgentStatus.ONLINE)
 
         status = service.get_pool_status(test_team.id)
 
@@ -605,7 +619,7 @@ class TestAgentServicePoolStatus:
         """Test pool status with running jobs."""
         service = AgentService(test_db_session)
 
-        # Create an online agent
+        # Create and register an agent
         token_result = service.create_registration_token(
             team_id=test_team.id,
             created_by_user_id=test_user.id,
@@ -615,12 +629,16 @@ class TestAgentServicePoolStatus:
             name="Test Agent",
         )
 
+        # Bring agent online via heartbeat
+        service.process_heartbeat(reg_result.agent, status=AgentStatus.ONLINE)
+
         # Create a running job assigned to this agent
         job = Job(
             team_id=test_team.id,
             tool="photostats",
             status=JobStatus.RUNNING,
             agent_id=reg_result.agent.id,
+            required_capabilities_json="[]",  # SQLite needs serialized JSON
         )
         test_db_session.add(job)
         test_db_session.commit()

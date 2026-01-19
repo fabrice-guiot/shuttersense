@@ -168,7 +168,7 @@ class TestGetAgentContext:
         assert ctx.agent_guid == reg_result.agent.guid
         assert ctx.team_id == test_team.id
         assert ctx.agent_name == "Test Agent"
-        assert ctx.status == AgentStatus.ONLINE
+        assert ctx.status == AgentStatus.OFFLINE  # Starts offline until first heartbeat
 
 
 class TestGetOptionalAgentContext:

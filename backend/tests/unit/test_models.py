@@ -151,17 +151,19 @@ class TestConnectorModel:
         with pytest.raises(IntegrityError):
             test_db_session.commit()
 
-    def test_connector_credentials_required(self, test_db_session):
-        """Test connector credentials are required."""
+    def test_connector_credentials_nullable_for_agent_mode(self, test_db_session, test_team):
+        """Test connector credentials can be null (for agent-stored credentials)."""
         connector = Connector(
-            name="No Creds Connector",
+            name="Agent Mode Connector",
             type=ConnectorType.S3,
-            credentials=None  # Invalid
+            credentials=None,  # Valid for AGENT or PENDING modes
+            team_id=test_team.id,
         )
         test_db_session.add(connector)
+        test_db_session.commit()
 
-        with pytest.raises(IntegrityError):
-            test_db_session.commit()
+        assert connector.id is not None
+        assert connector.credentials is None
 
     def test_connector_with_metadata(self, test_db_session, test_encryptor):
         """Test creating connector with metadata_json."""

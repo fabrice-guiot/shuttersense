@@ -82,14 +82,15 @@ class TestAgentCapabilities:
         assert agent.capabilities == []
 
     def test_capabilities_setter(self):
-        """Test capabilities setter."""
+        """Test capabilities setter stores value correctly."""
         agent = Agent(
             name="Test Agent",
             api_key_hash="a" * 64,
             api_key_prefix="agt_key_"
         )
         agent.capabilities = ["local_filesystem"]
-        assert agent.capabilities_json == ["local_filesystem"]
+        # Verify via getter (internal storage format varies by DB type)
+        assert agent.capabilities == ["local_filesystem"]
 
     def test_has_capability_true(self):
         """Test has_capability returns True for existing capability."""

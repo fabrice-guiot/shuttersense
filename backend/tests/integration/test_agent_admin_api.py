@@ -390,7 +390,7 @@ class TestPoolStatusEndpoint:
         )
         test_db_session.commit()
 
-        service.register_agent(
+        reg_result = service.register_agent(
             plaintext_token=token_result.plaintext_token,
             name="Test Agent",
             hostname="host.local",
@@ -398,6 +398,10 @@ class TestPoolStatusEndpoint:
             capabilities=["local_filesystem"],
             version="1.0.0"
         )
+        test_db_session.commit()
+
+        # Send heartbeat to bring agent online (agents start OFFLINE)
+        service.process_heartbeat(reg_result.agent, status=AgentStatus.ONLINE)
         test_db_session.commit()
 
         response = test_client.get("/api/agent/v1/pool-status")
