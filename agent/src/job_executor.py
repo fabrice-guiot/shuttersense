@@ -458,28 +458,35 @@ class JobExecutor:
                     # Clean up temp file
                     Path(tmp_path).unlink(missing_ok=True)
 
-                # Build results dict
+                # Build results dict matching server-side schema
+                # calculate_analytics returns: {camera_usage, method_usage, statistics}
+                # Server-side format uses: group_count, image_count, camera_usage, method_usage, invalid_files_count
+                statistics = analytics.get('statistics', {})
+
                 results = {
-                    'total_files': analytics.get('total_files', 0),
-                    'total_groups': analytics.get('total_groups', 0),
-                    'cameras': analytics.get('cameras', {}),
-                    'processing_methods': analytics.get('processing_methods', {}),
-                    'invalid_files': len(invalid_files),
-                    'issues_found': len(invalid_files),
-                    'scan_duration': scan_duration,
+                    'group_count': statistics.get('total_groups', 0),
+                    'image_count': statistics.get('total_images', 0),
+                    'camera_usage': analytics.get('camera_usage', {}),
+                    'method_usage': analytics.get('method_usage', {}),
+                    'invalid_files_count': len(invalid_files),
                 }
 
-                return results, report_html
+                # Calculate total files for JobResult
+                total_files = statistics.get('total_files_scanned', 0)
 
-            results, report_html = await loop.run_in_executor(None, run_analysis)
+                return results, report_html, total_files, len(invalid_files)
+
+            results, report_html, total_files, issues_count = await loop.run_in_executor(
+                None, run_analysis
+            )
 
             if results:
                 return JobResult(
                     success=True,
                     results=results,
                     report_html=report_html,
-                    files_scanned=results.get("total_files", 0),
-                    issues_found=results.get("issues_found", 0),
+                    files_scanned=total_files,
+                    issues_found=issues_count,
                 )
             else:
                 return JobResult(
