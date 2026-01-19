@@ -214,22 +214,75 @@ class JobExecutor:
             loop = asyncio.get_event_loop()
 
             def run_analysis():
+                import tempfile
+                from pathlib import Path
                 from photo_stats import PhotoStats
-                from src.config_loader import DictConfigLoader
 
-                # Create config loader from fetched config
-                config_loader = DictConfigLoader(config)
-
-                # Create PhotoStats instance
-                analyzer = PhotoStats(
-                    root_path=collection_path,
-                    config=config_loader,
-                    progress_callback=self._sync_progress_callback,
+                # Report progress at start
+                self._sync_progress_callback(
+                    stage="initializing",
+                    percentage=0,
+                    message="Initializing PhotoStats..."
                 )
 
-                # Run analysis
-                results = analyzer.analyze()
-                report_html = analyzer.generate_report() if results else None
+                # Create PhotoStats instance with folder_path
+                # Note: PhotoStats uses its own config discovery (file-based)
+                # The API-provided config is not used here as PhotoStats
+                # doesn't support receiving config as a dict
+                analyzer = PhotoStats(folder_path=collection_path)
+
+                # Report progress before scanning
+                self._sync_progress_callback(
+                    stage="scanning",
+                    percentage=10,
+                    message=f"Scanning {collection_path}..."
+                )
+
+                # Run analysis (scan_folder is the actual method)
+                stats = analyzer.scan_folder()
+
+                # Report progress before report generation
+                self._sync_progress_callback(
+                    stage="generating",
+                    percentage=80,
+                    message="Generating report..."
+                )
+
+                # Generate HTML report to a temp file and read content
+                report_html = None
+                if stats:
+                    with tempfile.NamedTemporaryFile(
+                        mode='w',
+                        suffix='.html',
+                        delete=False
+                    ) as tmp_file:
+                        tmp_path = tmp_file.name
+
+                    try:
+                        analyzer.generate_html_report(tmp_path)
+                        with open(tmp_path, 'r', encoding='utf-8') as f:
+                            report_html = f.read()
+                    finally:
+                        # Clean up temp file
+                        Path(tmp_path).unlink(missing_ok=True)
+
+                # Calculate issues (orphaned files)
+                issues_found = (
+                    len(stats.get('orphaned_images', []))
+                    + len(stats.get('orphaned_xmp', []))
+                )
+
+                # Build results dict
+                results = {
+                    'total_files': stats.get('total_files', 0),
+                    'total_size': stats.get('total_size', 0),
+                    'paired_files': len(stats.get('paired_files', [])),
+                    'orphaned_images': len(stats.get('orphaned_images', [])),
+                    'orphaned_xmp': len(stats.get('orphaned_xmp', [])),
+                    'issues_found': issues_found,
+                    'file_counts': dict(stats.get('file_counts', {})),
+                    'scan_time': stats.get('scan_time', 0),
+                }
 
                 return results, report_html
 
@@ -285,19 +338,110 @@ class JobExecutor:
             loop = asyncio.get_event_loop()
 
             def run_analysis():
-                from photo_pairing import PhotoPairing
-                from src.config_loader import DictConfigLoader
+                import tempfile
+                import time
+                from pathlib import Path
+                from photo_pairing import (
+                    scan_folder,
+                    build_imagegroups,
+                    calculate_analytics,
+                    generate_html_report
+                )
+                from utils.config_manager import PhotoAdminConfig
 
-                config_loader = DictConfigLoader(config)
-
-                analyzer = PhotoPairing(
-                    root_path=collection_path,
-                    config=config_loader,
-                    progress_callback=self._sync_progress_callback,
+                # Report progress at start
+                self._sync_progress_callback(
+                    stage="initializing",
+                    percentage=0,
+                    message="Initializing Photo Pairing..."
                 )
 
-                results = analyzer.analyze()
-                report_html = analyzer.generate_report() if results else None
+                # Load config (PhotoPairing uses file-based config)
+                config_manager = PhotoAdminConfig()
+                extensions = set(config_manager.photo_extensions)
+
+                folder_path = Path(collection_path)
+                start_time = time.time()
+
+                # Report progress before scanning
+                self._sync_progress_callback(
+                    stage="scanning",
+                    percentage=10,
+                    message=f"Scanning {collection_path}..."
+                )
+
+                # Scan folder for files
+                files = list(scan_folder(folder_path, extensions))
+
+                # Report progress
+                self._sync_progress_callback(
+                    stage="analyzing",
+                    percentage=30,
+                    message=f"Analyzing {len(files)} files...",
+                    files_scanned=len(files)
+                )
+
+                # Build image groups
+                group_result = build_imagegroups(files, folder_path)
+                imagegroups = group_result['imagegroups']
+                invalid_files = group_result['invalid_files']
+
+                # Report progress
+                self._sync_progress_callback(
+                    stage="calculating",
+                    percentage=60,
+                    message="Calculating analytics..."
+                )
+
+                # Calculate analytics
+                analytics = calculate_analytics(
+                    imagegroups,
+                    config_manager.camera_mappings,
+                    config_manager.processing_methods
+                )
+
+                scan_duration = time.time() - start_time
+
+                # Report progress before report generation
+                self._sync_progress_callback(
+                    stage="generating",
+                    percentage=80,
+                    message="Generating report..."
+                )
+
+                # Generate HTML report to temp file and read content
+                report_html = None
+                with tempfile.NamedTemporaryFile(
+                    mode='w',
+                    suffix='.html',
+                    delete=False
+                ) as tmp_file:
+                    tmp_path = tmp_file.name
+
+                try:
+                    generate_html_report(
+                        analytics,
+                        invalid_files,
+                        tmp_path,
+                        str(folder_path),
+                        scan_duration
+                    )
+                    with open(tmp_path, 'r', encoding='utf-8') as f:
+                        report_html = f.read()
+                finally:
+                    # Clean up temp file
+                    Path(tmp_path).unlink(missing_ok=True)
+
+                # Build results dict
+                results = {
+                    'total_files': analytics.get('total_files', 0),
+                    'total_groups': analytics.get('total_groups', 0),
+                    'cameras': analytics.get('cameras', {}),
+                    'processing_methods': analytics.get('processing_methods', {}),
+                    'invalid_files': len(invalid_files),
+                    'issues_found': len(invalid_files),
+                    'scan_duration': scan_duration,
+                }
 
                 return results, report_html
 
