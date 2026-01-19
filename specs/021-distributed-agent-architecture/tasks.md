@@ -154,15 +154,15 @@
 
 ### Frontend Tests for User Story 1
 
-- [ ] T061 [P] [US1] Component tests for AgentPoolStatus in `frontend/tests/components/layout/AgentPoolStatus.test.tsx` (all badge states, click navigation)
-- [ ] T062 [P] [US1] Hook tests for useAgentPoolStatus in `frontend/tests/hooks/useAgentPoolStatus.test.ts` (WebSocket connection, updates)
-- [ ] T063 [P] [US1] Context tests for AgentPoolContext in `frontend/tests/contexts/AgentPoolContext.test.tsx` (state management)
+- [x] T061 [P] [US1] Component tests for AgentPoolStatus in `frontend/tests/components/layout/AgentPoolStatus.test.tsx` (all badge states, click navigation)
+- [x] T062 [P] [US1] Hook tests for useAgentPoolStatus in `frontend/tests/hooks/useAgentPoolStatus.test.ts` (WebSocket connection, updates)
+- [x] T063 [P] [US1] ~~Context tests for AgentPoolContext~~ N/A - Design simplified: hook manages state directly without separate context
 
 ### Frontend Implementation for User Story 1
 
 - [x] T064 [US1] Create AgentPoolStatus component in `frontend/src/components/layout/AgentPoolStatus.tsx` (icon, badge, click handler)
 - [x] T065 [US1] Create useAgentPoolStatus hook in `frontend/src/hooks/useAgentPoolStatus.ts` (WebSocket subscription)
-- [x] T066 [US1] Create AgentPoolContext in `frontend/src/contexts/AgentPoolContext.tsx` for global state
+- [x] T066 [US1] ~~Create AgentPoolContext~~ N/A - Design simplified: useAgentPoolStatus hook manages state directly
 - [x] T067 [US1] Integrate AgentPoolStatus into TopHeader in `frontend/src/components/layout/TopHeader.tsx` (between bell and user card)
 - [x] T068 [US1] Add navigation from AgentPoolStatus click to /agents route
 
