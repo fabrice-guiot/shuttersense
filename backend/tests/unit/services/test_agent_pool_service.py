@@ -31,14 +31,14 @@ class TestAgentPoolStatus:
         """Pool status shows idle when online agents have no jobs."""
         service = AgentService(test_db_session)
 
-        # Register an agent (starts as ONLINE by default)
+        # Register an agent (starts as OFFLINE, needs heartbeat to go online)
         token_result = service.create_registration_token(
             team_id=test_team.id,
             created_by_user_id=test_user.id,
         )
         test_db_session.commit()
 
-        service.register_agent(
+        result = service.register_agent(
             plaintext_token=token_result.plaintext_token,
             name="Test Agent",
             hostname="test.local",
@@ -46,6 +46,10 @@ class TestAgentPoolStatus:
             capabilities=["local_filesystem"],
             version="1.0.0"
         )
+        test_db_session.commit()
+
+        # Send heartbeat to bring agent online
+        service.process_heartbeat(result.agent, status=AgentStatus.ONLINE)
         test_db_session.commit()
 
         status = service.get_pool_status(test_team.id)
@@ -60,7 +64,8 @@ class TestAgentPoolStatus:
         """Pool status correctly counts multiple online agents."""
         service = AgentService(test_db_session)
 
-        # Register multiple agents
+        # Register multiple agents and bring them online
+        agents = []
         for i in range(3):
             token_result = service.create_registration_token(
                 team_id=test_team.id,
@@ -68,7 +73,7 @@ class TestAgentPoolStatus:
             )
             test_db_session.commit()
 
-            service.register_agent(
+            result = service.register_agent(
                 plaintext_token=token_result.plaintext_token,
                 name=f"Agent {i+1}",
                 hostname=f"host{i+1}.local",
@@ -76,7 +81,13 @@ class TestAgentPoolStatus:
                 capabilities=["local_filesystem"],
                 version="1.0.0"
             )
+            agents.append(result.agent)
             test_db_session.commit()
+
+        # Send heartbeats to bring all agents online
+        for agent in agents:
+            service.process_heartbeat(agent, status=AgentStatus.ONLINE)
+        test_db_session.commit()
 
         status = service.get_pool_status(test_team.id)
 
@@ -95,7 +106,7 @@ class TestAgentPoolStatus:
             created_by_user_id=test_user.id,
         )
         test_db_session.commit()
-        service.register_agent(
+        result1 = service.register_agent(
             plaintext_token=token1.plaintext_token,
             name="Our Agent",
             hostname="our.local",
@@ -111,7 +122,7 @@ class TestAgentPoolStatus:
             created_by_user_id=other_team_user.id,
         )
         test_db_session.commit()
-        service.register_agent(
+        result2 = service.register_agent(
             plaintext_token=token2.plaintext_token,
             name="Their Agent",
             hostname="their.local",
@@ -119,6 +130,11 @@ class TestAgentPoolStatus:
             capabilities=["local_filesystem"],
             version="1.0.0"
         )
+        test_db_session.commit()
+
+        # Bring both agents online via heartbeat
+        service.process_heartbeat(result1.agent, status=AgentStatus.ONLINE)
+        service.process_heartbeat(result2.agent, status=AgentStatus.ONLINE)
         test_db_session.commit()
 
         # Our team should only see our agent

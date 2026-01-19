@@ -31,14 +31,14 @@ class TestPoolStatusAPI:
         """Pool status shows idle when online agents exist."""
         service = AgentService(test_db_session)
 
-        # Register an agent
+        # Register an agent (starts OFFLINE, needs heartbeat)
         token_result = service.create_registration_token(
             team_id=test_team.id,
             created_by_user_id=test_user.id,
         )
         test_db_session.commit()
 
-        service.register_agent(
+        result = service.register_agent(
             plaintext_token=token_result.plaintext_token,
             name="Test Agent",
             hostname="test.local",
@@ -46,6 +46,10 @@ class TestPoolStatusAPI:
             capabilities=["local_filesystem"],
             version="1.0.0"
         )
+        test_db_session.commit()
+
+        # Send heartbeat to bring agent online
+        service.process_heartbeat(result.agent, status=AgentStatus.ONLINE)
         test_db_session.commit()
 
         response = test_client.get("/api/agent/v1/pool-status")

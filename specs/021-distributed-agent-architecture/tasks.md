@@ -140,9 +140,9 @@
 
 ### Backend Tests for User Story 1
 
-- [ ] T053 [P] [US1] Unit tests for pool status service in `backend/tests/unit/services/test_agent_pool_service.py` (status calculation, broadcast triggers)
-- [ ] T054 [P] [US1] Integration tests for GET `/api/agents/pool-status` in `backend/tests/integration/test_pool_status_api.py`
-- [ ] T055 [P] [US1] WebSocket tests for pool status broadcast in `backend/tests/integration/test_pool_status_ws.py` (connect, receive updates)
+- [x] T053 [P] [US1] Unit tests for pool status service in `backend/tests/unit/services/test_agent_pool_service.py` (status calculation, broadcast triggers)
+- [x] T054 [P] [US1] Integration tests for GET `/api/agent/v1/pool-status` in `backend/tests/integration/test_pool_status_api.py`
+- [x] T055 [P] [US1] WebSocket tests for pool status broadcast in `backend/tests/integration/test_pool_status_ws.py` (connect, receive updates)
 
 ### Backend Implementation for User Story 1
 
