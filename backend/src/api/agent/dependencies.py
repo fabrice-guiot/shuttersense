@@ -90,9 +90,6 @@ async def get_agent_context(
     # Import here to avoid circular imports
     from backend.src.services.agent_service import AgentService
 
-    # Log that agent auth is being attempted
-    logger.info(f"get_agent_context called for path: {request.url.path}")
-
     # Extract Bearer token from Authorization header
     auth_header = request.headers.get("Authorization")
     if not auth_header:
