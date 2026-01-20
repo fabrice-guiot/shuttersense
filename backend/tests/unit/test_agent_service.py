@@ -649,3 +649,240 @@ class TestAgentServicePoolStatus:
         assert status["running_jobs_count"] == 1
         assert status["idle_count"] == 0  # Agent is running a job
         assert status["status"] == "running"
+
+
+# ============================================================================
+# Agent Deletion Blocking Tests (Phase 6 - T103/T110)
+# ============================================================================
+
+class TestAgentDeletionBlocking:
+    """Tests for blocking agent deletion when bound collections exist.
+
+    Issue #90 - Distributed Agent Architecture (Phase 6)
+    Tasks T103, T110: Agent deletion blocked if bound collections exist
+
+    Requirements:
+    - Agents with bound collections cannot be deleted
+    - Error message indicates the blocking collections
+    - Once collections are unbound, agent can be deleted
+    """
+
+    def test_delete_agent_blocked_when_bound_collections_exist(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test that deleting an agent with bound collections raises ConflictError."""
+        import tempfile
+        from backend.src.services.exceptions import ConflictError
+        from backend.src.models.collection import Collection, CollectionType, CollectionState
+
+        service = AgentService(test_db_session)
+
+        # Create an agent
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        reg_result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Agent with Collection",
+        )
+
+        # Create a collection bound to this agent
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = Collection(
+                name="Bound Collection",
+                type=CollectionType.LOCAL,
+                location=temp_dir,
+                team_id=test_team.id,
+                state=CollectionState.LIVE,
+                bound_agent_id=reg_result.agent.id,
+                is_accessible=True,
+            )
+            test_db_session.add(collection)
+            test_db_session.commit()
+
+            # Try to delete the agent - should fail
+            with pytest.raises(ConflictError) as exc_info:
+                service.delete_agent(reg_result.agent)
+
+            assert "Cannot delete agent" in str(exc_info.value)
+            assert "bound collections" in str(exc_info.value)
+
+    def test_delete_agent_succeeds_when_no_bound_collections(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test that deleting an agent without bound collections succeeds."""
+        from backend.src.models.agent_registration_token import AgentRegistrationToken
+
+        service = AgentService(test_db_session)
+
+        # Create an agent
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        reg_result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Agent without Collection",
+        )
+
+        agent_id = reg_result.agent.id
+
+        # Clear the registration token reference to allow deletion
+        # (In production, this FK exists for audit trail)
+        token_result.token.used_by_agent_id = None
+        test_db_session.commit()
+
+        # Delete the agent - should succeed
+        service.delete_agent(reg_result.agent)
+
+        # Verify agent is deleted
+        deleted_agent = test_db_session.query(Agent).filter(
+            Agent.id == agent_id
+        ).first()
+        assert deleted_agent is None
+
+    def test_delete_agent_succeeds_after_unbinding_collections(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test that agent can be deleted after unbinding all collections."""
+        import tempfile
+        from backend.src.models.collection import Collection, CollectionType, CollectionState
+
+        service = AgentService(test_db_session)
+
+        # Create an agent
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        reg_result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Agent to Unbind",
+        )
+
+        # Create a bound collection
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = Collection(
+                name="Collection to Unbind",
+                type=CollectionType.LOCAL,
+                location=temp_dir,
+                team_id=test_team.id,
+                state=CollectionState.LIVE,
+                bound_agent_id=reg_result.agent.id,
+                is_accessible=True,
+            )
+            test_db_session.add(collection)
+            test_db_session.commit()
+
+            # Unbind the collection
+            collection.bound_agent_id = None
+            test_db_session.commit()
+
+            # Clear the registration token reference to allow deletion
+            # (In production, this FK exists for audit trail)
+            token_result.token.used_by_agent_id = None
+            test_db_session.commit()
+
+            agent_id = reg_result.agent.id
+
+            # Now delete should succeed
+            service.delete_agent(reg_result.agent)
+
+            # Verify agent is deleted
+            deleted_agent = test_db_session.query(Agent).filter(
+                Agent.id == agent_id
+            ).first()
+            assert deleted_agent is None
+
+    def test_delete_agent_blocked_with_multiple_bound_collections(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test deletion blocked when agent has multiple bound collections."""
+        import tempfile
+        from backend.src.services.exceptions import ConflictError
+        from backend.src.models.collection import Collection, CollectionType, CollectionState
+
+        service = AgentService(test_db_session)
+
+        # Create an agent
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        reg_result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Agent with Multiple Collections",
+        )
+
+        # Create multiple bound collections
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            with tempfile.TemporaryDirectory() as temp_dir2:
+                collection1 = Collection(
+                    name="Bound Collection 1",
+                    type=CollectionType.LOCAL,
+                    location=temp_dir1,
+                    team_id=test_team.id,
+                    state=CollectionState.LIVE,
+                    bound_agent_id=reg_result.agent.id,
+                    is_accessible=True,
+                )
+                collection2 = Collection(
+                    name="Bound Collection 2",
+                    type=CollectionType.LOCAL,
+                    location=temp_dir2,
+                    team_id=test_team.id,
+                    state=CollectionState.LIVE,
+                    bound_agent_id=reg_result.agent.id,
+                    is_accessible=True,
+                )
+                test_db_session.add_all([collection1, collection2])
+                test_db_session.commit()
+
+                # Try to delete - should fail with count of bound collections
+                with pytest.raises(ConflictError) as exc_info:
+                    service.delete_agent(reg_result.agent)
+
+                assert "2 bound collections" in str(exc_info.value)
+
+    def test_agent_bound_collections_relationship(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test agent.bound_collections relationship for counting."""
+        import tempfile
+        from backend.src.models.collection import Collection, CollectionType, CollectionState
+
+        service = AgentService(test_db_session)
+
+        # Create an agent
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        reg_result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Agent with Collections",
+        )
+
+        # Initially no bound collections
+        assert reg_result.agent.bound_collections.count() == 0
+
+        # Create a bound collection
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = Collection(
+                name="Bound Collection",
+                type=CollectionType.LOCAL,
+                location=temp_dir,
+                team_id=test_team.id,
+                state=CollectionState.LIVE,
+                bound_agent_id=reg_result.agent.id,
+                is_accessible=True,
+            )
+            test_db_session.add(collection)
+            test_db_session.commit()
+
+            # Refresh agent to see relationship
+            test_db_session.refresh(reg_result.agent)
+
+            # Now has 1 bound collection
+            assert reg_result.agent.bound_collections.count() == 1

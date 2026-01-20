@@ -179,6 +179,8 @@ class JobExecutor:
             return await self._run_pipeline_validation(
                 collection_path, pipeline_guid, config
             )
+        elif tool == "collection_test":
+            return await self._run_collection_test(job)
         else:
             return JobResult(
                 success=False,
@@ -1019,6 +1021,150 @@ class JobExecutor:
                 pipeline_config.termination_nodes.append(node)
 
         return pipeline_config
+
+    async def _run_collection_test(self, job: Dict[str, Any]) -> JobResult:
+        """
+        Run collection accessibility test.
+
+        Tests if a LOCAL collection path is accessible by the agent:
+        1. Validates path against agent's authorized roots
+        2. Checks if path exists and is a directory
+        3. Checks read permission
+        4. Counts files in the directory
+
+        Args:
+            job: Job data with collection_path in parameters
+
+        Returns:
+            JobResult with accessibility test results
+        """
+        from pathlib import Path
+        from src.config import AgentConfig
+
+        # Get collection path from job parameters
+        parameters = job.get("parameters", {})
+        collection_path = parameters.get("collection_path") or job.get("collection_path")
+
+        if not collection_path:
+            return JobResult(
+                success=False,
+                results={"success": False, "error": "Collection path not provided"},
+                error_message="Collection path is required for accessibility test"
+            )
+
+        logger.info(f"Testing accessibility of collection path: {collection_path}")
+
+        try:
+            # Load agent config to get authorized roots
+            config = AgentConfig()
+            authorized_roots = config.authorized_roots
+
+            # Validate path against authorized roots
+            path = Path(collection_path).expanduser().resolve()
+            path_authorized = False
+
+            for root in authorized_roots:
+                try:
+                    root_path = Path(root).expanduser().resolve()
+                    if path == root_path:
+                        path_authorized = True
+                        break
+                    try:
+                        path.relative_to(root_path)
+                        path_authorized = True
+                        break
+                    except ValueError:
+                        continue
+                except (OSError, ValueError):
+                    continue
+
+            if not path_authorized:
+                error_msg = (
+                    f"Path '{collection_path}' is not under any of the agent's "
+                    f"authorized roots: {', '.join(authorized_roots) or 'none configured'}"
+                )
+                logger.warning(f"Collection test failed: {error_msg}")
+                return JobResult(
+                    success=True,  # Job succeeded, but collection is not accessible
+                    results={
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
+
+            # Check if path exists
+            if not path.exists():
+                error_msg = f"Path does not exist: {collection_path}"
+                logger.warning(f"Collection test failed: {error_msg}")
+                return JobResult(
+                    success=True,
+                    results={
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
+
+            # Check if path is a directory
+            if not path.is_dir():
+                error_msg = f"Path is not a directory: {collection_path}"
+                logger.warning(f"Collection test failed: {error_msg}")
+                return JobResult(
+                    success=True,
+                    results={
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
+
+            # Check read permission by listing the directory
+            try:
+                file_count = 0
+                for entry in path.iterdir():
+                    if entry.is_file():
+                        file_count += 1
+                    elif entry.is_dir():
+                        # Count files in subdirectories (shallow scan)
+                        try:
+                            for sub_entry in entry.iterdir():
+                                if sub_entry.is_file():
+                                    file_count += 1
+                        except PermissionError:
+                            # Skip subdirectories we can't read
+                            pass
+            except PermissionError as e:
+                error_msg = f"Permission denied reading directory: {collection_path}"
+                logger.warning(f"Collection test failed: {error_msg}")
+                return JobResult(
+                    success=True,
+                    results={
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
+
+            # Collection is accessible
+            message = f"Collection is accessible. Found {file_count:,} files."
+            logger.info(f"Collection test succeeded: {message}")
+
+            return JobResult(
+                success=True,
+                results={
+                    "success": True,
+                    "file_count": file_count,
+                    "message": message,
+                }
+            )
+
+        except Exception as e:
+            error_msg = f"Error testing collection accessibility: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return JobResult(
+                success=True,  # Job succeeded, but we're reporting an error in the result
+                results={
+                    "success": False,
+                    "error": error_msg,
+                }
+            )
 
     def _sync_progress_callback(
         self,

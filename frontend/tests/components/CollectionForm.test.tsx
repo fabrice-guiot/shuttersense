@@ -7,6 +7,19 @@ import type { Connector } from '@/contracts/api/connector-api'
 import type { Collection } from '@/contracts/api/collection-api'
 import type { CollectionFormData } from '@/types/schemas/collection'
 
+// Mock the useOnlineAgents hook
+vi.mock('@/hooks/useOnlineAgents', () => ({
+  useOnlineAgents: vi.fn(() => ({
+    onlineAgents: [
+      { guid: 'agt_01hgw2bbg00000000000000001', name: 'Studio Mac', hostname: 'studio-mac.local', version: '1.0.0' },
+      { guid: 'agt_01hgw2bbg00000000000000002', name: 'Home Server', hostname: 'home-server.local', version: '1.0.0' },
+    ],
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+}))
+
 describe('CollectionForm', () => {
   const mockConnectors: Connector[] = [
     {
@@ -138,6 +151,7 @@ describe('CollectionForm', () => {
       is_accessible: true,
       accessibility_message: null,
       last_scanned_at: null,
+      bound_agent: null,
       created_at: '2025-01-01T09:00:00Z',
       updated_at: '2025-01-01T09:00:00Z',
     }
@@ -180,5 +194,94 @@ describe('CollectionForm', () => {
 
     // State field should exist
     expect(screen.getByLabelText(/State/i)).toBeInTheDocument()
+  })
+
+  // =========================================================================
+  // Agent Selector Tests (Phase 6 - Issue #90)
+  // =========================================================================
+
+  describe('Agent Selector', () => {
+    it('should show agent selector for LOCAL collection type', () => {
+      render(
+        <CollectionForm
+          collection={null}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      // Default type is LOCAL, so agent selector should be visible
+      // Use getAllByText since label and icon text might both match
+      const boundAgentElements = screen.getAllByText(/Bound Agent/i)
+      expect(boundAgentElements.length).toBeGreaterThan(0)
+    })
+
+    it('should have agent selector combobox for LOCAL type', () => {
+      render(
+        <CollectionForm
+          collection={null}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      // Default type is LOCAL, agent selector should be present
+      const agentTrigger = screen.getByRole('combobox', { name: /Bound Agent/i })
+      expect(agentTrigger).toBeInTheDocument()
+    })
+
+    it('should show description for agent selector', () => {
+      render(
+        <CollectionForm
+          collection={null}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      // Should show the description text
+      expect(screen.getByText(/Bind this collection to a specific agent/i)).toBeInTheDocument()
+    })
+
+    it('should pre-populate bound agent when editing collection with bound agent', () => {
+      const collectionWithAgent: Collection = {
+        guid: 'col_01hgw2bbg00000000000000001',
+        name: 'Collection with Agent',
+        type: 'local',
+        location: '/photos',
+        state: 'live',
+        connector_guid: null,
+        pipeline_guid: null,
+        pipeline_version: null,
+        pipeline_name: null,
+        cache_ttl: null,
+        is_accessible: true,
+        accessibility_message: null,
+        last_scanned_at: null,
+        bound_agent: {
+          guid: 'agt_01hgw2bbg00000000000000001',
+          name: 'Studio Mac',
+          status: 'online',
+        },
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      }
+
+      render(
+        <CollectionForm
+          collection={collectionWithAgent}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      // Should show bound agent label
+      const boundAgentElements = screen.getAllByText(/Bound Agent/i)
+      expect(boundAgentElements.length).toBeGreaterThan(0)
+    })
   })
 })

@@ -78,6 +78,7 @@ def agent_to_response(agent, current_job_guid: str = None) -> AgentResponse:
         error_message=agent.error_message,
         last_heartbeat=agent.last_heartbeat,
         capabilities=agent.capabilities,
+        authorized_roots=agent.authorized_roots,
         version=agent.version,
         created_at=agent.created_at,
         team_guid=agent.team.guid if agent.team else "",
@@ -119,6 +120,7 @@ async def register_agent(
             hostname=data.hostname,
             os_info=data.os_info,
             capabilities=data.capabilities,
+            authorized_roots=data.authorized_roots,
             version=data.version,
             binary_checksum=data.binary_checksum,
         )
@@ -136,6 +138,7 @@ async def register_agent(
             api_key=result.api_key,
             name=result.agent.name,
             team_guid=result.agent.team.guid if result.agent.team else "",
+            authorized_roots=result.agent.authorized_roots,
         )
 
     except ServiceValidationError as e:
@@ -192,6 +195,7 @@ async def send_heartbeat(
         agent=agent,
         status=data.status,
         capabilities=data.capabilities,
+        authorized_roots=data.authorized_roots,
         version=data.version,
         error_message=data.error_message,
     )
@@ -350,6 +354,7 @@ async def claim_job(
         collection_guid=collection_guid,
         collection_path=collection_path,
         pipeline_guid=pipeline_guid,
+        parameters=job.parameters,
         signing_secret=result.signing_secret,
         priority=job.priority,
         retry_count=job.retry_count,

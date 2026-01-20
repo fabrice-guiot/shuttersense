@@ -136,6 +136,7 @@ class AgentApiClient:
         os_info: str,
         capabilities: list[str],
         version: str,
+        authorized_roots: Optional[list[str]] = None,
         binary_checksum: Optional[str] = None,
     ) -> dict[str, Any]:
         """
@@ -148,6 +149,7 @@ class AgentApiClient:
             os_info: Operating system information
             capabilities: List of agent capabilities
             version: Agent software version
+            authorized_roots: Optional list of authorized local filesystem roots
             binary_checksum: Optional SHA-256 checksum of agent binary
 
         Returns:
@@ -165,6 +167,8 @@ class AgentApiClient:
             "capabilities": capabilities,
             "version": version,
         }
+        if authorized_roots:
+            payload["authorized_roots"] = authorized_roots
         if binary_checksum:
             payload["binary_checksum"] = binary_checksum
 
@@ -199,6 +203,7 @@ class AgentApiClient:
         self,
         status: str = "online",
         capabilities: Optional[list[str]] = None,
+        authorized_roots: Optional[list[str]] = None,
         version: Optional[str] = None,
         current_job_guid: Optional[str] = None,
         current_job_progress: Optional[dict[str, Any]] = None,
@@ -210,6 +215,7 @@ class AgentApiClient:
         Args:
             status: Current agent status (online, busy, error)
             capabilities: Updated capabilities list (if changed)
+            authorized_roots: Updated authorized roots list (if changed)
             version: Updated version (if changed)
             current_job_guid: GUID of job currently being executed
             current_job_progress: Progress info for current job
@@ -227,6 +233,8 @@ class AgentApiClient:
 
         if capabilities is not None:
             payload["capabilities"] = capabilities
+        if authorized_roots is not None:
+            payload["authorized_roots"] = authorized_roots
         if version is not None:
             payload["version"] = version
         if current_job_guid:

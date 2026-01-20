@@ -319,6 +319,24 @@ class Job(Base, GuidMixin):
             self.progress_json = json.dumps(value)
 
     @property
+    def parameters(self) -> Optional[Dict[str, Any]]:
+        """
+        Get tool-specific parameters for the job.
+
+        For collection_test jobs, this includes the collection_path.
+        For other jobs, this returns None (parameters come from collection/pipeline).
+
+        Returns:
+            Dictionary of parameters or None
+        """
+        if self.tool == "collection_test" and self.collection:
+            return {
+                "collection_path": self.collection.location,
+                "collection_guid": self.collection.guid,
+            }
+        return None
+
+    @property
     def is_claimable(self) -> bool:
         """
         Check if the job can be claimed by an agent.

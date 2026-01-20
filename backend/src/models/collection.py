@@ -161,7 +161,8 @@ class Collection(Base, GuidMixin):
     cache_ttl = Column(Integer, nullable=True)  # Seconds, NULL = use state default
 
     # Accessibility tracking
-    is_accessible = Column(Boolean, default=True, nullable=False, index=True)
+    # NULL = pending/unknown (test in progress), True = accessible, False = not accessible
+    is_accessible = Column(Boolean, default=True, nullable=True, index=True)
     last_error = Column(Text, nullable=True)
 
     # Optional metadata

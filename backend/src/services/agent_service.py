@@ -198,6 +198,7 @@ class AgentService:
         hostname: Optional[str] = None,
         os_info: Optional[str] = None,
         capabilities: Optional[List[str]] = None,
+        authorized_roots: Optional[List[str]] = None,
         version: Optional[str] = None,
         binary_checksum: Optional[str] = None
     ) -> RegistrationResult:
@@ -213,6 +214,7 @@ class AgentService:
             hostname: Machine hostname (auto-detected by agent)
             os_info: Operating system information
             capabilities: Initial capabilities list
+            authorized_roots: Authorized local filesystem roots
             version: Agent software version
             binary_checksum: SHA-256 of agent binary
 
@@ -243,9 +245,12 @@ class AgentService:
         )
 
         # Create agent
-        # Serialize capabilities to JSON string for SQLite compatibility
+        # Serialize capabilities and authorized_roots to JSON string for SQLite compatibility
         capabilities_list = capabilities or []
         capabilities_serialized = json.dumps(capabilities_list) if capabilities_list else "[]"
+
+        authorized_roots_list = authorized_roots or []
+        authorized_roots_serialized = json.dumps(authorized_roots_list) if authorized_roots_list else "[]"
 
         agent = Agent(
             team_id=token.team_id,
@@ -257,6 +262,7 @@ class AgentService:
             status=AgentStatus.OFFLINE,  # Start as offline until first heartbeat
             last_heartbeat=None,  # No heartbeat received yet
             capabilities_json=capabilities_serialized,
+            authorized_roots_json=authorized_roots_serialized,
             connectors_json="[]",  # Empty list serialized for SQLite compatibility
             api_key_hash=api_key_hash,
             api_key_prefix=api_key_prefix,
@@ -352,19 +358,21 @@ class AgentService:
         status: Optional[AgentStatus] = None,
         error_message: Optional[str] = None,
         capabilities: Optional[List[str]] = None,
+        authorized_roots: Optional[List[str]] = None,
         version: Optional[str] = None
     ) -> Agent:
         """
         Process an agent heartbeat.
 
         Updates last_heartbeat timestamp and optionally updates
-        status, capabilities, and version.
+        status, capabilities, authorized_roots, and version.
 
         Args:
             agent: The agent sending the heartbeat
             status: Optional new status (defaults to ONLINE)
             error_message: Error message if status is ERROR
             capabilities: Updated capabilities list
+            authorized_roots: Updated authorized roots list
             version: Updated agent version
 
         Returns:
@@ -395,6 +403,10 @@ class AgentService:
         if capabilities is not None:
             # Serialize capabilities to JSON string for SQLite compatibility
             agent.capabilities_json = json.dumps(capabilities) if capabilities else "[]"
+
+        if authorized_roots is not None:
+            # Serialize authorized_roots to JSON string for SQLite compatibility
+            agent.authorized_roots_json = json.dumps(authorized_roots) if authorized_roots else "[]"
 
         if version is not None:
             agent.version = version

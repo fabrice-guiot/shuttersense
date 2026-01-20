@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,14 +29,36 @@ export default function CollectionsPage() {
     setSearch,
     filters,
     setFilters,
+    fetchCollections,
     createCollection,
     updateCollection,
     deleteCollection,
     testCollection
   } = useCollections()
 
+  const { connectors } = useConnectors()
+  const { pipelines } = usePipelines()
+
+  // KPI Stats for header (Issue #37)
+  const { stats, refetch: refetchStats } = useCollectionStats()
+  const { setStats } = useHeaderStats()
+
+  // Callback to refresh collections when a collection_test job completes
+  const handleJobComplete = useCallback((job: { tool: string }) => {
+    if (job.tool === 'collection_test') {
+      // Refresh collections list to show updated accessibility status
+      fetchCollections(filters)
+      refetchStats()
+    }
+  }, [fetchCollections, filters, refetchStats])
+
   // Tools hook for running analysis on collections
-  const { runAllTools } = useTools({ autoFetch: false })
+  // Enable WebSocket to receive job completion events
+  const { runAllTools } = useTools({
+    autoFetch: false,
+    useWebSocket: true,
+    onJobComplete: handleJobComplete
+  })
 
   // Filter UI state (for select components)
   const [selectedState, setSelectedState] = useState<CollectionState | 'ALL' | ''>('ALL')
@@ -51,13 +73,6 @@ export default function CollectionsPage() {
       accessible_only: accessibleOnly || undefined
     })
   }, [selectedState, selectedType, accessibleOnly, setFilters])
-
-  const { connectors } = useConnectors()
-  const { pipelines } = usePipelines()
-
-  // KPI Stats for header (Issue #37)
-  const { stats, refetch: refetchStats } = useCollectionStats()
-  const { setStats } = useHeaderStats()
 
   // Update header stats when data changes
   useEffect(() => {

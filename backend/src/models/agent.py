@@ -155,6 +155,13 @@ class Agent(Base, GuidMixin):
         default=list
     )
 
+    # Authorized local filesystem roots (JSONB array of path strings)
+    authorized_roots_json = Column(
+        JSONB().with_variant(Text, "sqlite"),
+        nullable=False,
+        default=list
+    )
+
     # Authentication
     api_key_hash = Column(String(255), unique=True, nullable=False)
     api_key_prefix = Column(String(20), nullable=False, index=True)  # "agt_key_" + 8 random chars
@@ -264,6 +271,75 @@ class Agent(Base, GuidMixin):
             self.connectors_json = json.dumps(value) if value else "[]"
         else:
             self.connectors_json = value
+
+    @property
+    def authorized_roots(self) -> List[str]:
+        """
+        Get the authorized local filesystem roots.
+
+        Returns:
+            List of authorized root path strings
+        """
+        if self.authorized_roots_json is None:
+            return []
+        if isinstance(self.authorized_roots_json, str):
+            import json
+            return json.loads(self.authorized_roots_json)
+        return self.authorized_roots_json
+
+    @authorized_roots.setter
+    def authorized_roots(self, value: List[str]) -> None:
+        """
+        Set the authorized local filesystem roots.
+
+        Args:
+            value: List of authorized root path strings
+        """
+        # For SQLite compatibility, serialize to JSON string
+        import json
+        if isinstance(value, list):
+            self.authorized_roots_json = json.dumps(value) if value else "[]"
+        else:
+            self.authorized_roots_json = value
+
+    def is_path_authorized(self, path: str) -> bool:
+        """
+        Check if a path is under one of the agent's authorized roots.
+
+        The path is considered authorized if it starts with any of the
+        authorized root paths.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            True if the path is under an authorized root
+        """
+        from pathlib import Path as PathLib
+
+        # Normalize and resolve the path
+        try:
+            normalized_path = PathLib(path).expanduser().resolve()
+        except (OSError, ValueError):
+            return False
+
+        # Check against each authorized root
+        for root in self.authorized_roots:
+            try:
+                normalized_root = PathLib(root).expanduser().resolve()
+                # Check if path is the root or a subdirectory of the root
+                if normalized_path == normalized_root:
+                    return True
+                try:
+                    normalized_path.relative_to(normalized_root)
+                    return True
+                except ValueError:
+                    # Path is not relative to this root
+                    continue
+            except (OSError, ValueError):
+                continue
+
+        return False
 
     @property
     def is_online(self) -> bool:

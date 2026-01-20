@@ -25,6 +25,7 @@ export interface Agent {
   error_message: string | null
   last_heartbeat: string | null
   capabilities: string[]
+  authorized_roots: string[]
   version: string
   created_at: string
   team_guid: string

@@ -32,9 +32,11 @@ def cli(ctx: click.Context) -> None:
 # Import and register subcommands
 from cli.register import register  # noqa: E402
 from cli.start import start  # noqa: E402
+from cli.config import config  # noqa: E402
 
 cli.add_command(register)
 cli.add_command(start)
+cli.add_command(config)
 
 
 # Additional commands will be added here as they are implemented:

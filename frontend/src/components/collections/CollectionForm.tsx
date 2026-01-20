@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, TestTube } from 'lucide-react'
+import { Loader2, TestTube, Bot } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -27,8 +27,10 @@ import type { PipelineSummary } from '@/contracts/api/pipelines-api'
 import {
   collectionFormSchema,
   type CollectionFormData,
-  isConnectorRequiredForType
+  isConnectorRequiredForType,
+  supportsAgentBinding
 } from '@/types/schemas/collection'
+import { useOnlineAgents, type OnlineAgent } from '@/hooks/useOnlineAgents'
 
 // ============================================================================
 // Beta Collection Types
@@ -110,6 +112,9 @@ export default function CollectionForm({
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  // Fetch online agents for LOCAL collection binding
+  const { onlineAgents, loading: agentsLoading } = useOnlineAgents()
+
   const isEdit = !!collection
 
   // Initialize form with react-hook-form and Zod
@@ -122,7 +127,8 @@ export default function CollectionForm({
       location: collection?.location || '',
       connector_guid: collection?.connector_guid || null,
       cache_ttl: collection?.cache_ttl || null,
-      pipeline_guid: collection?.pipeline_guid || null
+      pipeline_guid: collection?.pipeline_guid || null,
+      bound_agent_guid: collection?.bound_agent?.guid || null
     }
   })
 
@@ -131,12 +137,15 @@ export default function CollectionForm({
 
   const selectedType = form.watch('type')
   const requiresConnector = isConnectorRequiredForType(selectedType)
+  const showAgentSelector = supportsAgentBinding(selectedType)
   const availableConnectors = getConnectorsForType(connectors, selectedType)
 
-  // Reset connector_guid when switching to local type
+  // Reset connector_guid when switching to local type, reset bound_agent_guid when switching to remote
   useEffect(() => {
     if (selectedType === 'local') {
       form.setValue('connector_guid', null)
+    } else {
+      form.setValue('bound_agent_guid', null)
     }
   }, [selectedType, form])
 
@@ -150,14 +159,22 @@ export default function CollectionForm({
         location: collection.location,
         connector_guid: collection.connector_guid,
         cache_ttl: collection.cache_ttl,
-        pipeline_guid: collection.pipeline_guid
+        pipeline_guid: collection.pipeline_guid,
+        bound_agent_guid: collection.bound_agent?.guid || null
       })
     }
   }, [collection, form])
 
   const handleSubmit = async (data: CollectionFormData) => {
+    console.log('[CollectionForm] handleSubmit called with data:', data)
     setTestResult(null)
     await onSubmit(data)
+  }
+
+  // Debug: Log form errors when they change
+  const formErrors = form.formState.errors
+  if (Object.keys(formErrors).length > 0) {
+    console.log('[CollectionForm] Form validation errors:', formErrors)
   }
 
   const handleTestConnection = async () => {
@@ -309,6 +326,56 @@ export default function CollectionForm({
               </FormItem>
             )}
           />
+
+          {/* Bound Agent (only for LOCAL collections) */}
+          {showAgentSelector && (
+            <FormField
+              control={form.control}
+              name="bound_agent_guid"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                    <Bot className="h-4 w-4" />
+                    Bound Agent (Optional)
+                  </FormLabel>
+                  <Select
+                    onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
+                    value={field.value || 'none'}
+                    disabled={agentsLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an agent..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">No bound agent (any agent)</SelectItem>
+                      {onlineAgents.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No online agents available
+                        </div>
+                      ) : (
+                        onlineAgents.map((agent) => (
+                          <SelectItem key={agent.guid} value={agent.guid}>
+                            <span className="flex items-center gap-2">
+                              <span className="h-2 w-2 rounded-full bg-green-500" />
+                              {agent.name}
+                              <span className="text-xs text-muted-foreground">({agent.hostname})</span>
+                            </span>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Bind this collection to a specific agent for local filesystem access.
+                    Only online agents are shown.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           {/* Collection State */}
           <FormField

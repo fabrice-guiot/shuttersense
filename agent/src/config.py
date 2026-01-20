@@ -12,7 +12,7 @@ Task: T039
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import yaml
 from platformdirs import user_config_dir
@@ -149,6 +149,7 @@ class AgentConfig:
         self._api_key: str = ""
         self._agent_guid: str = ""
         self._agent_name: str = ""
+        self._authorized_roots: List[str] = []
         self._heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL
         self._poll_interval_seconds: int = DEFAULT_POLL_INTERVAL
         self._log_level: str = DEFAULT_LOG_LEVEL
@@ -240,6 +241,16 @@ class AgentConfig:
         """Set the log level."""
         self._log_level = value
 
+    @property
+    def authorized_roots(self) -> List[str]:
+        """Get the list of authorized local filesystem roots."""
+        return self._authorized_roots
+
+    @authorized_roots.setter
+    def authorized_roots(self, value: List[str]) -> None:
+        """Set the list of authorized local filesystem roots."""
+        self._authorized_roots = value
+
     # -------------------------------------------------------------------------
     # Computed Properties
     # -------------------------------------------------------------------------
@@ -271,6 +282,7 @@ class AgentConfig:
             self._api_key = data.get("api_key", "")
             self._agent_guid = data.get("agent_guid", "")
             self._agent_name = data.get("agent_name", "")
+            self._authorized_roots = data.get("authorized_roots", [])
             self._heartbeat_interval_seconds = data.get(
                 "heartbeat_interval_seconds", DEFAULT_HEARTBEAT_INTERVAL
             )
@@ -292,6 +304,7 @@ class AgentConfig:
             "api_key": self._api_key,
             "agent_guid": self._agent_guid,
             "agent_name": self._agent_name,
+            "authorized_roots": self._authorized_roots,
             "heartbeat_interval_seconds": self._heartbeat_interval_seconds,
             "poll_interval_seconds": self._poll_interval_seconds,
             "log_level": self._log_level,

@@ -25,6 +25,7 @@ class ToolType(str, Enum):
     PHOTOSTATS = "photostats"
     PHOTO_PAIRING = "photo_pairing"
     PIPELINE_VALIDATION = "pipeline_validation"
+    COLLECTION_TEST = "collection_test"  # Accessibility test for LOCAL collections
 
 
 class ToolMode(str, Enum):

@@ -9,7 +9,7 @@
 // Entity Types
 // ============================================================================
 
-export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation'
+export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation' | 'collection_test'
 
 export type ToolMode = 'collection' | 'display_graph'
 

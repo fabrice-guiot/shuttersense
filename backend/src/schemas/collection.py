@@ -347,6 +347,7 @@ class CollectionCreate(BaseModel):
     Validates:
     - Remote collections (S3/GCS/SMB) require connector_guid
     - Local collections cannot have connector_guid
+    - Local collections can optionally specify bound_agent_guid
     - Location format is reasonable
     - State defaults to LIVE
 
@@ -356,6 +357,7 @@ class CollectionCreate(BaseModel):
         location: File path or remote location
         state: Collection state (defaults to LIVE)
         connector_guid: Required for remote collections (con_xxx format)
+        bound_agent_guid: Agent for LOCAL collections (agt_xxx format)
         pipeline_guid: Explicit pipeline assignment (NULL = use default at runtime)
         cache_ttl: Override default cache TTL (seconds)
         metadata: User-defined metadata
@@ -374,6 +376,7 @@ class CollectionCreate(BaseModel):
     location: str = Field(..., min_length=1, max_length=1024, description="File path or remote location")
     state: CollectionState = Field(default=CollectionState.LIVE, description="Collection state")
     connector_guid: Optional[str] = Field(default=None, description="Connector GUID (con_xxx, required for remote)")
+    bound_agent_guid: Optional[str] = Field(default=None, description="Bound agent GUID (agt_xxx, for LOCAL collections)")
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = use default)")
     cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800, description="Cache TTL in seconds (max 7 days)")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="User-defined metadata")
@@ -383,15 +386,19 @@ class CollectionCreate(BaseModel):
         """Validate connector_guid is provided for remote collections and absent for local."""
         # Check collection type requirements first (more specific error messages)
 
-        # Local collections cannot have connector_guid
+        # Local collections require bound_agent_guid and cannot have connector_guid
         if self.type == CollectionType.LOCAL:
             if self.connector_guid is not None:
                 raise ValueError("connector_guid must be null for LOCAL collections")
+            if self.bound_agent_guid is None:
+                raise ValueError("bound_agent_guid is required for LOCAL collections")
 
-        # Remote collections require connector_guid
+        # Remote collections require connector_guid and cannot have bound_agent_guid
         if self.type in [CollectionType.S3, CollectionType.GCS, CollectionType.SMB]:
             if self.connector_guid is None:
                 raise ValueError(f"connector_guid is required for {self.type.value} collections")
+            if self.bound_agent_guid is not None:
+                raise ValueError("bound_agent_guid is only valid for LOCAL collections")
 
         return self
 
@@ -422,6 +429,7 @@ class CollectionUpdate(BaseModel):
         location: New location path
         state: New state (LIVE, CLOSED, ARCHIVED)
         pipeline_guid: New pipeline assignment (pip_xxx, set to explicit None to clear)
+        bound_agent_guid: Bound agent for LOCAL collections (agt_xxx, set to None to unbind)
         cache_ttl: New cache TTL override
         metadata: New metadata
 
@@ -430,6 +438,7 @@ class CollectionUpdate(BaseModel):
         - Changing state invalidates cache (new TTL applies)
         - Setting pipeline_guid assigns a pipeline and pins the current version
         - Use clear_pipeline endpoint to explicitly remove assignment
+        - bound_agent_guid can only be set for LOCAL collections
 
     Example:
         >>> update = CollectionUpdate(state=CollectionState.ARCHIVED, cache_ttl=86400)
@@ -438,6 +447,7 @@ class CollectionUpdate(BaseModel):
     location: Optional[str] = Field(default=None, min_length=1, max_length=1024)
     state: Optional[CollectionState] = Field(default=None)
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = keep current)")
+    bound_agent_guid: Optional[str] = Field(default=None, description="Bound agent GUID (agt_xxx, for LOCAL collections)")
     cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800)
     metadata: Optional[Dict[str, Any]] = Field(default=None)
 
@@ -446,8 +456,37 @@ class CollectionUpdate(BaseModel):
             "example": {
                 "state": "archived",
                 "pipeline_guid": "pip_01hgw2bbg0000000000000002",
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
                 "cache_ttl": 86400,
                 "metadata": {"archived_by": "admin", "reason": "project completed"}
+            }
+        }
+    }
+
+
+class BoundAgentSummary(BaseModel):
+    """
+    Summary schema for bound agent in collection responses.
+
+    Fields:
+        guid: Agent GUID (agt_xxx)
+        name: Agent display name
+        status: Current agent status
+
+    Example:
+        >>> summary = BoundAgentSummary(guid="agt_xxx", name="My Agent", status="online")
+    """
+    guid: str = Field(..., description="Agent GUID (agt_xxx)")
+    name: str = Field(..., description="Agent display name")
+    status: str = Field(..., description="Agent status (online, offline, error)")
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "guid": "agt_01hgw2bbg0000000000000001",
+                "name": "Home Mac Agent",
+                "status": "online"
             }
         }
     }
@@ -468,8 +507,9 @@ class CollectionResponse(BaseModel):
         pipeline_guid: Pipeline GUID (pip_xxx, null = use default)
         pipeline_version: Pinned pipeline version (null if using default)
         pipeline_name: Name of assigned pipeline (null if using default)
+        bound_agent: Bound agent details for LOCAL collections (null for remote)
         cache_ttl: Cache TTL override
-        is_accessible: Accessibility flag
+        is_accessible: Accessibility flag (True=accessible, False=not accessible, None=pending/testing)
         last_error: Last error message
         metadata: User-defined metadata
         created_at: Creation timestamp
@@ -487,8 +527,12 @@ class CollectionResponse(BaseModel):
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx)")
     pipeline_version: Optional[int] = None
     pipeline_name: Optional[str] = None
+    bound_agent: Optional[BoundAgentSummary] = Field(default=None, description="Bound agent for LOCAL collections")
     cache_ttl: Optional[int]
-    is_accessible: bool
+    is_accessible: Optional[bool] = Field(
+        default=None,
+        description="Accessibility flag: True=accessible, False=not accessible, None=pending/testing"
+    )
     last_error: Optional[str]
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
@@ -502,22 +546,52 @@ class CollectionResponse(BaseModel):
         if isinstance(data, dict):
             # Already a dict (from JSON API request)
             return data
-        # It's an ORM object
+        # It's an ORM object - convert to dict to avoid modifying the ORM
+        result = {}
+
+        # Copy basic attributes
+        for attr in ['guid', 'name', 'type', 'location', 'state', 'pipeline_version',
+                     'cache_ttl', 'is_accessible', 'last_error', 'created_at', 'updated_at']:
+            if hasattr(data, attr):
+                result[attr] = getattr(data, attr)
+
+        # Deserialize metadata_json
         if hasattr(data, 'metadata_json'):
             import json
             metadata_json = data.metadata_json
             if metadata_json:
                 try:
-                    data.metadata = json.loads(metadata_json)
+                    result['metadata'] = json.loads(metadata_json)
                 except (json.JSONDecodeError, TypeError):
-                    data.metadata = None
+                    result['metadata'] = None
             else:
-                data.metadata = None
+                result['metadata'] = None
+
         # Extract pipeline_guid and pipeline_name from relationship
         if hasattr(data, 'pipeline') and data.pipeline:
-            data.pipeline_guid = data.pipeline.guid
-            data.pipeline_name = data.pipeline.name
-        return data
+            result['pipeline_guid'] = data.pipeline.guid
+            result['pipeline_name'] = data.pipeline.name
+        else:
+            result['pipeline_guid'] = None
+            result['pipeline_name'] = None
+
+        # Extract bound_agent info from relationship
+        if hasattr(data, 'bound_agent') and data.bound_agent:
+            result['bound_agent'] = BoundAgentSummary(
+                guid=data.bound_agent.guid,
+                name=data.bound_agent.name,
+                status=data.bound_agent.status.value if hasattr(data.bound_agent.status, 'value') else str(data.bound_agent.status)
+            )
+        else:
+            result['bound_agent'] = None
+
+        # Extract connector from relationship
+        if hasattr(data, 'connector') and data.connector:
+            result['connector'] = data.connector
+        else:
+            result['connector'] = None
+
+        return result
 
     model_config = {
         "from_attributes": True,
@@ -531,6 +605,7 @@ class CollectionResponse(BaseModel):
                 "pipeline_guid": "pip_01hgw2bbg0000000000000001",
                 "pipeline_version": 3,
                 "pipeline_name": "Standard RAW Workflow",
+                "bound_agent": None,
                 "cache_ttl": 7200,
                 "is_accessible": True,
                 "last_error": None,
@@ -556,10 +631,16 @@ class CollectionTestResponse(BaseModel):
     """
     Schema for collection accessibility test response.
 
+    For LOCAL collections bound to agents, the test is performed asynchronously
+    by the agent. The response includes a job_guid that can be used to track
+    the test progress. The collection's is_accessible will be updated when
+    the agent completes the test.
+
     Fields:
-        success: Test result
+        success: Test result (for async tests: False until agent completes)
         message: Descriptive message
         collection: Updated collection with new accessibility status
+        job_guid: Job GUID for async accessibility tests (LOCAL collections)
 
     Example:
         >>> response = CollectionTestResponse(success=True, message="Collection is accessible", collection=...)
@@ -570,6 +651,10 @@ class CollectionTestResponse(BaseModel):
         default=None,
         description="Updated collection with new accessibility status"
     )
+    job_guid: Optional[str] = Field(
+        default=None,
+        description="Job GUID for async accessibility tests (job_xxx, only for LOCAL collections)"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -577,12 +662,13 @@ class CollectionTestResponse(BaseModel):
                 "success": True,
                 "message": "Collection is accessible. Found 1,234 files.",
                 "collection": {
-                    "id": 1,
+                    "guid": "col_01hgw2bbg0000000000000000",
                     "name": "Vacation Photos",
                     "type": "local",
                     "is_accessible": True,
                     "last_error": None
-                }
+                },
+                "job_guid": None
             }
         }
     }

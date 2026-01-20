@@ -42,6 +42,7 @@ describe('AgentsPage', () => {
       error_message: null,
       last_heartbeat: '2026-01-18T12:00:00Z',
       capabilities: ['local_filesystem', 'tool:photostats:1.0.0'],
+      authorized_roots: ['/Users/photographer/Photos', '/Volumes/External'],
       version: '1.0.0',
       created_at: '2026-01-15T10:00:00Z',
       team_guid: 'tea_01hgw2bbg00000000000000001',
@@ -56,6 +57,7 @@ describe('AgentsPage', () => {
       error_message: null,
       last_heartbeat: '2026-01-17T10:00:00Z',
       capabilities: ['local_filesystem'],
+      authorized_roots: ['/home/photos'],
       version: '1.0.0',
       created_at: '2026-01-10T08:00:00Z',
       team_guid: 'tea_01hgw2bbg00000000000000001',
@@ -317,6 +319,7 @@ describe('AgentsPage', () => {
       ...mockAgents[0],
       status: 'error',
       error_message: 'Connection timeout',
+      authorized_roots: [],
     }
     vi.mocked(agentService.listAgents).mockResolvedValue([errorAgent])
 

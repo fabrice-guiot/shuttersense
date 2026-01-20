@@ -208,6 +208,111 @@ class TestAgentStatusProperties:
         assert agent.can_execute_jobs is False
 
 
+class TestAgentAuthorizedRoots:
+    """Tests for Agent authorized_roots property and is_path_authorized method.
+
+    Issue #90 - Distributed Agent Architecture (Phase 6b)
+    Task: T133
+    """
+
+    def test_authorized_roots_getter_with_list(self):
+        """Test authorized_roots getter when authorized_roots_json is a list."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots_json = ["/photos", "/backup"]
+        assert agent.authorized_roots == ["/photos", "/backup"]
+
+    def test_authorized_roots_getter_with_none(self):
+        """Test authorized_roots getter when authorized_roots_json is None."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots_json = None
+        assert agent.authorized_roots == []
+
+    def test_authorized_roots_setter(self):
+        """Test authorized_roots setter stores value correctly."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots = ["/photos", "/backup"]
+        # Verify via getter (internal storage format varies by DB type)
+        assert agent.authorized_roots == ["/photos", "/backup"]
+
+    def test_authorized_roots_setter_empty_list(self):
+        """Test authorized_roots setter with empty list."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots = []
+        assert agent.authorized_roots == []
+
+    def test_is_path_authorized_exact_match(self):
+        """Test is_path_authorized returns True for exact root match."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots = ["/photos", "/backup"]
+        assert agent.is_path_authorized("/photos") is True
+        assert agent.is_path_authorized("/backup") is True
+
+    def test_is_path_authorized_subdirectory(self):
+        """Test is_path_authorized returns True for subdirectories of root."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots = ["/photos"]
+        assert agent.is_path_authorized("/photos/vacation") is True
+        assert agent.is_path_authorized("/photos/vacation/2024") is True
+
+    def test_is_path_authorized_not_under_root(self):
+        """Test is_path_authorized returns False for paths not under any root."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots = ["/photos"]
+        assert agent.is_path_authorized("/documents") is False
+        assert agent.is_path_authorized("/photos2") is False
+
+    def test_is_path_authorized_empty_roots(self):
+        """Test is_path_authorized returns False when no roots configured."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots = []
+        assert agent.is_path_authorized("/photos") is False
+
+    def test_is_path_authorized_multiple_roots(self):
+        """Test is_path_authorized with multiple authorized roots."""
+        agent = Agent(
+            name="Test Agent",
+            api_key_hash="a" * 64,
+            api_key_prefix="agt_key_"
+        )
+        agent.authorized_roots = ["/photos", "/backup", "/external"]
+        assert agent.is_path_authorized("/photos/vacation") is True
+        assert agent.is_path_authorized("/backup/archives") is True
+        assert agent.is_path_authorized("/external/raw") is True
+        assert agent.is_path_authorized("/documents") is False
+
+
 class TestAgentRepresentation:
     """Tests for Agent string representation."""
 

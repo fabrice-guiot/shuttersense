@@ -12,6 +12,15 @@
 export type CollectionType = 'local' | 's3' | 'gcs' | 'smb'
 export type CollectionState = 'live' | 'closed' | 'archived'
 
+/**
+ * Bound agent summary included in Collection responses
+ */
+export interface BoundAgentSummary {
+  guid: string
+  name: string
+  status: 'online' | 'offline' | 'error'
+}
+
 export interface Collection {
   guid: string  // External identifier (col_xxx) for URL-safe references
   name: string
@@ -22,9 +31,10 @@ export interface Collection {
   pipeline_guid: string | null  // null = use default pipeline at runtime
   pipeline_version: number | null  // pinned version when explicitly assigned
   pipeline_name: string | null  // name of assigned pipeline
-  is_accessible: boolean
+  is_accessible: boolean | null  // null = pending/testing, true = accessible, false = not accessible
   accessibility_message: string | null
   cache_ttl: number | null
+  bound_agent: BoundAgentSummary | null  // only for LOCAL collections
   created_at: string  // ISO 8601 timestamp
   updated_at: string  // ISO 8601 timestamp
   last_scanned_at: string | null  // ISO 8601 timestamp
@@ -42,6 +52,7 @@ export interface CollectionCreateRequest {
   connector_guid: string | null  // null for LOCAL, required for remote
   pipeline_guid?: string | null  // Optional: assign specific pipeline (pip_xxx)
   cache_ttl: number | null
+  bound_agent_guid?: string | null  // Optional: bind LOCAL collection to agent (agt_xxx)
 }
 
 export interface CollectionUpdateRequest {
@@ -52,6 +63,7 @@ export interface CollectionUpdateRequest {
   connector_guid?: string | null  // null for LOCAL, required for remote
   pipeline_guid?: string | null  // Optional: update pipeline assignment (pip_xxx)
   cache_ttl?: number | null
+  bound_agent_guid?: string | null  // Optional: update bound agent (agt_xxx, LOCAL only)
 }
 
 // ============================================================================

@@ -226,7 +226,7 @@
 
 ---
 
-## Phase 6: User Story 3 - Local Collection with Agent Binding (Priority: P0)
+## Phase 6: User Story 3 - Local Collection with Agent Binding (Priority: P0) ✅
 
 **Goal**: Photographers can analyze local photo collections via bound agents
 
@@ -234,38 +234,38 @@
 
 ### Backend Tests for User Story 3
 
-- [ ] T103 [P] [US3] Unit tests for collection binding validation in `backend/tests/unit/services/test_collection_binding.py` (LOCAL requires agent, deletion blocking)
-- [ ] T104 [P] [US3] Integration tests for LOCAL collection creation in `backend/tests/integration/test_local_collection.py` (binding required, agent validation)
-- [ ] T105 [P] [US3] Integration tests for bound job routing in `backend/tests/integration/test_bound_job_routing.py` (only bound agent claims)
+- [x] T103 [P] [US3] Unit tests for collection binding validation in `backend/tests/unit/test_collection_service.py` (LOCAL requires agent, deletion blocking)
+- [x] T104 [P] [US3] Integration tests for LOCAL collection creation in `backend/tests/integration/test_collection_binding.py` (binding required, agent validation)
+- [x] T105 [P] [US3] Integration tests for bound job routing in `backend/tests/unit/services/test_job_coordinator.py` (only bound agent claims)
 
 ### Backend Implementation for User Story 3
 
-- [ ] T106 [US3] Update Collection create endpoint to require agent selection for LOCAL type in `backend/src/api/collections/routes.py`
-- [ ] T107 [US3] Add agent binding validation in CollectionService in `backend/src/services/collection_service.py`
-- [ ] T108 [US3] Update job creation to set bound_agent_id from collection in `backend/src/services/job_service.py`
-- [ ] T109 [US3] Update job claim query to prioritize bound jobs in `backend/src/services/job_coordinator_service.py`
-- [ ] T110 [US3] Block agent deletion if bound collections exist in `backend/src/services/agent_service.py`
+- [x] T106 [US3] Update Collection create endpoint to require agent selection for LOCAL type in `backend/src/services/collection_service.py`
+- [x] T107 [US3] Add agent binding validation in CollectionService in `backend/src/services/collection_service.py`
+- [x] T108 [US3] Update job creation to set bound_agent_id from collection in `backend/src/services/job_coordinator_service.py`
+- [x] T109 [US3] Update job claim query to prioritize bound jobs in `backend/src/services/job_coordinator_service.py`
+- [x] T110 [US3] Block agent deletion if bound collections exist in `backend/src/services/agent_service.py`
 
 ### Agent Tests for User Story 3
 
-- [ ] T111 [P] [US3] Unit tests for local filesystem scanning in `agent/tests/unit/test_local_filesystem.py` (path validation, file enumeration)
+- [x] T111 [P] [US3] Unit tests for local filesystem scanning in `agent/tests/unit/test_local_filesystem.py` (path validation, file enumeration)
 
 ### Agent Implementation for User Story 3
 
-- [ ] T112 [US3] Handle local filesystem scanning in agent in `agent/src/job_executor.py` (local_filesystem capability)
+- [x] T112 [US3] Handle local filesystem scanning in agent in `agent/src/job_executor.py` (local_filesystem capability, collection_test tool)
 
 ### Frontend Tests for User Story 3
 
-- [ ] T113 [P] [US3] Component tests for CollectionForm with agent selector in `frontend/tests/components/collections/CollectionForm.test.tsx` (LOCAL type shows selector)
-- [ ] T114 [P] [US3] Hook tests for useOnlineAgents in `frontend/tests/hooks/useOnlineAgents.test.ts` (fetch online agents)
+- [x] T113 [P] [US3] Component tests for CollectionForm with agent selector in `frontend/tests/components/CollectionForm.test.tsx` (LOCAL type shows selector)
+- [x] T114 [P] [US3] Hook tests for useOnlineAgents in `frontend/tests/hooks/useOnlineAgents.test.ts` (fetch online agents)
 
 ### Frontend Implementation for User Story 3
 
-- [ ] T115 [US3] Update CollectionForm to show agent selector for LOCAL type in `frontend/src/components/collections/CollectionForm.tsx`
-- [ ] T116 [US3] Add useOnlineAgents hook for agent dropdown in `frontend/src/hooks/useOnlineAgents.ts`
-- [ ] T117 [US3] Display bound agent in collection detail view in `frontend/src/pages/CollectionDetailPage.tsx`
+- [x] T115 [US3] Update CollectionForm to show agent selector for LOCAL type in `frontend/src/components/collections/CollectionForm.tsx`
+- [x] T116 [US3] Add useOnlineAgents hook for agent dropdown in `frontend/src/hooks/useOnlineAgents.ts`
+- [x] T117 [US3] Display bound agent in collection list view in `frontend/src/components/collections/CollectionList.tsx`
 
-**Checkpoint**: LOCAL collections work with bound agents
+**Checkpoint**: LOCAL collections work with bound agents ✅
 
 ---
 

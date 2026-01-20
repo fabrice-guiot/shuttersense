@@ -81,6 +81,7 @@ class CollectionService:
         team_id: int,
         state: CollectionState = CollectionState.LIVE,
         connector_id: Optional[int] = None,
+        bound_agent_id: Optional[int] = None,
         pipeline_id: Optional[int] = None,
         cache_ttl: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None
@@ -92,6 +93,7 @@ class CollectionService:
         - Local collections: directory exists and is accessible
         - Remote collections: connector exists and connection succeeds
         - Pipeline assignment: pipeline exists and is active
+        - Bound agent (for LOCAL): agent exists and belongs to same team
 
         Args:
             name: User-friendly collection name (must be unique within team)
@@ -100,6 +102,7 @@ class CollectionService:
             team_id: Team ID for tenant isolation (from TenantContext)
             state: Collection lifecycle state (default: LIVE)
             connector_id: Connector ID (required for remote types, None for LOCAL)
+            bound_agent_id: Agent ID for LOCAL collections (optional)
             pipeline_id: Optional explicit pipeline assignment (NULL = use default)
             cache_ttl: Custom cache TTL override (seconds)
             metadata: Optional user-defined metadata
@@ -108,15 +111,16 @@ class CollectionService:
             Created Collection instance
 
         Raises:
-            ValueError: If validation fails (name exists, location invalid, connector missing, pipeline invalid)
+            ValueError: If validation fails (name exists, location invalid, connector missing, pipeline invalid, agent invalid)
             Exception: If database operation fails
 
         Example:
-            >>> # Local collection
+            >>> # Local collection with bound agent
             >>> collection = service.create_collection(
             ...     name="Local Photos",
             ...     type=CollectionType.LOCAL,
-            ...     location="/photos/2024"
+            ...     location="/photos/2024",
+            ...     bound_agent_id=1
             ... )
             >>> # Remote collection with pipeline
             >>> collection = service.create_collection(
@@ -134,6 +138,31 @@ class CollectionService:
         if type == CollectionType.LOCAL and connector_id:
             raise ValueError("Connector ID should not be provided for LOCAL collections")
 
+        # Validate bound_agent_id is only for LOCAL collections
+        if type != CollectionType.LOCAL and bound_agent_id:
+            raise ValueError("bound_agent_id is only valid for LOCAL collections")
+
+        # For LOCAL collections, bound_agent_id is required
+        if type == CollectionType.LOCAL and bound_agent_id is None:
+            raise ValueError("bound_agent_id is required for LOCAL collections")
+
+        # Validate bound agent if specified
+        if bound_agent_id is not None:
+            from backend.src.models.agent import Agent
+            agent = self.db.query(Agent).filter(Agent.id == bound_agent_id).first()
+            if not agent:
+                raise ValueError(f"Agent with ID {bound_agent_id} not found")
+            if agent.team_id != team_id:
+                raise ValueError("Bound agent must belong to the same team as the collection")
+
+            # Validate path against agent's authorized roots (for LOCAL collections)
+            if type == CollectionType.LOCAL:
+                if not agent.is_path_authorized(location):
+                    raise ValueError(
+                        f"Path '{location}' is not under any of the agent's authorized roots. "
+                        f"Authorized roots: {', '.join(agent.authorized_roots) or 'none configured'}"
+                    )
+
         # Validate pipeline if specified
         pipeline_version = None
         if pipeline_id is not None:
@@ -145,7 +174,15 @@ class CollectionService:
             pipeline_version = pipeline.version
 
         # Test accessibility before creation
-        is_accessible, last_error = self._test_accessibility(type, location, connector_id)
+        # For LOCAL collections with bound agents, defer testing to agent (async via job)
+        # Set is_accessible=None to indicate pending state
+        if type == CollectionType.LOCAL and bound_agent_id is not None:
+            # Agent will test accessibility asynchronously
+            is_accessible = None
+            last_error = None
+        else:
+            # Remote collections: test synchronously via connector
+            is_accessible, last_error = self._test_accessibility(type, location, connector_id)
 
         try:
             # Convert metadata to JSON string if provided
@@ -159,6 +196,7 @@ class CollectionService:
                 team_id=team_id,
                 state=state,
                 connector_id=connector_id,
+                bound_agent_id=bound_agent_id,
                 pipeline_id=pipeline_id,
                 pipeline_version=pipeline_version,
                 cache_ttl=cache_ttl,
@@ -310,6 +348,7 @@ class CollectionService:
         location: Optional[str] = None,
         state: Optional[CollectionState] = None,
         pipeline_id: Optional[int] = None,
+        bound_agent_id: Optional[int] = ...,  # Use sentinel to differentiate None (unbind) from not provided
         cache_ttl: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Collection:
@@ -317,7 +356,8 @@ class CollectionService:
         Update collection properties.
 
         Invalidates cache if state changes (different TTL applies).
-        Only updates fields that are not None.
+        Only updates fields that are not None (except bound_agent_id which can be
+        explicitly set to None to unbind).
 
         Args:
             collection_id: Collection ID to update
@@ -325,6 +365,7 @@ class CollectionService:
             location: New location path/URI
             state: New lifecycle state
             pipeline_id: New pipeline assignment (validates pipeline is active)
+            bound_agent_id: Bound agent ID (None to unbind, ... to keep current)
             cache_ttl: New cache TTL override
             metadata: New metadata
 
@@ -332,7 +373,8 @@ class CollectionService:
             Updated Collection instance
 
         Raises:
-            ValueError: If collection not found, name conflicts, or pipeline invalid
+            ValueError: If collection not found, name conflicts, pipeline invalid,
+                        or bound_agent_id used with non-LOCAL collection
             Exception: If database operation fails
 
         Example:
@@ -340,6 +382,8 @@ class CollectionService:
             >>> # Cache invalidated due to state change
             >>> collection = service.update_collection(1, pipeline_id=2)
             >>> # Pipeline assignment updated with current version
+            >>> collection = service.update_collection(1, bound_agent_id=5)
+            >>> # Bind LOCAL collection to agent
         """
         collection = self.db.query(Collection).filter(Collection.id == collection_id).first()
 
@@ -379,27 +423,86 @@ class CollectionService:
             if metadata is not None:
                 collection.metadata_json = json.dumps(metadata)
 
-            # If location changed, re-test accessibility
-            if location_changed:
-                # Test accessibility with new location
-                is_accessible, last_error = self._test_accessibility(
-                    collection.type,
-                    collection.location,
-                    collection.connector_id
-                )
-                collection.is_accessible = is_accessible
-                collection.last_error = last_error
+            # Handle bound_agent_id update (only for LOCAL collections)
+            if bound_agent_id is not ...:  # Check against sentinel
+                if collection.type != CollectionType.LOCAL and bound_agent_id is not None:
+                    raise ValueError("bound_agent_id is only valid for LOCAL collections")
+                # LOCAL collections require a bound agent
+                if collection.type == CollectionType.LOCAL and bound_agent_id is None:
+                    raise ValueError("bound_agent_id is required for LOCAL collections")
+                # Validate agent exists and belongs to same team
+                if bound_agent_id is not None:
+                    from backend.src.models.agent import Agent
+                    agent = self.db.query(Agent).filter(Agent.id == bound_agent_id).first()
+                    if not agent:
+                        raise ValueError(f"Agent with ID {bound_agent_id} not found")
+                    if agent.team_id != collection.team_id:
+                        raise ValueError("Bound agent must belong to the same team as the collection")
+                    # Validate path against agent's authorized roots
+                    # Use the new location if provided, otherwise current location
+                    path_to_check = location if location is not None else collection.location
+                    if not agent.is_path_authorized(path_to_check):
+                        raise ValueError(
+                            f"Path '{path_to_check}' is not under any of the agent's authorized roots. "
+                            f"Authorized roots: {', '.join(agent.authorized_roots) or 'none configured'}"
+                        )
+                collection.bound_agent_id = bound_agent_id
 
-                # Invalidate cache since location changed
+            # If location changed and there's a bound agent, validate the new path
+            if location_changed and collection.type == CollectionType.LOCAL:
+                # Get the bound agent (either new or existing)
+                agent_id = bound_agent_id if bound_agent_id is not ... else collection.bound_agent_id
+                if agent_id is not None:
+                    from backend.src.models.agent import Agent
+                    agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
+                    if agent and not agent.is_path_authorized(location):
+                        raise ValueError(
+                            f"Path '{location}' is not under any of the agent's authorized roots. "
+                            f"Authorized roots: {', '.join(agent.authorized_roots) or 'none configured'}"
+                        )
+
+            # Track if bound_agent_id changed (for LOCAL collections)
+            agent_changed = (
+                bound_agent_id is not ... and
+                bound_agent_id != collection.bound_agent_id
+            )
+            # Note: bound_agent_id was already updated above if provided
+
+            # If connectivity fields changed, re-test accessibility
+            connectivity_changed = location_changed or agent_changed
+            if connectivity_changed:
+                # For LOCAL collections with bound agent, defer testing to agent
+                if collection.type == CollectionType.LOCAL and collection.bound_agent_id is not None:
+                    # Set to pending - API will create a test job
+                    collection.is_accessible = None
+                    collection.last_error = None
+                    logger.info(
+                        f"Connectivity changed for LOCAL collection, set to pending: {collection.name}",
+                        extra={
+                            "collection_id": collection_id,
+                            "location_changed": location_changed,
+                            "agent_changed": agent_changed
+                        }
+                    )
+                else:
+                    # Remote collections: test synchronously via connector
+                    is_accessible, last_error = self._test_accessibility(
+                        collection.type,
+                        collection.location,
+                        collection.connector_id
+                    )
+                    collection.is_accessible = is_accessible
+                    collection.last_error = last_error
+                    logger.info(
+                        f"Connectivity changed, re-tested accessibility: {collection.name}",
+                        extra={
+                            "collection_id": collection_id,
+                            "accessible": is_accessible
+                        }
+                    )
+
+                # Invalidate cache since connectivity changed
                 self.file_cache.invalidate(collection_id)
-                logger.info(
-                    f"Location changed, re-tested accessibility: {collection.name}",
-                    extra={
-                        "collection_id": collection_id,
-                        "new_location": location,
-                        "accessible": is_accessible
-                    }
-                )
 
             self.db.commit()
             self.db.refresh(collection)

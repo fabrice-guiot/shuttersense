@@ -148,11 +148,16 @@ class AgentRunner:
         capabilities = detect_capabilities()
         self.logger.info(f"Detected capabilities: {capabilities}")
 
-        # Send initial heartbeat with capabilities and version to set agent status to ONLINE
-        # This ensures the agent can claim jobs immediately and has up-to-date capabilities/version
-        self.logger.info(f"Sending initial heartbeat (version: {__version__})...")
+        # Send initial heartbeat with capabilities, version, and authorized roots to set agent status to ONLINE
+        # This ensures the agent can claim jobs immediately and has up-to-date capabilities/version/roots
+        authorized_roots = self.config.authorized_roots
+        self.logger.info(f"Sending initial heartbeat (version: {__version__}, roots: {len(authorized_roots)})...")
         try:
-            await self._api_client.heartbeat(capabilities=capabilities, version=__version__)
+            await self._api_client.heartbeat(
+                capabilities=capabilities,
+                version=__version__,
+                authorized_roots=authorized_roots,
+            )
             self.logger.info("Initial heartbeat acknowledged, agent is now ONLINE")
         except AgentRevokedError:
             raise  # Re-raise to be handled by caller
@@ -218,8 +223,10 @@ class AgentRunner:
 
         while not self._shutdown_event.is_set():
             try:
-                # Send heartbeat
-                response = await self._api_client.heartbeat()
+                # Send heartbeat with authorized roots (may have changed via CLI)
+                response = await self._api_client.heartbeat(
+                    authorized_roots=self.config.authorized_roots,
+                )
                 self.logger.debug(f"Heartbeat acknowledged, server time: {response.get('server_time')}")
 
                 # Reset failure counter on success

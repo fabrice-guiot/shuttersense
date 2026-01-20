@@ -537,7 +537,8 @@ class JobCoordinatorService:
         """
         Complete a job with results.
 
-        Creates an AnalysisResult record and links it to the job.
+        For most jobs, creates an AnalysisResult record and links it to the job.
+        For collection_test jobs, updates the collection's accessibility status instead.
 
         Args:
             job_guid: Job GUID
@@ -565,7 +566,27 @@ class JobCoordinatorService:
         ):
             raise ValidationError("Invalid result signature")
 
-        # Create analysis result
+        # Handle collection_test jobs specially - update collection accessibility
+        if job.tool == "collection_test":
+            self._handle_collection_test_completion(job, completion_data)
+            # Complete the job without creating an AnalysisResult
+            job.complete(result_id=None)
+            job.progress = None
+
+            self.db.commit()
+
+            logger.info(
+                "Collection test job completed",
+                extra={
+                    "job_guid": job.guid,
+                    "collection_id": job.collection_id,
+                    "success": completion_data.results.get("success", False)
+                }
+            )
+
+            return job
+
+        # Standard job completion - create analysis result
         result = self._create_analysis_result(job, completion_data)
 
         # Complete the job
@@ -585,6 +606,61 @@ class JobCoordinatorService:
         )
 
         return job
+
+    def _handle_collection_test_completion(
+        self,
+        job: Job,
+        completion_data: JobCompletionData
+    ) -> None:
+        """
+        Handle completion of a collection_test job.
+
+        Updates the collection's is_accessible and last_error fields
+        based on the test results.
+
+        Args:
+            job: The collection_test job
+            completion_data: Completion data with test results
+        """
+        from backend.src.models.collection import Collection
+
+        if not job.collection_id:
+            logger.warning(
+                "Collection test job has no collection_id",
+                extra={"job_guid": job.guid}
+            )
+            return
+
+        collection = self.db.query(Collection).filter(
+            Collection.id == job.collection_id
+        ).first()
+
+        if not collection:
+            logger.warning(
+                "Collection not found for collection_test job",
+                extra={"job_guid": job.guid, "collection_id": job.collection_id}
+            )
+            return
+
+        # Extract results
+        results = completion_data.results
+        success = results.get("success", False)
+        error = results.get("error")
+        message = results.get("message")
+
+        # Update collection accessibility
+        collection.is_accessible = success
+        collection.last_error = error if not success else None
+
+        logger.info(
+            "Updated collection accessibility from agent test",
+            extra={
+                "collection_guid": collection.guid,
+                "is_accessible": success,
+                "last_error": error,
+                "result_message": message
+            }
+        )
 
     def _create_analysis_result(
         self,

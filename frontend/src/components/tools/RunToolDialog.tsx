@@ -59,6 +59,10 @@ const TOOL_INFO: Record<ToolType, { label: string; description: string }> = {
   pipeline_validation: {
     label: 'Pipeline Validation',
     description: 'Validate files against a defined pipeline'
+  },
+  collection_test: {
+    label: 'Collection Test',
+    description: 'Test if a LOCAL collection is accessible via bound agent'
   }
 }
 

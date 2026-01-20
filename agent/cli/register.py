@@ -136,14 +136,19 @@ def register(
     # Detect capabilities
     capabilities = detect_capabilities()
 
+    # Get authorized roots from config (if any)
+    authorized_roots = config.authorized_roots
+
     click.echo(f"Registering agent '{name}' with server {server}...")
     click.echo(f"  Hostname: {hostname}")
     click.echo(f"  OS: {os_info}")
     click.echo(f"  Capabilities: {', '.join(capabilities)}")
+    if authorized_roots:
+        click.echo(f"  Authorized roots: {', '.join(authorized_roots)}")
 
     # Perform registration
     try:
-        result = asyncio.run(_register_async(server, token, name, hostname, os_info, capabilities))
+        result = asyncio.run(_register_async(server, token, name, hostname, os_info, capabilities, authorized_roots))
     except AgentConnectionError as e:
         click.echo(click.style("Error: ", fg="red", bold=True) + f"Connection failed: {e}")
         ctx.exit(1)
@@ -180,6 +185,7 @@ async def _register_async(
     hostname: str,
     os_info: str,
     capabilities: list[str],
+    authorized_roots: list[str],
 ) -> dict:
     """
     Async registration helper.
@@ -191,6 +197,7 @@ async def _register_async(
         hostname: Machine hostname
         os_info: OS information
         capabilities: Agent capabilities
+        authorized_roots: Authorized local filesystem roots
 
     Returns:
         Registration response
@@ -202,5 +209,6 @@ async def _register_async(
             hostname=hostname,
             os_info=os_info,
             capabilities=capabilities,
+            authorized_roots=authorized_roots,
             version=__version__,
         )

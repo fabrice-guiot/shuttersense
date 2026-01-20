@@ -21,8 +21,8 @@ export const collectionFormSchema = z
       .min(1, 'Collection name is required')
       .max(100, 'Collection name must be less than 100 characters')
       .regex(
-        /^[a-zA-Z0-9\s\-_]+$/,
-        'Collection name can only contain letters, numbers, spaces, hyphens, and underscores'
+        /^[a-zA-Z0-9\s\-_.'()&,]+$/,
+        'Collection name can only contain letters, numbers, spaces, and common punctuation (- _ . \' ( ) & ,)'
       ),
     type: z.enum(['local', 's3', 'gcs', 'smb'], {
       message: 'Invalid collection type'
@@ -35,9 +35,12 @@ export const collectionFormSchema = z
       .min(1, 'Location is required')
       .max(500, 'Location must be less than 500 characters'),
     connector_guid: z
-      .string()
-      .min(1, 'Connector is required')
-      .nullable(),
+      .union([
+        z.string().min(1, 'Connector is required'),
+        z.null()
+      ])
+      .optional()
+      .transform((val) => val ?? null),  // Convert undefined to null
     cache_ttl: z
       .number()
       .int('Cache TTL must be an integer')
@@ -45,6 +48,10 @@ export const collectionFormSchema = z
       .nullable()
       .optional(),
     pipeline_guid: z
+      .string()
+      .nullable()
+      .optional(),
+    bound_agent_guid: z
       .string()
       .nullable()
       .optional()
@@ -73,6 +80,19 @@ export const collectionFormSchema = z
     {
       message: 'Remote collections require a connector',
       path: ['connector_guid']
+    }
+  )
+  .refine(
+    (data) => {
+      // bound_agent_guid is only valid for LOCAL collections
+      if (data.type !== 'local' && data.bound_agent_guid) {
+        return false
+      }
+      return true
+    },
+    {
+      message: 'Bound agent is only valid for LOCAL collections',
+      path: ['bound_agent_guid']
     }
   )
 
@@ -104,6 +124,14 @@ export function getDefaultCollectionFormValues(type: CollectionType = 'local'): 
     location: '',
     connector_guid: type === 'local' ? null : undefined,
     cache_ttl: null,
-    pipeline_guid: null
+    pipeline_guid: null,
+    bound_agent_guid: null
   }
+}
+
+/**
+ * Check if a collection type supports bound agents
+ */
+export function supportsAgentBinding(type: CollectionType): boolean {
+  return type === 'local'
 }

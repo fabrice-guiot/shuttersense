@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -50,6 +50,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { useAgents, useAgentStats, useRegistrationTokens } from '@/hooks/useAgents'
 import { AgentStatusBadge } from '@/components/agents/AgentStatusBadge'
+import { AgentDetailsDialog } from '@/components/agents/AgentDetailsDialog'
 import { RegistrationTokenDialog } from '@/components/agents/RegistrationTokenDialog'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime } from '@/utils/dateFormat'
@@ -63,6 +64,7 @@ export default function AgentsPage() {
 
   // Dialog states
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
@@ -79,6 +81,11 @@ export default function AgentsPage() {
     }
     return () => setStats([])
   }, [stats, setStats])
+
+  const handleViewDetails = (agent: Agent) => {
+    setSelectedAgent(agent)
+    setDetailsDialogOpen(true)
+  }
 
   const handleRename = (agent: Agent) => {
     setSelectedAgent(agent)
@@ -217,6 +224,10 @@ export default function AgentsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewDetails(agent)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleRename(agent)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Rename
@@ -244,6 +255,13 @@ export default function AgentsPage() {
         open={tokenDialogOpen}
         onOpenChange={setTokenDialogOpen}
         onCreateToken={createToken}
+      />
+
+      {/* Agent Details Dialog */}
+      <AgentDetailsDialog
+        agent={selectedAgent}
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
       />
 
       {/* Rename Dialog */}

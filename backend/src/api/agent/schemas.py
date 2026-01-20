@@ -48,6 +48,10 @@ class AgentRegistrationRequest(BaseModel):
         default_factory=list,
         description="List of agent capabilities (tools, storage access)"
     )
+    authorized_roots: List[str] = Field(
+        default_factory=list,
+        description="List of authorized local filesystem root paths"
+    )
     version: str = Field(
         ...,
         min_length=1,
@@ -72,6 +76,10 @@ class AgentRegistrationRequest(BaseModel):
                     "tool:photostats:1.0.0",
                     "tool:photo_pairing:1.0.0"
                 ],
+                "authorized_roots": [
+                    "/Users/photographer/Photos",
+                    "/Volumes/External"
+                ],
                 "version": "1.0.0",
                 "binary_checksum": "abc123def456..."
             }
@@ -89,6 +97,10 @@ class AgentRegistrationResponse(BaseModel):
     )
     name: str = Field(..., description="Agent display name")
     team_guid: str = Field(..., description="Team GUID (tea_xxx)")
+    authorized_roots: List[str] = Field(
+        default_factory=list,
+        description="Authorized filesystem roots for this agent"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -96,7 +108,8 @@ class AgentRegistrationResponse(BaseModel):
                 "guid": "agt_01hgw2bbg...",
                 "api_key": "agt_key_secret_token_here",
                 "name": "MacBook Pro - Studio",
-                "team_guid": "tea_01hgw2bbg..."
+                "team_guid": "tea_01hgw2bbg...",
+                "authorized_roots": ["/photos", "/backup"]
             }
         }
     }
@@ -130,6 +143,10 @@ class HeartbeatRequest(BaseModel):
         None,
         description="Updated capabilities list (if changed)"
     )
+    authorized_roots: Optional[List[str]] = Field(
+        None,
+        description="Updated authorized roots list (if changed)"
+    )
     version: Optional[str] = Field(
         None,
         max_length=50,
@@ -145,7 +162,12 @@ class HeartbeatRequest(BaseModel):
                     "stage": "scanning",
                     "percentage": 45,
                     "files_scanned": 1234
-                }
+                },
+                "authorized_roots": [
+                    "/Users/photographer/Photos",
+                    "/Volumes/External",
+                    "/Volumes/NewDrive"
+                ]
             }
         }
     }
@@ -193,6 +215,7 @@ class AgentResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if in ERROR state")
     last_heartbeat: Optional[datetime] = Field(None, description="Last heartbeat timestamp")
     capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
+    authorized_roots: List[str] = Field(default_factory=list, description="Authorized local filesystem roots")
     version: str = Field(..., description="Agent software version")
     created_at: datetime = Field(..., description="Registration timestamp")
 
@@ -211,6 +234,7 @@ class AgentResponse(BaseModel):
                 "status": "online",
                 "last_heartbeat": "2026-01-18T12:00:00.000Z",
                 "capabilities": ["local_filesystem", "tool:photostats:1.0.0"],
+                "authorized_roots": ["/Users/photographer/Photos", "/Volumes/External"],
                 "version": "1.0.0",
                 "created_at": "2026-01-18T10:00:00.000Z",
                 "team_guid": "tea_01hgw2bbg...",
@@ -374,11 +398,12 @@ class JobClaimResponse(BaseModel):
     """Response schema for job claim."""
 
     guid: str = Field(..., description="Job GUID (job_xxx)")
-    tool: str = Field(..., description="Tool to execute (photostats, photo_pairing, pipeline_validation)")
+    tool: str = Field(..., description="Tool to execute (photostats, photo_pairing, pipeline_validation, collection_test)")
     mode: Optional[str] = Field(None, description="Execution mode (e.g., 'collection')")
     collection_guid: Optional[str] = Field(None, description="Collection GUID if applicable")
     collection_path: Optional[str] = Field(None, description="Collection root path")
     pipeline_guid: Optional[str] = Field(None, description="Pipeline GUID if applicable")
+    parameters: Optional[Dict[str, Any]] = Field(None, description="Additional job parameters")
     signing_secret: str = Field(..., description="Base64-encoded signing secret for result attestation")
     priority: int = Field(..., description="Job priority")
     retry_count: int = Field(..., description="Current retry attempt")
@@ -392,6 +417,7 @@ class JobClaimResponse(BaseModel):
                 "mode": "collection",
                 "collection_guid": "col_01hgw2bbg...",
                 "collection_path": "/Users/photos/collection",
+                "parameters": {"collection_guid": "col_xxx", "collection_path": "/path/to/collection"},
                 "signing_secret": "base64-encoded-secret",
                 "priority": 0,
                 "retry_count": 0,

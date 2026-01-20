@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { FolderCheck, FolderSync, Edit, Trash2, Search } from 'lucide-react'
+import { FolderCheck, FolderSync, Edit, Trash2, Search, Bot } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -141,6 +141,7 @@ export function CollectionList({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
+              <TableHead>Agent</TableHead>
               <TableHead>State</TableHead>
               <TableHead>Pipeline</TableHead>
               <TableHead>Location</TableHead>
@@ -159,6 +160,44 @@ export function CollectionList({
                     </Badge>
                     {isBetaCollectionType(collection.type) && <BetaChip />}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {collection.bound_agent ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1.5">
+                            <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span
+                              className={cn(
+                                'h-2 w-2 rounded-full',
+                                collection.bound_agent.status === 'online'
+                                  ? 'bg-green-500'
+                                  : collection.bound_agent.status === 'offline'
+                                    ? 'bg-gray-400'
+                                    : 'bg-red-500'
+                              )}
+                            />
+                            <span className="text-sm truncate max-w-[100px]">
+                              {collection.bound_agent.name}
+                            </span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            <div className="font-medium">{collection.bound_agent.name}</div>
+                            <div className="text-muted-foreground capitalize">
+                              Status: {collection.bound_agent.status}
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : collection.type === 'local' ? (
+                    <span className="text-muted-foreground text-sm">Any agent</span>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">-</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant={COLLECTION_STATE_BADGE_VARIANT[collection.state]}>
