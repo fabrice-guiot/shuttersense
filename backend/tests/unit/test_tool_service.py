@@ -2,12 +2,16 @@
 Unit tests for ToolService.
 
 Tests job management, tool execution, and queue operations.
+
+Note: These tests focus on the in-memory job queue functionality which is retained
+for potential future server-side tools. Most tests mock is_inmemory_job_type() to
+return True to force the in-memory queue path. The default behavior (persistent jobs)
+is tested in integration tests.
 """
 
 import pytest
 from datetime import datetime
-from uuid import uuid4
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +23,7 @@ from backend.src.utils.job_queue import JobQueue, AnalysisJob, JobStatus as Queu
 
 
 class TestToolServiceJobManagement:
-    """Tests for job creation and management."""
+    """Tests for job creation and management using in-memory queue."""
 
     @pytest.fixture
     def mock_db(self):
@@ -57,8 +61,17 @@ class TestToolServiceJobManagement:
         pipeline.edges_json = []
         return pipeline
 
-    def test_run_tool_creates_job(self, mock_db, mock_collection, job_queue):
-        """Test that run_tool creates a new job."""
+    @pytest.fixture
+    def mock_settings_inmemory(self):
+        """Mock settings to enable in-memory job queue for all tool types."""
+        with patch('backend.src.config.settings.get_settings') as mock_get_settings:
+            mock_settings = Mock()
+            mock_settings.is_inmemory_job_type.return_value = True
+            mock_get_settings.return_value = mock_settings
+            yield mock_settings
+
+    def test_run_tool_creates_job(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
+        """Test that run_tool creates a new job in in-memory queue."""
         # Set up mock to return collection first, then None for default pipeline query
         def side_effect(model):
             query_mock = Mock()
@@ -85,7 +98,7 @@ class TestToolServiceJobManagement:
         assert job.tool == ToolType.PHOTOSTATS
         assert job.status == JobStatus.QUEUED
 
-    def test_run_tool_validates_collection(self, mock_db, job_queue):
+    def test_run_tool_validates_collection(self, mock_db, job_queue, mock_settings_inmemory):
         """Test that run_tool validates collection exists."""
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
@@ -93,7 +106,7 @@ class TestToolServiceJobManagement:
         with pytest.raises(ValueError, match="Collection 999 not found"):
             service.run_tool(collection_id=999, tool=ToolType.PHOTOSTATS)
 
-    def test_run_tool_validates_default_pipeline_for_validation(self, mock_db, mock_collection, job_queue):
+    def test_run_tool_validates_default_pipeline_for_validation(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
         """Test that a default pipeline is required for pipeline_validation when no pipeline_id is provided."""
         # Set up mock to return collection first, then None for pipeline query
         def side_effect(model):
@@ -116,8 +129,8 @@ class TestToolServiceJobManagement:
                 tool=ToolType.PIPELINE_VALIDATION
             )
 
-    def test_run_tool_prevents_duplicate(self, mock_db, mock_collection, job_queue):
-        """Test that duplicate tool execution is prevented."""
+    def test_run_tool_prevents_duplicate(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
+        """Test that duplicate tool execution is prevented in in-memory queue."""
         # Set up mock to return collection first, then None for default pipeline query
         def side_effect(model):
             query_mock = Mock()
@@ -141,8 +154,8 @@ class TestToolServiceJobManagement:
         with pytest.raises(ConflictError):
             service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
 
-    def test_get_job_returns_job(self, mock_db, mock_collection, job_queue):
-        """Test getting job by ID."""
+    def test_get_job_returns_job(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
+        """Test getting job by ID from in-memory queue."""
         def side_effect(model):
             query_mock = Mock()
             filter_mock = Mock()
@@ -164,20 +177,34 @@ class TestToolServiceJobManagement:
 
     def test_get_job_returns_none_for_unknown(self, mock_db, job_queue):
         """Test getting non-existent job returns None."""
+        # Mock the DB query for looking up the job in the database
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+
         service = ToolService(db=mock_db, job_queue=job_queue)
-        result = service.get_job(uuid4())
+        # Use a valid GUID format string instead of UUID object
+        result = service.get_job("job_01hgw2bbg0000000000000999")
         assert result is None
 
-    def test_list_jobs_returns_all(self, mock_db, mock_collection, job_queue):
-        """Test listing all jobs."""
+    def test_list_jobs_returns_all(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
+        """Test listing all jobs from in-memory queue."""
+        # Set up flexible mock for queries
         def side_effect(model):
             query_mock = Mock()
             filter_mock = Mock()
+            order_mock = Mock()
+            limit_mock = Mock()
+
             if model == Collection:
                 filter_mock.first.return_value = mock_collection
             else:
                 filter_mock.first.return_value = None
+                # For list_jobs DB query, return empty list
+                limit_mock.all.return_value = []
+                order_mock.limit.return_value = limit_mock
+                filter_mock.order_by.return_value = order_mock
+
             query_mock.filter.return_value = filter_mock
+            query_mock.order_by.return_value = order_mock
             return query_mock
 
         mock_db.query.side_effect = side_effect
@@ -188,16 +215,26 @@ class TestToolServiceJobManagement:
         jobs = service.list_jobs()
         assert len(jobs) == 1
 
-    def test_list_jobs_filters_by_status(self, mock_db, mock_collection, job_queue):
-        """Test filtering jobs by status."""
+    def test_list_jobs_filters_by_status(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
+        """Test filtering jobs by status in in-memory queue."""
         def side_effect(model):
             query_mock = Mock()
             filter_mock = Mock()
+            order_mock = Mock()
+            limit_mock = Mock()
+
             if model == Collection:
                 filter_mock.first.return_value = mock_collection
             else:
                 filter_mock.first.return_value = None
+                # For list_jobs DB query, return empty list
+                limit_mock.all.return_value = []
+                order_mock.limit.return_value = limit_mock
+                filter_mock.order_by.return_value = order_mock
+                filter_mock.filter.return_value = filter_mock  # For chained filters
+
             query_mock.filter.return_value = filter_mock
+            query_mock.order_by.return_value = order_mock
             return query_mock
 
         mock_db.query.side_effect = side_effect
@@ -211,8 +248,8 @@ class TestToolServiceJobManagement:
         assert len(queued) == 1
         assert len(running) == 0
 
-    def test_cancel_job_cancels_queued(self, mock_db, mock_collection, job_queue):
-        """Test cancelling a queued job."""
+    def test_cancel_job_cancels_queued(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
+        """Test cancelling a queued job in in-memory queue."""
         def side_effect(model):
             query_mock = Mock()
             filter_mock = Mock()
@@ -240,7 +277,7 @@ class TestToolServiceJobManagement:
 
 
 class TestToolServiceQueueStatus:
-    """Tests for queue status."""
+    """Tests for queue status combining in-memory and persistent jobs."""
 
     @pytest.fixture
     def mock_db(self):
@@ -264,22 +301,38 @@ class TestToolServiceQueueStatus:
         collection.pipeline_id = None
         return collection
 
-    def test_get_queue_status(self, mock_db, mock_collection, job_queue):
+    @pytest.fixture
+    def mock_settings_inmemory(self):
+        """Mock settings to enable in-memory job queue for all tool types."""
+        with patch('backend.src.config.settings.get_settings') as mock_get_settings:
+            mock_settings = Mock()
+            mock_settings.is_inmemory_job_type.return_value = True
+            mock_get_settings.return_value = mock_settings
+            yield mock_settings
+
+    def test_get_queue_status(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
         """Test getting queue status with in-memory jobs."""
-        # Set up a more flexible mock that handles different query patterns
-        query_mock = Mock()
-        filter_mock = Mock()
-        group_mock = Mock()
+        # Set up mock that handles different query patterns with variable arguments
+        def side_effect(*args):
+            query_mock = Mock()
+            filter_mock = Mock()
+            group_mock = Mock()
 
-        # Default behavior: return empty list for .all() and mock_collection for .first()
-        group_mock.all.return_value = []
-        filter_mock.first.return_value = mock_collection
-        filter_mock.group_by.return_value = group_mock
+            # Check if this is a Collection query (single arg)
+            if len(args) == 1 and args[0] == Collection:
+                filter_mock.first.return_value = mock_collection
+            else:
+                # Pipeline query or get_queue_status query (multiple args or Job)
+                filter_mock.first.return_value = None
+                # For get_queue_status DB query, return empty counts
+                group_mock.all.return_value = []
+                filter_mock.group_by.return_value = group_mock
 
-        query_mock.filter.return_value = filter_mock
-        query_mock.group_by.return_value = group_mock
+            query_mock.filter.return_value = filter_mock
+            query_mock.group_by.return_value = group_mock
+            return query_mock
 
-        mock_db.query.return_value = query_mock
+        mock_db.query.side_effect = side_effect
 
         service = ToolService(db=mock_db, job_queue=job_queue)
         service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
