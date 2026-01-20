@@ -502,3 +502,449 @@ def other_team_user(test_db_session, other_team):
     test_db_session.commit()
     test_db_session.refresh(user)
     return user
+
+
+# ============================================================================
+# Collection Stats Update Tests (Phase 8)
+# ============================================================================
+
+class TestCollectionStatsUpdate:
+    """Tests for collection stats update on job completion.
+
+    When PhotoStats or Photo Pairing jobs complete, collection statistics
+    should be automatically updated from the tool results.
+
+    Issue #90 - Distributed Agent Architecture (Phase 8)
+    """
+
+    def test_photostats_updates_file_count_and_storage_bytes(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """PhotoStats results update collection's file_count and storage_bytes."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={
+                "total_files": 1500,
+                "total_size": 2500000000,  # 2.5 GB
+                "orphaned_files": 10,
+            },
+            files_scanned=1500,
+            issues_found=10,
+            signature="a" * 64,
+        )
+
+        service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        # Refresh collection to get updated values
+        test_db_session.refresh(collection)
+
+        assert collection.file_count == 1500
+        assert collection.storage_bytes == 2500000000
+
+    def test_photo_pairing_updates_image_count(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """Photo Pairing results update collection's image_count."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+        job = create_job(
+            test_team,
+            tool="photo_pairing",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={
+                "image_count": 850,
+                "camera_groups": 3,
+                "pairing_issues": 5,
+            },
+            files_scanned=1000,
+            issues_found=5,
+            signature="a" * 64,
+        )
+
+        service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        test_db_session.refresh(collection)
+
+        assert collection.image_count == 850
+
+    def test_stats_update_ignores_other_tools(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """Tools other than photostats/photo_pairing don't update collection stats."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+
+        # Set initial values
+        collection.file_count = 100
+        collection.storage_bytes = 1000000
+        collection.image_count = 50
+        test_db_session.commit()
+
+        job = create_job(
+            test_team,
+            tool="pipeline_validation",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={
+                "total_files": 9999,  # Should be ignored
+                "total_size": 9999999,  # Should be ignored
+                "image_count": 9999,  # Should be ignored
+                "validation_passed": True,
+            },
+            files_scanned=100,
+            issues_found=0,
+            signature="a" * 64,
+        )
+
+        service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        test_db_session.refresh(collection)
+
+        # Values should be unchanged
+        assert collection.file_count == 100
+        assert collection.storage_bytes == 1000000
+        assert collection.image_count == 50
+
+    def test_stats_update_handles_missing_fields(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """Stats update gracefully handles missing fields in results."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+
+        # Set initial values
+        collection.file_count = 100
+        collection.storage_bytes = 1000000
+        test_db_session.commit()
+
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        # Results only contain total_files, not total_size
+        completion_data = JobCompletionData(
+            results={
+                "total_files": 200,
+                # total_size is missing
+            },
+            files_scanned=200,
+            issues_found=0,
+            signature="a" * 64,
+        )
+
+        service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        test_db_session.refresh(collection)
+
+        # file_count updated, storage_bytes unchanged
+        assert collection.file_count == 200
+        assert collection.storage_bytes == 1000000
+
+    def test_stats_update_no_collection_skipped(
+        self, test_db_session, test_team, test_user, create_agent, create_job
+    ):
+        """Stats update is skipped for jobs without collection_id."""
+        agent = create_agent(test_team, test_user)
+
+        # Job without collection
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=None,  # No collection
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={"total_files": 1000, "total_size": 5000000},
+            files_scanned=1000,
+            issues_found=0,
+            signature="a" * 64,
+        )
+
+        # Should complete without error
+        completed_job = service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        assert completed_job.status == JobStatus.COMPLETED
+
+
+# ============================================================================
+# Collection Test Job Handling Tests (Phase 8)
+# ============================================================================
+
+class TestCollectionTestJobHandling:
+    """Tests for collection_test job completion handling.
+
+    collection_test jobs update collection accessibility status
+    without creating an AnalysisResult record.
+
+    Issue #90 - Distributed Agent Architecture (Phase 8)
+    """
+
+    def test_collection_test_updates_accessibility_on_success(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """Successful collection_test marks collection as accessible."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+
+        # Start as inaccessible
+        collection.is_accessible = False
+        collection.last_error = "Previous error"
+        test_db_session.commit()
+
+        job = create_job(
+            test_team,
+            tool="collection_test",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={
+                "success": True,
+                "message": "Directory accessible",
+            },
+            signature="a" * 64,
+        )
+
+        service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        test_db_session.refresh(collection)
+
+        assert collection.is_accessible is True
+        assert collection.last_error is None
+
+    def test_collection_test_updates_error_on_failure(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """Failed collection_test marks collection as inaccessible with error."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+
+        # Start as accessible
+        collection.is_accessible = True
+        collection.last_error = None
+        test_db_session.commit()
+
+        job = create_job(
+            test_team,
+            tool="collection_test",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={
+                "success": False,
+                "error": "Permission denied: /path/to/collection",
+                "message": "Cannot access directory",
+            },
+            signature="a" * 64,
+        )
+
+        service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        test_db_session.refresh(collection)
+
+        assert collection.is_accessible is False
+        assert collection.last_error == "Permission denied: /path/to/collection"
+
+    def test_collection_test_no_analysis_result_created(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """collection_test jobs don't create AnalysisResult records."""
+        from backend.src.models import AnalysisResult
+
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+
+        # Count existing results
+        initial_count = test_db_session.query(AnalysisResult).count()
+
+        job = create_job(
+            test_team,
+            tool="collection_test",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={"success": True, "message": "OK"},
+            signature="a" * 64,
+        )
+
+        completed_job = service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        # Job completed without result_id
+        assert completed_job.status == JobStatus.COMPLETED
+        assert completed_job.result_id is None
+
+        # No new AnalysisResult created
+        final_count = test_db_session.query(AnalysisResult).count()
+        assert final_count == initial_count
+
+    def test_collection_test_clears_progress(
+        self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
+    ):
+        """collection_test job completion clears progress field."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team)
+
+        job = create_job(
+            test_team,
+            tool="collection_test",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=collection,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        job.progress = {"stage": "testing", "percentage": 50}
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={"success": True},
+            signature="a" * 64,
+        )
+
+        completed_job = service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        assert completed_job.progress is None
+
+    def test_collection_test_missing_collection_logged(
+        self, test_db_session, test_team, test_user, create_agent, create_job
+    ):
+        """collection_test with missing collection completes without error."""
+        agent = create_agent(test_team, test_user)
+
+        # Job without collection
+        job = create_job(
+            test_team,
+            tool="collection_test",
+            status=JobStatus.RUNNING,
+            agent=agent,
+            collection=None,
+        )
+        job.signing_secret_hash = "dummy_hash"
+        test_db_session.commit()
+
+        service = JobCoordinatorService(test_db_session)
+
+        completion_data = JobCompletionData(
+            results={"success": True},
+            signature="a" * 64,
+        )
+
+        # Should complete without error (warning logged)
+        completed_job = service.complete_job(
+            job_guid=job.guid,
+            agent_id=agent.id,
+            team_id=test_team.id,
+            completion_data=completion_data,
+        )
+
+        assert completed_job.status == JobStatus.COMPLETED
