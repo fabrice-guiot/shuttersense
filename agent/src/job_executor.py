@@ -18,6 +18,18 @@ from src.progress_reporter import ProgressReporter
 from src.result_signer import ResultSigner
 from src.config_loader import ApiConfigLoader
 
+# Shared analysis modules for unified local/remote processing
+from src.analysis import (
+    build_imagegroups,
+    calculate_analytics,
+    analyze_pairing,
+    calculate_stats,
+    run_pipeline_validation,
+    flatten_imagegroups_to_specific_images,
+    add_metadata_files,
+)
+from src.remote.base import FileInfo
+
 
 logger = logging.getLogger("shuttersense.agent.executor")
 
@@ -160,6 +172,9 @@ class JobExecutor:
         """
         Execute the appropriate tool for the job.
 
+        For remote collections (with connector info), uses storage adapters
+        to list files and processes them without downloading.
+
         Args:
             job: Job data
             config: Configuration data
@@ -170,14 +185,21 @@ class JobExecutor:
         tool = job["tool"]
         collection_path = job.get("collection_path")
         pipeline_guid = job.get("pipeline_guid")
+        connector = config.get("connector")
+
+        # Check if this is a remote collection
+        is_remote = connector is not None
 
         if tool == "photostats":
-            return await self._run_photostats(collection_path, config)
+            # Unified code path: connector=None means local, connector!=None means remote
+            return await self._run_photostats(collection_path, config, connector)
         elif tool == "photo_pairing":
-            return await self._run_photo_pairing(collection_path, config)
+            # Unified code path: connector=None means local, connector!=None means remote
+            return await self._run_photo_pairing(collection_path, config, connector)
         elif tool == "pipeline_validation":
+            # Unified code path: connector=None means local, connector!=None means remote
             return await self._run_pipeline_validation(
-                collection_path, pipeline_guid, config
+                collection_path, pipeline_guid, config, connector
             )
         elif tool == "collection_test":
             # Merge connector info from config into job for collection_test
@@ -194,14 +216,20 @@ class JobExecutor:
     async def _run_photostats(
         self,
         collection_path: Optional[str],
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        connector: Optional[Dict[str, Any]] = None
     ) -> JobResult:
         """
-        Run PhotoStats analysis.
+        Run PhotoStats analysis on local or remote collection.
+
+        Unified code path for both local and remote collections:
+        - connector=None: Use LocalAdapter for local filesystem
+        - connector provided: Use appropriate remote adapter (S3/GCS/SMB)
 
         Args:
-            collection_path: Path to collection
+            collection_path: Path to collection (local path or remote location)
             config: Configuration data
+            connector: Optional connector info for remote collections
 
         Returns:
             JobResult with analysis results
@@ -214,15 +242,14 @@ class JobExecutor:
             )
 
         try:
-            # Import and run PhotoStats
-            # Run in a thread pool to avoid blocking the event loop
             loop = asyncio.get_event_loop()
+            is_remote = connector is not None
 
             def run_analysis():
-                import tempfile
-                import yaml
-                from pathlib import Path
-                from photo_stats import PhotoStats
+                import time
+                from src.remote.local_adapter import LocalAdapter
+
+                start_time = time.time()
 
                 # Report progress at start
                 self._sync_progress_callback(
@@ -231,107 +258,69 @@ class JobExecutor:
                     message="Initializing PhotoStats..."
                 )
 
-                # Write API config to a temp YAML file for PhotoStats to use
-                # PhotoStats uses PhotoAdminConfig which reads from YAML files
-                config_yaml = {
-                    'photo_extensions': config.get('photo_extensions', []),
-                    'metadata_extensions': config.get('metadata_extensions', []),
-                    'require_sidecar': config.get('require_sidecar', []),
-                    'camera_mappings': config.get('camera_mappings', {}),
-                    'processing_methods': config.get('processing_methods', {}),
-                }
-
-                with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.yaml',
-                    delete=False
-                ) as config_file:
-                    yaml.dump(config_yaml, config_file, default_flow_style=False)
-                    config_path = config_file.name
-
-                try:
-                    # Create PhotoStats instance with folder_path and API config
-                    analyzer = PhotoStats(
-                        folder_path=collection_path,
-                        config_path=config_path
+                # Get appropriate adapter based on collection type
+                if is_remote:
+                    adapter = self._get_storage_adapter(connector)
+                    normalized_path = self._normalize_remote_path(
+                        collection_path, connector.get("type", "")
                     )
+                    location_display = f"{connector.get('type', 'remote').upper()}: {connector.get('name', 'Unknown')} / {collection_path}"
+                else:
+                    adapter = LocalAdapter({})
+                    normalized_path = collection_path
+                    location_display = collection_path
 
-                    # Report progress before scanning
-                    self._sync_progress_callback(
-                        stage="scanning",
-                        percentage=10,
-                        message=f"Scanning {collection_path}..."
-                    )
+                # Report progress
+                self._sync_progress_callback(
+                    stage="scanning",
+                    percentage=10,
+                    message=f"Scanning {location_display}..."
+                )
 
-                    # Run analysis (scan_folder is the actual method)
-                    stats = analyzer.scan_folder()
+                # List files with metadata (same interface for local and remote)
+                logger.info(f"Listing files from collection: {normalized_path}")
+                file_infos = adapter.list_files_with_metadata(normalized_path)
+                logger.info(f"Found {len(file_infos)} files in collection")
 
-                    # Report progress before report generation
-                    self._sync_progress_callback(
-                        stage="generating",
-                        percentage=80,
-                        message="Generating report..."
-                    )
+                # Report progress
+                self._sync_progress_callback(
+                    stage="analyzing",
+                    percentage=30,
+                    message=f"Analyzing {len(file_infos)} files...",
+                    files_scanned=len(file_infos)
+                )
 
-                    # Generate HTML report to a temp file and read content
-                    report_html = None
-                    if stats:
-                        with tempfile.NamedTemporaryFile(
-                            mode='w',
-                            suffix='.html',
-                            delete=False
-                        ) as tmp_file:
-                            tmp_path = tmp_file.name
+                # Process files using shared analysis module (same for local and remote)
+                results = self._process_photostats_files(file_infos, config)
 
-                        try:
-                            analyzer.generate_html_report(tmp_path)
-                            with open(tmp_path, 'r', encoding='utf-8') as f:
-                                report_html = f.read()
-                        finally:
-                            # Clean up HTML temp file
-                            Path(tmp_path).unlink(missing_ok=True)
+                # Add scan duration
+                results['scan_time'] = time.time() - start_time
 
-                    # Build results dict matching server-side schema
-                    # orphaned_images and orphaned_xmp must be arrays (not counts)
-                    # for frontend compatibility
-                    orphaned_images = stats.get('orphaned_images', [])
-                    orphaned_xmp = stats.get('orphaned_xmp', [])
+                # Report progress
+                self._sync_progress_callback(
+                    stage="generating",
+                    percentage=80,
+                    message="Generating report..."
+                )
 
-                    results = {
-                        'total_files': stats.get('total_files', 0),
-                        'total_size': stats.get('total_size', 0),
-                        'file_counts': dict(stats.get('file_counts', {})),
-                        'orphaned_images': orphaned_images,
-                        'orphaned_xmp': orphaned_xmp,
-                    }
+                # Generate HTML report (same template for local and remote)
+                report_html = self._generate_photostats_report(
+                    results, location_display, connector
+                )
 
-                    # Calculate issues count for JobResult
-                    issues_count = len(orphaned_images) + len(orphaned_xmp)
+                return results, report_html
 
-                    return results, report_html, issues_count
+            results, report_html = await loop.run_in_executor(None, run_analysis)
 
-                finally:
-                    # Clean up config temp file
-                    Path(config_path).unlink(missing_ok=True)
+            issues_count = len(results.get('orphaned_images', [])) + len(results.get('orphaned_xmp', []))
 
-            results, report_html, issues_count = await loop.run_in_executor(
-                None, run_analysis
+            return JobResult(
+                success=True,
+                results=results,
+                report_html=report_html,
+                files_scanned=results.get('total_files', 0),
+                issues_found=issues_count,
             )
-
-            if results:
-                return JobResult(
-                    success=True,
-                    results=results,
-                    report_html=report_html,
-                    files_scanned=results.get("total_files", 0),
-                    issues_found=issues_count,
-                )
-            else:
-                return JobResult(
-                    success=False,
-                    results={},
-                    error_message="PhotoStats analysis returned no results"
-                )
 
         except Exception as e:
             logger.error(f"PhotoStats analysis failed: {e}", exc_info=True)
@@ -344,14 +333,20 @@ class JobExecutor:
     async def _run_photo_pairing(
         self,
         collection_path: Optional[str],
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        connector: Optional[Dict[str, Any]] = None
     ) -> JobResult:
         """
-        Run Photo Pairing analysis.
+        Run Photo Pairing analysis on local or remote collection.
+
+        Unified code path for both local and remote collections:
+        - connector=None: Use LocalAdapter for local filesystem
+        - connector provided: Use appropriate remote adapter (S3/GCS/SMB)
 
         Args:
-            collection_path: Path to collection
+            collection_path: Path to collection (local path or remote location)
             config: Configuration data
+            connector: Optional connector info for remote collections
 
         Returns:
             JobResult with analysis results
@@ -364,19 +359,14 @@ class JobExecutor:
             )
 
         try:
-            # Import and run Photo Pairing
             loop = asyncio.get_event_loop()
+            is_remote = connector is not None
 
             def run_analysis():
-                import tempfile
                 import time
-                from pathlib import Path
-                from photo_pairing import (
-                    scan_folder,
-                    build_imagegroups,
-                    calculate_analytics,
-                    generate_html_report
-                )
+                from src.remote.local_adapter import LocalAdapter
+
+                start_time = time.time()
 
                 # Report progress at start
                 self._sync_progress_callback(
@@ -385,37 +375,47 @@ class JobExecutor:
                     message="Initializing Photo Pairing..."
                 )
 
-                # Use API-provided config directly
-                # photo_pairing functions accept these as parameters
-                extensions = set(config.get('photo_extensions', []))
-                camera_mappings = config.get('camera_mappings', {})
-                processing_methods = config.get('processing_methods', {})
+                # Get appropriate adapter based on collection type
+                if is_remote:
+                    adapter = self._get_storage_adapter(connector)
+                    normalized_path = self._normalize_remote_path(
+                        collection_path, connector.get("type", "")
+                    )
+                    location_display = f"{connector.get('type', 'remote').upper()}: {connector.get('name', 'Unknown')} / {collection_path}"
+                else:
+                    adapter = LocalAdapter({})
+                    normalized_path = collection_path
+                    location_display = collection_path
 
-                folder_path = Path(collection_path)
-                start_time = time.time()
-
-                # Report progress before scanning
+                # Report progress
                 self._sync_progress_callback(
                     stage="scanning",
                     percentage=10,
-                    message=f"Scanning {collection_path}..."
+                    message=f"Scanning {location_display}..."
                 )
 
-                # Scan folder for files using API config extensions
-                files = list(scan_folder(folder_path, extensions))
+                # List files with metadata (same interface for local and remote)
+                logger.info(f"Listing files from collection: {normalized_path}")
+                all_files = adapter.list_files_with_metadata(normalized_path)
+
+                # Filter to photo extensions
+                photo_extensions = set(config.get('photo_extensions', []))
+                photo_exts_lower = {ext.lower() for ext in photo_extensions}
+                photo_files = [f for f in all_files if f.extension in photo_exts_lower]
+                logger.info(f"Found {len(photo_files)} photo files in collection")
 
                 # Report progress
                 self._sync_progress_callback(
                     stage="analyzing",
                     percentage=30,
-                    message=f"Analyzing {len(files)} files...",
-                    files_scanned=len(files)
+                    message=f"Analyzing {len(photo_files)} files...",
+                    files_scanned=len(photo_files)
                 )
 
-                # Build image groups
-                group_result = build_imagegroups(files, folder_path)
-                imagegroups = group_result['imagegroups']
-                invalid_files = group_result['invalid_files']
+                # Use SHARED analysis (same code path for local and remote)
+                result = build_imagegroups(photo_files)
+                imagegroups = result['imagegroups']
+                invalid_files = result['invalid_files']
 
                 # Report progress
                 self._sync_progress_callback(
@@ -424,81 +424,48 @@ class JobExecutor:
                     message="Calculating analytics..."
                 )
 
-                # Calculate analytics using API config mappings
-                analytics = calculate_analytics(
-                    imagegroups,
-                    camera_mappings,
-                    processing_methods
-                )
+                # Calculate analytics with config for label resolution
+                analytics = calculate_analytics(imagegroups, config)
 
                 scan_duration = time.time() - start_time
 
-                # Report progress before report generation
+                # Report progress
                 self._sync_progress_callback(
                     stage="generating",
                     percentage=80,
                     message="Generating report..."
                 )
 
-                # Generate HTML report to temp file and read content
-                report_html = None
-                with tempfile.NamedTemporaryFile(
-                    mode='w',
-                    suffix='.html',
-                    delete=False
-                ) as tmp_file:
-                    tmp_path = tmp_file.name
-
-                try:
-                    generate_html_report(
-                        analytics,
-                        invalid_files,
-                        tmp_path,
-                        str(folder_path),
-                        scan_duration
-                    )
-                    with open(tmp_path, 'r', encoding='utf-8') as f:
-                        report_html = f.read()
-                finally:
-                    # Clean up temp file
-                    Path(tmp_path).unlink(missing_ok=True)
-
                 # Build results dict matching server-side schema
-                # calculate_analytics returns: {camera_usage, method_usage, statistics}
-                # Server-side format uses: group_count, image_count, camera_usage, method_usage, invalid_files_count
-                statistics = analytics.get('statistics', {})
-
                 results = {
-                    'group_count': statistics.get('total_groups', 0),
-                    'image_count': statistics.get('total_images', 0),
-                    'camera_usage': analytics.get('camera_usage', {}),
-                    'method_usage': analytics.get('method_usage', {}),
+                    'group_count': analytics['group_count'],
+                    'image_count': analytics['image_count'],
+                    'file_count': analytics['file_count'],
+                    'camera_usage': analytics['camera_usage'],
+                    'method_usage': analytics['method_usage'],
                     'invalid_files_count': len(invalid_files),
+                    'scan_time': scan_duration,
                 }
 
-                # Calculate total files for JobResult
-                total_files = statistics.get('total_files_scanned', 0)
+                # Generate HTML report (same template for local and remote)
+                invalid_file_paths = [f['path'] for f in invalid_files]
+                report_html = self._generate_photo_pairing_report(
+                    results, invalid_file_paths, location_display, connector
+                )
 
-                return results, report_html, total_files, len(invalid_files)
+                return results, report_html, len(invalid_files)
 
-            results, report_html, total_files, issues_count = await loop.run_in_executor(
+            results, report_html, issues_count = await loop.run_in_executor(
                 None, run_analysis
             )
 
-            if results:
-                return JobResult(
-                    success=True,
-                    results=results,
-                    report_html=report_html,
-                    files_scanned=total_files,
-                    issues_found=issues_count,
-                )
-            else:
-                return JobResult(
-                    success=False,
-                    results={},
-                    error_message="Photo Pairing analysis returned no results"
-                )
+            return JobResult(
+                success=True,
+                results=results,
+                report_html=report_html,
+                files_scanned=results.get('file_count', 0),
+                issues_found=issues_count,
+            )
 
         except Exception as e:
             logger.error(f"Photo Pairing analysis failed: {e}", exc_info=True)
@@ -512,10 +479,15 @@ class JobExecutor:
         self,
         collection_path: Optional[str],
         pipeline_guid: Optional[str],
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        connector: Optional[Dict[str, Any]] = None
     ) -> JobResult:
         """
-        Run Pipeline Validation analysis.
+        Run Pipeline Validation analysis on local or remote collection.
+
+        Unified code path for both local and remote collections:
+        - connector=None: Use local filesystem
+        - connector provided: Use appropriate remote adapter (S3/GCS/SMB)
 
         For display_graph mode (no collection_path), generates a graph visualization.
         For collection mode, runs full pipeline validation.
@@ -524,6 +496,7 @@ class JobExecutor:
             collection_path: Path to collection (optional for display_graph mode)
             pipeline_guid: Pipeline GUID
             config: Configuration data (includes pipeline definition)
+            connector: Optional connector info for remote collections
 
         Returns:
             JobResult with analysis results
@@ -536,8 +509,8 @@ class JobExecutor:
                 # Display graph mode - generate graph visualization only
                 return await self._run_display_graph(config, loop)
             else:
-                # Collection validation mode - full pipeline validation
-                return await self._run_collection_validation(collection_path, config, loop)
+                # Collection validation mode - full pipeline validation (local or remote)
+                return await self._run_collection_validation(collection_path, config, loop, connector)
 
         except Exception as e:
             logger.error(f"Pipeline Validation failed: {e}", exc_info=True)
@@ -662,19 +635,25 @@ class JobExecutor:
         self,
         collection_path: str,
         config: Dict[str, Any],
-        loop: asyncio.AbstractEventLoop
+        loop: asyncio.AbstractEventLoop,
+        connector: Optional[Dict[str, Any]] = None
     ) -> JobResult:
         """
         Run collection validation mode - full pipeline validation.
 
+        Unified code path for both local and remote collections.
+
         Args:
-            collection_path: Path to collection
+            collection_path: Path to collection (local path or remote location)
             config: Configuration data with pipeline definition
             loop: Event loop for running in executor
+            connector: Optional connector info for remote collections
 
         Returns:
             JobResult with validation results
         """
+        is_remote = connector is not None
+
         # Get pipeline data from config
         pipeline_data = config.get("pipeline")
         if not pipeline_data:
@@ -684,25 +663,17 @@ class JobExecutor:
                 error_message="Pipeline data not found in job config"
             )
 
+        pipeline_name = pipeline_data.get('name', 'Unknown Pipeline')
+        pipeline_guid = pipeline_data.get('guid')
+
         # Create PipelineConfig from API data (outside executor to use self)
         pipeline_config = self._create_pipeline_config_from_api(pipeline_data)
 
         def run_collection_validation():
-            import tempfile
-            import yaml
             import time
-            from pathlib import Path
-            from datetime import datetime
+            from src.remote.local_adapter import LocalAdapter
 
-            from pipeline_validation import (
-                load_or_generate_imagegroups,
-                flatten_imagegroups_to_specific_images,
-                add_metadata_files_to_specific_images,
-                build_report_context,
-            )
-            from utils.pipeline_processor import ValidationStatus
-            from utils.report_renderer import ReportRenderer
-            from utils.config_manager import PhotoAdminConfig
+            start_time = time.time()
 
             # Report progress at start
             self._sync_progress_callback(
@@ -711,216 +682,109 @@ class JobExecutor:
                 message="Initializing Pipeline Validation..."
             )
 
-            # Write API config to temp YAML file for PhotoAdminConfig
-            config_yaml = {
-                'photo_extensions': config.get('photo_extensions', []),
-                'metadata_extensions': config.get('metadata_extensions', []),
-                'require_sidecar': config.get('require_sidecar', []),
-                'camera_mappings': config.get('camera_mappings', {}),
-                'processing_methods': config.get('processing_methods', {}),
+            # Get appropriate adapter based on collection type
+            if is_remote:
+                adapter = self._get_storage_adapter(connector)
+                normalized_path = self._normalize_remote_path(
+                    collection_path, connector.get("type", "")
+                )
+                location_display = f"{connector.get('type', 'remote').upper()}: {connector.get('name', 'Unknown')} / {collection_path}"
+            else:
+                adapter = LocalAdapter({})
+                normalized_path = collection_path
+                location_display = collection_path
+
+            # Report progress
+            self._sync_progress_callback(
+                stage="scanning",
+                percentage=10,
+                message=f"Scanning {location_display}..."
+            )
+
+            # List files with metadata (same interface for local and remote)
+            logger.info(f"Listing files from collection: {normalized_path}")
+            all_files = adapter.list_files_with_metadata(normalized_path)
+            logger.info(f"Found {len(all_files)} files in collection")
+
+            # Report progress
+            # Get config
+            photo_extensions = set(config.get('photo_extensions', []))
+            metadata_extensions = set(config.get('metadata_extensions', []))
+
+            # Progress callback for validation phase (10% to 80%)
+            last_reported_pct = [10]  # Use list for mutable closure
+
+            def validation_progress(current: int, total: int, issues: int):
+                # Calculate percentage: 10% to 80% range (70% span for validation)
+                if total > 0:
+                    pct = int((current / total) * 70) + 10
+                else:
+                    pct = 10
+                # Report every 2% or every 50 images (like backend)
+                if pct >= last_reported_pct[0] + 2 or current % 50 == 0 or current == total:
+                    self._sync_progress_callback(
+                        stage="analyzing",
+                        percentage=pct,
+                        message=f"Validating images... ({current}/{total})",
+                        files_scanned=current,
+                        total_files=total,
+                        issues_found=issues
+                    )
+                    last_reported_pct[0] = pct
+
+            # Initial progress before validation
+            self._sync_progress_callback(
+                stage="validating",
+                percentage=10,
+                message=f"Starting validation of {len(all_files)} files...",
+                files_scanned=0
+            )
+
+            # Use SHARED analysis (same code path for local and remote)
+            validation_result = run_pipeline_validation(
+                files=all_files,
+                pipeline_config=pipeline_config,
+                photo_extensions=photo_extensions,
+                metadata_extensions=metadata_extensions,
+                progress_callback=validation_progress
+            )
+
+            # Report progress
+            self._sync_progress_callback(
+                stage="generating",
+                percentage=85,
+                message="Generating report..."
+            )
+
+            # Build results dict in same format for both local and remote
+            status_counts = validation_result['status_counts']
+            results = {
+                'pipeline_guid': pipeline_guid,
+                'pipeline_name': pipeline_name,
+                'total_files': len(all_files),
+                'total_images': validation_result['total_images'],
+                'total_groups': validation_result['total_groups'],
+                'overall_status': {
+                    'CONSISTENT': status_counts['consistent'] + status_counts['consistent_with_warning'],
+                    'PARTIAL': status_counts['partial'],
+                    'INCONSISTENT': status_counts['inconsistent'],
+                },
+                # Per-termination type breakdown (for Trends tab)
+                'by_termination': validation_result.get('by_termination', {}),
+                'invalid_files_count': validation_result['invalid_files_count'],
+                'scan_time': time.time() - start_time,
             }
 
-            with tempfile.NamedTemporaryFile(
-                mode='w',
-                suffix='.yaml',
-                delete=False
-            ) as config_file:
-                yaml.dump(config_yaml, config_file, default_flow_style=False)
-                config_path = config_file.name
+            # Generate report (same template for local and remote)
+            report_html = self._generate_pipeline_validation_report(
+                results, validation_result, location_display, connector
+            )
 
-            try:
-                # Create PhotoAdminConfig from temp file
-                photo_config = PhotoAdminConfig(config_path=config_path)
+            # Calculate issues (PARTIAL + INCONSISTENT)
+            issues = status_counts['partial'] + status_counts['inconsistent']
+            return results, report_html, issues
 
-                folder_path = Path(collection_path)
-                scan_start = datetime.now()
-
-                # Report progress
-                self._sync_progress_callback(
-                    stage="loading",
-                    percentage=10,
-                    message="Loading Photo Pairing results..."
-                )
-
-                # Load or generate imagegroups
-                imagegroups = load_or_generate_imagegroups(folder_path, force_regenerate=False)
-
-                # Report progress
-                self._sync_progress_callback(
-                    stage="processing",
-                    percentage=30,
-                    message=f"Processing {len(imagegroups)} image groups..."
-                )
-
-                # Flatten imagegroups to specific images
-                specific_images = flatten_imagegroups_to_specific_images(imagegroups)
-
-                # Add metadata files
-                add_metadata_files_to_specific_images(specific_images, folder_path, photo_config)
-
-                # Import validate_specific_image for granular progress reporting
-                from utils.pipeline_processor import validate_specific_image
-
-                # Initialize status counts
-                overall_status_counts = {
-                    ValidationStatus.CONSISTENT: 0,
-                    ValidationStatus.CONSISTENT_WITH_WARNING: 0,
-                    ValidationStatus.PARTIAL: 0,
-                    ValidationStatus.INCONSISTENT: 0,
-                }
-                termination_stats = {}
-                validation_results = []
-
-                # Validate each image with progress updates (10% to 90% range)
-                total_images = len(specific_images)
-                last_broadcast_pct = 0
-
-                for idx, specific_image in enumerate(specific_images):
-                    result = validate_specific_image(
-                        specific_image, pipeline_config, show_progress=False
-                    )
-                    validation_results.append(result)
-
-                    # Update statistics as we go
-                    overall_status_counts[result.overall_status] = (
-                        overall_status_counts.get(result.overall_status, 0) + 1
-                    )
-
-                    for term_match in result.termination_matches:
-                        term_type = term_match.termination_type
-                        match_status = term_match.status
-
-                        if term_type not in termination_stats:
-                            termination_stats[term_type] = {
-                                'type': term_type,
-                                'consistent': 0,
-                                'warning': 0,
-                                'partial': 0,
-                                'inconsistent': 0
-                            }
-
-                        if match_status == ValidationStatus.CONSISTENT:
-                            termination_stats[term_type]['consistent'] += 1
-                        elif match_status == ValidationStatus.CONSISTENT_WITH_WARNING:
-                            termination_stats[term_type]['warning'] += 1
-                        elif match_status == ValidationStatus.PARTIAL:
-                            termination_stats[term_type]['partial'] += 1
-                        elif match_status == ValidationStatus.INCONSISTENT:
-                            termination_stats[term_type]['inconsistent'] += 1
-
-                    # Report progress every 2% or every 50 images
-                    # Uses 10% to 90% range for validation (80% of total)
-                    current_pct = int((idx + 1) / total_images * 80) + 10 if total_images > 0 else 90
-                    if current_pct >= last_broadcast_pct + 2 or (idx + 1) % 50 == 0 or idx == total_images - 1:
-                        issues_so_far = (
-                            overall_status_counts[ValidationStatus.PARTIAL] +
-                            overall_status_counts[ValidationStatus.INCONSISTENT]
-                        )
-                        self._sync_progress_callback(
-                            stage="analyzing",
-                            percentage=current_pct,
-                            files_scanned=idx + 1,
-                            total_files=total_images,
-                            message=f"Validated {idx + 1}/{total_images} images, {issues_so_far} issues"
-                        )
-                        last_broadcast_pct = current_pct
-
-                scan_end = datetime.now()
-                scan_duration = (scan_end - scan_start).total_seconds()
-
-                # Report progress for report generation
-                self._sync_progress_callback(
-                    stage="generating",
-                    percentage=92,
-                    message="Generating report..."
-                )
-
-                # Convert ValidationResult objects to dictionaries for report functions
-                # (build_report_context expects dicts, not ValidationResult objects)
-                validation_results_dict = []
-                for result in validation_results:
-                    # Determine worst status across all terminations
-                    worst_status = ValidationStatus.CONSISTENT
-                    for term_match in result.termination_matches:
-                        if term_match.status.value > worst_status.value:
-                            worst_status = term_match.status
-
-                    # Convert termination matches to dictionaries
-                    termination_matches_dict = []
-                    for term_match in result.termination_matches:
-                        termination_matches_dict.append({
-                            'termination_type': term_match.termination_type,
-                            'status': term_match.status.name,
-                            'expected_files': term_match.expected_files,
-                            'actual_files': term_match.actual_files,
-                            'missing_files': term_match.missing_files,
-                            'extra_files': term_match.extra_files
-                        })
-
-                    # Extract group_id from base_filename
-                    group_id = f"{result.camera_id}{result.counter}"
-
-                    validation_results_dict.append({
-                        'unique_id': result.base_filename,
-                        'group_id': group_id,
-                        'status': worst_status.name,
-                        'termination_matches': termination_matches_dict
-                    })
-
-                # Build report context
-                context = build_report_context(
-                    validation_results=validation_results_dict,
-                    scan_path=collection_path,
-                    scan_start=scan_start,
-                    scan_end=scan_end,
-                    pipeline=pipeline_config,
-                    config=photo_config,
-                    display_graph=False
-                )
-
-                # Render HTML report
-                renderer = ReportRenderer()
-                report_html = renderer.render_to_string(context)
-
-                # Build by_termination dict for results
-                by_termination = {}
-                for term_type, stats in termination_stats.items():
-                    by_termination[term_type] = {
-                        "CONSISTENT": stats['consistent'] + stats['warning'],
-                        "PARTIAL": stats['partial'],
-                        "INCONSISTENT": stats['inconsistent']
-                    }
-
-                # Build results dict matching server-side format
-                results = {
-                    "overall_status": {
-                        "CONSISTENT": (
-                            overall_status_counts[ValidationStatus.CONSISTENT] +
-                            overall_status_counts[ValidationStatus.CONSISTENT_WITH_WARNING]
-                        ),
-                        "PARTIAL": overall_status_counts[ValidationStatus.PARTIAL],
-                        "INCONSISTENT": overall_status_counts[ValidationStatus.INCONSISTENT]
-                    },
-                    "by_termination": by_termination,
-                    "invalid_files_count": 0,  # Pipeline validation doesn't track invalid files
-                    "scan_duration": scan_duration,
-                    "group_count": len(imagegroups),
-                    "image_count": len(specific_images),
-                }
-
-                # Calculate issues (PARTIAL + INCONSISTENT)
-                issues_count = (
-                    overall_status_counts[ValidationStatus.PARTIAL] +
-                    overall_status_counts[ValidationStatus.INCONSISTENT]
-                )
-
-                return results, report_html, len(specific_images), issues_count
-
-            finally:
-                # Clean up config temp file
-                Path(config_path).unlink(missing_ok=True)
-
-        results, report_html, files_scanned, issues_count = await loop.run_in_executor(
+        results, report_html, issues = await loop.run_in_executor(
             None, run_collection_validation
         )
 
@@ -928,8 +792,8 @@ class JobExecutor:
             success=True,
             results=results,
             report_html=report_html,
-            files_scanned=files_scanned,
-            issues_found=issues_count,
+            files_scanned=results.get('total_files', 0),
+            issues_found=issues,
         )
 
     def _create_pipeline_config_from_api(self, pipeline_data: Dict[str, Any]):
@@ -1552,6 +1416,7 @@ class JobExecutor:
         total_files: Optional[int] = None,
         current_file: Optional[str] = None,
         message: Optional[str] = None,
+        issues_found: Optional[int] = None,
     ) -> None:
         """
         Synchronous progress callback for tool execution.
@@ -1566,6 +1431,7 @@ class JobExecutor:
             total_files: Total files to scan
             current_file: Currently processing file
             message: Progress message
+            issues_found: Number of issues found so far
         """
         if self._progress_reporter and self._event_loop:
             # Schedule async progress report in a thread-safe manner
@@ -1578,6 +1444,715 @@ class JobExecutor:
                     total_files=total_files,
                     current_file=current_file,
                     message=message,
+                    issues_found=issues_found,
                 ),
                 self._event_loop
             )
+
+    # =========================================================================
+    # Remote Collection Support
+    # =========================================================================
+
+    def _get_storage_adapter(self, connector: Dict[str, Any]):
+        """
+        Create storage adapter for remote collection access.
+
+        Gets credentials from local store (AGENT mode) or from connector info (SERVER mode).
+
+        Args:
+            connector: Connector info dict with guid, type, credential_location, credentials
+
+        Returns:
+            Storage adapter instance (S3Adapter, GCSAdapter, or SMBAdapter)
+
+        Raises:
+            ValueError: If connector type is unsupported or credentials unavailable
+        """
+        from src.remote import S3Adapter, GCSAdapter, SMBAdapter
+
+        connector_type = connector.get("type")
+        credential_location = connector.get("credential_location")
+        connector_guid = connector.get("guid")
+
+        # Get credentials based on location
+        if credential_location == "agent":
+            # Get credentials from local store
+            from src.credential_store import CredentialStore
+            store = CredentialStore()
+            credentials = store.get_credentials(connector_guid)
+            if not credentials:
+                raise ValueError(
+                    f"No local credentials found for connector {connector_guid}. "
+                    "Run 'agent connectors configure' to set up credentials."
+                )
+        elif credential_location == "server":
+            # Credentials provided by server
+            credentials = connector.get("credentials")
+            if not credentials:
+                raise ValueError(
+                    f"Server did not provide credentials for connector {connector_guid}"
+                )
+        else:
+            raise ValueError(
+                f"Unsupported credential location: {credential_location}"
+            )
+
+        # Create appropriate adapter
+        if connector_type == "s3":
+            return S3Adapter(credentials)
+        elif connector_type == "gcs":
+            return GCSAdapter(credentials)
+        elif connector_type == "smb":
+            return SMBAdapter(credentials)
+        else:
+            raise ValueError(f"Unsupported connector type: {connector_type}")
+
+    def _normalize_remote_path(self, location: str, connector_type: str) -> str:
+        """
+        Normalize remote collection path by stripping protocol prefix.
+
+        Collection locations are stored with protocol prefixes (s3://, gs://, smb://)
+        but the storage adapters expect just the path (bucket/prefix).
+
+        Args:
+            location: Collection location (e.g., "s3://bucket/path" or "bucket/path")
+            connector_type: Connector type (s3, gcs, smb)
+
+        Returns:
+            Normalized path without protocol prefix
+        """
+        # Strip protocol prefixes based on connector type
+        prefixes = {
+            "s3": ["s3://", "s3:/"],
+            "gcs": ["gs://", "gs:/", "gcs://", "gcs:/"],
+            "smb": ["smb://", "smb:/", "\\\\"],
+        }
+
+        for prefix in prefixes.get(connector_type, []):
+            if location.startswith(prefix):
+                return location[len(prefix):]
+
+        # Also handle generic cases
+        if location.startswith("//"):
+            return location[2:]
+
+        return location
+
+    def _process_photostats_files(
+        self,
+        file_infos: list,
+        config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Process file list to generate PhotoStats results.
+
+        Uses shared analysis modules for unified local/remote processing.
+
+        Args:
+            file_infos: List of FileInfo objects with path and size
+            config: Configuration dict with photo_extensions, metadata_extensions, require_sidecar
+
+        Returns:
+            Results dictionary matching PhotoStats output format
+        """
+        photo_extensions = set(config.get('photo_extensions', []))
+        metadata_extensions = set(config.get('metadata_extensions', []))
+        require_sidecar = set(config.get('require_sidecar', []))
+
+        # Use shared analysis modules (same code path as local)
+        stats_result = calculate_stats(file_infos, photo_extensions, metadata_extensions)
+        pairing_result = analyze_pairing(
+            file_infos, photo_extensions, metadata_extensions, require_sidecar
+        )
+
+        # Combine results into PhotoStats format
+        # paired_files format matches local: list of dicts with 'base_name' and 'files'
+        return {
+            'total_files': stats_result['total_files'],
+            'total_size': stats_result['total_size'],
+            'file_counts': stats_result['file_counts'],
+            'storage_by_type': {
+                ext: sum(sizes)
+                for ext, sizes in stats_result['file_sizes'].items()
+            },
+            'orphaned_images': pairing_result['orphaned_images'],
+            'orphaned_xmp': pairing_result['orphaned_xmp'],
+        }
+
+    def _generate_photostats_report(
+        self,
+        results: Dict[str, Any],
+        location: str,
+        connector: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Generate HTML report for PhotoStats results using Jinja2 templates.
+
+        Unified report generation for both local and remote collections.
+
+        Args:
+            results: PhotoStats results dictionary
+            location: Collection path (display string)
+            connector: Optional connector info (None for local collections)
+
+        Returns:
+            HTML report string
+        """
+        from utils.report_renderer import (
+            ReportRenderer,
+            ReportContext,
+            KPICard,
+            ReportSection,
+            WarningMessage
+        )
+        from version import __version__ as TOOL_VERSION
+        from datetime import datetime
+
+        def format_size(size_bytes: int) -> str:
+            """Format bytes to human-readable size."""
+            size = float(size_bytes)
+            for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+                if size < 1024.0:
+                    return f"{size:.2f} {unit}"
+                size /= 1024.0
+            return f"{size:.2f} PB"
+
+        is_remote = connector is not None
+
+        try:
+            # Use location as-is (already formatted by caller)
+            display_location = location
+
+            # Build KPI cards
+            total_images = sum(
+                count for ext, count in results.get('file_counts', {}).items()
+                if ext not in {'.xmp'}
+            )
+            total_size = results.get('total_size', 0)
+            kpis = [
+                KPICard(
+                    title="Total Images",
+                    value=str(total_images),
+                    status="success",
+                    unit="files"
+                ),
+                KPICard(
+                    title="Total Size",
+                    value=format_size(total_size),
+                    status="info"
+                ),
+                KPICard(
+                    title="Orphaned Images",
+                    value=str(len(results.get('orphaned_images', []))),
+                    status="warning" if results.get('orphaned_images') else "success",
+                    unit="files"
+                ),
+                KPICard(
+                    title="Orphaned Sidecars",
+                    value=str(len(results.get('orphaned_xmp', []))),
+                    status="warning" if results.get('orphaned_xmp') else "success",
+                    unit="files"
+                )
+            ]
+
+            # Build chart sections
+            file_counts = results.get('file_counts', {})
+            image_labels = [ext.upper() for ext in file_counts.keys() if ext != '.xmp']
+            image_counts = [file_counts[ext] for ext in file_counts.keys() if ext != '.xmp']
+
+            sections = [
+                ReportSection(
+                    title="Image Type Distribution",
+                    type="chart_pie",
+                    data={
+                        "labels": image_labels,
+                        "values": image_counts
+                    },
+                    description="Number of images by file type"
+                )
+            ]
+
+            # Add Storage Distribution bar chart (storage by type in MB)
+            storage_by_type = results.get('storage_by_type', {})
+            if storage_by_type:
+                storage_labels = [ext.upper() for ext in storage_by_type.keys()]
+                # Convert bytes to MB for display
+                storage_values_mb = [
+                    round(size_bytes / (1024 * 1024), 2)
+                    for size_bytes in storage_by_type.values()
+                ]
+                sections.append(
+                    ReportSection(
+                        title="Storage Distribution",
+                        type="chart_bar",
+                        data={
+                            "labels": storage_labels,
+                            "values": storage_values_mb
+                        },
+                        description="Storage usage by image type (including paired sidecars) in MB"
+                    )
+                )
+
+            # Add file pairing status
+            orphaned_count = len(results.get('orphaned_images', [])) + len(results.get('orphaned_xmp', []))
+            if orphaned_count > 0:
+                rows = []
+                for file_path in results.get('orphaned_images', [])[:100]:
+                    filename = file_path.rsplit('/', 1)[-1] if '/' in file_path else file_path
+                    rows.append([filename, "Missing XMP sidecar"])
+                for file_path in results.get('orphaned_xmp', [])[:100]:
+                    filename = file_path.rsplit('/', 1)[-1] if '/' in file_path else file_path
+                    rows.append([filename, "Missing image file"])
+
+                sections.append(
+                    ReportSection(
+                        title="File Pairing Status",
+                        type="table",
+                        data={
+                            "headers": ["File", "Issue"],
+                            "rows": rows
+                        },
+                        description=f"Found {orphaned_count} orphaned files"
+                    )
+                )
+            else:
+                sections.append(
+                    ReportSection(
+                        title="File Pairing Status",
+                        type="html",
+                        html_content='<div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;"><strong>All image files have corresponding XMP metadata files!</strong></div>'
+                    )
+                )
+
+            # Build warnings
+            warnings = []
+            if orphaned_count > 0:
+                orphaned_details = []
+                if results.get('orphaned_images'):
+                    orphaned_details.append(f"{len(results['orphaned_images'])} images without XMP files")
+                if results.get('orphaned_xmp'):
+                    orphaned_details.append(f"{len(results['orphaned_xmp'])} XMP files without images")
+                warnings.append(
+                    WarningMessage(
+                        message=f"Found {orphaned_count} orphaned files",
+                        details=orphaned_details,
+                        severity="medium"
+                    )
+                )
+
+            # Build context and render using ReportRenderer
+            footer_note = "Remote collection analysis" if is_remote else "Local collection analysis"
+            context = ReportContext(
+                tool_name="PhotoStats",
+                tool_version=TOOL_VERSION,
+                scan_path=display_location,
+                scan_timestamp=datetime.now(),
+                scan_duration=results.get('scan_time', 0),
+                kpis=kpis,
+                sections=sections,
+                warnings=warnings,
+                errors=[],
+                footer_note=footer_note
+            )
+
+            renderer = ReportRenderer()
+            return renderer.render_to_string(context, "photo_stats.html.j2")
+
+        except Exception as e:
+            logger.warning(f"Failed to render PhotoStats template: {e}", exc_info=True)
+
+        # Fallback: simple HTML report
+        orphaned_images = results.get('orphaned_images', [])
+        orphaned_xmp = results.get('orphaned_xmp', [])
+        collection_type = "Remote" if is_remote else "Local"
+        return f"""
+        <html>
+        <head><title>PhotoStats Report</title></head>
+        <body>
+            <h1>PhotoStats Report ({collection_type} Collection)</h1>
+            <p>Location: {location}</p>
+            <p>Total Files: {results.get('total_files', 0)}</p>
+            <p>Orphaned Images: {len(orphaned_images)}</p>
+            <p>Orphaned XMP: {len(orphaned_xmp)}</p>
+        </body>
+        </html>
+        """
+
+    def _generate_photo_pairing_report(
+        self,
+        results: Dict[str, Any],
+        invalid_files: list,
+        location: str,
+        connector: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Generate HTML report for Photo Pairing results using Jinja2 templates.
+
+        Unified report generation for both local and remote collections.
+
+        Args:
+            results: Photo Pairing results dictionary
+            invalid_files: List of invalid file paths
+            location: Collection path (display string)
+            connector: Optional connector info (None for local collections)
+
+        Returns:
+            HTML report string
+        """
+        is_remote = connector is not None
+        from utils.report_renderer import (
+            ReportRenderer,
+            ReportContext,
+            KPICard,
+            ReportSection,
+            WarningMessage
+        )
+        from version import __version__ as TOOL_VERSION
+
+        try:
+            # Use location as-is (already formatted by caller)
+            display_location = location
+
+            camera_usage = results.get('camera_usage', {})
+            method_usage = results.get('method_usage', {})
+
+            # Build KPI cards
+            kpis = [
+                KPICard(
+                    title="Total Groups",
+                    value=str(results.get('group_count', 0)),
+                    status="success",
+                    unit="groups"
+                ),
+                KPICard(
+                    title="Total Images",
+                    value=str(results.get('image_count', 0)),
+                    status="success",
+                    unit="images"
+                ),
+                KPICard(
+                    title="Cameras Used",
+                    value=str(len(camera_usage)),
+                    status="info",
+                    unit="cameras"
+                ),
+                KPICard(
+                    title="Processing Methods",
+                    value=str(len(method_usage)),
+                    status="info",
+                    unit="methods"
+                ),
+                KPICard(
+                    title="Invalid Files",
+                    value=str(results.get('invalid_files_count', 0)),
+                    status="danger" if invalid_files else "success",
+                    unit="files"
+                )
+            ]
+
+            # Build sections
+            sections = []
+
+            # Camera usage chart - labels already resolved to camera names
+            if camera_usage:
+                sections.append(
+                    ReportSection(
+                        title="Camera Usage",
+                        type="chart_pie",
+                        data={
+                            "labels": list(camera_usage.keys()),
+                            "values": list(camera_usage.values())
+                        },
+                        description="Images captured by each camera"
+                    )
+                )
+
+            # Processing methods chart - labels already resolved to method descriptions
+            if method_usage:
+                sections.append(
+                    ReportSection(
+                        title="Processing Methods",
+                        type="chart_bar",
+                        data={
+                            "labels": list(method_usage.keys()),
+                            "values": list(method_usage.values())
+                        },
+                        description="Usage of processing methods"
+                    )
+                )
+
+            # Invalid files table
+            if invalid_files:
+                rows = [[f.rsplit('/', 1)[-1] if '/' in f else f, "Invalid filename pattern"]
+                        for f in invalid_files[:100]]
+                sections.append(
+                    ReportSection(
+                        title="⚠️ Invalid Filenames",
+                        type="table",
+                        data={
+                            "headers": ["File", "Issue"],
+                            "rows": rows
+                        },
+                        description=f"Found {len(invalid_files)} files with non-standard filenames"
+                    )
+                )
+
+            # Warnings
+            warnings = []
+            if invalid_files:
+                warnings.append(
+                    WarningMessage(
+                        message=f"Found {len(invalid_files)} files with invalid filenames",
+                        details=["These files don't match the expected naming pattern"],
+                        severity="medium"
+                    )
+                )
+
+            # Build context and render
+            from datetime import datetime
+            footer_note = "Remote collection analysis" if is_remote else "Local collection analysis"
+            context = ReportContext(
+                tool_name="Photo Pairing",
+                tool_version=TOOL_VERSION,
+                scan_path=display_location,
+                scan_timestamp=datetime.now(),
+                scan_duration=results.get('scan_time', 0),
+                kpis=kpis,
+                sections=sections,
+                warnings=warnings,
+                errors=[],
+                footer_note=footer_note
+            )
+
+            renderer = ReportRenderer()
+            return renderer.render_to_string(context, "photo_pairing.html.j2")
+
+        except Exception as e:
+            logger.warning(f"Failed to render Photo Pairing template: {e}", exc_info=True)
+
+        # Fallback: simple HTML report
+        collection_type = "Remote" if is_remote else "Local"
+        return f"""
+        <html>
+        <head><title>Photo Pairing Report</title></head>
+        <body>
+            <h1>Photo Pairing Report ({collection_type} Collection)</h1>
+            <p>Location: {location}</p>
+            <p>Total Images: {results.get('image_count', 0)}</p>
+            <p>Image Groups: {results.get('group_count', 0)}</p>
+            <p>Invalid Files: {len(invalid_files)}</p>
+        </body>
+        </html>
+        """
+
+    def _generate_pipeline_validation_report(
+        self,
+        results: Dict[str, Any],
+        validation_result: Dict[str, Any],
+        location: str,
+        connector: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Generate HTML report for pipeline validation results.
+
+        Unified report generation for both local and remote collections.
+
+        Args:
+            results: Summary results dict
+            validation_result: Full validation result from run_pipeline_validation()
+            location: Collection path (display string)
+            connector: Optional connector info (None for local collections)
+
+        Returns:
+            HTML report string
+        """
+        is_remote = connector is not None
+        from utils.report_renderer import (
+            ReportRenderer,
+            ReportContext,
+            KPICard,
+            ReportSection,
+            WarningMessage
+        )
+        from version import __version__ as TOOL_VERSION
+        from datetime import datetime
+
+        try:
+            # Use location as-is (already formatted by caller)
+            display_location = location
+
+            overall_status = results.get('overall_status', {})
+            consistent = overall_status.get('CONSISTENT', 0)
+            partial = overall_status.get('PARTIAL', 0)
+            inconsistent = overall_status.get('INCONSISTENT', 0)
+            total_images = results.get('total_images', 0)
+
+            # Determine overall validation status
+            if inconsistent > 0:
+                validation_status = "FAILED"
+                status_style = "danger"
+            elif partial > 0:
+                validation_status = "PARTIAL"
+                status_style = "warning"
+            else:
+                validation_status = "PASSED"
+                status_style = "success"
+
+            # Build KPI cards
+            kpis = [
+                KPICard(
+                    title="Total Images",
+                    value=str(total_images),
+                    status="success",
+                    unit="images"
+                ),
+                KPICard(
+                    title="Consistent",
+                    value=str(consistent),
+                    status="success" if consistent > 0 else "muted",
+                    unit="images"
+                ),
+                KPICard(
+                    title="Partial",
+                    value=str(partial),
+                    status="warning" if partial > 0 else "success",
+                    unit="images"
+                ),
+                KPICard(
+                    title="Inconsistent",
+                    value=str(inconsistent),
+                    status="danger" if inconsistent > 0 else "success",
+                    unit="images"
+                ),
+            ]
+
+            # Build sections
+            sections = []
+
+            # Validation status summary
+            if validation_status == "PASSED":
+                sections.append(
+                    ReportSection(
+                        title="Validation Result",
+                        type="html",
+                        html_content='<div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;"><strong>Pipeline validation PASSED!</strong><br>All images meet the pipeline requirements.</div>'
+                    )
+                )
+            elif validation_status == "PARTIAL":
+                sections.append(
+                    ReportSection(
+                        title="Validation Result",
+                        type="html",
+                        html_content=f'<div class="message-box" style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; border-radius: 8px;"><strong>Pipeline validation PARTIAL</strong><br>{partial} images have partial compliance with the pipeline.</div>'
+                    )
+                )
+            else:
+                sections.append(
+                    ReportSection(
+                        title="Validation Result",
+                        type="html",
+                        html_content=f'<div class="message-box" style="background: #f8d7da; border-left: 4px solid #dc3545; padding: 20px; border-radius: 8px;"><strong>Pipeline validation FAILED!</strong><br>{inconsistent} images are inconsistent with the pipeline requirements.</div>'
+                    )
+                )
+
+            # Status distribution chart (overall)
+            if total_images > 0:
+                sections.append(
+                    ReportSection(
+                        title="Overall Status Distribution",
+                        type="chart_pie",
+                        data={
+                            "labels": ["Consistent", "Partial", "Inconsistent"],
+                            "values": [consistent, partial, inconsistent]
+                        },
+                        description="Distribution of validation statuses across all images"
+                    )
+                )
+
+            # Per-termination type pie charts (for Trends tab compatibility)
+            by_termination = results.get('by_termination', {})
+            for term_type, counts in sorted(by_termination.items()):
+                term_consistent = counts.get('CONSISTENT', 0)
+                term_partial = counts.get('PARTIAL', 0)
+                term_inconsistent = counts.get('INCONSISTENT', 0)
+                term_total = term_consistent + term_partial + term_inconsistent
+
+                if term_total > 0:
+                    sections.append(
+                        ReportSection(
+                            title=f"{term_type} Status",
+                            type="chart_pie",
+                            data={
+                                "labels": ["Consistent", "Partial", "Inconsistent"],
+                                "values": [term_consistent, term_partial, term_inconsistent]
+                            },
+                            description=f"Validation status for {term_type} termination type ({term_total} images)"
+                        )
+                    )
+
+            # Warnings
+            warnings = []
+            if inconsistent > 0:
+                warnings.append(
+                    WarningMessage(
+                        message=f"{inconsistent} images are inconsistent with the pipeline",
+                        details=["Review the validation results to identify missing files"],
+                        severity="high"
+                    )
+                )
+            if partial > 0:
+                warnings.append(
+                    WarningMessage(
+                        message=f"{partial} images have partial compliance",
+                        details=["Some expected outputs may be missing"],
+                        severity="medium"
+                    )
+                )
+
+            # Build context and render
+            footer_note = "Remote collection validation" if is_remote else "Local collection validation"
+            context = ReportContext(
+                tool_name="Pipeline Validation",
+                tool_version=TOOL_VERSION,
+                scan_path=display_location,
+                scan_timestamp=datetime.now(),
+                scan_duration=results.get('scan_time', 0),
+                kpis=kpis,
+                sections=sections,
+                warnings=warnings,
+                errors=[],
+                footer_note=footer_note
+            )
+
+            renderer = ReportRenderer()
+            return renderer.render_to_string(context, "pipeline_validation.html.j2")
+
+        except Exception as e:
+            logger.warning(f"Failed to render Pipeline Validation template: {e}", exc_info=True)
+
+        # Fallback: simple HTML report
+        overall_status = results.get('overall_status', {})
+        collection_type = "Remote" if is_remote else "Local"
+
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Pipeline Validation Report - {collection_type} Collection</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px; }}
+        h1, h2 {{ color: #333; }}
+        .summary {{ background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
+    </style>
+</head>
+<body>
+    <h1>Pipeline Validation Report ({collection_type} Collection)</h1>
+    <div class="summary">
+        <p><strong>Path:</strong> {location}</p>
+        <p><strong>Total Images:</strong> {results.get('total_images', 0)}</p>
+        <p><strong>Consistent:</strong> {overall_status.get('CONSISTENT', 0)}</p>
+        <p><strong>Partial:</strong> {overall_status.get('PARTIAL', 0)}</p>
+        <p><strong>Inconsistent:</strong> {overall_status.get('INCONSISTENT', 0)}</p>
+    </div>
+    <p><em>Generated by ShutterSense Agent</em></p>
+</body>
+</html>"""

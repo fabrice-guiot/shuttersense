@@ -395,6 +395,7 @@ class AgentApiClient:
         total_files: Optional[int] = None,
         current_file: Optional[str] = None,
         message: Optional[str] = None,
+        issues_found: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Update progress for a running job.
@@ -407,6 +408,7 @@ class AgentApiClient:
             total_files: Total files to scan
             current_file: Currently processing file
             message: Progress message
+            issues_found: Number of issues found so far
 
         Returns:
             Job status response
@@ -427,6 +429,8 @@ class AgentApiClient:
             payload["current_file"] = current_file
         if message is not None:
             payload["message"] = message
+        if issues_found is not None:
+            payload["issues_found"] = issues_found
 
         try:
             response = await self._client.post(

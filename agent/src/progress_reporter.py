@@ -61,6 +61,7 @@ class ProgressReporter:
         total_files: Optional[int] = None,
         current_file: Optional[str] = None,
         message: Optional[str] = None,
+        issues_found: Optional[int] = None,
     ) -> None:
         """
         Report job progress to the server.
@@ -75,6 +76,7 @@ class ProgressReporter:
             total_files: Total files to scan
             current_file: Currently processing file
             message: Progress message
+            issues_found: Number of issues found so far
         """
         if self._closed:
             return
@@ -91,6 +93,8 @@ class ProgressReporter:
             progress["current_file"] = current_file
         if message is not None:
             progress["message"] = message
+        if issues_found is not None:
+            progress["issues_found"] = issues_found
 
         # Check rate limiting
         now = time.monotonic()

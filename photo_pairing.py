@@ -31,6 +31,16 @@ from utils.config_manager import PhotoAdminConfig
 from utils.filename_parser import FilenameParser
 from version import __version__
 
+# Add agent to path for shared analysis modules
+# Note: CLI tools will be deprecated; analysis logic lives in agent
+sys.path.insert(0, str(Path(__file__).parent / 'agent'))
+from src.remote.local_adapter import LocalAdapter
+from src.remote.base import FileInfo
+from src.analysis.photo_pairing_analyzer import (
+    build_imagegroups as _build_imagegroups_shared,
+    calculate_analytics as _calculate_analytics_shared,
+)
+
 
 # Tool version from centralized version management
 TOOL_VERSION = __version__
@@ -85,6 +95,8 @@ def build_imagegroups(files, folder_path):
     """
     Build ImageGroup structure from list of file paths.
 
+    Delegates to shared analysis module for unified local/remote processing.
+
     Args:
         files: List of Path objects
         folder_path: Base folder Path for calculating relative paths
@@ -95,85 +107,17 @@ def build_imagegroups(files, folder_path):
             'invalid_files': list of invalid file dictionaries
         }
     """
-    groups = defaultdict(lambda: {
-        'group_id': '',
-        'camera_id': '',
-        'counter': '',
-        'separate_images': defaultdict(lambda: {'files': [], 'properties': set()})
-    })
-
-    invalid_files = []
-
+    # Convert Path objects to FileInfo objects for shared module
+    file_infos = []
     for file_path in files:
-        filename = file_path.name
-
-        # Validate filename
-        is_valid, error_reason = FilenameParser.validate_filename(filename)
-
-        if not is_valid:
-            invalid_files.append({
-                'filename': filename,
-                'path': str(file_path.relative_to(folder_path)),
-                'reason': error_reason
-            })
+        try:
+            file_infos.append(FileInfo.from_path_object(file_path, folder_path))
+        except (PermissionError, OSError):
+            # Skip files we can't access
             continue
 
-        # Parse filename
-        parsed = FilenameParser.parse_filename(filename)
-        group_id = parsed['camera_id'] + parsed['counter']
-
-        # Initialize group if first file
-        if not groups[group_id]['group_id']:
-            groups[group_id]['group_id'] = group_id
-            groups[group_id]['camera_id'] = parsed['camera_id']
-            groups[group_id]['counter'] = parsed['counter']
-
-        # Determine which separate image this file belongs to
-        separate_image_id = ''  # Default: base image
-        processing_methods = []
-
-        for prop in parsed['properties']:
-            prop_type = FilenameParser.detect_property_type(prop)
-            if prop_type == 'separate_image':
-                # First numeric property becomes the separate image ID
-                if separate_image_id == '':
-                    separate_image_id = prop
-                else:
-                    # Later numeric properties are treated as processing methods (unusual but valid)
-                    processing_methods.append(prop)
-            else:
-                processing_methods.append(prop)
-
-        # Add file to appropriate separate image
-        relative_path = str(file_path.relative_to(folder_path))
-        groups[group_id]['separate_images'][separate_image_id]['files'].append(relative_path)
-
-        # Add processing methods (deduplicated via set)
-        for method in processing_methods:
-            groups[group_id]['separate_images'][separate_image_id]['properties'].add(method)
-
-    # Convert to final structure
-    imagegroups = []
-    for group_id, group_data in sorted(groups.items()):
-        # Convert separate_images defaultdict to regular dict with properties as lists
-        separate_images_dict = {}
-        for sep_id, sep_data in group_data['separate_images'].items():
-            separate_images_dict[sep_id] = {
-                'files': sorted(sep_data['files']),
-                'properties': sorted(list(sep_data['properties']))
-            }
-
-        imagegroups.append({
-            'group_id': group_data['group_id'],
-            'camera_id': group_data['camera_id'],
-            'counter': group_data['counter'],
-            'separate_images': separate_images_dict
-        })
-
-    return {
-        'imagegroups': imagegroups,
-        'invalid_files': invalid_files
-    }
+    # Use shared analysis module (same code path as remote)
+    return _build_imagegroups_shared(file_infos)
 
 
 def calculate_file_list_hash(folder_path, extensions):
@@ -390,6 +334,8 @@ def calculate_analytics(imagegroups, camera_mappings, processing_methods):
     """
     Calculate analytics from ImageGroups.
 
+    Combines shared module analytics with CLI-specific statistics format.
+
     Args:
         imagegroups: List of ImageGroup dictionaries
         camera_mappings: Dictionary of camera ID -> list of camera info
@@ -402,16 +348,20 @@ def calculate_analytics(imagegroups, camera_mappings, processing_methods):
             'statistics': {...}
         }
     """
-    # Camera usage
+    # Use shared analytics for core calculations
+    config = {
+        'camera_mappings': camera_mappings,
+        'processing_methods': processing_methods,
+    }
+    shared_analytics = _calculate_analytics_shared(imagegroups, config)
+
+    # Build CLI-specific camera_usage format (includes serial number and group_count)
     camera_usage = defaultdict(lambda: {'name': '', 'serial_number': '', 'image_count': 0, 'group_count': 0})
 
     for group in imagegroups:
         camera_id = group['camera_id']
-        # Get camera info - handle both array and object formats defensively
-        # Database may store as: dict, [dict], or [[dict]] depending on source
         raw_camera_info = camera_mappings.get(camera_id)
         camera_info = raw_camera_info
-        # Unwrap lists until we get a dict or None
         while isinstance(camera_info, list):
             camera_info = camera_info[0] if camera_info else None
         if not isinstance(camera_info, dict):
@@ -422,7 +372,7 @@ def calculate_analytics(imagegroups, camera_mappings, processing_methods):
         camera_usage[camera_id]['group_count'] += 1
         camera_usage[camera_id]['image_count'] += len(group['separate_images'])
 
-    # Method usage
+    # Build CLI-specific method_usage format (includes description)
     method_usage = defaultdict(lambda: {'description': '', 'image_count': 0})
 
     for group in imagegroups:
@@ -431,13 +381,10 @@ def calculate_analytics(imagegroups, camera_mappings, processing_methods):
                 method_usage[method]['description'] = processing_methods.get(method, f'Unknown Method {method}')
                 method_usage[method]['image_count'] += 1
 
-    # Statistics
-    total_files = sum(
-        sum(len(img['files']) for img in group['separate_images'].values())
-        for group in imagegroups
-    )
-    total_groups = len(imagegroups)
-    total_images = sum(len(group['separate_images']) for group in imagegroups)
+    # Build CLI-specific statistics
+    total_files = shared_analytics['file_count']
+    total_groups = shared_analytics['group_count']
+    total_images = shared_analytics['image_count']
 
     max_files = max((
         sum(len(img['files']) for img in group['separate_images'].values())

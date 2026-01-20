@@ -580,22 +580,32 @@ class PipelineData(BaseModel):
 
 class ConnectorTestData(BaseModel):
     """
-    Connector information for collection_test jobs with agent-based credentials.
+    Connector information for jobs accessing remote collections.
 
-    The agent uses this to look up credentials from its local store
-    and test connectivity to the remote storage.
+    For AGENT credential mode: Agent looks up credentials locally using the GUID.
+    For SERVER credential mode: Credentials are included in this response.
     """
 
     guid: str = Field(..., description="Connector GUID (con_xxx)")
     type: str = Field(..., description="Connector type (s3, gcs, smb)")
     name: str = Field(..., description="Connector display name")
+    credential_location: str = Field(
+        ...,
+        description="Credential storage location (server, agent)"
+    )
+    credentials: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Decrypted credentials (only for server credential mode)"
+    )
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "guid": "con_01hgw2bbg...",
                 "type": "s3",
-                "name": "Production AWS S3"
+                "name": "Production AWS S3",
+                "credential_location": "agent",
+                "credentials": None
             }
         }
     }

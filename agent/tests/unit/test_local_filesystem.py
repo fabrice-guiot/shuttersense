@@ -90,12 +90,11 @@ class TestLocalFilesystemPathValidation:
         executor._progress_reporter = MagicMock()
         executor._progress_reporter.report = AsyncMock()
 
-        result = await executor._run_photo_pairing(nonexistent_path, config)
+        result = await executor._run_photo_pairing(nonexistent_path, config, None)
 
-        # Succeeds with 0 results (graceful handling)
-        assert result.success is True
-        assert result.results.get("group_count", 0) == 0
-        assert result.results.get("image_count", 0) == 0
+        # Fails with appropriate error message (path does not exist)
+        assert result.success is False
+        assert "does not exist" in result.error_message
 
 
 class TestLocalFilesystemScanningWithRealPaths:
@@ -420,10 +419,10 @@ class TestBoundAgentLocalCollection:
         original_run_photostats = executor._run_photostats
         used_path = None
 
-        async def track_path(path, config):
+        async def track_path(path, config, connector=None):
             nonlocal used_path
             used_path = path
-            return await original_run_photostats(path, config)
+            return await original_run_photostats(path, config, connector)
 
         executor._run_photostats = track_path
 

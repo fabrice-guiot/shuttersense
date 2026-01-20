@@ -610,6 +610,7 @@ async def get_job_config(
     job_guid: str,
     ctx: AgentContext = Depends(get_agent_context),
     db: Session = Depends(get_db),
+    connector_service: ConnectorService = Depends(get_connector_service),
 ):
     """
     Get configuration for a specific job.
@@ -669,17 +670,32 @@ async def get_job_config(
             edges=job.pipeline.edges_json or [],
         )
 
-    # Get connector data for collection_test jobs with agent-credential connectors
+    # Get connector data for ALL jobs with connectors (not just collection_test)
+    # This allows agents to use storage adapters for remote collections
     connector_data = None
-    if job.tool == "collection_test" and job.collection and job.collection.connector:
+    if job.collection and job.collection.connector:
         connector = job.collection.connector
-        # Only include if using agent-based credentials
-        if connector.credential_location == CredentialLocation.AGENT:
-            connector_data = ConnectorTestData(
-                guid=connector.guid,
-                type=connector.type.value,
-                name=connector.name,
+
+        # For SERVER credentials, decrypt and include credentials
+        # For AGENT credentials, agent uses locally stored credentials
+        credentials = None
+        if connector.credential_location == CredentialLocation.SERVER:
+            # Get connector with decrypted credentials
+            connector_with_creds = connector_service.get_by_guid(
+                connector.guid,
+                team_id=ctx.team_id,
+                decrypt_credentials=True
             )
+            if connector_with_creds:
+                credentials = getattr(connector_with_creds, 'decrypted_credentials', None)
+
+        connector_data = ConnectorTestData(
+            guid=connector.guid,
+            type=connector.type.value,
+            name=connector.name,
+            credential_location=connector.credential_location.value,
+            credentials=credentials,
+        )
 
     return JobConfigResponse(
         job_guid=job.guid,
