@@ -695,6 +695,9 @@ class JobCoordinatorService:
         # Standard job completion - create analysis result
         result = self._create_analysis_result(job, completion_data)
 
+        # Update collection statistics from tool results
+        self._update_collection_stats_from_results(job, completion_data)
+
         # Complete the job
         job.complete(result_id=result.id)
         job.progress = None  # Clear progress
@@ -807,6 +810,67 @@ class JobCoordinatorService:
         self.db.flush()
 
         return result
+
+    def _update_collection_stats_from_results(
+        self,
+        job: Job,
+        completion_data: JobCompletionData
+    ) -> None:
+        """
+        Update collection statistics from tool results.
+
+        Extracts statistics from tool results and updates the collection record:
+        - PhotoStats: total_files → file_count, total_size → storage_bytes
+        - Photo Pairing: image_count → image_count
+
+        Args:
+            job: The completed job
+            completion_data: Job completion data with results
+        """
+        from backend.src.models.collection import Collection
+
+        if not job.collection_id:
+            return
+
+        # Only photostats and photo_pairing update stats
+        if job.tool not in ("photostats", "photo_pairing"):
+            return
+
+        collection = self.db.query(Collection).filter(
+            Collection.id == job.collection_id
+        ).first()
+
+        if not collection:
+            return
+
+        results = completion_data.results
+
+        # PhotoStats: total_files → file_count, total_size → storage_bytes
+        if job.tool == "photostats":
+            if "total_files" in results:
+                collection.file_count = results["total_files"]
+            if "total_size" in results:
+                collection.storage_bytes = results["total_size"]
+            logger.debug(
+                "Updated collection stats from photostats",
+                extra={
+                    "collection_id": job.collection_id,
+                    "file_count": results.get("total_files"),
+                    "storage_bytes": results.get("total_size")
+                }
+            )
+
+        # Photo Pairing: image_count → image_count
+        elif job.tool == "photo_pairing":
+            if "image_count" in results:
+                collection.image_count = results["image_count"]
+            logger.debug(
+                "Updated collection stats from photo_pairing",
+                extra={
+                    "collection_id": job.collection_id,
+                    "image_count": results.get("image_count")
+                }
+            )
 
     def fail_job(
         self,
