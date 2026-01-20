@@ -11,10 +11,20 @@
 
 export type ConnectorType = 's3' | 'gcs' | 'smb'
 
+/**
+ * Credential storage location for connectors.
+ *
+ * - 'server': Credentials stored encrypted on the server (default)
+ * - 'agent': Credentials stored only on the agent, not on server
+ * - 'pending': No credentials configured yet, awaiting setup
+ */
+export type CredentialLocation = 'server' | 'agent' | 'pending'
+
 export interface Connector {
   guid: string  // External identifier (con_xxx) for URL-safe references
   name: string
   type: ConnectorType
+  credential_location: CredentialLocation
   is_active: boolean
   metadata?: Record<string, unknown> | null
   last_validated?: string | null
@@ -55,13 +65,15 @@ export interface SMBCredentials {
 export interface ConnectorCreateRequest {
   name: string
   type: ConnectorType
-  credentials: Record<string, unknown>
+  credential_location?: CredentialLocation  // Defaults to 'server' if not specified
+  credentials?: Record<string, unknown>  // Required when credential_location='server'
   metadata?: Record<string, unknown> | null
 }
 
 export interface ConnectorUpdateRequest {
   name?: string
-  credentials?: Record<string, unknown>
+  credential_location?: CredentialLocation
+  credentials?: Record<string, unknown>  // Only valid when credential_location='server'
   metadata?: Record<string, unknown> | null
   is_active?: boolean
 }

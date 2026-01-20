@@ -269,7 +269,7 @@
 
 ---
 
-## Phase 7: User Story 5 - Connector Credential Modes (Priority: P1)
+## Phase 7: User Story 5 - Connector Credential Modes (Priority: P1) ✅
 
 **Goal**: Administrators can choose where connector credentials are stored (server vs agent)
 
@@ -277,30 +277,39 @@
 
 ### Backend Tests for User Story 5
 
-- [ ] T118 [P] [US5] Unit tests for credential location validation in `backend/tests/unit/services/test_credential_location.py` (mode validation, job routing)
-- [ ] T119 [P] [US5] Integration tests for connector creation with credential modes in `backend/tests/integration/test_connector_credential_modes.py`
-- [ ] T120 [P] [US5] Integration tests for job routing with agent credentials in `backend/tests/integration/test_agent_credential_routing.py`
+- [x] T118 [P] [US5] Unit tests for credential location validation in `backend/tests/unit/services/test_connector_service.py` (mode validation, existing tests updated)
+- [x] T119 [P] [US5] Integration tests for connector creation with credential modes (covered by existing connector tests)
+- [ ] T120 [P] [US5] Integration tests for job routing with agent credentials - **DEFERRED TO PHASE 8** (requires agent credential reporting)
 
 ### Backend Implementation for User Story 5
 
-- [ ] T121 [US5] Add CredentialLocation enum to Connector model (verify exists from T013)
-- [ ] T122 [US5] Update Connector create/update endpoints to accept credential_location in `backend/src/api/connectors/routes.py`
-- [ ] T123 [US5] Conditionally require credentials based on location in `backend/src/services/connector_service.py`
-- [ ] T124 [US5] Update job routing to check agent connector capabilities in `backend/src/services/job_coordinator_service.py`
-- [ ] T125 [US5] Report connector capability to server from agent in `agent/src/api_client.py`
+- [x] T121 [US5] Add CredentialLocation enum to Connector model (verified from T013)
+- [x] T122 [US5] Update Connector create/update endpoints to accept credential_location in `backend/src/api/connectors.py` (also added update_credentials flag for edit mode)
+- [x] T123 [US5] Conditionally require credentials based on location in `backend/src/services/connector_service.py` (server requires credentials, pending/agent do not)
+- [ ] T124 [US5] Update job routing to check agent connector capabilities - **DEFERRED TO PHASE 8** (requires agent credential reporting)
+- [ ] T125 [US5] Report connector capability to server from agent - **DEFERRED TO PHASE 8**
 
 ### Frontend Tests for User Story 5
 
-- [ ] T126 [P] [US5] Component tests for ConnectorForm with credential_location in `frontend/tests/components/connectors/ConnectorForm.test.tsx`
-- [ ] T127 [P] [US5] Component tests for connector credential status display in `frontend/tests/pages/ConnectorsPage.test.tsx`
+- [x] T126 [P] [US5] Component tests for ConnectorForm with credential_location in `frontend/tests/components/ConnectorForm.test.tsx` (existing tests updated)
+- [x] T127 [P] [US5] Component tests for connector credential status display in `frontend/tests/components/ConnectorList.test.tsx` (existing tests updated)
 
 ### Frontend Implementation for User Story 5
 
-- [ ] T128 [US5] Update ConnectorForm to show credential_location selector in `frontend/src/components/connectors/ConnectorForm.tsx`
-- [ ] T129 [US5] Display credential status (Server/Agent-only/Pending) in connector list in `frontend/src/pages/ConnectorsPage.tsx`
-- [ ] T130 [US5] Show which agents have credentials for each connector in connector detail in `frontend/src/pages/ConnectorDetailPage.tsx`
+- [x] T128 [US5] Update ConnectorForm to show credential_location selector in `frontend/src/components/connectors/ConnectorForm.tsx` (Server/Pending options for create, Agent only shown when editing existing agent connector)
+- [x] T129 [US5] Display credential status (Server/Agent/Pending Config) in connector list in `frontend/src/components/connectors/ConnectorList.tsx` (moved from ConnectorsPage to ConnectorsTab in Settings)
+- [ ] T130 [US5] Show which agents have credentials for each connector - **DEFERRED TO PHASE 8** (requires agent credential reporting)
 
-**Checkpoint**: Connectors support three credential modes with proper job routing
+### Additional Implementation Notes (Phase 7)
+
+- Added `update_credentials` flag to ConnectorUpdate schema for editing without re-entering credentials
+- Connectors with pending credentials cannot be activated (enforced in backend and frontend)
+- Test connection disabled for pending/agent credentials (graceful error messages)
+- Deleted unused `ConnectorsPage.tsx` (connectors now in Settings tab)
+- Fixed dialog scrolling and added toast notifications for test results
+- Fixed Pydantic validation error handling in frontend API client
+
+**Checkpoint**: Connectors support server and pending credential modes. Agent credential mode will be fully functional after Phase 8 ✅
 
 ---
 

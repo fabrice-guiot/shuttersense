@@ -103,7 +103,9 @@ class Connector(Base, GuidMixin):
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
 
     # Core fields
-    name = Column(String(255), unique=True, nullable=False, index=True)
+    # Note: name uniqueness is team-scoped via composite constraint in __table_args__
+    # No separate index on name since the composite index (team_id, name) covers lookups
+    name = Column(String(255), nullable=False)
     type = Column(Enum(ConnectorType, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
 
     # Credential storage location (server/agent/pending)
@@ -146,6 +148,8 @@ class Connector(Base, GuidMixin):
     __table_args__ = (
         Index("idx_connector_type", "type"),
         Index("idx_connector_active", "is_active"),
+        # Team-scoped name uniqueness (different teams can have same connector name)
+        Index("uq_connectors_team_name", "team_id", "name", unique=True),
     )
 
     @property

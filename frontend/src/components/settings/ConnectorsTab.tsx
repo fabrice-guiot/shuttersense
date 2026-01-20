@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -92,10 +93,23 @@ export function ConnectorsTab() {
       })
   }
 
-  const handleTest = (connector: Connector) => {
-    testConnector(connector.guid).catch(() => {
-      // Error handled by hook
-    })
+  const handleTest = async (connector: Connector) => {
+    try {
+      const result = await testConnector(connector.guid)
+      if (result.success) {
+        toast.success('Connection successful', {
+          description: result.message
+        })
+      } else {
+        toast.error('Connection failed', {
+          description: result.message
+        })
+      }
+    } catch (err: any) {
+      toast.error('Connection test failed', {
+        description: err.message || 'An unexpected error occurred'
+      })
+    }
   }
 
   return (
@@ -126,8 +140,8 @@ export function ConnectorsTab() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {editingConnector ? 'Edit Connector' : 'New Connector'}
             </DialogTitle>
@@ -139,7 +153,7 @@ export function ConnectorsTab() {
               </DialogDescription>
             )}
           </DialogHeader>
-          <div className="mt-4">
+          <div className="mt-4 overflow-y-auto flex-1 pr-2">
             {formError && (
               <Alert variant="destructive" className="mb-4">
                 <AlertDescription>{formError}</AlertDescription>

@@ -30,6 +30,9 @@ def upgrade() -> None:
     New column:
     - credential_location: Where credentials are stored (server/agent/pending)
 
+    Also makes credentials column nullable to support AGENT/PENDING modes
+    where credentials are not stored on the server.
+
     Default value 'server' maintains backward compatibility with existing connectors.
     """
     op.add_column(
@@ -45,8 +48,14 @@ def upgrade() -> None:
     # Create index for filtering by credential location
     op.create_index('ix_connectors_credential_location', 'connectors', ['credential_location'])
 
+    # Make credentials nullable for AGENT/PENDING modes
+    op.alter_column('connectors', 'credentials', nullable=True)
+
 
 def downgrade() -> None:
-    """Remove credential_location from connectors table."""
+    """Remove credential_location from connectors table and restore credentials NOT NULL."""
+    # Restore credentials NOT NULL (will fail if any NULL values exist)
+    op.alter_column('connectors', 'credentials', nullable=False)
+
     op.drop_index('ix_connectors_credential_location', table_name='connectors')
     op.drop_column('connectors', 'credential_location')

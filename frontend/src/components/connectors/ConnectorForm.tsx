@@ -26,7 +26,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import type { Connector, ConnectorType } from '@/contracts/api/connector-api'
 import {
   connectorFormSchema,
-  getConnectorFormSchemaForType,
   type ConnectorFormData
 } from '@/types/schemas/connector'
 
@@ -95,6 +94,7 @@ export default function ConnectorForm({
 }: ConnectorFormProps) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [updateCredentials, setUpdateCredentials] = useState(false)
 
   const isEdit = !!connector
 
@@ -104,12 +104,16 @@ export default function ConnectorForm({
     defaultValues: {
       name: connector?.name || '',
       type: connector?.type || 's3',
+      credential_location: connector?.credential_location || 'server',
       is_active: connector?.is_active ?? true,
-      credentials: getDefaultCredentials(connector?.type || 's3')
+      credentials: getDefaultCredentials(connector?.type || 's3'),
+      // For edit mode: false = keep existing credentials (skip validation)
+      update_credentials: connector ? false : undefined
     }
   })
 
   const selectedType = form.watch('type')
+  const credentialLocation = form.watch('credential_location')
 
   // Reset credentials when type changes
   useEffect(() => {
@@ -118,21 +122,51 @@ export default function ConnectorForm({
     }
   }, [selectedType, isEdit, form])
 
+  // Auto-disable active status when credentials are pending
+  useEffect(() => {
+    if (credentialLocation === 'pending') {
+      form.setValue('is_active', false)
+    }
+  }, [credentialLocation, form])
+
   // Update form when connector prop changes
   useEffect(() => {
     if (connector) {
       form.reset({
         name: connector.name,
         type: connector.type,
+        credential_location: connector.credential_location || 'server',
         is_active: connector.is_active,
-        credentials: getDefaultCredentials(connector.type)
+        credentials: connector.credential_location === 'server'
+          ? getDefaultCredentials(connector.type)
+          : undefined,
+        // Edit mode: default to keeping existing credentials
+        update_credentials: false
       })
+      // Also reset the local state
+      setUpdateCredentials(false)
     }
   }, [connector, form])
 
   const handleSubmit = async (data: ConnectorFormData) => {
     setTestResult(null)
-    await onSubmit(data)
+
+    // Determine if we should include credentials:
+    // - For new connectors with server credentials: always include
+    // - For editing with server credentials: only if updateCredentials is true
+    // - For agent/pending: never include
+    const shouldIncludeCredentials =
+      data.credential_location === 'server' &&
+      (!isEdit || updateCredentials)
+
+    const submitData: ConnectorFormData = {
+      ...data,
+      credentials: shouldIncludeCredentials ? data.credentials : undefined,
+      // Tell the backend whether to update credentials (for edit mode)
+      update_credentials: isEdit ? updateCredentials : undefined
+    }
+
+    await onSubmit(submitData)
   }
 
   const handleTestConnection = async () => {
@@ -244,21 +278,107 @@ export default function ConnectorForm({
                   <Checkbox
                     checked={field.value}
                     onCheckedChange={field.onChange}
+                    disabled={credentialLocation === 'pending'}
                   />
                 </FormControl>
                 <div className="space-y-1 leading-none">
                   <FormLabel>Active</FormLabel>
                   <FormDescription>
-                    Enable this connector for use in collections
+                    {credentialLocation === 'pending'
+                      ? 'Cannot activate until credentials are configured'
+                      : 'Enable this connector for use in collections'}
                   </FormDescription>
                 </div>
               </FormItem>
             )}
           />
 
-          {/* Credentials Section */}
+          {/* Credential Storage Location */}
+          <FormField
+            control={form.control}
+            name="credential_location"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Credential Storage</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                  disabled={isEdit}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select where to store credentials" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="server">
+                      <span className="flex items-center gap-2">
+                        Server (Encrypted)
+                      </span>
+                    </SelectItem>
+                    {/* Agent option only shown when editing a connector that already has agent credentials */}
+                    {isEdit && credentialLocation === 'agent' && (
+                      <SelectItem value="agent">
+                        <span className="flex items-center gap-2">
+                          Agent Only
+                        </span>
+                      </SelectItem>
+                    )}
+                    <SelectItem value="pending">
+                      <span className="flex items-center gap-2">
+                        Pending Agent Configuration
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  {credentialLocation === 'server' && 'Credentials encrypted and stored on the server'}
+                  {credentialLocation === 'agent' && 'Credentials configured on agent via CLI'}
+                  {credentialLocation === 'pending' && 'Credentials will be configured on an agent via CLI'}
+                </FormDescription>
+                {isEdit && (
+                  <FormDescription className="text-amber-600 dark:text-amber-400">
+                    Credential storage location cannot be changed after creation
+                  </FormDescription>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Credentials Section - only shown for server storage */}
+          {credentialLocation === 'server' && (
           <div className="space-y-4 rounded-lg border border-border bg-muted/50 p-4">
-            <h3 className="text-sm font-semibold">Credentials</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Credentials</h3>
+              {isEdit && (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="update-credentials"
+                    checked={updateCredentials}
+                    onCheckedChange={(checked) => {
+                      setUpdateCredentials(checked === true)
+                      // Update form value for validation
+                      form.setValue('update_credentials', checked === true)
+                    }}
+                  />
+                  <label
+                    htmlFor="update-credentials"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Update credentials
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Show existing credentials message or credential fields */}
+            {isEdit && !updateCredentials ? (
+              <p className="text-sm text-muted-foreground">
+                Credentials are securely stored. Enable "Update credentials" to change them.
+              </p>
+            ) : (
+              <>
 
             {/* S3 Credentials */}
             {selectedType === 's3' && (
@@ -442,7 +562,10 @@ export default function ConnectorForm({
                 />
               </>
             )}
+              </>
+            )}
           </div>
+          )}
 
           {/* Test Result */}
           {testResult && (
@@ -461,7 +584,7 @@ export default function ConnectorForm({
           {/* Actions */}
           <div className="flex justify-between gap-2 pt-4">
             <div>
-              {onTestConnection && (
+              {onTestConnection && credentialLocation === 'server' && (
                 <Button
                   type="button"
                   variant="outline"

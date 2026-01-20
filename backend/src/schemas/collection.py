@@ -19,6 +19,7 @@ from typing import Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.src.models import CollectionType, CollectionState, ConnectorType
+from backend.src.models.connector import CredentialLocation
 
 
 # ============================================================================
@@ -162,53 +163,95 @@ class ConnectorCreate(BaseModel):
     Fields:
         name: User-friendly connector name (must be unique)
         type: Connector type (S3, GCS, SMB)
-        credentials: Type-specific credentials object
+        credential_location: Where credentials are stored (server/agent/pending)
+        credentials: Type-specific credentials object (required when location=server)
         metadata: Optional user-defined metadata
 
+    Credential Location Modes:
+        - server: Credentials encrypted on server (default, current behavior)
+        - agent: Credentials stored only on agent(s), server has none
+        - pending: Placeholder connector awaiting credential configuration
+
     Example:
+        >>> # Server credentials (default)
         >>> connector = ConnectorCreate(
         ...     name="My AWS Account",
         ...     type=ConnectorType.S3,
         ...     credentials={"aws_access_key_id": "...", "aws_secret_access_key": "..."},
-        ...     metadata={"team": "engineering", "cost_center": "123"}
+        ... )
+        >>> # Agent-only credentials
+        >>> connector = ConnectorCreate(
+        ...     name="NAS Storage",
+        ...     type=ConnectorType.SMB,
+        ...     credential_location=CredentialLocation.AGENT,
         ... )
     """
     name: str = Field(..., min_length=1, max_length=255, description="Unique connector name")
     type: ConnectorType = Field(..., description="Connector type")
-    credentials: Dict[str, Any] = Field(..., description="Connector credentials")
+    credential_location: CredentialLocation = Field(
+        default=CredentialLocation.SERVER,
+        description="Where credentials are stored (server/agent/pending)"
+    )
+    credentials: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Connector credentials (required when credential_location=server)"
+    )
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="User-defined metadata")
+    is_active: bool = Field(default=True, description="Whether connector is active")
 
     @model_validator(mode='after')
     def validate_credentials_match_type(self):
-        """Validate credentials structure matches connector type."""
-        if not self.type or not self.credentials:
-            return self
+        """Validate credentials are required for server mode and match connector type."""
+        # Cannot activate a connector with pending credentials
+        if self.credential_location == CredentialLocation.PENDING and self.is_active:
+            raise ValueError("Cannot activate connector with pending credentials. Configure credentials first.")
 
-        # Validate credentials based on type
-        try:
-            if self.type == ConnectorType.S3:
-                S3Credentials(**self.credentials)
-            elif self.type == ConnectorType.GCS:
-                GCSCredentials(**self.credentials)
-            elif self.type == ConnectorType.SMB:
-                SMBCredentials(**self.credentials)
-        except Exception as e:
-            raise ValueError(f"Invalid credentials for {self.type.value}: {str(e)}")
+        # Credentials required when location is SERVER
+        if self.credential_location == CredentialLocation.SERVER:
+            if not self.credentials:
+                raise ValueError("Credentials are required when credential_location is 'server'")
+
+            # Validate credentials structure based on type
+            try:
+                if self.type == ConnectorType.S3:
+                    S3Credentials(**self.credentials)
+                elif self.type == ConnectorType.GCS:
+                    GCSCredentials(**self.credentials)
+                elif self.type == ConnectorType.SMB:
+                    SMBCredentials(**self.credentials)
+            except Exception as e:
+                raise ValueError(f"Invalid credentials for {self.type.value}: {str(e)}")
+
+        # For AGENT or PENDING, credentials should not be provided
+        elif self.credentials:
+            raise ValueError(
+                f"Credentials should not be provided when credential_location is '{self.credential_location.value}'. "
+                "For agent credentials, configure them on the agent using CLI."
+            )
 
         return self
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "name": "Production AWS",
-                "type": "s3",
-                "credentials": {
-                    "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
-                    "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-                    "region": "us-west-2"
+            "examples": [
+                {
+                    "name": "Production AWS",
+                    "type": "s3",
+                    "credential_location": "server",
+                    "credentials": {
+                        "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+                        "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                        "region": "us-west-2"
+                    },
+                    "metadata": {"team": "engineering", "environment": "production"}
                 },
-                "metadata": {"team": "engineering", "environment": "production"}
-            }
+                {
+                    "name": "Office NAS",
+                    "type": "smb",
+                    "credential_location": "agent",
+                    "metadata": {"location": "office"}
+                }
+            ]
         }
     }
 
@@ -221,15 +264,30 @@ class ConnectorUpdate(BaseModel):
 
     Fields:
         name: New connector name
-        credentials: New credentials (will be re-encrypted)
+        credential_location: New credential storage location
+        credentials: New credentials (will be re-encrypted, only when location=server)
+        update_credentials: Whether to update credentials (false = keep existing)
         metadata: New metadata
         is_active: Active status
+
+    Note:
+        Changing credential_location from server to agent will clear server credentials.
+        Changing from agent to server requires providing new credentials.
+        When update_credentials=false, the credentials field is ignored.
 
     Example:
         >>> update = ConnectorUpdate(name="Updated AWS Account", is_active=False)
     """
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    credential_location: Optional[CredentialLocation] = Field(
+        default=None,
+        description="New credential storage location"
+    )
     credentials: Optional[Dict[str, Any]] = Field(default=None)
+    update_credentials: bool = Field(
+        default=True,
+        description="Whether to update credentials (false = keep existing)"
+    )
     metadata: Optional[Dict[str, Any]] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
 
@@ -237,7 +295,9 @@ class ConnectorUpdate(BaseModel):
         "json_schema_extra": {
             "example": {
                 "name": "Updated Connector Name",
+                "credential_location": "server",
                 "is_active": True,
+                "update_credentials": False,
                 "metadata": {"team": "platform"}
             }
         }
@@ -254,6 +314,7 @@ class ConnectorResponse(BaseModel):
         guid: External identifier (con_xxx)
         name: Connector name
         type: ConnectorType
+        credential_location: Where credentials are stored (server/agent/pending)
         metadata: User-defined metadata
         is_active: Active status
         last_validated: Last successful connection test
@@ -267,6 +328,9 @@ class ConnectorResponse(BaseModel):
     guid: str = Field(..., description="External identifier (con_xxx)")
     name: str
     type: ConnectorType
+    credential_location: CredentialLocation = Field(
+        description="Where credentials are stored (server/agent/pending)"
+    )
     metadata: Optional[Dict[str, Any]] = None
     is_active: bool
     last_validated: Optional[datetime]

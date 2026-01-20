@@ -62,14 +62,24 @@ class TestConnectorServiceCreate:
         assert connector.metadata_json is None
 
     def test_create_connector_duplicate_name(self, test_db_session, test_encryptor, test_team):
-        """Should raise ValueError if connector name already exists"""
+        """Should raise ValueError if connector name already exists within the same team"""
         service = ConnectorService(test_db_session, test_encryptor)
         credentials = {"service_account_json": '{"type": "service_account"}'}
 
-        service.create_connector("GCS Bucket", ConnectorType.GCS, credentials, team_id=test_team.id)
+        service.create_connector(
+            name="GCS Bucket",
+            type=ConnectorType.GCS,
+            team_id=test_team.id,
+            credentials=credentials
+        )
 
         with pytest.raises(ValueError) as exc_info:
-            service.create_connector("GCS Bucket", ConnectorType.GCS, credentials, team_id=test_team.id)
+            service.create_connector(
+                name="GCS Bucket",
+                type=ConnectorType.GCS,
+                team_id=test_team.id,
+                credentials=credentials
+            )
 
         assert "already exists" in str(exc_info.value)
 

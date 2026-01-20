@@ -32,6 +32,8 @@ from sqlalchemy import and_, or_
 
 from backend.src.models.job import Job, JobStatus
 from backend.src.models.analysis_result import AnalysisResult
+from backend.src.models.agent import Agent
+from backend.src.models.connector import CredentialLocation
 from backend.src.models import ResultStatus
 from backend.src.services.exceptions import NotFoundError, ValidationError
 from backend.src.utils.logging_config import get_logger
@@ -245,11 +247,38 @@ class JobCoordinatorService:
 
         jobs = query.all()
 
-        # Filter by capabilities (in Python since JSONB contains varies by DB)
+        # Filter by capabilities and connector credentials (in Python)
         for job in jobs:
             required = job.required_capabilities
-            if not required or self._has_all_capabilities(agent_capabilities, required):
-                return job
+            if required and not self._has_all_capabilities(agent_capabilities, required):
+                continue
+
+            # Skip jobs with PENDING credentials (no agent can claim them)
+            if self._job_has_pending_credentials(job):
+                logger.debug(
+                    "Skipping job with PENDING connector credentials",
+                    extra={
+                        "agent_id": agent_id,
+                        "job_guid": job.guid
+                    }
+                )
+                continue
+
+            # Check if job requires agent-side connector credentials
+            connector_guid = self._job_requires_agent_credentials(job)
+            if connector_guid:
+                if not self._agent_has_connector_credentials(agent_id, connector_guid):
+                    logger.debug(
+                        "Agent lacks connector credentials for job",
+                        extra={
+                            "agent_id": agent_id,
+                            "job_guid": job.guid,
+                            "connector_guid": connector_guid
+                        }
+                    )
+                    continue
+
+            return job
 
         return None
 
@@ -304,6 +333,76 @@ class JobCoordinatorService:
                 return True
 
         return False
+
+    def _agent_has_connector_credentials(
+        self,
+        agent_id: int,
+        connector_guid: str
+    ) -> bool:
+        """
+        Check if an agent has credentials for a specific connector.
+
+        Used for connectors with credential_location=AGENT where the
+        credentials are stored on the agent, not on the server.
+
+        Args:
+            agent_id: Internal agent ID
+            connector_guid: Connector GUID to check
+
+        Returns:
+            True if the agent has credentials for this connector
+        """
+        agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            return False
+        return connector_guid in agent.connector_guids
+
+    def _job_requires_agent_credentials(self, job: Job) -> Optional[str]:
+        """
+        Check if a job requires agent-side connector credentials.
+
+        Args:
+            job: Job to check
+
+        Returns:
+            Connector GUID if agent credentials required, None otherwise
+        """
+        # Only check for jobs with collections that have connectors
+        if not job.collection or not job.collection.connector_id:
+            return None
+
+        connector = job.collection.connector
+        if not connector:
+            return None
+
+        # Check if connector requires agent credentials
+        if connector.credential_location == CredentialLocation.AGENT:
+            return connector.guid
+
+        return None
+
+    def _job_has_pending_credentials(self, job: Job) -> bool:
+        """
+        Check if a job's connector has PENDING credential status.
+
+        Jobs with PENDING credentials cannot be claimed until credentials
+        are configured on either the server or an agent.
+
+        Args:
+            job: Job to check
+
+        Returns:
+            True if connector has PENDING credential status
+        """
+        # Only check for jobs with collections that have connectors
+        if not job.collection or not job.collection.connector_id:
+            return False
+
+        connector = job.collection.connector
+        if not connector:
+            return False
+
+        return connector.credential_location == CredentialLocation.PENDING
 
     def _assign_job_to_agent(self, job: Job, agent_id: int) -> JobClaimResult:
         """

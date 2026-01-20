@@ -33,7 +33,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import type { Connector, ConnectorType } from '@/contracts/api/connector-api'
+import type { Connector, ConnectorType, CredentialLocation } from '@/contracts/api/connector-api'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/utils/dateFormat'
 
@@ -69,6 +69,16 @@ function getConnectorTypeLabel(type: ConnectorType): string {
 
 function isBetaConnectorType(type: ConnectorType): boolean {
   return BETA_CONNECTOR_TYPES.has(type)
+}
+
+const CREDENTIAL_LOCATION_LABELS: Record<CredentialLocation, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+  server: { label: 'Server', variant: 'default' },
+  agent: { label: 'Agent', variant: 'secondary' },
+  pending: { label: 'Pending Config', variant: 'outline' }
+}
+
+function getCredentialLocationDisplay(location: CredentialLocation): { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' } {
+  return CREDENTIAL_LOCATION_LABELS[location] || { label: location, variant: 'outline' }
 }
 
 
@@ -218,6 +228,7 @@ export function ConnectorList({
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Credentials</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -226,7 +237,7 @@ export function ConnectorList({
             <TableBody>
               {filteredConnectors.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     No connectors match the current filters
                   </TableCell>
                 </TableRow>
@@ -247,6 +258,12 @@ export function ConnectorList({
                       </div>
                     </TableCell>
                     <TableCell>
+                      {(() => {
+                        const { label, variant } = getCredentialLocationDisplay(connector.credential_location)
+                        return <Badge variant={variant}>{label}</Badge>
+                      })()}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={connector.is_active ? 'default' : 'outline'}>
                         {connector.is_active ? 'Active' : 'Inactive'}
                       </Badge>
@@ -263,12 +280,19 @@ export function ConnectorList({
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => onTest(connector)}
+                                disabled={connector.credential_location !== 'server'}
                                 aria-label="Test Connection"
                               >
                                 <CloudCheck className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Test Connection</TooltipContent>
+                            <TooltipContent>
+                              {connector.credential_location === 'server'
+                                ? 'Test Connection'
+                                : connector.credential_location === 'pending'
+                                  ? 'Cannot test: credentials not configured'
+                                  : 'Cannot test from server: credentials on agent'}
+                            </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
 

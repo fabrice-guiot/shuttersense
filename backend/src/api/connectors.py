@@ -212,9 +212,11 @@ async def create_connector(
         created_connector = connector_service.create_connector(
             name=connector.name,
             type=connector.type,
-            credentials=connector.credentials,
             team_id=ctx.team_id,
-            metadata=connector.metadata
+            credential_location=connector.credential_location,
+            credentials=connector.credentials,
+            metadata=connector.metadata,
+            is_active=connector.is_active
         )
 
         logger.info(
@@ -358,7 +360,9 @@ async def update_connector(
         updated_connector = connector_service.update_connector(
             connector_id=connector.id,
             name=connector_update.name,
+            credential_location=connector_update.credential_location,
             credentials=connector_update.credentials,
+            update_credentials=connector_update.update_credentials,
             metadata=connector_update.metadata,
             is_active=connector_update.is_active
         )

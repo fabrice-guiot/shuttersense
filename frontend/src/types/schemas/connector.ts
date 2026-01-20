@@ -8,6 +8,18 @@ import { z } from 'zod'
 import type { ConnectorType } from '@/contracts/api/connector-api'
 
 // ============================================================================
+// Credential Location Schema
+// ============================================================================
+
+/**
+ * Credential location for connectors
+ * - server: Credentials stored encrypted on server
+ * - agent: Credentials stored on agent only
+ * - pending: No credentials configured yet
+ */
+export const credentialLocationSchema = z.enum(['server', 'agent', 'pending'])
+
+// ============================================================================
 // Credential Schemas
 // ============================================================================
 
@@ -114,15 +126,72 @@ export const connectorBaseSchema = z.object({
   type: z.enum(['s3', 'gcs', 'smb'], {
     message: 'Invalid connector type'
   }),
+  credential_location: credentialLocationSchema,
   is_active: z.boolean()
 })
 
 /**
  * Full connector form schema with dynamic credentials
+ *
+ * Credentials are required when credential_location is 'server' AND update_credentials is true.
+ * For editing existing connectors, update_credentials can be false to skip credential validation.
+ * Credentials should not be provided when 'agent' or 'pending'.
+ * Validates credentials based on the selected connector type.
  */
-export const connectorFormSchema = connectorBaseSchema.extend({
-  credentials: credentialsSchema
-})
+export const connectorFormSchema = connectorBaseSchema
+  .extend({
+    credentials: z.any().optional(),
+    // For edit mode: false = keep existing credentials, true = update with new credentials
+    update_credentials: z.boolean().optional()
+  })
+  .superRefine((data, ctx) => {
+    // Skip credentials validation if not storing on server
+    if (data.credential_location !== 'server') {
+      return
+    }
+
+    // Skip credentials validation if update_credentials is explicitly false (edit mode)
+    if (data.update_credentials === false) {
+      return
+    }
+
+    // Credentials required when credential_location is 'server' and updating
+    if (!data.credentials) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Credentials are required when storing on server',
+        path: ['credentials']
+      })
+      return
+    }
+
+    // Validate credentials based on connector type
+    let credSchema: z.ZodTypeAny
+    switch (data.type) {
+      case 's3':
+        credSchema = s3CredentialsSchema
+        break
+      case 'gcs':
+        credSchema = gcsCredentialsSchema
+        break
+      case 'smb':
+        credSchema = smbCredentialsSchema
+        break
+      default:
+        return
+    }
+
+    const result = credSchema.safeParse(data.credentials)
+    if (!result.success) {
+      // Add each credential validation error with the proper path
+      result.error.issues.forEach((issue) => {
+        ctx.addIssue({
+          ...issue,
+          path: ['credentials', ...issue.path]
+        })
+      })
+    }
+  })
 
 /**
  * S3 Connector Form Schema (specific type)
