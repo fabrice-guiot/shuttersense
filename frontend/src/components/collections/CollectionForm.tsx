@@ -72,13 +72,23 @@ export interface CollectionFormProps {
 // Helper Functions
 // ============================================================================
 
-function getConnectorsForType(connectors: Connector[], type: CollectionType): Connector[] {
+function getConnectorsForType(
+  connectors: Connector[],
+  type: CollectionType,
+  currentConnectorGuid?: string | null
+): Connector[] {
   if (type === 'local') {
     return []
   }
 
   // Map collection type to connector type (they use the same values)
-  return connectors.filter((connector) => connector.type === type && connector.is_active)
+  // Include active connectors of matching type, plus the current connector if assigned
+  // (even if inactive, to allow editing without losing the assignment)
+  return connectors.filter(
+    (connector) =>
+      (connector.type === type && connector.is_active) ||
+      (currentConnectorGuid && connector.guid === currentConnectorGuid)
+  )
 }
 
 function getStateDescription(state: string): string {
@@ -138,7 +148,7 @@ export default function CollectionForm({
   const selectedType = form.watch('type')
   const requiresConnector = isConnectorRequiredForType(selectedType)
   const showAgentSelector = supportsAgentBinding(selectedType)
-  const availableConnectors = getConnectorsForType(connectors, selectedType)
+  const availableConnectors = getConnectorsForType(connectors, selectedType, collection?.connector_guid)
 
   // Reset connector_guid when switching to local type, reset bound_agent_guid when switching to remote
   useEffect(() => {

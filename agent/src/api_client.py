@@ -600,12 +600,81 @@ class AgentApiClient:
             )
 
     # -------------------------------------------------------------------------
+    # Synchronous Methods (for CLI use)
+    # -------------------------------------------------------------------------
+
+    def _get_sync_client(self) -> httpx.Client:
+        """Get or create synchronous HTTP client for CLI operations."""
+        if not hasattr(self, "_sync_client") or self._sync_client is None:
+            headers = {
+                "User-Agent": USER_AGENT,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            if self._api_key:
+                headers["Authorization"] = f"Bearer {self._api_key}"
+
+            self._sync_client = httpx.Client(
+                base_url=self._server_url,
+                headers=headers,
+                timeout=self._timeout,
+            )
+        return self._sync_client
+
+    def get(self, path: str) -> httpx.Response:
+        """
+        Synchronous GET request for CLI operations.
+
+        Args:
+            path: API path (will be prefixed with /api/agent/v1)
+
+        Returns:
+            httpx.Response object
+
+        Raises:
+            ConnectionError: If connection to server fails
+        """
+        client = self._get_sync_client()
+        try:
+            return client.get(f"{API_BASE_PATH}{path}")
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+    def post(self, path: str, json: Optional[dict] = None) -> httpx.Response:
+        """
+        Synchronous POST request for CLI operations.
+
+        Args:
+            path: API path (will be prefixed with /api/agent/v1)
+            json: Optional JSON payload
+
+        Returns:
+            httpx.Response object
+
+        Raises:
+            ConnectionError: If connection to server fails
+        """
+        client = self._get_sync_client()
+        try:
+            return client.post(f"{API_BASE_PATH}{path}", json=json)
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+    # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
 
     async def close(self) -> None:
         """Close the HTTP client."""
         await self._client.aclose()
+        # Also close sync client if it exists
+        if hasattr(self, "_sync_client") and self._sync_client is not None:
+            self._sync_client.close()
+            self._sync_client = None
 
     async def __aenter__(self) -> "AgentApiClient":
         """Async context manager entry."""

@@ -707,8 +707,12 @@ async def test_collection(
     will execute. The collection's is_accessible field will be updated when
     the agent completes the job.
 
-    For remote collections (S3, GCS, SMB), tests connectivity synchronously
-    via the connector and updates is_accessible immediately.
+    For remote collections with agent-based credentials (credential_location=agent),
+    creates an async job that can be claimed by any agent with credentials for
+    that connector. The job's required_capabilities includes "connector:{guid}".
+
+    For remote collections with server-based credentials (credential_location=server),
+    tests connectivity synchronously via the connector and updates is_accessible immediately.
 
     Path Parameters:
         guid: Collection GUID (col_xxx format)
@@ -718,13 +722,13 @@ async def test_collection(
         - success: True for sync tests that pass, False for async or failed tests
         - message: Descriptive message
         - collection: Updated collection with accessibility status
-        - job_guid: Job GUID for async tests (LOCAL collections only)
+        - job_guid: Job GUID for async tests (LOCAL or agent-credential collections)
 
     Raises:
         400 Bad Request: If GUID format is invalid, prefix mismatch, or LOCAL collection has no bound agent
         404 Not Found: If collection doesn't exist
 
-    Example (remote collection):
+    Example (remote collection with server credentials):
         POST /api/collections/col_01hgw2bbg0000000000000000/test
 
         Response:
@@ -735,7 +739,7 @@ async def test_collection(
           "job_guid": null
         }
 
-    Example (LOCAL collection with agent):
+    Example (LOCAL collection with agent or remote with agent credentials):
         POST /api/collections/col_01hgw2bbg0000000000000001/test
 
         Response:
@@ -799,7 +803,55 @@ async def test_collection(
                 job_guid=job.guid
             )
 
-        # For remote collections or LOCAL without agent, test synchronously
+        # For remote collections with agent-based credentials, create an async job
+        # that can be claimed by any agent with credentials for that connector
+        from backend.src.models.connector import CredentialLocation
+        if (collection.connector and
+            collection.connector.credential_location == CredentialLocation.AGENT):
+            from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+            connector_guid = collection.connector.guid
+
+            # Create a collection_test job requiring connector credentials
+            # Any agent with "connector:{guid}" capability can claim this job
+            job = Job(
+                team_id=ctx.team_id,
+                collection_id=collection.id,
+                tool="collection_test",
+                mode="collection",
+                status=PersistentJobStatus.PENDING,
+                bound_agent_id=None,  # Not bound - any capable agent can claim
+                required_capabilities=[f"connector:{connector_guid}"],
+            )
+
+            db.add(job)
+
+            # Set accessibility to pending (NULL) while job is running
+            collection.is_accessible = None
+            collection.last_error = None
+
+            db.commit()
+            db.refresh(job)
+            db.refresh(collection)
+
+            logger.info(
+                f"Created collection_test job for agent-credential connector",
+                extra={
+                    "collection_guid": guid,
+                    "job_guid": job.guid,
+                    "connector_guid": connector_guid,
+                    "required_capability": f"connector:{connector_guid}"
+                }
+            )
+
+            return CollectionTestResponse(
+                success=False,
+                message="Accessibility test job created. An agent with connector credentials will execute it.",
+                collection=CollectionResponse.model_validate(collection),
+                job_guid=job.guid
+            )
+
+        # For remote collections with server credentials or LOCAL without agent, test synchronously
         success, message, updated_collection = collection_service.test_collection_accessibility(collection.id)
 
         logger.info(

@@ -16,6 +16,7 @@ from typing import Optional
 from src import __version__
 from src.config import AgentConfig
 from src.capabilities import detect_capabilities
+from src.credential_store import CredentialStore
 from src.api_client import (
     AgentApiClient,
     AgentRevokedError,
@@ -24,6 +25,29 @@ from src.api_client import (
 )
 from src.polling_loop import JobPollingLoop
 from src.job_executor import JobExecutor
+
+
+def get_all_capabilities() -> list[str]:
+    """
+    Get all agent capabilities including connector credentials.
+
+    Returns:
+        List of capability strings
+    """
+    # Get built-in capabilities (tools, local_filesystem)
+    capabilities = detect_capabilities()
+
+    # Add connector capabilities from credential store
+    try:
+        store = CredentialStore()
+        connector_guids = store.list_connector_guids()
+        for guid in connector_guids:
+            capabilities.append(f"connector:{guid}")
+    except Exception:
+        # Credential store not initialized or error - skip connector capabilities
+        pass
+
+    return capabilities
 
 
 # ============================================================================
@@ -143,9 +167,9 @@ class AgentRunner:
         Returns:
             Exit code
         """
-        # Detect capabilities on startup (in case tools were added/upgraded)
+        # Detect capabilities on startup (in case tools were added/upgraded or connectors configured)
         self.logger.info("Detecting agent capabilities...")
-        capabilities = detect_capabilities()
+        capabilities = get_all_capabilities()
         self.logger.info(f"Detected capabilities: {capabilities}")
 
         # Send initial heartbeat with capabilities, version, and authorized roots to set agent status to ONLINE
@@ -220,14 +244,24 @@ class AgentRunner:
         """
         consecutive_failures = 0
         max_failures = 5
+        heartbeat_count = 0
 
         while not self._shutdown_event.is_set():
             try:
-                # Send heartbeat with authorized roots (may have changed via CLI)
+                # Refresh capabilities periodically (every 10 heartbeats, ~5 minutes)
+                # This catches new connector credentials configured while agent is running
+                capabilities = None
+                if heartbeat_count % 10 == 0:
+                    capabilities = get_all_capabilities()
+                    self.logger.debug(f"Refreshed capabilities: {len(capabilities)} total")
+
+                # Send heartbeat with authorized roots and capabilities (if refreshed)
                 response = await self._api_client.heartbeat(
                     authorized_roots=self.config.authorized_roots,
+                    capabilities=capabilities,
                 )
                 self.logger.debug(f"Heartbeat acknowledged, server time: {response.get('server_time')}")
+                heartbeat_count += 1
 
                 # Reset failure counter on success
                 consecutive_failures = 0

@@ -71,6 +71,7 @@ class ApiConfigLoader:
         config_data["collection_path"] = response.get("collection_path")
         config_data["pipeline_guid"] = response.get("pipeline_guid")
         config_data["pipeline"] = response.get("pipeline")  # Pipeline definition (nodes, edges)
+        config_data["connector"] = response.get("connector")  # Connector info for remote collection tests
 
         self._config_cache = config_data
 

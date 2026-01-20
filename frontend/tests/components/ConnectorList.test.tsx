@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { render } from '../utils/test-utils'
 import { ConnectorList } from '@/components/connectors/ConnectorList'
 import type { Connector } from '@/contracts/api/connector-api'
+import type { Agent } from '@/contracts/api/agent-api'
 
 describe('ConnectorList', () => {
   const mockConnectors: Connector[] = [
@@ -271,5 +272,121 @@ describe('ConnectorList', () => {
 
     expect(mockOnTest).toHaveBeenCalledTimes(1)
     expect(mockOnTest).toHaveBeenCalledWith(mockConnectors[0])
+  })
+
+  describe('Agent credential display', () => {
+    const agentConnectors: Connector[] = [
+      {
+        guid: 'con_01hgw2bbg00000000000000004',
+        name: 'Agent S3 Connector',
+        type: 's3',
+        credential_location: 'agent',
+        is_active: true,
+        last_validated: null,
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      },
+      {
+        guid: 'con_01hgw2bbg00000000000000005',
+        name: 'Pending SMB Connector',
+        type: 'smb',
+        credential_location: 'pending',
+        is_active: true,
+        last_validated: null,
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      },
+    ]
+
+    const mockAgents: Agent[] = [
+      {
+        guid: 'agt_01hgw2bbg00000000000000001',
+        name: 'Studio Mac',
+        hostname: 'studio.local',
+        os_info: 'macOS 14.0',
+        status: 'online',
+        error_message: null,
+        last_heartbeat: '2025-01-01T12:00:00Z',
+        capabilities: ['local_filesystem', 'connector:con_01hgw2bbg00000000000000004'],
+        authorized_roots: ['/photos'],
+        version: '1.0.0',
+        created_at: '2025-01-01T09:00:00Z',
+        team_guid: 'tea_01hgw2bbg00000000000000001',
+        current_job_guid: null,
+      },
+      {
+        guid: 'agt_01hgw2bbg00000000000000002',
+        name: 'Backup Server',
+        hostname: 'backup.local',
+        os_info: 'Ubuntu 22.04',
+        status: 'offline',
+        error_message: null,
+        last_heartbeat: '2025-01-01T10:00:00Z',
+        capabilities: ['local_filesystem', 'connector:con_01hgw2bbg00000000000000004'],
+        authorized_roots: ['/data'],
+        version: '1.0.0',
+        created_at: '2025-01-01T09:00:00Z',
+        team_guid: 'tea_01hgw2bbg00000000000000001',
+        current_job_guid: null,
+      },
+    ]
+
+    it('should display Agent badge for agent credential location', () => {
+      render(
+        <ConnectorList
+          connectors={agentConnectors}
+          loading={false}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onTest={mockOnTest}
+        />
+      )
+
+      expect(screen.getByText('Agent')).toBeInTheDocument()
+    })
+
+    it('should display Pending Config badge for pending credential location', () => {
+      render(
+        <ConnectorList
+          connectors={agentConnectors}
+          loading={false}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onTest={mockOnTest}
+        />
+      )
+
+      expect(screen.getByText('Pending Config')).toBeInTheDocument()
+    })
+
+    it('should display Needs config hint for pending connectors', () => {
+      render(
+        <ConnectorList
+          connectors={agentConnectors}
+          loading={false}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onTest={mockOnTest}
+        />
+      )
+
+      expect(screen.getByText('Needs config')).toBeInTheDocument()
+    })
+
+    it('should display agent count for agent-based connectors with credentials', () => {
+      render(
+        <ConnectorList
+          connectors={agentConnectors}
+          loading={false}
+          onEdit={mockOnEdit}
+          onDelete={mockOnDelete}
+          onTest={mockOnTest}
+          agents={mockAgents}
+        />
+      )
+
+      // Should show count "2" for the 2 agents with credentials
+      expect(screen.getByText('2')).toBeInTheDocument()
+    })
   })
 })

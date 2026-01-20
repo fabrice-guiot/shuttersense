@@ -180,7 +180,10 @@ class JobExecutor:
                 collection_path, pipeline_guid, config
             )
         elif tool == "collection_test":
-            return await self._run_collection_test(job)
+            # Merge connector info from config into job for collection_test
+            job_with_connector = dict(job)
+            job_with_connector["connector"] = config.get("connector")
+            return await self._run_collection_test(job_with_connector)
         else:
             return JobResult(
                 success=False,
@@ -1026,21 +1029,23 @@ class JobExecutor:
         """
         Run collection accessibility test.
 
-        Tests if a LOCAL collection path is accessible by the agent:
+        For LOCAL collections:
         1. Validates path against agent's authorized roots
         2. Checks if path exists and is a directory
         3. Checks read permission
         4. Counts files in the directory
 
+        For remote collections (S3, GCS, SMB) with agent-based credentials:
+        1. Loads credentials from local credential store
+        2. Tests connectivity to the remote storage
+        3. Tries to list the location
+
         Args:
-            job: Job data with collection_path in parameters
+            job: Job data with collection_path and optional connector info
 
         Returns:
             JobResult with accessibility test results
         """
-        from pathlib import Path
-        from src.config import AgentConfig
-
         # Get collection path from job parameters
         parameters = job.get("parameters", {})
         collection_path = parameters.get("collection_path") or job.get("collection_path")
@@ -1052,7 +1057,27 @@ class JobExecutor:
                 error_message="Collection path is required for accessibility test"
             )
 
-        logger.info(f"Testing accessibility of collection path: {collection_path}")
+        # Check if this is a remote collection with connector credentials
+        connector_info = job.get("connector")
+        if connector_info:
+            return await self._test_remote_collection(collection_path, connector_info)
+        else:
+            return await self._test_local_collection(collection_path)
+
+    async def _test_local_collection(self, collection_path: str) -> JobResult:
+        """
+        Test LOCAL collection accessibility.
+
+        Args:
+            collection_path: Local filesystem path
+
+        Returns:
+            JobResult with test results
+        """
+        from pathlib import Path
+        from src.config import AgentConfig
+
+        logger.info(f"Testing accessibility of LOCAL collection path: {collection_path}")
 
         try:
             # Load agent config to get authorized roots
@@ -1163,6 +1188,359 @@ class JobExecutor:
                 results={
                     "success": False,
                     "error": error_msg,
+                }
+            )
+
+    async def _test_remote_collection(
+        self,
+        collection_path: str,
+        connector_info: Dict[str, Any]
+    ) -> JobResult:
+        """
+        Test remote collection accessibility using agent-stored credentials.
+
+        Args:
+            collection_path: Remote location (bucket/prefix, s3://bucket/path, etc.)
+            connector_info: Connector details (guid, type, name)
+
+        Returns:
+            JobResult with test results
+        """
+        from src.credential_store import CredentialStore
+
+        connector_guid = connector_info.get("guid")
+        connector_type = connector_info.get("type")
+        connector_name = connector_info.get("name", connector_guid)
+
+        logger.info(
+            f"Testing accessibility of remote collection: {collection_path} "
+            f"via {connector_type} connector {connector_name}"
+        )
+
+        try:
+            # Load credentials from local store
+            store = CredentialStore()
+            credentials = store.get_credentials(connector_guid)
+
+            if not credentials:
+                error_msg = (
+                    f"No credentials found for connector {connector_name} ({connector_guid}). "
+                    "Please configure credentials using 'shuttersense-agent connectors configure'."
+                )
+                logger.warning(f"Collection test failed: {error_msg}")
+                return JobResult(
+                    success=True,
+                    results={
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
+
+            # Test connection based on connector type
+            if connector_type == "s3":
+                return await self._test_s3_collection(collection_path, credentials)
+            elif connector_type == "gcs":
+                return await self._test_gcs_collection(collection_path, credentials)
+            elif connector_type == "smb":
+                return await self._test_smb_collection(collection_path, credentials)
+            else:
+                error_msg = f"Unsupported connector type: {connector_type}"
+                logger.error(error_msg)
+                return JobResult(
+                    success=True,
+                    results={
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
+
+        except Exception as e:
+            error_msg = f"Error testing remote collection accessibility: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return JobResult(
+                success=True,
+                results={
+                    "success": False,
+                    "error": error_msg,
+                }
+            )
+
+    async def _test_s3_collection(
+        self,
+        collection_path: str,
+        credentials: Dict[str, Any]
+    ) -> JobResult:
+        """
+        Test S3 collection accessibility.
+
+        Args:
+            collection_path: S3 location (bucket/prefix or s3://bucket/path)
+            credentials: S3 credentials (aws_access_key_id, aws_secret_access_key, region)
+
+        Returns:
+            JobResult with test results
+        """
+        import asyncio
+
+        loop = asyncio.get_event_loop()
+
+        def test_s3():
+            try:
+                import boto3
+                from botocore.exceptions import ClientError, NoCredentialsError
+
+                # Parse collection path
+                path = collection_path
+                if path.startswith("s3://"):
+                    path = path[5:]  # Remove s3:// prefix
+
+                # Split into bucket and prefix
+                parts = path.split("/", 1)
+                bucket = parts[0]
+                prefix = parts[1] if len(parts) > 1 else ""
+
+                # Create S3 client with credentials
+                s3 = boto3.client(
+                    "s3",
+                    aws_access_key_id=credentials.get("aws_access_key_id"),
+                    aws_secret_access_key=credentials.get("aws_secret_access_key"),
+                    region_name=credentials.get("region"),
+                )
+
+                # Try to list objects (limited to 10 for quick test)
+                response = s3.list_objects_v2(
+                    Bucket=bucket,
+                    Prefix=prefix,
+                    MaxKeys=10,
+                )
+
+                # Count objects found
+                object_count = response.get("KeyCount", 0)
+                is_truncated = response.get("IsTruncated", False)
+
+                if object_count > 0 or not is_truncated:
+                    message = f"Collection is accessible."
+                    if object_count > 0:
+                        message += f" Found {object_count}+ objects in s3://{bucket}/{prefix}."
+                    return True, message, None
+                else:
+                    # Empty prefix but accessible
+                    return True, f"Collection is accessible (empty or no objects with prefix).", None
+
+            except NoCredentialsError:
+                return False, None, "Invalid or missing AWS credentials"
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                error_msg = e.response.get("Error", {}).get("Message", str(e))
+                if error_code == "NoSuchBucket":
+                    return False, None, f"Bucket does not exist: {bucket}"
+                elif error_code == "AccessDenied":
+                    return False, None, f"Access denied to bucket: {bucket}"
+                else:
+                    return False, None, f"S3 error ({error_code}): {error_msg}"
+            except Exception as e:
+                return False, None, f"S3 connection failed: {str(e)}"
+
+        success, message, error = await loop.run_in_executor(None, test_s3)
+
+        if success:
+            logger.info(f"S3 collection test succeeded: {message}")
+            return JobResult(
+                success=True,
+                results={
+                    "success": True,
+                    "message": message,
+                }
+            )
+        else:
+            logger.warning(f"S3 collection test failed: {error}")
+            return JobResult(
+                success=True,
+                results={
+                    "success": False,
+                    "error": error,
+                }
+            )
+
+    async def _test_gcs_collection(
+        self,
+        collection_path: str,
+        credentials: Dict[str, Any]
+    ) -> JobResult:
+        """
+        Test GCS collection accessibility.
+
+        Args:
+            collection_path: GCS location (bucket/prefix or gs://bucket/path)
+            credentials: GCS credentials (service_account_json)
+
+        Returns:
+            JobResult with test results
+        """
+        import asyncio
+        import json
+        import tempfile
+        from pathlib import Path
+
+        loop = asyncio.get_event_loop()
+
+        def test_gcs():
+            try:
+                from google.cloud import storage
+                from google.oauth2 import service_account
+
+                # Parse collection path
+                path = collection_path
+                if path.startswith("gs://"):
+                    path = path[5:]  # Remove gs:// prefix
+
+                # Split into bucket and prefix
+                parts = path.split("/", 1)
+                bucket_name = parts[0]
+                prefix = parts[1] if len(parts) > 1 else ""
+
+                # Load service account credentials
+                sa_json = credentials.get("service_account_json")
+                if isinstance(sa_json, str):
+                    sa_info = json.loads(sa_json)
+                else:
+                    sa_info = sa_json
+
+                creds = service_account.Credentials.from_service_account_info(sa_info)
+                client = storage.Client(credentials=creds, project=sa_info.get("project_id"))
+
+                # Get bucket and list objects (limited for quick test)
+                bucket = client.bucket(bucket_name)
+                blobs = list(bucket.list_blobs(prefix=prefix, max_results=10))
+
+                object_count = len(blobs)
+                message = f"Collection is accessible."
+                if object_count > 0:
+                    message += f" Found {object_count}+ objects in gs://{bucket_name}/{prefix}."
+
+                return True, message, None
+
+            except json.JSONDecodeError:
+                return False, None, "Invalid service account JSON"
+            except Exception as e:
+                error_str = str(e)
+                if "404" in error_str or "not found" in error_str.lower():
+                    return False, None, f"Bucket does not exist: {bucket_name}"
+                elif "403" in error_str or "permission" in error_str.lower():
+                    return False, None, f"Access denied to bucket: {bucket_name}"
+                else:
+                    return False, None, f"GCS connection failed: {error_str}"
+
+        success, message, error = await loop.run_in_executor(None, test_gcs)
+
+        if success:
+            logger.info(f"GCS collection test succeeded: {message}")
+            return JobResult(
+                success=True,
+                results={
+                    "success": True,
+                    "message": message,
+                }
+            )
+        else:
+            logger.warning(f"GCS collection test failed: {error}")
+            return JobResult(
+                success=True,
+                results={
+                    "success": False,
+                    "error": error,
+                }
+            )
+
+    async def _test_smb_collection(
+        self,
+        collection_path: str,
+        credentials: Dict[str, Any]
+    ) -> JobResult:
+        """
+        Test SMB/CIFS collection accessibility.
+
+        Args:
+            collection_path: SMB path (share/folder)
+            credentials: SMB credentials (server, share, username, password, domain)
+
+        Returns:
+            JobResult with test results
+        """
+        import asyncio
+
+        loop = asyncio.get_event_loop()
+
+        def test_smb():
+            try:
+                from smb.SMBConnection import SMBConnection
+
+                server = credentials.get("server")
+                share = credentials.get("share")
+                username = credentials.get("username")
+                password = credentials.get("password")
+                domain = credentials.get("domain", "")
+
+                # Parse path - could be just a subfolder within the share
+                subfolder = collection_path.strip("/") if collection_path else ""
+
+                # Create SMB connection
+                conn = SMBConnection(
+                    username,
+                    password,
+                    "shuttersense-agent",
+                    server,
+                    domain=domain,
+                    use_ntlm_v2=True,
+                )
+
+                # Connect
+                connected = conn.connect(server, 445, timeout=10)
+                if not connected:
+                    return False, None, f"Failed to connect to SMB server: {server}"
+
+                try:
+                    # List files in the path
+                    path = f"/{subfolder}" if subfolder else "/"
+                    entries = conn.listPath(share, path)
+
+                    # Count files (exclude . and ..)
+                    file_count = sum(1 for e in entries if not e.isDirectory and e.filename not in (".", ".."))
+                    dir_count = sum(1 for e in entries if e.isDirectory and e.filename not in (".", ".."))
+
+                    message = f"Collection is accessible. Found {file_count} files, {dir_count} directories."
+                    return True, message, None
+
+                finally:
+                    conn.close()
+
+            except Exception as e:
+                error_str = str(e)
+                if "authentication" in error_str.lower() or "password" in error_str.lower():
+                    return False, None, "SMB authentication failed"
+                elif "not found" in error_str.lower() or "no such" in error_str.lower():
+                    return False, None, f"SMB share or path not found"
+                else:
+                    return False, None, f"SMB connection failed: {error_str}"
+
+        success, message, error = await loop.run_in_executor(None, test_smb)
+
+        if success:
+            logger.info(f"SMB collection test succeeded: {message}")
+            return JobResult(
+                success=True,
+                results={
+                    "success": True,
+                    "message": message,
+                }
+            )
+        else:
+            logger.warning(f"SMB collection test failed: {error}")
+            return JobResult(
+                success=True,
+                results={
+                    "success": False,
+                    "error": error,
                 }
             )
 

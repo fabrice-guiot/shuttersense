@@ -695,6 +695,32 @@ class AgentService:
 
         return agent
 
+    def update_capabilities(self, agent: Agent, capabilities: List[str]) -> Agent:
+        """
+        Update an agent's capabilities.
+
+        Used when agent reports connector credentials or other capability changes.
+
+        Args:
+            agent: Agent to update
+            capabilities: New capabilities list
+
+        Returns:
+            Updated agent
+        """
+        agent.capabilities = capabilities
+        self.db.commit()
+
+        logger.info(
+            "Agent capabilities updated",
+            extra={
+                "agent_guid": agent.guid,
+                "capabilities_count": len(capabilities)
+            }
+        )
+
+        return agent
+
     def delete_agent(self, agent: Agent) -> None:
         """
         Delete an agent.

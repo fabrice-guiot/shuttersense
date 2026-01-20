@@ -345,6 +345,9 @@ class JobCoordinatorService:
         Used for connectors with credential_location=AGENT where the
         credentials are stored on the agent, not on the server.
 
+        Agents report connector credentials as capabilities with format
+        "connector:{guid}" when they successfully configure credentials.
+
         Args:
             agent_id: Internal agent ID
             connector_guid: Connector GUID to check
@@ -355,7 +358,11 @@ class JobCoordinatorService:
         agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
         if not agent:
             return False
-        return connector_guid in agent.connector_guids
+
+        # Check capabilities for connector:{guid} format
+        capabilities = agent.capabilities or []
+        capability_key = f"connector:{connector_guid}"
+        return capability_key in capabilities
 
     def _job_requires_agent_credentials(self, job: Job) -> Optional[str]:
         """

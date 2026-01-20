@@ -24,7 +24,10 @@ from backend.src.services.tool_service import _db_job_to_response
 from backend.src.db.database import get_db
 from backend.src.middleware.tenant import TenantContext, get_tenant_context
 from backend.src.services.agent_service import AgentService
+from backend.src.services.connector_service import ConnectorService
+from backend.src.api.connectors import get_connector_service
 from backend.src.services.exceptions import NotFoundError, ValidationError as ServiceValidationError
+from backend.src.models.connector import CredentialLocation
 from backend.src.api.agent.schemas import (
     # Registration
     AgentRegistrationRequest,
@@ -50,6 +53,13 @@ from backend.src.api.agent.schemas import (
     JobConfigData,
     JobConfigResponse,
     PipelineData,
+    ConnectorTestData,
+    # Connector schemas (Phase 8)
+    AgentConnectorResponse,
+    AgentConnectorListResponse,
+    AgentConnectorMetadataResponse,
+    ReportConnectorCapabilityRequest,
+    ReportConnectorCapabilityResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -659,6 +669,18 @@ async def get_job_config(
             edges=job.pipeline.edges_json or [],
         )
 
+    # Get connector data for collection_test jobs with agent-credential connectors
+    connector_data = None
+    if job.tool == "collection_test" and job.collection and job.collection.connector:
+        connector = job.collection.connector
+        # Only include if using agent-based credentials
+        if connector.credential_location == CredentialLocation.AGENT:
+            connector_data = ConnectorTestData(
+                guid=connector.guid,
+                type=connector.type.value,
+                name=connector.name,
+            )
+
     return JobConfigResponse(
         job_guid=job.guid,
         config=JobConfigData(
@@ -671,6 +693,7 @@ async def get_job_config(
         collection_path=collection_path,
         pipeline_guid=pipeline_guid,
         pipeline=pipeline_data,
+        connector=connector_data,
     )
 
 
@@ -859,6 +882,216 @@ async def get_pool_status(
         idle_count=status_data["idle_count"],
         running_jobs_count=status_data["running_jobs_count"],
         status=status_data["status"],
+    )
+
+
+# ============================================================================
+# Agent Connector Endpoints (Agent Auth Required - Phase 8)
+# Must be defined BEFORE /{guid} to avoid route conflicts
+# ============================================================================
+
+# Credential field definitions for each connector type
+CONNECTOR_CREDENTIAL_FIELDS = {
+    "s3": [
+        {"name": "aws_access_key_id", "type": "string", "required": True, "description": "AWS Access Key ID"},
+        {"name": "aws_secret_access_key", "type": "password", "required": True, "description": "AWS Secret Access Key"},
+        {"name": "region", "type": "string", "required": True, "description": "AWS Region (e.g., us-east-1)"},
+        {"name": "bucket", "type": "string", "required": False, "description": "Default bucket (optional)"},
+    ],
+    "gcs": [
+        {"name": "service_account_json", "type": "json", "required": True, "description": "Service Account JSON key file content"},
+        {"name": "bucket", "type": "string", "required": False, "description": "Default bucket (optional)"},
+    ],
+    "smb": [
+        {"name": "server", "type": "string", "required": True, "description": "Server address (hostname or IP)"},
+        {"name": "share", "type": "string", "required": True, "description": "Share name"},
+        {"name": "username", "type": "string", "required": True, "description": "Username"},
+        {"name": "password", "type": "password", "required": True, "description": "Password"},
+        {"name": "domain", "type": "string", "required": False, "description": "Domain (optional)"},
+    ],
+}
+
+
+@router.get(
+    "/connectors",
+    response_model=AgentConnectorListResponse,
+    summary="List connectors for credential configuration",
+    description="List connectors that the agent can configure credentials for. "
+                "Use pending_only=true to filter to only pending connectors."
+)
+async def list_connectors_for_agent(
+    pending_only: bool = False,
+    agent_ctx: AgentContext = Depends(require_online_agent),
+    connector_service: ConnectorService = Depends(get_connector_service),
+):
+    import logging
+    logging.getLogger("agent").info(f"list_connectors_for_agent called, agent={agent_ctx.agent_guid}")
+    """
+    List connectors available for agent credential configuration.
+
+    Query Parameters:
+        pending_only: If true, only return connectors with credential_location=pending
+
+    Returns:
+        List of connectors with their configuration status
+    """
+    # Get all connectors for the agent's team
+    connectors = connector_service.list_connectors(team_id=agent_ctx.agent.team_id)
+
+    # Filter based on credential_location
+    # Agents can configure: pending (needs initial config) or agent (update/expand)
+    # Agents cannot configure: server (credentials stored on server)
+    filtered = []
+    for conn in connectors:
+        # Skip server-side credential connectors
+        if conn.credential_location == CredentialLocation.SERVER:
+            continue
+
+        # If pending_only, only include pending connectors
+        if pending_only and conn.credential_location != CredentialLocation.PENDING:
+            continue
+
+        # Check if this agent has credentials for this connector
+        agent_capabilities = agent_ctx.agent.capabilities or []
+        has_local = f"connector:{conn.guid}" in agent_capabilities
+
+        filtered.append(AgentConnectorResponse(
+            guid=conn.guid,
+            name=conn.name,
+            type=conn.type.value,
+            credential_location=conn.credential_location.value,
+            is_active=conn.is_active,
+            created_at=conn.created_at,
+            has_local_credentials=has_local,
+        ))
+
+    return AgentConnectorListResponse(connectors=filtered, total=len(filtered))
+
+
+@router.get(
+    "/connectors/{guid}/metadata",
+    response_model=AgentConnectorMetadataResponse,
+    summary="Get connector metadata for configuration",
+    description="Get connector details and credential field definitions for configuration."
+)
+async def get_connector_metadata(
+    guid: str,
+    agent_ctx: AgentContext = Depends(require_online_agent),
+    connector_service: ConnectorService = Depends(get_connector_service),
+):
+    """
+    Get connector metadata needed for credential configuration.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx)
+
+    Returns:
+        Connector details and credential field definitions
+    """
+    # Get connector by GUID with team filtering
+    connector = connector_service.get_by_guid(guid, team_id=agent_ctx.agent.team_id)
+
+    if not connector:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Connector not found: {guid}"
+        )
+
+    # Cannot configure server-side credentials from agent
+    if connector.credential_location == CredentialLocation.SERVER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot configure credentials for server-side connector from agent"
+        )
+
+    # Get credential field definitions for this connector type
+    credential_fields = CONNECTOR_CREDENTIAL_FIELDS.get(connector.type.value, [])
+
+    return AgentConnectorMetadataResponse(
+        guid=connector.guid,
+        name=connector.name,
+        type=connector.type.value,
+        credential_location=connector.credential_location.value,
+        credential_fields=credential_fields,
+    )
+
+
+@router.post(
+    "/connectors/{guid}/report-capability",
+    response_model=ReportConnectorCapabilityResponse,
+    summary="Report connector credential capability",
+    description="Report that this agent has (or no longer has) credentials for a connector."
+)
+async def report_connector_capability(
+    guid: str,
+    request: ReportConnectorCapabilityRequest,
+    agent_ctx: AgentContext = Depends(require_online_agent),
+    agent_service: AgentService = Depends(get_agent_service),
+    connector_service: ConnectorService = Depends(get_connector_service),
+):
+    """
+    Report that this agent has credentials configured for a connector.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx)
+
+    Request Body:
+        has_credentials: Whether agent has valid credentials
+        last_tested: When credentials were last successfully tested
+
+    Returns:
+        Acknowledgement and whether credential_location was updated
+
+    Side Effects:
+        - Updates agent capabilities to include/exclude connector:{guid}
+        - If connector is pending and has_credentials=true, updates to agent
+    """
+    # Get connector by GUID with team filtering
+    connector = connector_service.get_by_guid(guid, team_id=agent_ctx.agent.team_id)
+
+    if not connector:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Connector not found: {guid}"
+        )
+
+    # Cannot configure server-side credentials from agent
+    if connector.credential_location == CredentialLocation.SERVER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot report capability for server-side connector"
+        )
+
+    agent = agent_ctx.agent
+    capabilities = list(agent.capabilities or [])
+    capability_key = f"connector:{guid}"
+
+    credential_location_updated = False
+
+    if request.has_credentials:
+        # Add capability if not present
+        if capability_key not in capabilities:
+            capabilities.append(capability_key)
+
+        # If connector is pending, flip to agent (activation is user's decision in WebUI)
+        if connector.credential_location == CredentialLocation.PENDING:
+            connector_service.update_connector(
+                connector_id=connector.id,
+                credential_location=CredentialLocation.AGENT,
+                update_credentials=False,  # Don't try to update server credentials
+            )
+            credential_location_updated = True
+    else:
+        # Remove capability if present
+        if capability_key in capabilities:
+            capabilities.remove(capability_key)
+
+    # Update agent capabilities
+    agent_service.update_capabilities(agent, capabilities)
+
+    return ReportConnectorCapabilityResponse(
+        acknowledged=True,
+        credential_location_updated=credential_location_updated,
     )
 
 

@@ -332,38 +332,37 @@ class ConnectorService:
             if name is not None:
                 connector.name = name
 
-            # Skip credential-related updates if update_credentials is False
-            if update_credentials:
-                # Handle credential_location change
-                if credential_location is not None:
-                    current_location = connector.credential_location
-                    if credential_location != current_location:
-                        # Changing to SERVER requires credentials
-                        if credential_location == CredentialLocation.SERVER and not credentials:
-                            raise ValueError(
-                                "Credentials required when changing credential_location to 'server'"
-                            )
-                        # Changing from SERVER to AGENT/PENDING clears server credentials
-                        if current_location == CredentialLocation.SERVER and credential_location != CredentialLocation.SERVER:
-                            connector.credentials = None
-                            logger.info(
-                                f"Cleared server credentials for connector: {connector.name}",
-                                extra={"connector_id": connector_id, "new_location": credential_location.value}
-                            )
-                        connector.credential_location = credential_location
-
-                # Handle credentials update
-                if credentials is not None:
-                    # Get effective credential location
-                    effective_location = credential_location or connector.credential_location
-                    if effective_location != CredentialLocation.SERVER:
+            # Handle credential_location change (independent of update_credentials flag)
+            # This allows agents to report capability changes without touching credential values
+            if credential_location is not None:
+                current_location = connector.credential_location
+                if credential_location != current_location:
+                    # Changing to SERVER requires credentials (only if update_credentials is True)
+                    if credential_location == CredentialLocation.SERVER and update_credentials and not credentials:
                         raise ValueError(
-                            f"Cannot set credentials when credential_location is '{effective_location.value}'. "
-                            "Configure credentials on the agent using CLI."
+                            "Credentials required when changing credential_location to 'server'"
                         )
-                    # Re-encrypt credentials
-                    credentials_json = json.dumps(credentials)
-                    connector.credentials = self.encryptor.encrypt(credentials_json)
+                    # Changing from SERVER to AGENT/PENDING clears server credentials
+                    if current_location == CredentialLocation.SERVER and credential_location != CredentialLocation.SERVER:
+                        connector.credentials = None
+                        logger.info(
+                            f"Cleared server credentials for connector: {connector.name}",
+                            extra={"connector_id": connector_id, "new_location": credential_location.value}
+                        )
+                    connector.credential_location = credential_location
+
+            # Handle credentials update (only if update_credentials is True)
+            if update_credentials and credentials is not None:
+                # Get effective credential location
+                effective_location = credential_location or connector.credential_location
+                if effective_location != CredentialLocation.SERVER:
+                    raise ValueError(
+                        f"Cannot set credentials when credential_location is '{effective_location.value}'. "
+                        "Configure credentials on the agent using CLI."
+                    )
+                # Re-encrypt credentials
+                credentials_json = json.dumps(credentials)
+                connector.credentials = self.encryptor.encrypt(credentials_json)
 
             if metadata is not None:
                 connector.metadata_json = json.dumps(metadata)

@@ -33,10 +33,14 @@ def cli(ctx: click.Context) -> None:
 from cli.register import register  # noqa: E402
 from cli.start import start  # noqa: E402
 from cli.config import config  # noqa: E402
+from cli.connectors import connectors  # noqa: E402
+from cli.capabilities import capabilities  # noqa: E402
 
 cli.add_command(register)
 cli.add_command(start)
 cli.add_command(config)
+cli.add_command(connectors)
+cli.add_command(capabilities)
 
 
 # Additional commands will be added here as they are implemented:

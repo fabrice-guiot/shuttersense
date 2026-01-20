@@ -578,6 +578,29 @@ class PipelineData(BaseModel):
     }
 
 
+class ConnectorTestData(BaseModel):
+    """
+    Connector information for collection_test jobs with agent-based credentials.
+
+    The agent uses this to look up credentials from its local store
+    and test connectivity to the remote storage.
+    """
+
+    guid: str = Field(..., description="Connector GUID (con_xxx)")
+    type: str = Field(..., description="Connector type (s3, gcs, smb)")
+    name: str = Field(..., description="Connector display name")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "con_01hgw2bbg...",
+                "type": "s3",
+                "name": "Production AWS S3"
+            }
+        }
+    }
+
+
 class JobConfigResponse(BaseModel):
     """Response schema for job-specific configuration."""
 
@@ -595,3 +618,160 @@ class JobConfigResponse(BaseModel):
         None,
         description="Pipeline definition (if applicable)"
     )
+    connector: Optional[ConnectorTestData] = Field(
+        None,
+        description="Connector info for remote collection tests (agent-credential mode)"
+    )
+
+
+# ============================================================================
+# Connector Schemas (for agent credential configuration)
+# ============================================================================
+
+class AgentConnectorResponse(BaseModel):
+    """
+    Response schema for connector details visible to agents.
+
+    Note: Credentials are NEVER sent to agents via this endpoint.
+    Agents configure and store credentials locally.
+    """
+
+    guid: str = Field(..., description="Connector GUID (con_xxx)")
+    name: str = Field(..., description="Connector display name")
+    type: str = Field(..., description="Connector type (s3, gcs, smb)")
+    credential_location: str = Field(
+        ...,
+        description="Credential storage location (server, agent, pending)"
+    )
+    is_active: bool = Field(..., description="Whether connector is active")
+    created_at: datetime = Field(..., description="Creation timestamp")
+
+    # Indicates if THIS agent has credentials configured for this connector
+    has_local_credentials: bool = Field(
+        default=False,
+        description="Whether this agent has credentials configured locally"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "con_01hgw2bbg...",
+                "name": "Studio NAS",
+                "type": "smb",
+                "credential_location": "pending",
+                "is_active": False,
+                "created_at": "2026-01-18T10:00:00.000Z",
+                "has_local_credentials": False
+            }
+        }
+    }
+
+
+class AgentConnectorListResponse(BaseModel):
+    """Response schema for listing connectors available to agent."""
+
+    connectors: List[AgentConnectorResponse] = Field(
+        ...,
+        description="List of connectors"
+    )
+    total: int = Field(..., description="Total number of connectors")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connectors": [
+                    {
+                        "guid": "con_01hgw2bbg...",
+                        "name": "Studio NAS",
+                        "type": "smb",
+                        "credential_location": "pending",
+                        "is_active": False,
+                        "created_at": "2026-01-18T10:00:00.000Z",
+                        "has_local_credentials": False
+                    }
+                ],
+                "total": 1
+            }
+        }
+    }
+
+
+class AgentConnectorMetadataResponse(BaseModel):
+    """
+    Response schema for connector metadata needed for credential configuration.
+
+    Provides type-specific field requirements for the agent CLI to prompt for.
+    """
+
+    guid: str = Field(..., description="Connector GUID (con_xxx)")
+    name: str = Field(..., description="Connector display name")
+    type: str = Field(..., description="Connector type (s3, gcs, smb)")
+    credential_location: str = Field(..., description="Credential storage location")
+
+    # Type-specific credential field definitions
+    credential_fields: List[Dict[str, Any]] = Field(
+        ...,
+        description="List of credential fields required for this connector type"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "con_01hgw2bbg...",
+                "name": "Studio NAS",
+                "type": "smb",
+                "credential_location": "pending",
+                "credential_fields": [
+                    {"name": "server", "type": "string", "required": True, "description": "Server address"},
+                    {"name": "share", "type": "string", "required": True, "description": "Share name"},
+                    {"name": "username", "type": "string", "required": True, "description": "Username"},
+                    {"name": "password", "type": "password", "required": True, "description": "Password"},
+                    {"name": "domain", "type": "string", "required": False, "description": "Domain (optional)"}
+                ]
+            }
+        }
+    }
+
+
+class ReportConnectorCapabilityRequest(BaseModel):
+    """Request schema for reporting connector capability from agent."""
+
+    has_credentials: bool = Field(
+        ...,
+        description="Whether agent has valid credentials for this connector"
+    )
+    last_tested: Optional[datetime] = Field(
+        None,
+        description="When credentials were last successfully tested"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "has_credentials": True,
+                "last_tested": "2026-01-18T12:00:00.000Z"
+            }
+        }
+    }
+
+
+class ReportConnectorCapabilityResponse(BaseModel):
+    """Response schema for connector capability report."""
+
+    acknowledged: bool = Field(
+        default=True,
+        description="Whether capability was recorded"
+    )
+    credential_location_updated: bool = Field(
+        default=False,
+        description="Whether credential_location was changed (pending -> agent)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "acknowledged": True,
+                "credential_location_updated": True
+            }
+        }
+    }

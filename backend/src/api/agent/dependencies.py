@@ -10,7 +10,7 @@ Agent authentication uses:
 - SHA-256 hash comparison against stored api_key_hash
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from fastapi import Request, HTTPException, status, Depends
@@ -38,6 +38,7 @@ class AgentContext:
         team_guid: Team's external GUID (tea_xxx)
         agent_name: Agent's display name
         status: Current agent status
+        agent: The full Agent model (for accessing capabilities, etc.)
     """
 
     agent_id: int
@@ -46,6 +47,7 @@ class AgentContext:
     team_guid: str
     agent_name: str
     status: AgentStatus
+    agent: Optional[Agent] = field(default=None)
 
     def __post_init__(self):
         """Validate required fields."""
@@ -87,6 +89,9 @@ async def get_agent_context(
     """
     # Import here to avoid circular imports
     from backend.src.services.agent_service import AgentService
+
+    # Log that agent auth is being attempted
+    logger.info(f"get_agent_context called for path: {request.url.path}")
 
     # Extract Bearer token from Authorization header
     auth_header = request.headers.get("Authorization")
@@ -143,14 +148,15 @@ async def get_agent_context(
             detail="Agent access has been revoked"
         )
 
-    # Build agent context
+    # Build agent context with the full agent model
     return AgentContext(
         agent_id=agent.id,
         agent_guid=agent.guid,
         team_id=agent.team_id,
         team_guid=agent.team.guid if agent.team else "",
         agent_name=agent.name,
-        status=agent.status
+        status=agent.status,
+        agent=agent,
     )
 
 

@@ -23,6 +23,8 @@ import { ConnectorList } from '@/components/connectors/ConnectorList'
 import ConnectorForm from '@/components/connectors/ConnectorForm'
 import { GuidBadge } from '@/components/GuidBadge'
 import type { Connector } from '@/contracts/api/connector-api'
+import * as agentService from '@/services/agents'
+import type { Agent } from '@/contracts/api/agent-api'
 
 export function ConnectorsTab() {
   const {
@@ -38,6 +40,16 @@ export function ConnectorsTab() {
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useConnectorStats()
   const { setStats } = useHeaderStats()
+
+  // Agents state (for showing which agents have credentials for each connector)
+  const [agents, setAgents] = useState<Agent[]>([])
+
+  // Fetch agents on mount
+  useEffect(() => {
+    agentService.listAgents(false).then(setAgents).catch(() => {
+      // Silently ignore agent fetch errors - this is just for display enhancement
+    })
+  }, [])
 
   // Update header stats when data changes
   useEffect(() => {
@@ -136,6 +148,7 @@ export function ConnectorsTab() {
         onEdit={handleOpen}
         onDelete={handleDelete}
         onTest={handleTest}
+        agents={agents}
       />
 
       {/* Create/Edit Dialog */}

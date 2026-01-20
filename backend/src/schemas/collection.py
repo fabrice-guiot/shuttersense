@@ -568,6 +568,7 @@ class CollectionResponse(BaseModel):
         type: Collection type
         location: File path or remote location
         state: Collection state
+        connector_guid: Connector GUID (con_xxx, null for LOCAL collections)
         pipeline_guid: Pipeline GUID (pip_xxx, null = use default)
         pipeline_version: Pinned pipeline version (null if using default)
         pipeline_name: Name of assigned pipeline (null if using default)
@@ -578,7 +579,7 @@ class CollectionResponse(BaseModel):
         metadata: User-defined metadata
         created_at: Creation timestamp
         updated_at: Last update timestamp
-        connector: Optional connector details (with guid)
+        connector: Optional connector details (full object)
 
     Example:
         >>> response = CollectionResponse.from_orm(collection_obj)
@@ -588,6 +589,7 @@ class CollectionResponse(BaseModel):
     type: CollectionType
     location: str
     state: CollectionState
+    connector_guid: Optional[str] = Field(default=None, description="Connector GUID (con_xxx)")
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx)")
     pipeline_version: Optional[int] = None
     pipeline_name: Optional[str] = None
@@ -649,10 +651,12 @@ class CollectionResponse(BaseModel):
         else:
             result['bound_agent'] = None
 
-        # Extract connector from relationship
+        # Extract connector_guid and connector from relationship
         if hasattr(data, 'connector') and data.connector:
+            result['connector_guid'] = data.connector.guid
             result['connector'] = data.connector
         else:
+            result['connector_guid'] = None
             result['connector'] = None
 
         return result
@@ -666,6 +670,7 @@ class CollectionResponse(BaseModel):
                 "type": "s3",
                 "location": "s3://my-bucket/photos/2024/vacation",
                 "state": "live",
+                "connector_guid": "con_01hgw2bbg0000000000000001",
                 "pipeline_guid": "pip_01hgw2bbg0000000000000001",
                 "pipeline_version": 3,
                 "pipeline_name": "Standard RAW Workflow",
