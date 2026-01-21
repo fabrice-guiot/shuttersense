@@ -77,10 +77,7 @@ class Collection(Base, GuidMixin):
         last_error: Last error message from accessibility test
         metadata_json: Optional user-defined metadata (tags, notes, custom fields)
         bound_agent_id: Agent bound to this LOCAL collection (FK to agents)
-        auto_refresh: Enable auto-refresh scheduling (default true)
-        refresh_interval_hours: Hours between refreshes (NULL = no auto-refresh)
         last_refresh_at: Last completed refresh timestamp
-        next_refresh_at: Next scheduled refresh time
         created_at: Creation timestamp
         updated_at: Last update timestamp
         connector: Related connector (many-to-one, NULL for local)
@@ -181,11 +178,8 @@ class Collection(Base, GuidMixin):
         index=True
     )
 
-    # Auto-refresh configuration
-    auto_refresh = Column(Boolean, default=True, nullable=False)
-    refresh_interval_hours = Column(Integer, nullable=True)  # NULL = no auto-refresh
+    # Last refresh timestamp (updated when tool completes)
     last_refresh_at = Column(DateTime, nullable=True)
-    next_refresh_at = Column(DateTime, nullable=True, index=True)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -254,19 +248,6 @@ class Collection(Base, GuidMixin):
             True if bound_agent_id is set
         """
         return self.bound_agent_id is not None
-
-    @property
-    def is_auto_refresh_enabled(self) -> bool:
-        """
-        Check if auto-refresh is enabled and configured.
-
-        Auto-refresh requires both auto_refresh=True and
-        refresh_interval_hours to be set.
-
-        Returns:
-            True if auto-refresh is fully configured
-        """
-        return self.auto_refresh and self.refresh_interval_hours is not None
 
     def get_effective_cache_ttl(self, team_ttl_config: Optional[Dict[str, int]] = None) -> int:
         """
