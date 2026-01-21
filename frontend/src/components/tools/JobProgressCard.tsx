@@ -14,7 +14,8 @@ import {
   Loader2,
   X,
   Monitor,
-  RefreshCw
+  RefreshCw,
+  CalendarClock
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +48,12 @@ const STATUS_CONFIG: Record<
   JobStatus,
   { icon: typeof Clock; color: string; label: string; badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline' }
 > = {
+  scheduled: {
+    icon: CalendarClock,
+    color: 'text-purple-500',
+    label: 'Scheduled',
+    badgeVariant: 'secondary'
+  },
   queued: {
     icon: Clock,
     color: 'text-yellow-500',
@@ -121,7 +128,7 @@ export function JobProgressCard({
     return formatRelativeTime(dateString)
   }
 
-  const canCancel = currentStatus === 'queued'
+  const canCancel = currentStatus === 'queued' || currentStatus === 'scheduled'
   const hasResult = currentStatus === 'completed' && job.result_guid !== null
 
   return (
@@ -187,6 +194,13 @@ export function JobProgressCard({
         {currentStatus === 'queued' && job.position !== null && (
           <div className="text-sm text-muted-foreground">
             Position in queue: <span className="font-medium">{job.position}</span>
+          </div>
+        )}
+
+        {/* Scheduled time for scheduled jobs */}
+        {currentStatus === 'scheduled' && job.scheduled_for && (
+          <div className="text-sm text-muted-foreground">
+            Scheduled for: <span className="font-medium">{formatJobDate(job.scheduled_for)}</span>
           </div>
         )}
 
