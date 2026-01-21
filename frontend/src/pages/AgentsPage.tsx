@@ -179,6 +179,7 @@ export default function AgentsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Load</TableHead>
                   <TableHead>Hostname</TableHead>
                   <TableHead>Version</TableHead>
                   <TableHead>Last Heartbeat</TableHead>
@@ -198,6 +199,15 @@ export default function AgentsPage() {
                       <AgentStatusBadge status={agent.status} />
                       {agent.error_message && (
                         <p className="text-xs text-destructive mt-1">{agent.error_message}</p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {agent.running_jobs_count > 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                          {agent.running_jobs_count} {agent.running_jobs_count === 1 ? 'job' : 'jobs'}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">Idle</span>
                       )}
                     </TableCell>
                     <TableCell>

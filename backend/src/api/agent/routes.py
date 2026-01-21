@@ -82,7 +82,11 @@ def get_agent_service(db: Session = Depends(get_db)) -> AgentService:
     return AgentService(db)
 
 
-def agent_to_response(agent, current_job_guid: str = None) -> AgentResponse:
+def agent_to_response(
+    agent,
+    current_job_guid: str = None,
+    running_jobs_count: int = 0
+) -> AgentResponse:
     """Convert Agent model to response schema."""
     from backend.src.api.agent.schemas import AgentMetrics
 
@@ -108,6 +112,7 @@ def agent_to_response(agent, current_job_guid: str = None) -> AgentResponse:
         team_guid=agent.team.guid if agent.team else "",
         current_job_guid=current_job_guid,
         metrics=metrics,
+        running_jobs_count=running_jobs_count,
     )
 
 
@@ -889,6 +894,7 @@ async def delete_registration_token(
 async def list_agents(
     ctx: TenantContext = Depends(get_tenant_context),
     service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
     include_revoked: bool = False,
 ):
     """List all agents for the current team."""
@@ -897,8 +903,25 @@ async def list_agents(
         include_revoked=include_revoked,
     )
 
+    # Get running jobs count for each agent (Phase 12 - Load Balancing)
+    from backend.src.models.job import Job, JobStatus
+    from sqlalchemy import func
+
+    running_counts_query = db.query(
+        Job.agent_id,
+        func.count(Job.id).label('count')
+    ).filter(
+        Job.team_id == ctx.team_id,
+        Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
+    ).group_by(Job.agent_id).all()
+
+    running_counts = {row.agent_id: row.count for row in running_counts_query}
+
     return AgentListResponse(
-        agents=[agent_to_response(a) for a in agents],
+        agents=[
+            agent_to_response(a, running_jobs_count=running_counts.get(a.id, 0))
+            for a in agents
+        ],
         total_count=len(agents),
     )
 

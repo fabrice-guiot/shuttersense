@@ -265,6 +265,9 @@ class AgentResponse(BaseModel):
     team_guid: str = Field(..., description="Team GUID")
     current_job_guid: Optional[str] = Field(None, description="Currently executing job GUID")
 
+    # Load info (Phase 12)
+    running_jobs_count: int = Field(0, description="Number of running/assigned jobs")
+
     model_config = {
         "from_attributes": True,
         "json_schema_extra": {
@@ -281,7 +284,8 @@ class AgentResponse(BaseModel):
                 "created_at": "2026-01-18T10:00:00.000Z",
                 "team_guid": "tea_01hgw2bbg...",
                 "current_job_guid": None,
-                "metrics": None
+                "metrics": None,
+                "running_jobs_count": 0
             }
         }
     }

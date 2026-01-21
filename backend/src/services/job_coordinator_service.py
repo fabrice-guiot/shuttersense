@@ -23,7 +23,7 @@ import hmac
 import json
 import secrets
 from base64 import b64encode, b64decode
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 
@@ -445,6 +445,53 @@ class JobCoordinatorService:
             job=job,
             signing_secret=signing_secret
         )
+
+    # =========================================================================
+    # Load Balancing
+    # =========================================================================
+
+    def get_agent_recent_job_count(
+        self,
+        agent_id: int,
+        team_id: int,
+        window_hours: int = 1
+    ) -> int:
+        """
+        Get the count of recent jobs for an agent.
+
+        Counts jobs that are either currently running or were completed
+        within the specified time window. Failed jobs are excluded.
+
+        This is used for load balancing visibility and monitoring.
+
+        Args:
+            agent_id: Internal agent ID
+            team_id: Team ID for scoping
+            window_hours: Time window in hours (default 1 hour)
+
+        Returns:
+            Count of recent running/completed jobs
+        """
+        from sqlalchemy import func
+
+        cutoff_time = datetime.utcnow() - timedelta(hours=window_hours)
+
+        # Count running jobs (no time filter) + recently completed jobs
+        count = self.db.query(func.count(Job.id)).filter(
+            Job.team_id == team_id,
+            Job.agent_id == agent_id,
+            or_(
+                # Running jobs (ASSIGNED or RUNNING status)
+                Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING]),
+                # Recently completed jobs
+                and_(
+                    Job.status == JobStatus.COMPLETED,
+                    Job.completed_at >= cutoff_time
+                )
+            )
+        ).scalar()
+
+        return count or 0
 
     # =========================================================================
     # Signing Secret Management

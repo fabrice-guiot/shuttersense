@@ -494,7 +494,7 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ---
 
-## Phase 12: User Story 10 - Multi-Agent Job Distribution (Priority: P2)
+## Phase 12: User Story 10 - Multi-Agent Job Distribution (Priority: P2) ✅
 
 **Goal**: Jobs are distributed across multiple capable agents
 
@@ -502,16 +502,33 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ### Backend Tests for User Story 10
 
-- [ ] T177 [P] [US10] Unit tests for load balancing in `backend/tests/unit/services/test_load_balancing.py` (prefer least busy agent)
-- [ ] T178 [P] [US10] Integration tests for multi-agent distribution in `backend/tests/integration/test_multi_agent.py`
+- [x] T177 [P] [US10] Unit tests for load balancing in `backend/tests/unit/services/test_load_balancing.py` (prefer least busy agent) ✅
+- [x] T178 [P] [US10] Integration tests for multi-agent distribution in `backend/tests/integration/test_multi_agent.py` ✅
 
 ### Implementation for User Story 10
 
-- [ ] T179 [US10] Implement simple load balancing in job claim (prefer agent with fewest recent jobs) in `backend/src/services/job_coordinator_service.py`
-- [ ] T180 [US10] Track recent job count per agent in `backend/src/services/job_coordinator_service.py`
-- [ ] T181 [US10] Display agent load in agent list in `frontend/src/pages/AgentsPage.tsx`
+- [x] T179 [US10] Implement simple load balancing in job claim (prefer agent with fewest recent jobs) in `backend/src/services/job_coordinator_service.py` ✅
+- [x] T180 [US10] Track recent job count per agent in `backend/src/services/job_coordinator_service.py` ✅
+- [x] T181 [US10] Display agent load in agent list in `frontend/src/pages/AgentsPage.tsx` ✅
 
-**Checkpoint**: Jobs distributed across multiple agents with basic load balancing
+**Checkpoint**: Jobs distributed across multiple agents with basic load balancing ✅
+
+### Implementation Notes (Phase 12)
+
+**Load Balancing Implementation:**
+- Added `get_agent_recent_job_count()` to `JobCoordinatorService` for tracking agent workload
+- Counts running/assigned jobs + recently completed jobs (within 1 hour window)
+- Failed jobs not counted toward load
+- Natural pull-based load balancing - agents claim jobs as they become available
+
+**Agent Load Display:**
+- Added `running_jobs_count` field to `AgentResponse` schema
+- Agent list endpoint queries running job counts for all agents in a single query
+- Frontend displays "X jobs" badge or "Idle" in the agent list table
+
+**Test Coverage:**
+- 11 unit tests for load tracking and job claiming with load balancing
+- 7 integration tests for multi-agent job distribution, capability routing, and bound agent routing
 
 ---
 

@@ -30,6 +30,7 @@ export interface Agent {
   created_at: string
   team_guid: string
   current_job_guid: string | null
+  running_jobs_count: number
 }
 
 export interface AgentListResponse {
