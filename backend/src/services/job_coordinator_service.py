@@ -66,15 +66,23 @@ class JobCompletionData:
     """
     Data for completing a job.
 
+    Supports two modes:
+    1. Inline content: results and report_html provided directly
+    2. Chunked upload: results_upload_id and/or report_upload_id provided
+
     Attributes:
-        results: Structured results dictionary
-        report_html: Optional HTML report
+        results: Structured results dictionary (inline mode)
+        report_html: Optional HTML report (inline mode)
+        results_upload_id: Upload ID for chunked results (chunked mode)
+        report_upload_id: Upload ID for chunked HTML report (chunked mode)
         files_scanned: Number of files processed
         issues_found: Number of issues detected
         signature: HMAC-SHA256 signature of results
     """
-    results: Dict[str, Any]
+    results: Optional[Dict[str, Any]] = None
     report_html: Optional[str] = None
+    results_upload_id: Optional[str] = None
+    report_upload_id: Optional[str] = None
     files_scanned: Optional[int] = None
     issues_found: Optional[int] = None
     signature: str = ""
@@ -725,8 +733,13 @@ class JobCoordinatorService:
                 f"Job must be in ASSIGNED or RUNNING state to complete, got {job.status.value}"
             )
 
+        # Resolve upload IDs to content if provided
+        completion_data = self._resolve_upload_ids(
+            completion_data, agent_id, team_id
+        )
+
         # Verify signature (basic validation for now)
-        if completion_data.signature and not self.verify_signature(
+        if completion_data.signature and completion_data.results and not self.verify_signature(
             job, completion_data.results, completion_data.signature
         ):
             raise ValidationError("Invalid result signature")
@@ -778,6 +791,80 @@ class JobCoordinatorService:
         )
 
         return job
+
+    def _resolve_upload_ids(
+        self,
+        completion_data: JobCompletionData,
+        agent_id: int,
+        team_id: int
+    ) -> JobCompletionData:
+        """
+        Resolve upload IDs to actual content.
+
+        If upload IDs are provided instead of inline content, retrieves
+        the content from finalized uploads.
+
+        Args:
+            completion_data: Completion data with possible upload IDs
+            agent_id: Agent ID for ownership verification
+            team_id: Team ID for ownership verification
+
+        Returns:
+            Updated completion data with resolved content
+
+        Raises:
+            ValidationError: If upload not found or not finalized
+        """
+        from backend.src.services.chunked_upload_service import (
+            ChunkedUploadService,
+            UploadType,
+        )
+
+        # If no upload IDs, return as-is
+        if not completion_data.results_upload_id and not completion_data.report_upload_id:
+            return completion_data
+
+        upload_service = ChunkedUploadService()
+
+        # Resolve results upload
+        results = completion_data.results
+        if completion_data.results_upload_id:
+            content = upload_service.get_finalized_content(
+                upload_id=completion_data.results_upload_id,
+                agent_id=agent_id,
+                team_id=team_id,
+            )
+            if content is None:
+                raise ValidationError(
+                    f"Results upload not found or not finalized: {completion_data.results_upload_id}"
+                )
+            import json
+            results = json.loads(content.decode('utf-8'))
+
+        # Resolve report upload
+        report_html = completion_data.report_html
+        if completion_data.report_upload_id:
+            content = upload_service.get_finalized_content(
+                upload_id=completion_data.report_upload_id,
+                agent_id=agent_id,
+                team_id=team_id,
+            )
+            if content is None:
+                raise ValidationError(
+                    f"Report upload not found or not finalized: {completion_data.report_upload_id}"
+                )
+            report_html = content.decode('utf-8')
+
+        # Return updated completion data
+        return JobCompletionData(
+            results=results,
+            report_html=report_html,
+            results_upload_id=None,  # Clear upload IDs
+            report_upload_id=None,
+            files_scanned=completion_data.files_scanned,
+            issues_found=completion_data.issues_found,
+            signature=completion_data.signature,
+        )
 
     def _handle_collection_test_completion(
         self,

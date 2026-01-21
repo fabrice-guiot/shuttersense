@@ -626,27 +626,49 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ---
 
-## Phase 15: Result Ingestion (Cross-Cutting)
+## Phase 15: Result Ingestion (Cross-Cutting) ✅
 
 **Purpose**: Chunked upload protocol for large results
 
 ### Tests
 
-- [ ] T200 [P] Unit tests for ChunkedUploadService in `backend/tests/unit/services/test_chunked_upload.py` (chunking, checksum, expiration)
-- [ ] T201 [P] Unit tests for agent chunked upload client in `agent/tests/unit/test_chunked_upload.py`
-- [ ] T202 [P] Integration tests for chunked upload flow in `backend/tests/integration/test_chunked_upload.py`
-- [ ] T203 [P] Unit tests for result validation in `backend/tests/unit/services/test_result_validation.py` (JSON schema, HTML security)
+- [x] T200 [P] Unit tests for ChunkedUploadService in `backend/tests/unit/services/test_chunked_upload.py` (chunking, checksum, expiration) - 34 unit tests
+- [x] T201 [P] Unit tests for agent chunked upload client in `agent/tests/unit/test_chunked_upload.py` - 16 tests
+- [x] T202 [P] Integration tests for chunked upload flow in `backend/tests/integration/test_chunked_upload.py` - 16 integration tests
+- [x] T203 [P] Unit tests for result validation in `backend/tests/unit/services/test_chunked_upload.py` (JSON schema, HTML security) - included in T200
 
 ### Implementation
 
-- [ ] T204 Create ChunkedUploadService in `backend/src/services/chunked_upload_service.py`
-- [ ] T205 Implement PUT `/uploads/{uploadId}/{chunkIndex}` endpoint in `backend/src/api/agent/routes.py`
-- [ ] T206 Implement POST `/uploads/{uploadId}/finalize` endpoint in `backend/src/api/agent/routes.py`
-- [ ] T207 Implement chunked upload client in agent in `agent/src/chunked_upload.py`
-- [ ] T208 Validate result JSON against tool schemas in `backend/src/services/job_service.py`
-- [ ] T209 Validate HTML report security (no external scripts) in `backend/src/services/chunked_upload_service.py`
+- [x] T204 Create ChunkedUploadService in `backend/src/services/chunked_upload_service.py`
+- [x] T205 Implement PUT `/uploads/{uploadId}/{chunkIndex}` endpoint in `backend/src/api/agent/routes.py`
+- [x] T206 Implement POST `/uploads/{uploadId}/finalize` endpoint in `backend/src/api/agent/routes.py`
+- [x] T207 Implement chunked upload client in agent in `agent/src/chunked_upload.py`
+- [x] T208 Validate result JSON against tool schemas in `backend/src/services/chunked_upload_service.py`
+- [x] T209 Validate HTML report security (no external scripts) in `backend/src/services/chunked_upload_service.py`
 
-**Checkpoint**: Large results upload via chunked protocol
+**Checkpoint**: Large results upload via chunked protocol ✅
+
+### Implementation Notes (Phase 15)
+
+**Chunked Upload Protocol:**
+- Initiate upload via POST `/api/agent/v1/uploads` with content type, total size, chunk count
+- Upload chunks via PUT `/api/agent/v1/uploads/{uploadId}/{chunkIndex}`
+- Finalize via POST `/api/agent/v1/uploads/{uploadId}/finalize` with SHA-256 checksum
+- Session expiration: 1 hour for active sessions, 24 hours for finalized content
+
+**Content Validation:**
+- JSON: Validates schema structure before accepting
+- HTML: Validates no external script sources (except trusted CDNs: jsdelivr, cdnjs, unpkg)
+- Size thresholds: Results >500KB or HTML >100KB use chunked upload
+
+**Job Completion Integration:**
+- `JobCompleteWithUploadRequest` supports both inline data and upload IDs
+- Mutual exclusivity enforced: cannot provide both `results` and `results_upload_id`
+- `JobCoordinatorService._resolve_upload_ids()` retrieves finalized content
+
+**Module-Level Storage:**
+- Upload sessions and finalized content stored at module level for cross-request persistence
+- Background cleanup removes expired sessions and content
 
 ---
 
@@ -656,7 +678,7 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ### Tests
 
-- [ ] T210 [P] E2E test for complete agent workflow in `backend/tests/e2e/test_agent_workflow.py` (register, execute job, complete)
+- [x] T210 [P] E2E test for complete agent workflow in `backend/tests/e2e/test_agent_workflow.py` (register, execute job, complete)
 
 ### Implementation
 

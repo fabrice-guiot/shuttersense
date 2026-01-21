@@ -15,7 +15,7 @@ import asyncio
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from backend.src.utils.websocket import get_connection_manager
@@ -52,7 +52,7 @@ from backend.src.api.agent.schemas import (
     # Job schemas (Phase 5)
     JobClaimResponse,
     JobProgressRequest,
-    JobCompleteRequest,
+    JobCompleteWithUploadRequest,
     JobFailRequest,
     JobStatusResponse,
     JobConfigData,
@@ -65,6 +65,13 @@ from backend.src.api.agent.schemas import (
     AgentConnectorMetadataResponse,
     ReportConnectorCapabilityRequest,
     ReportConnectorCapabilityResponse,
+    # Chunked upload schemas (Phase 15)
+    InitiateUploadRequest,
+    InitiateUploadResponse,
+    ChunkUploadResponse,
+    FinalizeUploadRequest,
+    FinalizeUploadResponse,
+    UploadStatusResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -484,17 +491,21 @@ async def update_job_progress(
     "/jobs/{job_guid}/complete",
     response_model=JobStatusResponse,
     summary="Complete job with results",
-    description="Mark a job as completed and submit results."
+    description="Mark a job as completed and submit results. Supports both inline content and chunked upload references."
 )
 async def complete_job(
     job_guid: str,
-    data: JobCompleteRequest,
+    data: JobCompleteWithUploadRequest,
     ctx: AgentContext = Depends(get_agent_context),
     service: AgentService = Depends(get_agent_service),
     db: Session = Depends(get_db),
 ):
     """
     Complete a job with results.
+
+    Supports two modes:
+    1. Inline: Provide results directly in the request body
+    2. Chunked: Provide upload_ids for pre-uploaded large content
 
     Creates an AnalysisResult record and links it to the job.
     The signature must match the HMAC-SHA256 of the results using
@@ -511,6 +522,8 @@ async def complete_job(
         completion_data = JobCompletionData(
             results=data.results,
             report_html=data.report_html,
+            results_upload_id=data.results_upload_id,
+            report_upload_id=data.report_upload_id,
             files_scanned=data.files_scanned,
             issues_found=data.issues_found,
             signature=data.signature,
@@ -742,6 +755,279 @@ async def get_job_config(
         pipeline=pipeline_data,
         connector=connector_data,
     )
+
+
+# ============================================================================
+# Chunked Upload Endpoints (Agent Auth Required - Phase 15)
+# ============================================================================
+
+# Module-level upload service instance (shared across requests)
+_upload_service = None
+
+
+def get_upload_service():
+    """Get or create the chunked upload service singleton."""
+    global _upload_service
+    if _upload_service is None:
+        from backend.src.services.chunked_upload_service import ChunkedUploadService
+        _upload_service = ChunkedUploadService()
+    return _upload_service
+
+
+@router.post(
+    "/jobs/{job_guid}/uploads/initiate",
+    response_model=InitiateUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Initiate chunked upload",
+    description="Start a chunked upload session for large results or HTML reports."
+)
+async def initiate_upload(
+    job_guid: str,
+    data: InitiateUploadRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Initiate a chunked upload for a job.
+
+    Used when results JSON exceeds 1MB or for HTML reports.
+    Returns upload_id and chunk info for subsequent uploads.
+    """
+    from backend.src.models.job import Job
+    from backend.src.services.chunked_upload_service import UploadType
+
+    # Parse job GUID
+    try:
+        job_uuid = Job.parse_guid(job_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job exists and is assigned to this agent
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id,
+    ).first()
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Validate upload type
+    try:
+        upload_type = UploadType(data.upload_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid upload_type: {data.upload_type}. Must be 'results_json' or 'report_html'"
+        )
+
+    # Initiate upload
+    upload_service = get_upload_service()
+    result = upload_service.initiate_upload(
+        job_guid=job_guid,
+        agent_id=ctx.agent_id,
+        team_id=ctx.team_id,
+        upload_type=upload_type,
+        expected_size=data.expected_size,
+        chunk_size=data.chunk_size,
+    )
+
+    return InitiateUploadResponse(
+        upload_id=result.upload_id,
+        chunk_size=result.chunk_size,
+        total_chunks=result.total_chunks,
+    )
+
+
+@router.put(
+    "/uploads/{upload_id}/{chunk_index}",
+    response_model=ChunkUploadResponse,
+    summary="Upload a chunk",
+    description="Upload a single chunk of data. Idempotent - duplicate uploads return success."
+)
+async def upload_chunk(
+    upload_id: str,
+    chunk_index: int,
+    request: Request,
+    ctx: AgentContext = Depends(get_agent_context),
+):
+    """
+    Upload a chunk of data.
+
+    The request body should be the raw chunk bytes.
+    Returns progress information.
+    """
+    from backend.src.services.chunked_upload_service import ChunkedUploadService
+
+    # Read raw body
+    chunk_data = await request.body()
+
+    if not chunk_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty chunk data"
+        )
+
+    upload_service = get_upload_service()
+
+    try:
+        is_new = upload_service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index=chunk_index,
+            chunk_data=chunk_data,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+        )
+
+        # Get session for progress info
+        session = upload_service.get_session(upload_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Upload session not found"
+            )
+
+        return ChunkUploadResponse(
+            received=is_new,
+            chunk_index=chunk_index,
+            chunks_received=len(session.chunks),
+            total_chunks=session.total_chunks,
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/uploads/{upload_id}/status",
+    response_model=UploadStatusResponse,
+    summary="Get upload status",
+    description="Get the current status of an upload session."
+)
+async def get_upload_status(
+    upload_id: str,
+    ctx: AgentContext = Depends(get_agent_context),
+):
+    """Get upload session status including progress and missing chunks."""
+    upload_service = get_upload_service()
+
+    try:
+        status_data = upload_service.get_upload_status(
+            upload_id=upload_id,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+        )
+        return UploadStatusResponse(**status_data)
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/uploads/{upload_id}/finalize",
+    response_model=FinalizeUploadResponse,
+    summary="Finalize upload",
+    description="Finalize an upload by verifying checksum and validating content."
+)
+async def finalize_upload(
+    upload_id: str,
+    data: FinalizeUploadRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+):
+    """
+    Finalize an upload.
+
+    Verifies SHA-256 checksum and validates content (JSON schema, HTML security).
+    The content is returned to be used with job completion.
+    """
+    upload_service = get_upload_service()
+
+    try:
+        result = upload_service.finalize_upload(
+            upload_id=upload_id,
+            expected_checksum=data.checksum,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+        )
+
+        return FinalizeUploadResponse(
+            success=result.success,
+            upload_type=result.content_type.value,
+            content_size=len(result.content) if result.content else 0,
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.delete(
+    "/uploads/{upload_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cancel upload",
+    description="Cancel an in-progress upload and clean up resources."
+)
+async def cancel_upload(
+    upload_id: str,
+    ctx: AgentContext = Depends(get_agent_context),
+):
+    """Cancel an in-progress upload."""
+    upload_service = get_upload_service()
+
+    try:
+        cancelled = upload_service.cancel_upload(
+            upload_id=upload_id,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+        )
+
+        if not cancelled:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Upload session not found"
+            )
+
+        return None
+
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 # ============================================================================

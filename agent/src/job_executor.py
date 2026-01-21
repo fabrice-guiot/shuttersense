@@ -17,6 +17,10 @@ from src.api_client import AgentApiClient
 from src.progress_reporter import ProgressReporter
 from src.result_signer import ResultSigner
 from src.config_loader import ApiConfigLoader
+from src.chunked_upload import (
+    ChunkedUploadClient,
+    should_use_chunked_upload,
+)
 
 # Shared analysis modules for unified local/remote processing
 from src.analysis import (
@@ -151,13 +155,49 @@ class JobExecutor:
             result = await self._execute_tool(job, config)
 
             if result.success:
-                # Sign and submit results
+                # Sign results
                 signature = self._result_signer.sign(result.results)
 
-                await self._api_client.complete_job(
-                    job_guid=job_guid,
+                # Check if chunked upload is needed
+                results_chunked, html_chunked = should_use_chunked_upload(
                     results=result.results,
                     report_html=result.report_html,
+                )
+
+                results_upload_id = None
+                report_upload_id = None
+
+                if results_chunked or html_chunked:
+                    # Use chunked upload for large content
+                    upload_client = ChunkedUploadClient(api_client=self._api_client)
+
+                    if results_chunked:
+                        logger.info(f"Using chunked upload for large results (job {job_guid})")
+                        upload_result = await upload_client.upload_results(
+                            job_guid=job_guid,
+                            results=result.results,
+                        )
+                        if not upload_result.success:
+                            raise RuntimeError(f"Chunked results upload failed: {upload_result.error}")
+                        results_upload_id = upload_result.upload_id
+
+                    if html_chunked and result.report_html:
+                        logger.info(f"Using chunked upload for HTML report (job {job_guid})")
+                        upload_result = await upload_client.upload_report_html(
+                            job_guid=job_guid,
+                            report_html=result.report_html,
+                        )
+                        if not upload_result.success:
+                            raise RuntimeError(f"Chunked HTML upload failed: {upload_result.error}")
+                        report_upload_id = upload_result.upload_id
+
+                # Submit job completion
+                await self._api_client.complete_job(
+                    job_guid=job_guid,
+                    results=None if results_chunked else result.results,
+                    report_html=None if html_chunked else result.report_html,
+                    results_upload_id=results_upload_id,
+                    report_upload_id=report_upload_id,
                     files_scanned=result.files_scanned,
                     issues_found=result.issues_found,
                     signature=signature,

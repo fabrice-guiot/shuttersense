@@ -9,7 +9,7 @@ Defines request and response models for:
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.src.models.agent import AgentStatus
 
@@ -944,6 +944,235 @@ class ReportConnectorCapabilityResponse(BaseModel):
             "example": {
                 "acknowledged": True,
                 "credential_location_updated": True
+            }
+        }
+    }
+
+
+# ============================================================================
+# Chunked Upload Schemas (Phase 15)
+# ============================================================================
+
+class InitiateUploadRequest(BaseModel):
+    """Request schema for initiating a chunked upload."""
+
+    upload_type: str = Field(
+        ...,
+        description="Type of content: 'results_json' or 'report_html'"
+    )
+    expected_size: int = Field(
+        ...,
+        gt=0,
+        description="Total size in bytes of the content to upload"
+    )
+    chunk_size: Optional[int] = Field(
+        None,
+        gt=0,
+        le=10485760,  # 10MB max
+        description="Optional custom chunk size (default 5MB, max 10MB)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "upload_type": "results_json",
+                "expected_size": 5000000,
+                "chunk_size": 5242880
+            }
+        }
+    }
+
+
+class InitiateUploadResponse(BaseModel):
+    """Response schema for initiating a chunked upload."""
+
+    upload_id: str = Field(
+        ...,
+        description="Unique upload session ID"
+    )
+    chunk_size: int = Field(
+        ...,
+        description="Size of each chunk (except last)"
+    )
+    total_chunks: int = Field(
+        ...,
+        description="Total number of chunks expected"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "upload_id": "abc123def456...",
+                "chunk_size": 5242880,
+                "total_chunks": 2
+            }
+        }
+    }
+
+
+class ChunkUploadResponse(BaseModel):
+    """Response schema for chunk upload."""
+
+    received: bool = Field(
+        ...,
+        description="Whether chunk was received (True for new, False for duplicate)"
+    )
+    chunk_index: int = Field(
+        ...,
+        description="Index of the chunk that was uploaded"
+    )
+    chunks_received: int = Field(
+        ...,
+        description="Total chunks received so far"
+    )
+    total_chunks: int = Field(
+        ...,
+        description="Total chunks expected"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "received": True,
+                "chunk_index": 0,
+                "chunks_received": 1,
+                "total_chunks": 2
+            }
+        }
+    }
+
+
+class FinalizeUploadRequest(BaseModel):
+    """Request schema for finalizing an upload."""
+
+    checksum: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 checksum of the complete content (hex-encoded)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+        }
+    }
+
+
+class FinalizeUploadResponse(BaseModel):
+    """Response schema for finalizing an upload."""
+
+    success: bool = Field(
+        ...,
+        description="Whether the upload was finalized successfully"
+    )
+    upload_type: str = Field(
+        ...,
+        description="Type of content that was uploaded"
+    )
+    content_size: int = Field(
+        ...,
+        description="Size of the finalized content"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "success": True,
+                "upload_type": "results_json",
+                "content_size": 5000000
+            }
+        }
+    }
+
+
+class UploadStatusResponse(BaseModel):
+    """Response schema for upload status."""
+
+    upload_id: str = Field(..., description="Upload session ID")
+    job_guid: str = Field(..., description="Associated job GUID")
+    upload_type: str = Field(..., description="Type of content being uploaded")
+    expected_size: int = Field(..., description="Total expected bytes")
+    received_size: int = Field(..., description="Bytes received so far")
+    total_chunks: int = Field(..., description="Total chunks expected")
+    received_chunks: int = Field(..., description="Chunks received so far")
+    received_chunk_indices: List[int] = Field(..., description="Indices of received chunks")
+    missing_chunk_indices: List[int] = Field(..., description="Indices of missing chunks")
+    is_complete: bool = Field(..., description="Whether all chunks received")
+    expires_at: str = Field(..., description="Session expiration timestamp")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "upload_id": "abc123def456...",
+                "job_guid": "job_01hgw2bbg...",
+                "upload_type": "results_json",
+                "expected_size": 5000000,
+                "received_size": 2621440,
+                "total_chunks": 2,
+                "received_chunks": 1,
+                "received_chunk_indices": [0],
+                "missing_chunk_indices": [1],
+                "is_complete": False,
+                "expires_at": "2026-01-18T13:00:00.000Z"
+            }
+        }
+    }
+
+
+class JobCompleteWithUploadRequest(BaseModel):
+    """
+    Request schema for job completion with chunked upload support.
+
+    Supports two modes:
+    1. Inline: Provide results directly (for small results < 1MB)
+    2. Chunked: Provide upload_ids for pre-uploaded content
+
+    At least one of results or results_upload_id must be provided.
+    """
+
+    results_upload_id: Optional[str] = Field(
+        None,
+        description="Upload ID for chunked results JSON (if > 1MB)"
+    )
+    report_upload_id: Optional[str] = Field(
+        None,
+        description="Upload ID for chunked HTML report"
+    )
+    results: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Inline results (only if < 1MB, mutually exclusive with results_upload_id)"
+    )
+    report_html: Optional[str] = Field(
+        None,
+        description="Inline HTML report (for small reports, mutually exclusive with report_upload_id)"
+    )
+    files_scanned: Optional[int] = Field(None, description="Total files scanned")
+    issues_found: Optional[int] = Field(None, description="Issues detected")
+    signature: str = Field(..., description="HMAC-SHA256 signature of results (hex-encoded)")
+
+    @model_validator(mode='after')
+    def validate_results_source(self) -> 'JobCompleteWithUploadRequest':
+        """Ensure either results or results_upload_id is provided."""
+        # Use 'is None' check instead of truthiness to allow empty dicts
+        if self.results is None and self.results_upload_id is None:
+            raise ValueError("Either 'results' or 'results_upload_id' must be provided")
+        if self.results is not None and self.results_upload_id is not None:
+            raise ValueError("Cannot provide both 'results' and 'results_upload_id'")
+        if self.report_html is not None and self.report_upload_id is not None:
+            raise ValueError("Cannot provide both 'report_html' and 'report_upload_id'")
+        return self
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "results_upload_id": "abc123def456...",
+                "report_upload_id": "xyz789ghi012...",
+                "files_scanned": 5000,
+                "issues_found": 17,
+                "signature": "abc123def456..."
             }
         }
     }

@@ -461,20 +461,28 @@ class AgentApiClient:
     async def complete_job(
         self,
         job_guid: str,
-        results: dict[str, Any],
+        results: Optional[dict[str, Any]],
         signature: str,
         report_html: Optional[str] = None,
+        results_upload_id: Optional[str] = None,
+        report_upload_id: Optional[str] = None,
         files_scanned: Optional[int] = None,
         issues_found: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Complete a job with results.
 
+        Supports two modes:
+        1. Inline: Provide results directly
+        2. Chunked: Provide upload_ids for pre-uploaded content
+
         Args:
             job_guid: GUID of the job
-            results: Structured results dictionary
+            results: Structured results dictionary (or None if using upload)
             signature: HMAC-SHA256 signature of results
-            report_html: Optional HTML report content
+            report_html: Optional HTML report content (or None if using upload)
+            results_upload_id: Upload ID for chunked results
+            report_upload_id: Upload ID for chunked HTML report
             files_scanned: Total files scanned
             issues_found: Issues detected
 
@@ -486,12 +494,21 @@ class AgentApiClient:
             ConnectionError: If connection to server fails
         """
         payload: dict[str, Any] = {
-            "results": results,
             "signature": signature,
         }
 
+        # Either inline results or upload ID
+        if results is not None:
+            payload["results"] = results
+        if results_upload_id is not None:
+            payload["results_upload_id"] = results_upload_id
+
+        # Either inline HTML or upload ID
         if report_html is not None:
             payload["report_html"] = report_html
+        if report_upload_id is not None:
+            payload["report_upload_id"] = report_upload_id
+
         if files_scanned is not None:
             payload["files_scanned"] = files_scanned
         if issues_found is not None:
