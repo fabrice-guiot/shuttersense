@@ -210,6 +210,9 @@ async def send_heartbeat(
         error_message=data.error_message,
     )
 
+    # Get pending commands for this agent
+    pending_commands = service.get_and_clear_commands(ctx.agent_id)
+
     # Broadcast pool status update to connected clients (T059)
     pool_status = service.get_pool_status(ctx.team_id)
     manager = get_connection_manager()
@@ -220,7 +223,7 @@ async def send_heartbeat(
     return HeartbeatResponse(
         acknowledged=True,
         server_time=datetime.utcnow(),
-        pending_commands=[],  # TODO: Implement command queue in Phase 4
+        pending_commands=pending_commands,
     )
 
 

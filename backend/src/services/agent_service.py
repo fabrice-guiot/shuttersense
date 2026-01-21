@@ -757,6 +757,72 @@ class AgentService:
         )
 
     # =========================================================================
+    # Command Queue
+    # =========================================================================
+
+    def queue_command(self, agent_id: int, command: str) -> None:
+        """
+        Add a command to an agent's pending_commands queue.
+
+        Commands are strings like:
+        - "cancel_job:job_xxx" - Cancel a specific job
+
+        Args:
+            agent_id: Internal agent ID
+            command: Command string to queue
+        """
+        agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            logger.warning(f"Cannot queue command: agent {agent_id} not found")
+            return
+
+        # Get current pending commands and add new one
+        commands = list(agent.pending_commands)
+        if command not in commands:  # Avoid duplicates
+            commands.append(command)
+            agent.pending_commands = commands
+            self.db.commit()
+
+            logger.info(
+                "Command queued for agent",
+                extra={
+                    "agent_guid": agent.guid,
+                    "command": command
+                }
+            )
+
+    def get_and_clear_commands(self, agent_id: int) -> List[str]:
+        """
+        Get pending commands for an agent and clear them atomically.
+
+        Used during heartbeat processing to send commands to the agent.
+
+        Args:
+            agent_id: Internal agent ID
+
+        Returns:
+            List of command strings (empty if no commands)
+        """
+        agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            return []
+
+        commands = list(agent.pending_commands)
+        if commands:
+            agent.pending_commands = []
+            self.db.commit()
+
+            logger.info(
+                "Commands sent to agent",
+                extra={
+                    "agent_guid": agent.guid,
+                    "commands_count": len(commands)
+                }
+            )
+
+        return commands
+
+    # =========================================================================
     # Pool Status
     # =========================================================================
 

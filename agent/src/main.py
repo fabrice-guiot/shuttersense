@@ -102,6 +102,7 @@ class AgentRunner:
         self.logger = setup_logging(config.log_level)
         self._shutdown_event = asyncio.Event()
         self._api_client: Optional[AgentApiClient] = None
+        self._polling_loop: Optional[JobPollingLoop] = None
 
     async def run(self) -> int:
         """
@@ -192,7 +193,7 @@ class AgentRunner:
 
         # Create job executor and polling loop
         job_executor = JobExecutor(self._api_client)
-        polling_loop = JobPollingLoop(
+        self._polling_loop = JobPollingLoop(
             api_client=self._api_client,
             job_executor=job_executor,
             poll_interval=5,  # Poll every 5 seconds when idle
@@ -200,7 +201,7 @@ class AgentRunner:
 
         # Start heartbeat and polling loops concurrently
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-        polling_task = asyncio.create_task(polling_loop.run())
+        polling_task = asyncio.create_task(self._polling_loop.run())
 
         try:
             # Wait for either task to complete (or shutdown)
@@ -221,7 +222,7 @@ class AgentRunner:
         finally:
             # Signal shutdown to both loops
             self._shutdown_event.set()
-            polling_loop.request_shutdown()
+            self._polling_loop.request_shutdown()
 
             # Cancel pending tasks
             for task in [heartbeat_task, polling_task]:
@@ -268,9 +269,8 @@ class AgentRunner:
 
                 # Process any pending commands
                 pending_commands = response.get("pending_commands", [])
-                if pending_commands:
-                    self.logger.info(f"Received {len(pending_commands)} pending commands")
-                    # TODO: Process commands (Phase 4)
+                for cmd in pending_commands:
+                    await self._process_command(cmd)
 
             except AgentConnectionError as e:
                 consecutive_failures += 1
@@ -311,6 +311,49 @@ class AgentRunner:
     def request_shutdown(self) -> None:
         """Request graceful shutdown of the agent."""
         self._shutdown_event.set()
+
+    async def _process_command(self, command: str) -> None:
+        """
+        Process a pending command from the server.
+
+        Commands are strings like:
+        - "cancel_job:{job_guid}" - Cancel the specified job
+
+        Args:
+            command: Command string to process
+        """
+        self.logger.info(f"Processing command: {command}")
+
+        if command.startswith("cancel_job:"):
+            job_guid = command.split(":", 1)[1]
+            await self._handle_cancel_job(job_guid)
+        else:
+            self.logger.warning(f"Unknown command: {command}")
+
+    async def _handle_cancel_job(self, job_guid: str) -> None:
+        """
+        Handle a cancel_job command.
+
+        If the specified job is currently being executed, request its cancellation.
+        If the job is not the current job, log and ignore (the job may have
+        already completed or never been claimed by this agent).
+
+        Args:
+            job_guid: GUID of the job to cancel
+        """
+        if not hasattr(self, '_polling_loop') or self._polling_loop is None:
+            self.logger.warning(f"Cannot cancel job {job_guid}: polling loop not initialized")
+            return
+
+        current_job = self._polling_loop.current_job
+        if current_job and current_job.get("guid") == job_guid:
+            self.logger.info(f"Requesting cancellation of current job: {job_guid}")
+            self._polling_loop.request_job_cancellation()
+        else:
+            self.logger.debug(
+                f"Ignoring cancel for job {job_guid}: not the current job "
+                f"(current: {current_job.get('guid') if current_job else 'none'})"
+            )
 
 
 # ============================================================================

@@ -16,7 +16,7 @@ Design:
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
@@ -147,6 +147,8 @@ class JobResponse(BaseModel):
     progress: Optional[ProgressData] = Field(None, description="Progress data if running")
     error_message: Optional[str] = Field(None, description="Error details if failed")
     result_guid: Optional[str] = Field(None, description="Analysis result GUID when completed")
+    agent_guid: Optional[str] = Field(None, description="GUID of assigned agent (agt_xxx)")
+    agent_name: Optional[str] = Field(None, description="Name of assigned agent")
 
     model_config = {
         "from_attributes": True,
@@ -164,7 +166,32 @@ class JobResponse(BaseModel):
                     "total_files": 500,
                     "issues_found": 3,
                     "percentage": 30.0
-                }
+                },
+                "agent_guid": "agt_01hgw2bbg0000000000000001",
+                "agent_name": "My MacBook"
+            }
+        }
+    }
+
+
+class JobListResponse(BaseModel):
+    """
+    Paginated job list response.
+
+    Contains a list of jobs with pagination metadata.
+    """
+    items: List[JobResponse] = Field(..., description="List of jobs")
+    total: int = Field(..., ge=0, description="Total number of jobs matching filters")
+    limit: int = Field(..., ge=1, description="Maximum items per page")
+    offset: int = Field(..., ge=0, description="Number of items skipped")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "items": [],
+                "total": 25,
+                "limit": 20,
+                "offset": 0
             }
         }
     }

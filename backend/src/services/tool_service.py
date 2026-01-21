@@ -17,6 +17,7 @@ queue architecture is retained for potential future server-side tools.
 """
 
 import asyncio
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -101,6 +102,10 @@ def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
     pipeline_guid = job.pipeline.guid if job.pipeline else None
     result_guid = job.result.guid if job.result else None
 
+    # Get agent info from relationship (set when job is assigned)
+    agent_guid = job.agent.guid if job.agent else None
+    agent_name = job.agent.name if job.agent else None
+
     return JobResponse(
         id=job.guid,  # Use guid as the external ID
         collection_guid=collection_guid,
@@ -115,6 +120,8 @@ def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
         progress=progress,
         error_message=job.error_message,
         result_guid=result_guid,
+        agent_guid=agent_guid,
+        agent_name=agent_name,
     )
 
 
@@ -157,6 +164,8 @@ class JobAdapter:
             progress=progress,
             error_message=job.error_message,
             result_guid=job.result_guid,
+            agent_guid=None,  # In-memory jobs don't have agents
+            agent_name=None,
         )
 
 
@@ -409,6 +418,8 @@ class ToolService:
             progress=None,
             error_message=job.error_message,
             result_guid=None,
+            agent_guid=None,  # No agent assigned yet
+            agent_name=None,
         )
 
     def _create_persistent_job(
@@ -501,6 +512,8 @@ class ToolService:
             progress=None,
             error_message=job.error_message,
             result_guid=None,
+            agent_guid=None,  # No agent assigned yet
+            agent_name=None,
         )
 
     def get_job(self, job_id: str) -> Optional[JobResponse]:
@@ -537,68 +550,95 @@ class ToolService:
 
     def list_jobs(
         self,
-        status: Optional[JobStatus] = None,
+        statuses: Optional[List[JobStatus]] = None,
         collection_id: Optional[int] = None,
-        tool: Optional[ToolType] = None
-    ) -> List[JobResponse]:
+        tool: Optional[ToolType] = None,
+        team_id: Optional[int] = None,
+        agent_id: Optional[int] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[List[JobResponse], int]:
         """
-        List jobs with optional filtering.
+        List jobs with optional filtering and pagination.
 
         Combines jobs from both in-memory queue and database.
 
         Args:
-            status: Filter by job status
+            statuses: Filter by job status(es) - can specify multiple
             collection_id: Filter by collection
             tool: Filter by tool type
+            team_id: Filter by team (for tenant isolation)
+            agent_id: Filter by agent (internal ID)
+            limit: Maximum number of jobs to return (default 50, max 100)
+            offset: Number of jobs to skip (for pagination)
 
         Returns:
-            List of matching job responses
+            Tuple of (list of matching job responses, total count)
         """
+        from sqlalchemy import func
         from backend.src.models.job import Job as DBJob
         from backend.src.models.job import JobStatus as DBJobStatus
 
         all_jobs = []
         seen_job_ids = set()
 
-        # 1. Get jobs from in-memory queue
-        with self._queue._lock:
-            for job in self._queue._jobs.values():
-                # Apply filters
-                if status and job.status.value != status.value:
-                    continue
-                if collection_id and job.collection_id != collection_id:
-                    continue
-                if tool and job.tool != tool.value:
-                    continue
+        # 1. Get jobs from in-memory queue (if no team/agent filter applied)
+        # In-memory jobs don't have team/agent context, so skip if those filters are applied
+        if team_id is None and agent_id is None:
+            with self._queue._lock:
+                for job in self._queue._jobs.values():
+                    # Apply filters
+                    if statuses:
+                        # Check if job status matches any of the requested statuses
+                        job_status_matches = any(
+                            job.status.value == requested_status.value for requested_status in statuses
+                        )
+                        if not job_status_matches:
+                            continue
+                    if collection_id and job.collection_id != collection_id:
+                        continue
+                    if tool and job.tool != tool.value:
+                        continue
 
-                position = None
-                if job.status == QueueJobStatus.QUEUED:
-                    try:
-                        position = self._queue._queue.index(job.id) + 1
-                    except ValueError:
-                        pass
+                    position = None
+                    if job.status == QueueJobStatus.QUEUED:
+                        try:
+                            position = self._queue._queue.index(job.id) + 1
+                        except ValueError:
+                            pass
 
-                all_jobs.append(JobAdapter.to_response(job, position))
-                seen_job_ids.add(job.id)
+                    all_jobs.append(JobAdapter.to_response(job, position))
+                    seen_job_ids.add(job.id)
 
         # 2. Get jobs from database (persisted jobs for agents)
         db_query = self.db.query(DBJob)
 
-        # Map API status to DB statuses for filtering
-        if status:
+        # Apply team filter for tenant isolation
+        if team_id is not None:
+            db_query = db_query.filter(DBJob.team_id == team_id)
+
+        # Apply agent filter
+        if agent_id is not None:
+            db_query = db_query.filter(DBJob.agent_id == agent_id)
+
+        # Map API statuses to DB statuses for filtering
+        if statuses:
             db_statuses = []
-            if status == JobStatus.QUEUED:
-                db_statuses = [DBJobStatus.PENDING, DBJobStatus.SCHEDULED]
-            elif status == JobStatus.RUNNING:
-                db_statuses = [DBJobStatus.ASSIGNED, DBJobStatus.RUNNING]
-            elif status == JobStatus.COMPLETED:
-                db_statuses = [DBJobStatus.COMPLETED]
-            elif status == JobStatus.FAILED:
-                db_statuses = [DBJobStatus.FAILED]
-            elif status == JobStatus.CANCELLED:
-                db_statuses = [DBJobStatus.CANCELLED]
+            for requested_status in statuses:
+                if requested_status == JobStatus.QUEUED:
+                    db_statuses.extend([DBJobStatus.PENDING, DBJobStatus.SCHEDULED])
+                elif requested_status == JobStatus.RUNNING:
+                    db_statuses.extend([DBJobStatus.ASSIGNED, DBJobStatus.RUNNING])
+                elif requested_status == JobStatus.COMPLETED:
+                    db_statuses.append(DBJobStatus.COMPLETED)
+                elif requested_status == JobStatus.FAILED:
+                    db_statuses.append(DBJobStatus.FAILED)
+                elif requested_status == JobStatus.CANCELLED:
+                    db_statuses.append(DBJobStatus.CANCELLED)
 
             if db_statuses:
+                # Remove duplicates while preserving order
+                db_statuses = list(dict.fromkeys(db_statuses))
                 db_query = db_query.filter(DBJob.status.in_(db_statuses))
 
         if collection_id:
@@ -607,54 +647,206 @@ class ToolService:
         if tool:
             db_query = db_query.filter(DBJob.tool == tool.value)
 
-        # Order by created_at descending and limit to recent jobs
-        db_jobs = db_query.order_by(DBJob.created_at.desc()).limit(100).all()
+        # Count in-memory jobs that match filters
+        inmemory_count = len(all_jobs)
 
-        for db_job in db_jobs:
-            # Skip if already in in-memory queue (avoid duplicates)
-            if db_job.guid in seen_job_ids:
-                continue
+        # Get total count from database
+        db_total = db_query.count()
+        total_count = db_total + inmemory_count
 
-            all_jobs.append(_db_job_to_response(db_job))
+        # Determine how to combine in-memory and DB jobs for this page
+        # Strategy: in-memory jobs come first (they're typically newer/active)
 
-        # Sort by created_at descending
-        return sorted(all_jobs, key=lambda j: j.created_at, reverse=True)
+        # If offset is beyond all in-memory jobs, we only need DB jobs
+        if offset >= inmemory_count:
+            # Skip all in-memory jobs, fetch from DB with adjusted offset
+            db_offset = offset - inmemory_count
+            db_jobs = db_query.order_by(DBJob.created_at.desc()).offset(db_offset).limit(limit).all()
 
-    def cancel_job(self, job_id: str) -> Optional[JobResponse]:
+            result_jobs = []
+            for db_job in db_jobs:
+                if db_job.guid not in seen_job_ids:
+                    result_jobs.append(_db_job_to_response(db_job))
+
+            return result_jobs, total_count
+
+        # Offset is within in-memory jobs - need some in-memory + possibly some DB
+        # First, sort in-memory jobs by created_at desc
+        all_jobs = sorted(all_jobs, key=lambda j: j.created_at, reverse=True)
+
+        # Take the in-memory jobs for this page
+        inmemory_for_page = all_jobs[offset:offset + limit]
+        remaining_slots = limit - len(inmemory_for_page)
+
+        if remaining_slots > 0:
+            # Need DB jobs to fill the rest of the page
+            db_jobs = db_query.order_by(DBJob.created_at.desc()).limit(remaining_slots).all()
+
+            for db_job in db_jobs:
+                if db_job.guid not in seen_job_ids:
+                    inmemory_for_page.append(_db_job_to_response(db_job))
+
+        return inmemory_for_page, total_count
+
+    def cancel_job(self, job_id: str, team_id: Optional[int] = None) -> Optional[JobResponse]:
         """
-        Cancel a queued job.
+        Cancel a job (queued or running).
 
-        Only queued jobs can be cancelled. Running jobs cannot be
-        interrupted safely.
+        For queued jobs (in-memory or database PENDING/SCHEDULED):
+        - Cancel immediately
+
+        For running jobs (database ASSIGNED/RUNNING):
+        - Set status to CANCELLED
+        - Queue a cancel_job command to the agent
 
         Args:
             job_id: Job identifier in GUID format (job_xxx)
+            team_id: Optional team ID for tenant isolation (required for DB jobs)
 
         Returns:
             Cancelled job response if found and cancellable, None otherwise
 
         Raises:
-            ValueError: If job is running and cannot be cancelled
+            ValueError: If job cannot be cancelled (already completed)
         """
-        job = self._queue.get_job(job_id)
-        if not job:
+        from backend.src.services.agent_service import AgentService
+
+        # 1. Check in-memory queue first
+        inmemory_job = self._queue.get_job(job_id)
+        if inmemory_job:
+            if inmemory_job.status == QueueJobStatus.RUNNING:
+                raise ValueError("Cannot cancel running in-memory job")
+
+            if inmemory_job.status != QueueJobStatus.QUEUED:
+                return JobAdapter.to_response(inmemory_job)
+
+            try:
+                self._queue.cancel(job_id)
+            except ValueError:
+                pass
+
+            inmemory_job = self._queue.get_job(job_id)
+            logger.info(f"Job {job_id} cancelled (in-memory)")
+            return JobAdapter.to_response(inmemory_job) if inmemory_job else None
+
+        # 2. Check database for persistent job
+        try:
+            job_uuid = Job.parse_guid(job_id)
+        except ValueError:
             return None
 
-        if job.status == QueueJobStatus.RUNNING:
-            raise ValueError("Cannot cancel running job")
+        query = self.db.query(Job).filter(Job.uuid == job_uuid)
+        if team_id is not None:
+            query = query.filter(Job.team_id == team_id)
+        db_job = query.first()
 
-        if job.status != QueueJobStatus.QUEUED:
-            return JobAdapter.to_response(job)  # Already completed/failed/cancelled
+        if not db_job:
+            return None
 
+        # Check if already in terminal state
+        if db_job.status in (
+            PersistentJobStatus.COMPLETED,
+            PersistentJobStatus.FAILED,
+            PersistentJobStatus.CANCELLED,
+        ):
+            if db_job.status == PersistentJobStatus.CANCELLED:
+                return _db_job_to_response(db_job)
+            raise ValueError(f"Cannot cancel job in {db_job.status.value} state")
+
+        # 3. For PENDING/SCHEDULED, cancel directly
+        if db_job.status in (PersistentJobStatus.PENDING, PersistentJobStatus.SCHEDULED):
+            db_job.status = PersistentJobStatus.CANCELLED
+            db_job.completed_at = datetime.utcnow()
+            self.db.commit()
+            logger.info(f"Job {job_id} cancelled (database, was pending)")
+            return _db_job_to_response(db_job)
+
+        # 4. For ASSIGNED/RUNNING, set cancelled and queue command to agent
+        if db_job.status in (PersistentJobStatus.ASSIGNED, PersistentJobStatus.RUNNING):
+            agent_id = db_job.agent_id
+            db_job.status = PersistentJobStatus.CANCELLED
+            db_job.completed_at = datetime.utcnow()
+            self.db.commit()
+
+            # Queue cancel command to agent if assigned
+            if agent_id:
+                agent_service = AgentService(self.db)
+                agent_service.queue_command(agent_id, f"cancel_job:{job_id}")
+                logger.info(f"Job {job_id} cancelled, command queued to agent {agent_id}")
+            else:
+                logger.info(f"Job {job_id} cancelled (database, was running without agent)")
+
+            return _db_job_to_response(db_job)
+
+        return None
+
+    def retry_job(self, job_id: str, team_id: Optional[int] = None) -> Optional[JobResponse]:
+        """
+        Retry a failed job by creating a new job with the same parameters.
+
+        Creates a new job with:
+        - Same tool, collection, pipeline, mode, and parameters
+        - Status set to PENDING
+        - Incremented retry_count
+        - parent_job_id set to the original job
+
+        Args:
+            job_id: Job identifier in GUID format (job_xxx)
+            team_id: Optional team ID for tenant isolation
+
+        Returns:
+            New job response if successful, None if job not found
+
+        Raises:
+            ValueError: If job is not in FAILED status or cannot be retried
+        """
+        # Parse job GUID
         try:
-            self._queue.cancel(job_id)
+            job_uuid = Job.parse_guid(job_id)
         except ValueError:
-            pass  # Job may have already been processed
+            return None
 
-        # Refetch to get updated status
-        job = self._queue.get_job(job_id)
-        logger.info(f"Job {job_id} cancelled")
-        return JobAdapter.to_response(job) if job else None
+        query = self.db.query(Job).filter(Job.uuid == job_uuid)
+        if team_id is not None:
+            query = query.filter(Job.team_id == team_id)
+        original_job = query.first()
+
+        if not original_job:
+            return None
+
+        # Validate job can be retried
+        if original_job.status != PersistentJobStatus.FAILED:
+            raise ValueError(f"Cannot retry job in {original_job.status.value} status")
+
+        # Create new job with same parameters
+        # Note: parameters is a derived property, not stored directly
+        # required_capabilities_json needs JSON serialization for SQLite
+        new_job = Job(
+            team_id=original_job.team_id,
+            collection_id=original_job.collection_id,
+            pipeline_id=original_job.pipeline_id,
+            pipeline_version=original_job.pipeline_version,
+            tool=original_job.tool,
+            mode=original_job.mode,
+            status=PersistentJobStatus.PENDING,
+            bound_agent_id=original_job.bound_agent_id,
+            required_capabilities_json=json.dumps(original_job.required_capabilities),
+            priority=original_job.priority,
+            retry_count=original_job.retry_count + 1,
+            max_retries=original_job.max_retries,
+            parent_job_id=original_job.id,  # Link to original job
+        )
+
+        self.db.add(new_job)
+        self.db.commit()
+        self.db.refresh(new_job)
+
+        logger.info(
+            f"Job {job_id} retried as {new_job.guid} "
+            f"(retry_count={new_job.retry_count})"
+        )
+
+        return _db_job_to_response(new_job)
 
     def get_queue_status(self, team_id: Optional[int] = None) -> Dict[str, Any]:
         """

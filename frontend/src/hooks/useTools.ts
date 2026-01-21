@@ -13,6 +13,7 @@ import type {
   ToolType,
   ToolRunRequest,
   JobListQueryParams,
+  JobListResponse,
   QueueStatusResponse,
   ProgressData,
   WebSocketMessage,
@@ -40,10 +41,17 @@ interface UseToolsReturn {
   loading: boolean
   error: string | null
   wsConnected: boolean
-  fetchJobs: (params?: JobListQueryParams) => Promise<Job[]>
+  /** Total number of jobs matching filters (for pagination) */
+  total: number
+  /** Current page limit */
+  limit: number
+  /** Current offset */
+  offset: number
+  fetchJobs: (params?: JobListQueryParams) => Promise<JobListResponse>
   runTool: (request: ToolRunRequest) => Promise<Job>
   runAllTools: (collectionGuid: string) => Promise<RunAllToolsResponse>
   cancelJob: (jobId: string) => Promise<Job>
+  retryJob: (jobId: string) => Promise<Job>
   getJob: (jobId: string) => Promise<Job>
 }
 
@@ -54,6 +62,9 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [limit, setLimit] = useState(50)
+  const [offset, setOffset] = useState(0)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -62,15 +73,18 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
   const maxReconnectAttempts = 5
 
   /**
-   * Fetch jobs with optional filters
+   * Fetch jobs with optional filters and pagination
    */
   const fetchJobs = useCallback(async (params: JobListQueryParams = {}) => {
     setLoading(true)
     setError(null)
     try {
-      const data = await toolsService.listJobs(params)
-      setJobs(data)
-      return data
+      const response = await toolsService.listJobs(params)
+      setJobs(response.items)
+      setTotal(response.total)
+      setLimit(response.limit)
+      setOffset(response.offset)
+      return response
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to load jobs'
       setError(errorMessage)
@@ -169,6 +183,32 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
       const errorMessage = err.userMessage || 'Failed to cancel job'
       setError(errorMessage)
       toast.error('Failed to cancel job', {
+        description: errorMessage
+      })
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  /**
+   * Retry a failed job
+   */
+  const retryJob = useCallback(async (jobId: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const newJob = await toolsService.retryJob(jobId)
+      // Add the new retry job to the front of the list
+      setJobs(prev => [newJob, ...prev])
+      toast.success('Job retry started', {
+        description: `New job ${newJob.id.slice(0, 8)} created`
+      })
+      return newJob
+    } catch (err: any) {
+      const errorMessage = err.userMessage || 'Failed to retry job'
+      setError(errorMessage)
+      toast.error('Failed to retry job', {
         description: errorMessage
       })
       throw err
@@ -329,10 +369,14 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     loading,
     error,
     wsConnected,
+    total,
+    limit,
+    offset,
     fetchJobs,
     runTool,
     runAllTools,
     cancelJob,
+    retryJob,
     getJob
   }
 }

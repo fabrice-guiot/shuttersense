@@ -55,6 +55,10 @@ export interface Job {
   error_message: string | null
   /** Analysis result GUID when completed */
   result_guid: string | null
+  /** GUID of assigned agent (agt_xxx), null for in-memory jobs */
+  agent_guid: string | null
+  /** Name of assigned agent, null for in-memory jobs */
+  agent_name: string | null
 }
 
 // ============================================================================
@@ -77,12 +81,18 @@ export interface ToolRunRequest {
 // ============================================================================
 
 export interface JobListQueryParams {
-  /** Filter by job status */
-  status?: JobStatus
+  /** Filter by job status(es) - can specify multiple */
+  status?: JobStatus | JobStatus[]
   /** Filter by collection GUID (col_xxx format) */
   collection_guid?: string
   /** Filter by tool type */
   tool?: ToolType
+  /** Filter by agent GUID (agt_xxx format) */
+  agent_guid?: string
+  /** Maximum number of jobs to return (default: 50, max: 100) */
+  limit?: number
+  /** Number of jobs to skip for pagination (default: 0) */
+  offset?: number
 }
 
 // ============================================================================
@@ -92,7 +102,14 @@ export interface JobListQueryParams {
 export interface JobResponse extends Job {}
 
 export interface JobListResponse {
-  jobs: Job[]
+  /** List of jobs */
+  items: Job[]
+  /** Total number of jobs matching filters */
+  total: number
+  /** Maximum items per page */
+  limit: number
+  /** Number of items skipped */
+  offset: number
 }
 
 export interface ConflictResponse {

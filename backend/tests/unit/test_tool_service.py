@@ -198,13 +198,16 @@ class TestToolServiceJobManagement:
                 filter_mock.first.return_value = mock_collection
             else:
                 filter_mock.first.return_value = None
-                # For list_jobs DB query, return empty list
+                # For list_jobs DB query, return empty list and count
                 limit_mock.all.return_value = []
                 order_mock.limit.return_value = limit_mock
+                order_mock.offset.return_value = order_mock
                 filter_mock.order_by.return_value = order_mock
+                filter_mock.count.return_value = 0  # No DB jobs
 
             query_mock.filter.return_value = filter_mock
             query_mock.order_by.return_value = order_mock
+            query_mock.count.return_value = 0  # No DB jobs
             return query_mock
 
         mock_db.query.side_effect = side_effect
@@ -212,8 +215,9 @@ class TestToolServiceJobManagement:
         service = ToolService(db=mock_db, job_queue=job_queue)
         service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
 
-        jobs = service.list_jobs()
+        jobs, total = service.list_jobs()
         assert len(jobs) == 1
+        assert total == 1
 
     def test_list_jobs_filters_by_status(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
         """Test filtering jobs by status in in-memory queue."""
@@ -227,14 +231,17 @@ class TestToolServiceJobManagement:
                 filter_mock.first.return_value = mock_collection
             else:
                 filter_mock.first.return_value = None
-                # For list_jobs DB query, return empty list
+                # For list_jobs DB query, return empty list and count
                 limit_mock.all.return_value = []
                 order_mock.limit.return_value = limit_mock
+                order_mock.offset.return_value = order_mock
                 filter_mock.order_by.return_value = order_mock
                 filter_mock.filter.return_value = filter_mock  # For chained filters
+                filter_mock.count.return_value = 0  # No DB jobs
 
             query_mock.filter.return_value = filter_mock
             query_mock.order_by.return_value = order_mock
+            query_mock.count.return_value = 0  # No DB jobs
             return query_mock
 
         mock_db.query.side_effect = side_effect
@@ -242,11 +249,13 @@ class TestToolServiceJobManagement:
         service = ToolService(db=mock_db, job_queue=job_queue)
         service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
 
-        queued = service.list_jobs(status=JobStatus.QUEUED)
-        running = service.list_jobs(status=JobStatus.RUNNING)
+        queued, queued_total = service.list_jobs(statuses=[JobStatus.QUEUED])
+        running, running_total = service.list_jobs(statuses=[JobStatus.RUNNING])
 
         assert len(queued) == 1
+        assert queued_total == 1
         assert len(running) == 0
+        assert running_total == 0
 
     def test_cancel_job_cancels_queued(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
         """Test cancelling a queued job in in-memory queue."""
@@ -557,13 +566,16 @@ class TestInMemoryJobExecution:
             else:
                 # Pipeline query or list_jobs query
                 filter_mock.first.return_value = None
-                # For list_jobs DB query, return empty list
+                # For list_jobs DB query, return empty list and count
                 limit_mock.all.return_value = []
                 order_mock.limit.return_value = limit_mock
+                order_mock.offset.return_value = order_mock
                 filter_mock.order_by.return_value = order_mock
+                filter_mock.count.return_value = 0  # No DB jobs
 
             query_mock.filter.return_value = filter_mock
             query_mock.order_by.return_value = order_mock
+            query_mock.count.return_value = 0  # No DB jobs
             return query_mock
 
         mock_db.query.side_effect = multi_collection_side_effect
@@ -575,8 +587,9 @@ class TestInMemoryJobExecution:
         job2 = service.run_tool(collection_id=2, tool=ToolType.PHOTOSTATS)
 
         # Verify both jobs are in queue
-        all_jobs = service.list_jobs()
+        all_jobs, total = service.list_jobs()
         assert len(all_jobs) == 2
+        assert total == 2
 
         # Verify both jobs exist (order may vary based on implementation)
         job_ids = {job.id for job in all_jobs}

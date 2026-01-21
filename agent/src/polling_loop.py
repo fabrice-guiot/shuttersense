@@ -65,6 +65,7 @@ class JobPollingLoop:
         self._shutdown_event = asyncio.Event()
         self._current_job: Optional[Dict[str, Any]] = None
         self._consecutive_failures = 0
+        self._cancellation_requested = False
 
     async def run(self) -> int:
         """
@@ -143,6 +144,7 @@ class JobPollingLoop:
             return False
 
         self._current_job = job
+        self._cancellation_requested = False  # Clear any stale cancellation flag
         logger.info(f"Claimed job {job['guid']} ({job['tool']})")
 
         try:
@@ -159,6 +161,7 @@ class JobPollingLoop:
 
         finally:
             self._current_job = None
+            self.clear_cancellation()
 
     async def _claim_job(self) -> Optional[Dict[str, Any]]:
         """
@@ -190,6 +193,23 @@ class JobPollingLoop:
     def request_shutdown(self) -> None:
         """Request graceful shutdown of the polling loop."""
         self._shutdown_event.set()
+
+    def request_job_cancellation(self) -> None:
+        """
+        Request cancellation of the current job.
+
+        This sets a flag that the job executor will check periodically.
+        The current job will be cancelled at the next opportunity.
+        """
+        if self._current_job:
+            logger.info(f"Cancellation requested for job {self._current_job.get('guid')}")
+            self._cancellation_requested = True
+            # Also notify the executor directly
+            self._job_executor.request_cancellation()
+
+    def clear_cancellation(self) -> None:
+        """Clear the cancellation flag after job completes."""
+        self._cancellation_requested = False
 
     @property
     def current_job(self) -> Optional[Dict[str, Any]]:

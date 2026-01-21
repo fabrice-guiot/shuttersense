@@ -61,6 +61,11 @@ export default function AnalyticsPage() {
   const urlResultId = searchParams.get('id')
   const [activeTab, setActiveTab] = useState(urlTab)
 
+  // Runs sub-tab state for per-status pagination
+  const [runsSubTab, setRunsSubTab] = useState<'active' | 'completed' | 'failed'>('active')
+  const [jobsPage, setJobsPage] = useState(1)
+  const jobsPerPage = 20
+
   // Dialog state
   const [runDialogOpen, setRunDialogOpen] = useState(false)
 
@@ -110,10 +115,12 @@ export default function AnalyticsPage() {
     jobs,
     loading: jobsLoading,
     error: jobsError,
+    total: jobsTotal,
     fetchJobs,
     runTool,
-    cancelJob
-  } = useTools({ useWebSocket: true, onJobStart: handleJobStart, onJobComplete: handleJobComplete })
+    cancelJob,
+    retryJob
+  } = useTools({ autoFetch: false, useWebSocket: true, onJobStart: handleJobStart, onJobComplete: handleJobComplete })
 
   // Results data
   const {
@@ -273,7 +280,7 @@ export default function AnalyticsPage() {
         refetchResults()
         break
       case 'runs':
-        fetchJobs()
+        fetchJobsForSubTab()
         break
     }
   }
@@ -288,6 +295,44 @@ export default function AnalyticsPage() {
   const handleCancelJob = async (jobId: string) => {
     await cancelJob(jobId)
     refetchQueueStatus()
+  }
+
+  // Retry job handler
+  const handleRetryJob = async (jobId: string) => {
+    await retryJob(jobId)
+    refetchQueueStatus()
+  }
+
+  // Map runs sub-tab to status filter(s)
+  const getStatusesForSubTab = (subTab: 'active' | 'completed' | 'failed'): ('queued' | 'running' | 'completed' | 'failed' | 'cancelled')[] => {
+    switch (subTab) {
+      case 'active':
+        return ['queued', 'running']
+      case 'completed':
+        return ['completed']
+      case 'failed':
+        return ['failed', 'cancelled']
+    }
+  }
+
+  // Fetch jobs for current runs sub-tab with pagination
+  const fetchJobsForSubTab = useCallback(() => {
+    const statuses = getStatusesForSubTab(runsSubTab)
+    const offset = (jobsPage - 1) * jobsPerPage
+    fetchJobs({ status: statuses, limit: jobsPerPage, offset })
+  }, [runsSubTab, jobsPage, jobsPerPage, fetchJobs])
+
+  // Fetch jobs when runs sub-tab or page changes
+  useEffect(() => {
+    if (activeTab === 'runs') {
+      fetchJobsForSubTab()
+    }
+  }, [activeTab, runsSubTab, jobsPage, fetchJobsForSubTab])
+
+  // Handle runs sub-tab change - reset to page 1
+  const handleRunsSubTabChange = (value: string) => {
+    setRunsSubTab(value as 'active' | 'completed' | 'failed')
+    setJobsPage(1)
   }
 
   // View result from job card (receives result_guid from job)
@@ -344,13 +389,6 @@ export default function AnalyticsPage() {
   // Derived State
   // ============================================================================
 
-  // Group jobs by status
-  const groupedJobs = {
-    active: jobs.filter((j) => j.status === 'queued' || j.status === 'running'),
-    completed: jobs.filter((j) => j.status === 'completed'),
-    failed: jobs.filter((j) => j.status === 'failed' || j.status === 'cancelled')
-  }
-
   // Loading state based on active tab
   const isLoading =
     activeTab === 'trends'
@@ -388,9 +426,39 @@ export default function AnalyticsPage() {
             key={job.id}
             job={job}
             onCancel={handleCancelJob}
+            onRetry={handleRetryJob}
             onViewResult={handleViewResult}
           />
         ))}
+      </div>
+    )
+  }
+
+  const renderJobsPagination = () => {
+    const totalPages = Math.ceil(jobsTotal / jobsPerPage)
+    if (totalPages <= 1) return null
+
+    return (
+      <div className="flex items-center justify-center gap-2 mt-6">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setJobsPage((p) => Math.max(1, p - 1))}
+          disabled={jobsPage === 1 || jobsLoading}
+        >
+          Previous
+        </Button>
+        <span className="text-sm text-muted-foreground">
+          Page {jobsPage} of {totalPages} ({jobsTotal} total)
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setJobsPage((p) => Math.min(totalPages, p + 1))}
+          disabled={jobsPage === totalPages || jobsLoading}
+        >
+          Next
+        </Button>
       </div>
     )
   }
@@ -517,19 +585,28 @@ export default function AnalyticsPage() {
 
         {/* Runs Tab */}
         <TabsContent value="runs">
-          <Tabs defaultValue="active" className="w-full">
+          <Tabs value={runsSubTab} onValueChange={handleRunsSubTabChange} className="w-full">
             <TabsList>
               <TabsTrigger value="active" className="gap-2">
                 <Clock className="h-4 w-4" />
-                Active ({groupedJobs.active.length})
+                Active
+                {queueStatus && (queueStatus.queued_count + queueStatus.running_count) > 0 && (
+                  <span className="ml-1 text-xs">({queueStatus.queued_count + queueStatus.running_count})</span>
+                )}
               </TabsTrigger>
               <TabsTrigger value="completed" className="gap-2">
                 <CheckCircle className="h-4 w-4" />
-                Completed ({groupedJobs.completed.length})
+                Completed
+                {queueStatus && queueStatus.completed_count > 0 && (
+                  <span className="ml-1 text-xs">({queueStatus.completed_count})</span>
+                )}
               </TabsTrigger>
               <TabsTrigger value="failed" className="gap-2">
                 <XCircle className="h-4 w-4" />
-                Failed ({groupedJobs.failed.length})
+                Failed
+                {queueStatus && (queueStatus.failed_count + queueStatus.cancelled_count) > 0 && (
+                  <span className="ml-1 text-xs">({queueStatus.failed_count + queueStatus.cancelled_count})</span>
+                )}
               </TabsTrigger>
             </TabsList>
 
@@ -539,19 +616,40 @@ export default function AnalyticsPage() {
                   <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
                 </div>
               ) : (
-                renderJobGrid(
-                  groupedJobs.active,
-                  'No active jobs. Click "Run Tool" to start an analysis.'
-                )
+                <>
+                  {renderJobGrid(
+                    jobs,
+                    'No active jobs. Click "Run Tool" to start an analysis.'
+                  )}
+                  {renderJobsPagination()}
+                </>
               )}
             </TabsContent>
 
             <TabsContent value="completed" className="mt-6">
-              {renderJobGrid(groupedJobs.completed, 'No completed jobs yet.')}
+              {jobsLoading && jobs.length === 0 ? (
+                <div className="flex justify-center py-8">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                </div>
+              ) : (
+                <>
+                  {renderJobGrid(jobs, 'No completed jobs yet.')}
+                  {renderJobsPagination()}
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="failed" className="mt-6">
-              {renderJobGrid(groupedJobs.failed, 'No failed jobs.')}
+              {jobsLoading && jobs.length === 0 ? (
+                <div className="flex justify-center py-8">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                </div>
+              ) : (
+                <>
+                  {renderJobGrid(jobs, 'No failed jobs.')}
+                  {renderJobsPagination()}
+                </>
+              )}
             </TabsContent>
           </Tabs>
         </TabsContent>

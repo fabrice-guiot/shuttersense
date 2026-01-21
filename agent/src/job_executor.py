@@ -34,6 +34,11 @@ from src.remote.base import FileInfo
 logger = logging.getLogger("shuttersense.agent.executor")
 
 
+class JobCancelledException(Exception):
+    """Exception raised when a job is cancelled."""
+    pass
+
+
 @dataclass
 class JobResult:
     """Result of job execution."""
@@ -71,6 +76,31 @@ class JobExecutor:
         self._config_loader: Optional[ApiConfigLoader] = None
         self._result_signer: Optional[ResultSigner] = None
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._cancel_requested = False
+        self._current_job_guid: Optional[str] = None
+
+    def request_cancellation(self) -> None:
+        """
+        Request cancellation of the currently executing job.
+
+        Sets a flag that will be checked during job execution.
+        """
+        self._cancel_requested = True
+        logger.info(f"Cancellation requested for job {self._current_job_guid}")
+
+    def is_cancellation_requested(self) -> bool:
+        """Check if cancellation has been requested."""
+        return self._cancel_requested
+
+    def _check_cancellation(self) -> None:
+        """
+        Check if cancellation has been requested and raise if so.
+
+        Raises:
+            JobCancelledException: If cancellation was requested
+        """
+        if self._cancel_requested:
+            raise JobCancelledException(f"Job {self._current_job_guid} was cancelled")
 
     async def execute(self, job: Dict[str, Any]) -> None:
         """
@@ -87,6 +117,10 @@ class JobExecutor:
         signing_secret = job["signing_secret"]
 
         logger.info(f"Executing job {job_guid} with tool {tool}")
+
+        # Reset cancellation state for new job
+        self._cancel_requested = False
+        self._current_job_guid = job_guid
 
         # Store event loop for thread-safe progress callbacks
         self._event_loop = asyncio.get_running_loop()
@@ -145,6 +179,12 @@ class JobExecutor:
                 logger.warning(f"Job {job_guid} failed: {result.error_message}")
                 raise Exception(result.error_message)
 
+        except JobCancelledException:
+            # Job was cancelled - the backend already set status to CANCELLED
+            # when it queued the cancel command, so we don't need to report back
+            logger.info(f"Job {job_guid} was cancelled - execution stopped")
+            raise
+
         except Exception as e:
             # Report failure if not already reported
             if self._result_signer and not failure_reported:
@@ -161,6 +201,7 @@ class JobExecutor:
 
         finally:
             # Cleanup
+            self._current_job_guid = None
             if self._progress_reporter:
                 await self._progress_reporter.close()
 
@@ -1424,6 +1465,9 @@ class JobExecutor:
         This is called by the tools during analysis (potentially from worker threads)
         and schedules an async progress report in a thread-safe manner.
 
+        Also checks for cancellation - if cancellation was requested, raises
+        JobCancelledException to stop the tool execution.
+
         Args:
             stage: Current execution stage
             percentage: Progress percentage (0-100)
@@ -1432,7 +1476,15 @@ class JobExecutor:
             current_file: Currently processing file
             message: Progress message
             issues_found: Number of issues found so far
+
+        Raises:
+            JobCancelledException: If cancellation was requested
         """
+        # Check for cancellation - this is called periodically during tool execution
+        if self._cancel_requested:
+            logger.info(f"Cancellation detected in progress callback for job {self._current_job_guid}")
+            raise JobCancelledException(f"Job {self._current_job_guid} was cancelled")
+
         if self._progress_reporter and self._event_loop:
             # Schedule async progress report in a thread-safe manner
             # This allows calling from worker threads (e.g., run_in_executor)

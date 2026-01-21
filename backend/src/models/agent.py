@@ -162,6 +162,14 @@ class Agent(Base, GuidMixin):
         default=list
     )
 
+    # Pending commands to be sent to agent on next heartbeat
+    # Commands are strings like "cancel_job:job_xxx"
+    pending_commands_json = Column(
+        JSONB().with_variant(Text, "sqlite"),
+        nullable=False,
+        default=list
+    )
+
     # Authentication
     api_key_hash = Column(String(255), unique=True, nullable=False)
     api_key_prefix = Column(String(20), nullable=False, index=True)  # "agt_key_" + 8 random chars
@@ -301,6 +309,36 @@ class Agent(Base, GuidMixin):
             self.authorized_roots_json = json.dumps(value) if value else "[]"
         else:
             self.authorized_roots_json = value
+
+    @property
+    def pending_commands(self) -> List[str]:
+        """
+        Get the pending commands for this agent.
+
+        Returns:
+            List of pending command strings
+        """
+        if self.pending_commands_json is None:
+            return []
+        if isinstance(self.pending_commands_json, str):
+            import json
+            return json.loads(self.pending_commands_json)
+        return self.pending_commands_json
+
+    @pending_commands.setter
+    def pending_commands(self, value: List[str]) -> None:
+        """
+        Set the pending commands for this agent.
+
+        Args:
+            value: List of command strings
+        """
+        # For SQLite compatibility, serialize to JSON string
+        import json
+        if isinstance(value, list):
+            self.pending_commands_json = json.dumps(value) if value else "[]"
+        else:
+            self.pending_commands_json = value
 
     def is_path_authorized(self, path: str) -> bool:
         """

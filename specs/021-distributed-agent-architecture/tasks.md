@@ -390,37 +390,56 @@ which provides full SMB/CIFS access alongside S3 and GCS adapters.
 
 **Independent Test**: Create multiple jobs, view job queue UI, perform cancel/retry actions
 
+### Current State (Partial Implementation)
+
+The original design called for a new Jobs page, but the existing Analytics > Runs tab was extended instead:
+- ✅ Jobs visibility exists in `AnalyticsPage.tsx` → Runs tab with Active/Completed/Failed sub-tabs
+- ✅ WebSocket real-time updates via global jobs channel in `useTools.ts`
+- ✅ Basic filters (status, collection, tool) in `JobListQueryParams`
+- ✅ Cancel button for in-memory queued jobs (but not agent jobs)
+- ❌ **Missing: Pagination** - Critical for Completed/Failed tabs as history grows
+- ❌ Missing: Agent information (which agent is handling each job)
+- ❌ Missing: Cancel/retry for agent-executed jobs
+
+**Note**: File paths updated - jobs API is in `backend/src/api/tools.py`, not `jobs/routes.py`
+
 ### Backend Tests for User Story 8
 
-- [ ] T152 [P] [US8] Unit tests for job cancellation service in `backend/tests/unit/services/test_job_cancellation.py` (cancel, notify agent)
-- [ ] T153 [P] [US8] Integration tests for job management endpoints in `backend/tests/integration/test_job_management.py` (cancel, retry, filters)
+- [x] T152 [P] [US8] Unit tests for job cancellation service in `backend/tests/unit/test_job_cancellation.py` (cancel pending/scheduled/running, cannot cancel terminal, retry failed) - 16 tests
+- [x] T153 [P] [US8] Integration tests for job management endpoints in `backend/tests/integration/test_job_management.py` (pagination, filters, cancel, retry) - 12 tests
 
 ### Backend Implementation for User Story 8
 
-- [ ] T154 [US8] Add agent_guid to job list response in `backend/src/api/jobs/routes.py`
-- [ ] T155 [US8] Add filters (agent, status) to job list endpoint in `backend/src/api/jobs/routes.py`
-- [ ] T156 [US8] Implement job cancel endpoint enhancement in `backend/src/api/jobs/routes.py` (notify agent via WebSocket)
-- [ ] T157 [US8] Implement job retry endpoint in `backend/src/api/jobs/routes.py` (create new PENDING job)
+- [x] T154 [US8] Add `agent_guid` and `agent_name` to `JobResponse` schema in `backend/src/schemas/tools.py`
+- [x] T155 [US8] Add filters (agent_guid) and pagination (offset, limit) to `list_jobs` in `backend/src/api/tools.py`
+  - **Bug Fix**: Fixed double-pagination issue where page 2+ returned empty results (offset was applied twice)
+  - Updated `ToolService.list_jobs()` to correctly combine in-memory and DB jobs with proper offset handling
+- [x] T156 [US8] Implement job cancel for agent jobs in `backend/src/services/tool_service.py` (via pending_commands mechanism)
+- [x] T157 [US8] Implement job retry endpoint in `backend/src/api/tools.py` (create new PENDING job from failed job)
 
 ### Agent Tests for User Story 8
 
-- [ ] T158 [P] [US8] Unit tests for cancellation handling in `agent/tests/unit/test_cancellation.py` (receive cancel, graceful stop)
+- [x] T158 [P] [US8] Unit tests for cancellation handling in `agent/tests/unit/test_cancellation.py` (command parsing, cancel current/non-current job, polling loop, executor) - 19 tests
 
 ### Agent Implementation for User Story 8
 
-- [ ] T159 [US8] Handle cancellation request in agent in `agent/src/polling_loop.py` (via WebSocket)
+- [x] T159 [US8] Handle cancellation request in agent via heartbeat pending_commands in `agent/src/main.py` and `agent/src/job_executor.py`
 
 ### Frontend Tests for User Story 8
 
-- [ ] T160 [P] [US8] Component tests for JobsPage with agent column in `frontend/tests/pages/JobsPage.test.tsx` (render, filters, actions)
+- [x] T160 [P] [US8] Component tests for JobProgressCard in `frontend/tests/components/tools/JobProgressCard.test.tsx` (agent display, retry button, existing tests updated) - 24 tests total, 11 new tests added
 
 ### Frontend Implementation for User Story 8
 
-- [ ] T161 [US8] Update JobsPage with agent column in `frontend/src/pages/JobsPage.tsx`
-- [ ] T162 [US8] Add job filters UI in `frontend/src/pages/JobsPage.tsx` (agent, status dropdowns)
-- [ ] T163 [US8] Add cancel/retry action buttons in `frontend/src/pages/JobsPage.tsx`
+- [x] T161 [US8] Add agent_guid and agent_name to Job interface in `frontend/src/contracts/api/tools-api.ts`
+- [x] T162 [US8] Add pagination to useTools hook in `frontend/src/hooks/useTools.ts` and service in `frontend/src/services/tools.ts`
+- [x] T163 [US8] Add agent display and retry button in `frontend/src/components/tools/JobProgressCard.tsx`
 
-**Checkpoint**: Full job queue visibility and management in UI
+### Database Migration
+
+- [x] Add pending_commands_json column to agents table in `backend/src/db/migrations/versions/041_add_agent_pending_commands.py`
+
+**Checkpoint**: Full job queue visibility and management in UI ✅
 
 ---
 

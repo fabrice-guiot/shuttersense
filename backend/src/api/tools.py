@@ -29,7 +29,7 @@ from backend.src.db.database import get_db
 from backend.src.middleware.tenant import TenantContext, get_tenant_context
 from backend.src.schemas.tools import (
     ToolType, ToolMode, JobStatus, ToolRunRequest, JobResponse,
-    QueueStatusResponse, ConflictResponse, RunAllToolsResponse
+    JobListResponse, QueueStatusResponse, ConflictResponse, RunAllToolsResponse
 )
 from backend.src.services.tool_service import ToolService
 from backend.src.services.collection_service import CollectionService
@@ -365,29 +365,39 @@ async def run_all_tools(
 
 @router.get(
     "/jobs",
-    response_model=List[JobResponse],
+    response_model=JobListResponse,
     summary="List all jobs"
 )
 def list_jobs(
-    status: Optional[JobStatus] = Query(None, description="Filter by status"),
+    job_statuses: Optional[List[JobStatus]] = Query(None, alias="status", description="Filter by status(es) - can specify multiple"),
     collection_guid: Optional[str] = Query(None, description="Filter by collection GUID (col_xxx format)"),
     tool: Optional[ToolType] = Query(None, description="Filter by tool"),
+    agent_guid: Optional[str] = Query(None, description="Filter by agent GUID (agt_xxx format)"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum items per page"),
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
+    ctx: TenantContext = Depends(get_tenant_context),
     service: ToolService = Depends(get_tool_service),
     collection_service: CollectionService = Depends(get_collection_service)
-) -> List[JobResponse]:
+) -> JobListResponse:
     """
-    List all jobs with optional filtering.
+    List all jobs with optional filtering and pagination.
 
     Returns jobs in descending order by creation time.
 
     Args:
-        status: Filter by job status (queued, running, completed, failed, cancelled)
+        status: Filter by job status(es) - can specify multiple values
+                (e.g., ?status=queued&status=running for active jobs)
         collection_guid: Filter by collection GUID (col_xxx format)
         tool: Filter by tool type
+        agent_guid: Filter by agent GUID (agt_xxx format)
+        limit: Maximum items per page (default 50, max 100)
+        offset: Number of items to skip
 
     Returns:
-        List of job details
+        Paginated list of job details
     """
+    from backend.src.models.agent import Agent
+
     # Resolve collection GUID to internal ID if provided
     collection_id = None
     if collection_guid:
@@ -402,12 +412,38 @@ def list_jobs(
         if collection:
             collection_id = collection.id
 
-    jobs = service.list_jobs(
-        status=status,
+    # Resolve agent GUID to internal ID if provided
+    agent_id = None
+    if agent_guid:
+        try:
+            agent_uuid = GuidService.parse_identifier(agent_guid, expected_prefix="agt")
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        agent = service.db.query(Agent).filter(
+            Agent.uuid == agent_uuid,
+            Agent.team_id == ctx.team_id
+        ).first()
+        if agent:
+            agent_id = agent.id
+
+    jobs, total = service.list_jobs(
+        statuses=job_statuses,
         collection_id=collection_id,
-        tool=tool
+        tool=tool,
+        team_id=ctx.team_id,
+        agent_id=agent_id,
+        limit=limit,
+        offset=offset,
     )
-    return jobs
+    return JobListResponse(
+        items=jobs,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(
@@ -443,17 +479,19 @@ def get_job(
 @router.post(
     "/jobs/{job_id}/cancel",
     response_model=JobResponse,
-    summary="Cancel a queued job"
+    summary="Cancel a job"
 )
 def cancel_job(
     job_id: str,
+    ctx: TenantContext = Depends(get_tenant_context),
     service: ToolService = Depends(get_tool_service)
 ) -> JobResponse:
     """
-    Cancel a queued job.
+    Cancel a queued or running job.
 
-    Only queued jobs can be cancelled. Running jobs cannot be
-    safely interrupted.
+    For queued jobs: Cancel immediately.
+    For running agent jobs: Set status to cancelled and queue
+    a cancel command to the agent.
 
     Args:
         job_id: Job identifier
@@ -462,11 +500,11 @@ def cancel_job(
         Updated job details
 
     Raises:
-        400: Job is running and cannot be cancelled
+        400: Job cannot be cancelled (already completed)
         404: Job not found
     """
     try:
-        job = service.cancel_job(job_id)
+        job = service.cancel_job(job_id, team_id=ctx.team_id)
         if not job:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -474,6 +512,49 @@ def cancel_job(
             )
         logger.info(f"Job {job_id} cancelled")
         return job
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
+    "/jobs/{job_id}/retry",
+    response_model=JobResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Retry a failed job"
+)
+def retry_job(
+    job_id: str,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: ToolService = Depends(get_tool_service)
+) -> JobResponse:
+    """
+    Retry a failed job by creating a new job with the same parameters.
+
+    Only failed jobs can be retried. Creates a new job linked to the
+    original via parent_job_id.
+
+    Args:
+        job_id: Job identifier of the failed job
+
+    Returns:
+        New job details
+
+    Raises:
+        400: Job cannot be retried (not in failed status)
+        404: Job not found
+    """
+    try:
+        new_job = service.retry_job(job_id, team_id=ctx.team_id)
+        if not new_job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job {job_id} not found"
+            )
+        logger.info(f"Job {job_id} retried as {new_job.id}")
+        return new_job
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
