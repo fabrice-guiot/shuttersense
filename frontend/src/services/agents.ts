@@ -14,6 +14,8 @@ import type {
   AgentUpdateRequest,
   AgentPoolStatusResponse,
   AgentStatsResponse,
+  AgentDetailResponse,
+  AgentJobHistoryResponse,
   RegistrationToken,
   RegistrationTokenCreateRequest,
   RegistrationTokenListItem,
@@ -157,4 +159,36 @@ export const listRegistrationTokens = async (
 export const deleteRegistrationToken = async (guid: string): Promise<void> => {
   const safeGuid = encodeURIComponent(validateGuid(guid, 'art'))
   await api.delete(`${AGENT_API_PATH}/tokens/${safeGuid}`)
+}
+
+// ============================================================================
+// Agent Detail Operations (Phase 11 - Health Monitoring)
+// ============================================================================
+
+/**
+ * Get detailed agent information including metrics, stats, and recent jobs
+ * @param guid - External ID (agt_xxx format)
+ */
+export const getAgentDetail = async (guid: string): Promise<AgentDetailResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'agt'))
+  const response = await api.get<AgentDetailResponse>(`${AGENT_API_PATH}/${safeGuid}/detail`)
+  return response.data
+}
+
+/**
+ * Get paginated job history for an agent
+ * @param guid - External ID (agt_xxx format)
+ * @param offset - Number of items to skip (default 0)
+ * @param limit - Maximum items to return (default 20)
+ */
+export const getAgentJobHistory = async (
+  guid: string,
+  offset = 0,
+  limit = 20
+): Promise<AgentJobHistoryResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'agt'))
+  const response = await api.get<AgentJobHistoryResponse>(`${AGENT_API_PATH}/${safeGuid}/jobs`, {
+    params: { offset, limit },
+  })
+  return response.data
 }

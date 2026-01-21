@@ -25,6 +25,7 @@ from src.api_client import (
 )
 from src.polling_loop import JobPollingLoop
 from src.job_executor import JobExecutor
+from src.metrics import MetricsCollector, is_metrics_available
 
 
 def get_all_capabilities() -> list[str]:
@@ -103,6 +104,12 @@ class AgentRunner:
         self._shutdown_event = asyncio.Event()
         self._api_client: Optional[AgentApiClient] = None
         self._polling_loop: Optional[JobPollingLoop] = None
+        self._metrics_collector: Optional[MetricsCollector] = None
+
+        # Initialize metrics collector if available
+        if is_metrics_available():
+            self._metrics_collector = MetricsCollector()
+            self.logger.debug("System metrics collection enabled (psutil available)")
 
     async def run(self) -> int:
         """
@@ -177,11 +184,21 @@ class AgentRunner:
         # This ensures the agent can claim jobs immediately and has up-to-date capabilities/version/roots
         authorized_roots = self.config.authorized_roots
         self.logger.info(f"Sending initial heartbeat (version: {__version__}, roots: {len(authorized_roots)})...")
+
+        # Collect initial metrics
+        initial_metrics = None
+        if self._metrics_collector:
+            metrics_result = self._metrics_collector.collect()
+            if not metrics_result.is_empty:
+                initial_metrics = metrics_result.to_dict()
+                self.logger.debug(f"Initial metrics: {initial_metrics}")
+
         try:
             await self._api_client.heartbeat(
                 capabilities=capabilities,
                 version=__version__,
                 authorized_roots=authorized_roots,
+                metrics=initial_metrics,
             )
             self.logger.info("Initial heartbeat acknowledged, agent is now ONLINE")
         except AgentRevokedError:
@@ -256,10 +273,18 @@ class AgentRunner:
                     capabilities = get_all_capabilities()
                     self.logger.debug(f"Refreshed capabilities: {len(capabilities)} total")
 
-                # Send heartbeat with authorized roots and capabilities (if refreshed)
+                # Collect system metrics for heartbeat
+                metrics = None
+                if self._metrics_collector:
+                    metrics_result = self._metrics_collector.collect()
+                    if not metrics_result.is_empty:
+                        metrics = metrics_result.to_dict()
+
+                # Send heartbeat with authorized roots, capabilities (if refreshed), and metrics
                 response = await self._api_client.heartbeat(
                     authorized_roots=self.config.authorized_roots,
                     capabilities=capabilities,
+                    metrics=metrics,
                 )
                 self.logger.debug(f"Heartbeat acknowledged, server time: {response.get('server_time')}")
                 heartbeat_count += 1

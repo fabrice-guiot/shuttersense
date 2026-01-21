@@ -15,7 +15,7 @@ Design Rationale:
 
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, Enum, Index
 from sqlalchemy.dialects.postgresql import JSONB
@@ -167,7 +167,15 @@ class Agent(Base, GuidMixin):
     pending_commands_json = Column(
         JSONB().with_variant(Text, "sqlite"),
         nullable=False,
-        default=list
+        default="[]"
+    )
+
+    # System resource metrics reported by agent
+    # Contains: cpu_percent, memory_percent, disk_free_gb, metrics_updated_at
+    metrics_json = Column(
+        JSONB().with_variant(Text, "sqlite"),
+        nullable=True,
+        default=None
     )
 
     # Authentication
@@ -339,6 +347,39 @@ class Agent(Base, GuidMixin):
             self.pending_commands_json = json.dumps(value) if value else "[]"
         else:
             self.pending_commands_json = value
+
+    @property
+    def metrics(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the agent's system resource metrics.
+
+        Returns:
+            Dict with cpu_percent, memory_percent, disk_free_gb, metrics_updated_at
+            or None if no metrics have been reported yet.
+        """
+        if self.metrics_json is None:
+            return None
+        if isinstance(self.metrics_json, str):
+            import json
+            return json.loads(self.metrics_json)
+        return self.metrics_json
+
+    @metrics.setter
+    def metrics(self, value: Optional[Dict[str, Any]]) -> None:
+        """
+        Set the agent's system resource metrics.
+
+        Args:
+            value: Dict with metrics or None to clear
+        """
+        # For SQLite compatibility, serialize to JSON string
+        import json
+        if value is None:
+            self.metrics_json = None
+        elif isinstance(value, dict):
+            self.metrics_json = json.dumps(value)
+        else:
+            self.metrics_json = value
 
     def is_path_authorized(self, path: str) -> bool:
         """

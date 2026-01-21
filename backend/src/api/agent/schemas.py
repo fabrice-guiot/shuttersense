@@ -119,6 +119,38 @@ class AgentRegistrationResponse(BaseModel):
 # Heartbeat Schemas
 # ============================================================================
 
+class AgentMetrics(BaseModel):
+    """Schema for agent system resource metrics."""
+
+    cpu_percent: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        description="CPU usage percentage (0-100)"
+    )
+    memory_percent: Optional[float] = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Memory usage percentage (0-100)"
+    )
+    disk_free_gb: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Free disk space in GB"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "cpu_percent": 45.2,
+                "memory_percent": 62.8,
+                "disk_free_gb": 128.5
+            }
+        }
+    }
+
+
 class HeartbeatRequest(BaseModel):
     """Request schema for agent heartbeat."""
 
@@ -152,6 +184,10 @@ class HeartbeatRequest(BaseModel):
         max_length=50,
         description="Agent version (if changed)"
     )
+    metrics: Optional[AgentMetrics] = Field(
+        None,
+        description="System resource metrics (CPU, memory, disk)"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -167,7 +203,12 @@ class HeartbeatRequest(BaseModel):
                     "/Users/photographer/Photos",
                     "/Volumes/External",
                     "/Volumes/NewDrive"
-                ]
+                ],
+                "metrics": {
+                    "cpu_percent": 45.2,
+                    "memory_percent": 62.8,
+                    "disk_free_gb": 128.5
+                }
             }
         }
     }
@@ -209,15 +250,16 @@ class AgentResponse(BaseModel):
 
     guid: str = Field(..., description="Agent GUID (agt_xxx)")
     name: str = Field(..., description="Agent display name")
-    hostname: str = Field(..., description="Machine hostname")
-    os_info: str = Field(..., description="Operating system info")
+    hostname: Optional[str] = Field(None, description="Machine hostname")
+    os_info: Optional[str] = Field(None, description="Operating system info")
     status: AgentStatus = Field(..., description="Current status")
     error_message: Optional[str] = Field(None, description="Error message if in ERROR state")
     last_heartbeat: Optional[datetime] = Field(None, description="Last heartbeat timestamp")
     capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
     authorized_roots: List[str] = Field(default_factory=list, description="Authorized local filesystem roots")
-    version: str = Field(..., description="Agent software version")
+    version: Optional[str] = Field(None, description="Agent software version")
     created_at: datetime = Field(..., description="Registration timestamp")
+    metrics: Optional[AgentMetrics] = Field(None, description="System resource metrics")
 
     # Relationships
     team_guid: str = Field(..., description="Team GUID")
@@ -238,7 +280,112 @@ class AgentResponse(BaseModel):
                 "version": "1.0.0",
                 "created_at": "2026-01-18T10:00:00.000Z",
                 "team_guid": "tea_01hgw2bbg...",
-                "current_job_guid": None
+                "current_job_guid": None,
+                "metrics": None
+            }
+        }
+    }
+
+
+class AgentJobHistoryItem(BaseModel):
+    """Response schema for a job in agent's history."""
+
+    guid: str = Field(..., description="Job GUID (job_xxx)")
+    tool: str = Field(..., description="Tool name")
+    collection_guid: Optional[str] = Field(None, description="Collection GUID")
+    collection_name: Optional[str] = Field(None, description="Collection name")
+    status: str = Field(..., description="Job status")
+    started_at: Optional[datetime] = Field(None, description="When job started")
+    completed_at: Optional[datetime] = Field(None, description="When job completed/failed")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "guid": "job_01hgw2bbg...",
+                "tool": "photostats",
+                "collection_guid": "col_01hgw2bbg...",
+                "collection_name": "Wedding Photos",
+                "status": "completed",
+                "started_at": "2026-01-18T10:00:00.000Z",
+                "completed_at": "2026-01-18T10:05:00.000Z",
+                "error_message": None
+            }
+        }
+    }
+
+
+class AgentDetailResponse(BaseModel):
+    """Response schema for agent detail view with extended information."""
+
+    guid: str = Field(..., description="Agent GUID (agt_xxx)")
+    name: str = Field(..., description="Agent display name")
+    hostname: Optional[str] = Field(None, description="Machine hostname")
+    os_info: Optional[str] = Field(None, description="Operating system info")
+    status: AgentStatus = Field(..., description="Current status")
+    error_message: Optional[str] = Field(None, description="Error message if in ERROR state")
+    last_heartbeat: Optional[datetime] = Field(None, description="Last heartbeat timestamp")
+    capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
+    authorized_roots: List[str] = Field(default_factory=list, description="Authorized local filesystem roots")
+    version: Optional[str] = Field(None, description="Agent software version")
+    created_at: datetime = Field(..., description="Registration timestamp")
+    metrics: Optional[AgentMetrics] = Field(None, description="System resource metrics")
+
+    # Relationships
+    team_guid: str = Field(..., description="Team GUID")
+    current_job_guid: Optional[str] = Field(None, description="Currently executing job GUID")
+
+    # Extended detail fields
+    bound_collections_count: int = Field(0, description="Number of collections bound to this agent")
+    total_jobs_completed: int = Field(0, description="Total jobs completed by this agent")
+    total_jobs_failed: int = Field(0, description="Total jobs failed by this agent")
+    recent_jobs: List[AgentJobHistoryItem] = Field(
+        default_factory=list,
+        description="Recent job history (last 10 jobs)"
+    )
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "guid": "agt_01hgw2bbg...",
+                "name": "MacBook Pro - Studio",
+                "hostname": "studio-macbook.local",
+                "os_info": "macOS 14.0",
+                "status": "online",
+                "last_heartbeat": "2026-01-18T12:00:00.000Z",
+                "capabilities": ["local_filesystem", "tool:photostats:1.0.0"],
+                "authorized_roots": ["/Users/photographer/Photos", "/Volumes/External"],
+                "version": "1.0.0",
+                "created_at": "2026-01-18T10:00:00.000Z",
+                "team_guid": "tea_01hgw2bbg...",
+                "current_job_guid": "job_01hgw2bbg...",
+                "metrics": {"cpu_percent": 45.2, "memory_percent": 62.8, "disk_free_gb": 128.5},
+                "bound_collections_count": 3,
+                "total_jobs_completed": 125,
+                "total_jobs_failed": 2,
+                "recent_jobs": []
+            }
+        }
+    }
+
+
+class AgentJobHistoryResponse(BaseModel):
+    """Response schema for paginated agent job history."""
+
+    jobs: List[AgentJobHistoryItem] = Field(default_factory=list)
+    total_count: int = Field(..., description="Total number of jobs")
+    offset: int = Field(..., description="Current offset")
+    limit: int = Field(..., description="Items per page")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "jobs": [],
+                "total_count": 127,
+                "offset": 0,
+                "limit": 20
             }
         }
     }

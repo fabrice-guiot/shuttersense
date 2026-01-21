@@ -443,7 +443,7 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ---
 
-## Phase 11: User Story 9 - Agent Health Monitoring (Priority: P1)
+## Phase 11: User Story 9 - Agent Health Monitoring (Priority: P1) ✅
 
 **Goal**: Administrators can monitor agent health and resource usage
 
@@ -451,36 +451,46 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ### Backend Tests for User Story 9
 
-- [ ] T164 [P] [US9] Unit tests for metrics storage in `backend/tests/unit/services/test_agent_metrics.py` (store, retrieve)
-- [ ] T165 [P] [US9] Integration tests for agent detail endpoint in `backend/tests/integration/test_agent_detail.py` (metrics, job history)
+- [x] T164 [P] [US9] Unit tests for metrics storage in `backend/tests/unit/services/test_agent_metrics.py` (store, retrieve) - 16 tests
+- [x] T165 [P] [US9] Integration tests for agent detail endpoint in `backend/tests/integration/test_agent_detail.py` (metrics, job history) - 15 tests
 
 ### Backend Implementation for User Story 9
 
-- [ ] T166 [US9] Add metrics to heartbeat request schema in `backend/src/api/agent/schemas.py` (cpu_percent, memory_percent, disk_free_gb)
-- [ ] T167 [US9] Store agent metrics in Agent model in `backend/src/models/agent.py` (metrics_json field)
-- [ ] T168 [US9] Create agent detail endpoint GET `/api/agents/{guid}` in `backend/src/api/agents/routes.py` (include recent jobs)
-- [ ] T169 [US9] Create agent job history endpoint GET `/api/agents/{guid}/jobs` in `backend/src/api/agents/routes.py`
+- [x] T166 [US9] Add metrics to heartbeat request schema in `backend/src/api/agent/schemas.py` (cpu_percent, memory_percent, disk_free_gb)
+- [x] T167 [US9] Store agent metrics in Agent model in `backend/src/models/agent.py` (metrics_json field)
+- [x] T168 [US9] Create agent detail endpoint GET `/api/agent/v1/{guid}/detail` in `backend/src/api/agent/routes.py` (include metrics, job stats, recent jobs)
+- [x] T169 [US9] Create agent job history endpoint GET `/api/agent/v1/{guid}/jobs` in `backend/src/api/agent/routes.py` (paginated)
 
 ### Agent Tests for User Story 9
 
-- [ ] T170 [P] [US9] Unit tests for metrics collection in `agent/tests/unit/test_metrics.py` (CPU, memory, disk)
+- [x] T170 [P] [US9] Unit tests for metrics collection in `agent/tests/unit/test_metrics.py` (CPU, memory, disk) - 17 tests (9 passed, 8 skipped when psutil unavailable)
 
 ### Agent Implementation for User Story 9
 
-- [ ] T171 [US9] Collect and report system metrics in agent in `agent/src/metrics.py`
+- [x] T171 [US9] Collect and report system metrics in agent in `agent/src/metrics.py` (MetricsCollector with psutil, graceful fallback)
 
 ### Frontend Tests for User Story 9
 
-- [ ] T172 [P] [US9] Component tests for AgentDetailPage in `frontend/tests/pages/AgentDetailPage.test.tsx` (metrics, job history)
-- [ ] T173 [P] [US9] Hook tests for useAgentDetail in `frontend/tests/hooks/useAgentDetail.test.ts` (fetch, WebSocket updates)
+- [x] T172 [P] [US9] Component tests for AgentDetailPage in `frontend/tests/components/agents/AgentDetailPage.test.tsx` (metrics, job history) - 20 tests
+- [x] T173 [P] [US9] Hook tests for useAgentDetail in `frontend/tests/hooks/useAgentDetail.test.ts` (fetch, WebSocket updates) - 17 tests
 
 ### Frontend Implementation for User Story 9
 
-- [ ] T174 [US9] Create AgentDetailPage in `frontend/src/pages/AgentDetailPage.tsx` (metrics, current job, history)
-- [ ] T175 [US9] Add route for agent detail at `/agents/{guid}` in `frontend/src/App.tsx`
-- [ ] T176 [US9] Create real-time agent status WebSocket subscription in `frontend/src/hooks/useAgentDetail.ts`
+- [x] T174 [US9] Create AgentDetailPage in `frontend/src/pages/AgentDetailPage.tsx` (metrics cards, job stats, agent info, job history with pagination)
+- [x] T175 [US9] Add route for agent detail at `/agents/:guid` in `frontend/src/App.tsx`
+- [x] T176 [US9] Create real-time agent status WebSocket subscription in `frontend/src/hooks/useAgentDetail.ts` (useAgentDetail and useAgentJobHistory hooks)
 
-**Checkpoint**: Agent health monitoring with metrics and job history
+### Additional Implementation Notes (Phase 11)
+
+- Database migration `042_add_agent_metrics.py` added `metrics_json` column to agents table
+- `AgentDetailResponse` schema includes metrics, bound_collections_count, total_jobs_completed, total_jobs_failed, recent_jobs
+- `AgentJobHistoryResponse` schema provides paginated job history with collection info
+- Agent metrics include cpu_percent, memory_percent, disk_free_gb with timestamps
+- Frontend AgentDetailPage shows system metrics progress bars, job statistics cards, capabilities, authorized roots
+- WebSocket subscription for real-time status updates via pool-status channel
+- Link to agent detail page added to AgentsPage dropdown menu
+
+**Checkpoint**: Agent health monitoring with metrics and job history ✅
 
 ---
 

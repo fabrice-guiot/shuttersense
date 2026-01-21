@@ -359,13 +359,14 @@ class AgentService:
         error_message: Optional[str] = None,
         capabilities: Optional[List[str]] = None,
         authorized_roots: Optional[List[str]] = None,
-        version: Optional[str] = None
+        version: Optional[str] = None,
+        metrics: Optional[dict] = None
     ) -> Agent:
         """
         Process an agent heartbeat.
 
         Updates last_heartbeat timestamp and optionally updates
-        status, capabilities, authorized_roots, and version.
+        status, capabilities, authorized_roots, version, and metrics.
 
         Args:
             agent: The agent sending the heartbeat
@@ -374,6 +375,7 @@ class AgentService:
             capabilities: Updated capabilities list
             authorized_roots: Updated authorized roots list
             version: Updated agent version
+            metrics: System resource metrics (cpu_percent, memory_percent, disk_free_gb)
 
         Returns:
             The updated agent
@@ -411,13 +413,23 @@ class AgentService:
         if version is not None:
             agent.version = version
 
+        # Update metrics if provided
+        if metrics is not None:
+            # Add timestamp to metrics
+            metrics_with_timestamp = {
+                **metrics,
+                "metrics_updated_at": datetime.utcnow().isoformat()
+            }
+            agent.metrics_json = json.dumps(metrics_with_timestamp)
+
         self.db.commit()
 
         logger.debug(
             "heartbeat_processed",
             extra={
                 "agent_guid": agent.guid,
-                "status": agent.status.value
+                "status": agent.status.value,
+                "has_metrics": metrics is not None
             }
         )
 

@@ -43,6 +43,7 @@ import DirectoryPage from './pages/DirectoryPage'
 import LoginPage from './pages/LoginPage'
 import ProfilePage from './pages/ProfilePage'
 import AgentsPage from './pages/AgentsPage'
+import AgentDetailPage from './pages/AgentDetailPage'
 
 // ============================================================================
 // Route Configuration
@@ -173,6 +174,18 @@ function App() {
                 <ProtectedRoute>
                   <MainLayout pageTitle="Agents" pageIcon={Bot} pageHelp="Manage distributed agents for local photo collection analysis">
                     <AgentsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Agent detail page (Issue #90 - Phase 11) */}
+            <Route
+              path="/agents/:guid"
+              element={
+                <ProtectedRoute>
+                  <MainLayout pageTitle="Agent Details" pageIcon={Bot} pageHelp="View detailed agent information and job history">
+                    <AgentDetailPage />
                   </MainLayout>
                 </ProtectedRoute>
               }

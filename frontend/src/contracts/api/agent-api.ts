@@ -97,3 +97,60 @@ export interface AgentStatsResponse {
   online_agents: number
   offline_agents: number
 }
+
+// ============================================================================
+// Agent Metrics (Phase 11 - Health Monitoring)
+// ============================================================================
+
+export interface AgentMetrics {
+  cpu_percent: number | null
+  memory_percent: number | null
+  disk_free_gb: number | null
+}
+
+// ============================================================================
+// Agent Job History (Phase 11 - Health Monitoring)
+// ============================================================================
+
+export interface AgentJobHistoryItem {
+  guid: string
+  tool: string
+  collection_guid: string | null
+  collection_name: string | null
+  status: string
+  started_at: string | null
+  completed_at: string | null
+  error_message: string | null
+}
+
+export interface AgentJobHistoryResponse {
+  jobs: AgentJobHistoryItem[]
+  total_count: number
+  offset: number
+  limit: number
+}
+
+// ============================================================================
+// Agent Detail Response (Phase 11 - Health Monitoring)
+// ============================================================================
+
+export interface AgentDetailResponse {
+  guid: string
+  name: string
+  hostname: string
+  os_info: string
+  status: AgentStatus
+  error_message: string | null
+  last_heartbeat: string | null
+  capabilities: string[]
+  authorized_roots: string[]
+  version: string
+  created_at: string
+  team_guid: string
+  current_job_guid: string | null
+  metrics: AgentMetrics | null
+  bound_collections_count: number
+  total_jobs_completed: number
+  total_jobs_failed: number
+  recent_jobs: AgentJobHistoryItem[]
+}

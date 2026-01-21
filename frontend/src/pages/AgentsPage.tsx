@@ -9,7 +9,8 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -224,9 +225,15 @@ export default function AgentsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link to={`/agents/${agent.guid}`}>
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Open Detail Page
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleViewDetails(agent)}>
                             <Eye className="h-4 w-4 mr-2" />
-                            View Details
+                            Quick View
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleRename(agent)}>
                             <Pencil className="h-4 w-4 mr-2" />

@@ -208,6 +208,7 @@ class AgentApiClient:
         current_job_guid: Optional[str] = None,
         current_job_progress: Optional[dict[str, Any]] = None,
         error_message: Optional[str] = None,
+        metrics: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """
         Send heartbeat to the server.
@@ -220,6 +221,7 @@ class AgentApiClient:
             current_job_guid: GUID of job currently being executed
             current_job_progress: Progress info for current job
             error_message: Error message if status is error
+            metrics: System resource metrics (cpu_percent, memory_percent, disk_free_gb)
 
         Returns:
             Heartbeat response with server time and pending commands
@@ -243,6 +245,8 @@ class AgentApiClient:
             payload["current_job_progress"] = current_job_progress
         if error_message:
             payload["error_message"] = error_message
+        if metrics:
+            payload["metrics"] = metrics
 
         try:
             response = await self._client.post(
