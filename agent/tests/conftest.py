@@ -364,4 +364,44 @@ def mock_api_client():
     client.heartbeat = AsyncMock(return_value={"server_time": "2024-01-01T00:00:00"})
     client.disconnect = AsyncMock()
     client.close = AsyncMock()
+
+    # Mock the underlying HTTP client for chunked uploads (Phase 15)
+    # ChunkedUploadClient uses _api_client._client directly
+    # Different endpoints expect different status codes:
+    # - POST /uploads (initiate) -> 201
+    # - PUT /uploads/{id}/{chunk} (upload chunk) -> 200
+    # - POST /uploads/{id}/finalize -> 200
+    # - DELETE /uploads/{id} (cancel) -> 204
+
+    mock_initiate_response = MagicMock()
+    mock_initiate_response.status_code = 201
+    mock_initiate_response.json.return_value = {
+        "upload_id": "test-upload-id-123",
+        "chunk_size": 1048576,
+        "total_chunks": 1,
+    }
+
+    mock_chunk_response = MagicMock()
+    mock_chunk_response.status_code = 200
+    mock_chunk_response.json.return_value = {"received": True}
+
+    mock_finalize_response = MagicMock()
+    mock_finalize_response.status_code = 200
+    mock_finalize_response.json.return_value = {"success": True}
+
+    mock_cancel_response = MagicMock()
+    mock_cancel_response.status_code = 204
+
+    def mock_post(url, *args, **kwargs):
+        """Route POST requests to appropriate mock response."""
+        if "/finalize" in url:
+            return mock_finalize_response
+        return mock_initiate_response
+
+    http_client = MagicMock()
+    http_client.post = AsyncMock(side_effect=mock_post)
+    http_client.put = AsyncMock(return_value=mock_chunk_response)
+    http_client.delete = AsyncMock(return_value=mock_cancel_response)
+    client._client = http_client
+
     return client
