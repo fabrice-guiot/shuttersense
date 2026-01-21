@@ -935,6 +935,16 @@ class JobCoordinatorService:
                 }
             )
 
+        # Update last_scanned_at for all tool completions
+        collection.last_scanned_at = datetime.utcnow()
+        logger.debug(
+            "Updated collection last_scanned_at",
+            extra={
+                "collection_id": job.collection_id,
+                "last_scanned_at": collection.last_scanned_at.isoformat()
+            }
+        )
+
     # =========================================================================
     # Scheduled Job Creation (Auto-Refresh)
     # =========================================================================
