@@ -585,24 +585,44 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ---
 
-## Phase 14: Agent Trust and Attestation (Cross-Cutting)
+## Phase 14: Agent Trust and Attestation (Cross-Cutting) ✅
 
 **Purpose**: Binary attestation and result signing
 
 ### Tests
 
-- [ ] T193 [P] Unit tests for release manifest in `backend/tests/unit/models/test_release_manifest.py`
-- [ ] T194 [P] Unit tests for binary attestation in `agent/tests/unit/test_attestation.py` (self-hash)
-- [ ] T195 [P] Integration tests for attestation flow in `backend/tests/integration/test_agent_attestation.py`
+- [x] T193 [P] Unit tests for release manifest in `backend/tests/unit/models/test_release_manifest.py` - 13 tests
+- [x] T194 [P] Unit tests for binary attestation in `agent/tests/unit/test_attestation.py` (self-hash) - 6 tests
+- [x] T195 [P] Integration tests for attestation flow in `backend/tests/integration/test_attestation_flow.py` - 6 tests
 
 ### Implementation
 
-- [ ] T196 Create release manifest model/storage for binary checksums in `backend/src/models/release_manifest.py`
-- [ ] T197 Validate binary checksum during registration in `backend/src/services/agent_service.py`
-- [ ] T198 Implement binary self-hash in agent in `agent/src/attestation.py`
-- [ ] T199 Add admin endpoint to manage release manifests in `backend/src/api/admin/routes.py`
+- [x] T196 Create release manifest model/storage for binary checksums in `backend/src/models/release_manifest.py`
+- [x] T197 Validate binary checksum during registration in `backend/src/services/agent_service.py`
+- [x] T198 Implement binary self-hash in agent in `agent/src/attestation.py`
+- [x] T199 Add admin endpoint to manage release manifests in `backend/src/api/admin/release_manifests.py` - 16 API tests
 
-**Checkpoint**: Agent attestation ensures only trusted binaries can register
+**Checkpoint**: Agent attestation ensures only trusted binaries can register ✅
+
+### Implementation Notes (Phase 14)
+
+**Release Manifests:**
+- Super admins manage known-good binary checksums via `/api/admin/release-manifests`
+- CRUD operations: create, list (with filters), get, update (is_active, notes), delete
+- Statistics endpoint shows total/active counts, platforms, versions
+
+**Binary Attestation Flow:**
+- Agents provide SHA-256 checksum and platform during registration
+- Server validates checksum against active release manifests
+- Platform verification ensures checksum matches reported platform
+
+**Operational Modes:**
+- **Bootstrap Mode** (default): When no manifests exist, registration allowed without checksum
+- **Production Mode** (`REQUIRE_AGENT_ATTESTATION=true`): Registration rejected if no manifests configured
+- **Development Mode**: Agent `development_mode=true` flag for local development
+
+**Environment Variables:**
+- `REQUIRE_AGENT_ATTESTATION=true` - Enforce attestation even when no manifests exist (production)
 
 ---
 

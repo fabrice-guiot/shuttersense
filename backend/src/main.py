@@ -597,6 +597,7 @@ from backend.src.api import auth as auth_router
 from backend.src.api import users as users_router
 from backend.src.api import tokens as tokens_router
 from backend.src.api.admin import teams_router as admin_teams_router
+from backend.src.api.admin import release_manifests_router as admin_release_manifests_router
 
 app.include_router(collections.router, prefix="/api")
 app.include_router(connectors.router, prefix="/api")
@@ -622,6 +623,7 @@ app.include_router(tokens_router.router)
 
 # Admin routes (super admin only)
 app.include_router(admin_teams_router, prefix="/api/admin")
+app.include_router(admin_release_manifests_router, prefix="/api/admin")
 
 # Agent API routes (Issue #90 - Distributed Agent Architecture)
 from backend.src.api.agent import router as agent_router

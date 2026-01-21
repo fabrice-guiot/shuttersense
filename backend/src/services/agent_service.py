@@ -30,6 +30,7 @@ from backend.src.models import (
     User, UserStatus, UserType,
     Team,
     Job, JobStatus,
+    ReleaseManifest,
 )
 from backend.src.models.agent_registration_token import DEFAULT_TOKEN_EXPIRATION_HOURS
 from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
@@ -200,7 +201,9 @@ class AgentService:
         capabilities: Optional[List[str]] = None,
         authorized_roots: Optional[List[str]] = None,
         version: Optional[str] = None,
-        binary_checksum: Optional[str] = None
+        binary_checksum: Optional[str] = None,
+        platform: Optional[str] = None,
+        development_mode: bool = False
     ) -> RegistrationResult:
         """
         Register a new agent using a registration token.
@@ -217,15 +220,20 @@ class AgentService:
             authorized_roots: Authorized local filesystem roots
             version: Agent software version
             binary_checksum: SHA-256 of agent binary
+            platform: Agent platform (e.g., 'darwin-arm64')
+            development_mode: Whether agent is in development mode
 
         Returns:
             RegistrationResult with agent and plaintext API key
 
         Raises:
-            ValidationError: If token is invalid or name is empty
+            ValidationError: If token is invalid, name is empty, or attestation fails
         """
         # Validate token
         token = self.validate_registration_token(plaintext_token)
+
+        # Validate binary attestation (unless in dev mode with no manifests)
+        self._validate_binary_attestation(binary_checksum, platform, development_mode)
 
         # Validate name
         if not name or not name.strip():
@@ -347,6 +355,125 @@ class AgentService:
         )
 
         return system_user
+
+    def _validate_binary_attestation(
+        self,
+        binary_checksum: Optional[str],
+        platform: Optional[str],
+        development_mode: bool
+    ) -> None:
+        """
+        Validate agent binary attestation against release manifests.
+
+        Security logic:
+        - If REQUIRE_AGENT_ATTESTATION=true, manifests MUST exist (production)
+        - If no release manifests exist and not required, allow (bootstrap/dev)
+        - If manifests exist, require matching active checksum
+        - Development mode agents are logged but still validated
+
+        Environment Variables:
+            REQUIRE_AGENT_ATTESTATION: Set to 'true' in production to enforce
+                that release manifests must exist. Prevents accidental deployment
+                without attestation. Default: 'false' (allows bootstrap mode)
+
+        Args:
+            binary_checksum: SHA-256 hash of agent binary
+            platform: Agent platform identifier (e.g., 'darwin-arm64')
+            development_mode: Whether agent reports being in development mode
+
+        Raises:
+            ValidationError: If attestation fails
+        """
+        import os
+        from sqlalchemy import func
+
+        # Check if attestation is required (production mode)
+        require_attestation = os.environ.get(
+            'REQUIRE_AGENT_ATTESTATION', 'false'
+        ).lower() == 'true'
+
+        # Check if any manifests exist (bootstrap check)
+        manifest_count = self.db.query(func.count(ReleaseManifest.id)).filter(
+            ReleaseManifest.is_active == True
+        ).scalar() or 0
+
+        if manifest_count == 0:
+            if require_attestation:
+                # Production mode: attestation required but no manifests configured
+                logger.error(
+                    "Agent registration denied: REQUIRE_AGENT_ATTESTATION=true but no manifests exist",
+                    extra={
+                        "binary_checksum": binary_checksum,
+                        "platform": platform,
+                        "development_mode": development_mode
+                    }
+                )
+                raise ValidationError(
+                    "Binary attestation required but no release manifests are configured. "
+                    "Contact your administrator to add release manifests."
+                )
+
+            # Bootstrap/dev mode allowed - log warning for visibility
+            logger.warning(
+                "Agent registration allowed: no release manifests configured (bootstrap mode). "
+                "Set REQUIRE_AGENT_ATTESTATION=true in production.",
+                extra={
+                    "binary_checksum": binary_checksum,
+                    "platform": platform,
+                    "development_mode": development_mode
+                }
+            )
+            return
+
+        # Manifests exist - require valid checksum
+        if not binary_checksum:
+            raise ValidationError(
+                "Binary attestation required: agent did not provide checksum"
+            )
+
+        # Look up the checksum in the manifest
+        manifest = ReleaseManifest.find_by_checksum(self.db, binary_checksum)
+
+        if not manifest:
+            logger.warning(
+                "Agent registration denied: unknown binary checksum",
+                extra={
+                    "binary_checksum": binary_checksum,
+                    "platform": platform,
+                    "development_mode": development_mode
+                }
+            )
+            raise ValidationError(
+                "Binary attestation failed: agent binary checksum not recognized. "
+                "Ensure you are running an official release."
+            )
+
+        # Checksum found - verify platform matches if both are provided
+        if platform and manifest.platform != platform.lower():
+            logger.warning(
+                "Agent registration denied: platform mismatch",
+                extra={
+                    "binary_checksum": binary_checksum,
+                    "agent_platform": platform,
+                    "manifest_platform": manifest.platform,
+                    "manifest_version": manifest.version
+                }
+            )
+            raise ValidationError(
+                f"Binary attestation failed: checksum is for {manifest.platform}, "
+                f"but agent reports {platform}"
+            )
+
+        # Log successful attestation
+        logger.info(
+            "Agent binary attestation successful",
+            extra={
+                "binary_checksum": binary_checksum,
+                "platform": manifest.platform,
+                "version": manifest.version,
+                "development_mode": development_mode
+            }
+        )
 
     # =========================================================================
     # Heartbeat and Status Management

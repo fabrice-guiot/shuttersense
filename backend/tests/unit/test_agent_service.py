@@ -5,6 +5,7 @@ Tests agent registration, heartbeat processing, token management,
 and offline detection.
 """
 
+import os
 import pytest
 import hashlib
 from datetime import datetime, timedelta
@@ -886,3 +887,460 @@ class TestAgentDeletionBlocking:
 
             # Now has 1 bound collection
             assert reg_result.agent.bound_collections.count() == 1
+
+
+# ============================================================================
+# Binary Attestation Tests (Phase 14 - T197)
+# ============================================================================
+
+class TestAgentBinaryAttestation:
+    """Tests for agent binary attestation during registration.
+
+    Issue #90 - Distributed Agent Architecture (Phase 14)
+    Task T197: Validate binary checksum during registration
+
+    Requirements:
+    - Bootstrap mode: If no release manifests exist, allow registration
+    - With manifests: Only allow registration if checksum matches an active manifest
+    - Platform verification: If both agent and manifest provide platform, they must match
+    """
+
+    def test_registration_bootstrap_mode_no_manifests(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration allowed when no release manifests exist (bootstrap mode)."""
+        service = AgentService(test_db_session)
+
+        # No manifests in database - bootstrap mode
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Registration should succeed without checksum
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Bootstrap Agent",
+            hostname="test-host",
+            version="1.0.0",
+        )
+
+        assert result.agent is not None
+        assert result.agent.name == "Bootstrap Agent"
+
+    def test_registration_bootstrap_mode_with_checksum(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration with checksum allowed in bootstrap mode."""
+        service = AgentService(test_db_session)
+
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Registration with checksum should succeed in bootstrap mode
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Bootstrap Agent with Checksum",
+            hostname="test-host",
+            version="1.0.0",
+            binary_checksum="a" * 64,
+            platform="darwin-arm64",
+        )
+
+        assert result.agent is not None
+        assert result.agent.binary_checksum == "a" * 64
+
+    def test_registration_valid_checksum_matches_manifest(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration succeeds when checksum matches an active manifest."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create a release manifest
+        checksum = "b" * 64
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum=checksum,
+            is_active=True,
+        )
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        # Create token and register with matching checksum
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Attested Agent",
+            hostname="test-host",
+            version="1.0.0",
+            binary_checksum=checksum,
+            platform="darwin-arm64",
+        )
+
+        assert result.agent is not None
+        assert result.agent.binary_checksum == checksum
+
+    def test_registration_rejected_unknown_checksum(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration rejected when checksum doesn't match any manifest."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create a release manifest
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum="a" * 64,
+            is_active=True,
+        )
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Try to register with unknown checksum
+        with pytest.raises(ValidationError, match="attestation failed"):
+            service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="Unknown Binary Agent",
+                hostname="test-host",
+                version="1.0.0",
+                binary_checksum="b" * 64,  # Different checksum
+                platform="darwin-arm64",
+            )
+
+    def test_registration_rejected_no_checksum_when_manifests_exist(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration rejected when no checksum provided but manifests exist."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create a release manifest
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum="a" * 64,
+            is_active=True,
+        )
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Try to register without checksum
+        with pytest.raises(ValidationError, match="attestation required"):
+            service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="No Checksum Agent",
+                hostname="test-host",
+                version="1.0.0",
+                # No binary_checksum
+            )
+
+    def test_registration_rejected_platform_mismatch(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration rejected when platform doesn't match manifest."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create a release manifest for darwin-arm64
+        checksum = "c" * 64
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum=checksum,
+            is_active=True,
+        )
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Try to register with wrong platform
+        with pytest.raises(ValidationError, match="checksum is for darwin-arm64"):
+            service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="Wrong Platform Agent",
+                hostname="test-host",
+                version="1.0.0",
+                binary_checksum=checksum,
+                platform="linux-amd64",  # Wrong platform
+            )
+
+    def test_registration_checksum_case_insensitive(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test checksum lookup is case-insensitive."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create manifest with lowercase checksum
+        checksum_lower = "abcdef" + "1" * 58
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum=checksum_lower,
+            is_active=True,
+        )
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Register with uppercase checksum
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Case Insensitive Agent",
+            hostname="test-host",
+            version="1.0.0",
+            binary_checksum=checksum_lower.upper(),  # Uppercase
+            platform="darwin-arm64",
+        )
+
+        assert result.agent is not None
+
+    def test_registration_inactive_manifest_rejected(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration rejected when only matching manifest is inactive."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create an INACTIVE manifest
+        checksum = "d" * 64
+        inactive_manifest = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum=checksum,
+            is_active=False,  # Inactive
+        )
+        # Also create an active manifest with different checksum
+        # (so we're not in bootstrap mode)
+        active_manifest = ReleaseManifest(
+            version="1.1.0",
+            platform="darwin-arm64",
+            checksum="e" * 64,
+            is_active=True,
+        )
+        test_db_session.add_all([inactive_manifest, active_manifest])
+        test_db_session.commit()
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Try to register with inactive manifest's checksum
+        with pytest.raises(ValidationError, match="attestation failed"):
+            service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="Inactive Manifest Agent",
+                hostname="test-host",
+                version="1.0.0",
+                binary_checksum=checksum,
+                platform="darwin-arm64",
+            )
+
+    def test_registration_multiple_platforms_same_version(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration works with multiple platform manifests for same version."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create manifests for multiple platforms
+        checksum_darwin = "f" * 64
+        checksum_linux = "0" * 64
+
+        manifest_darwin = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum=checksum_darwin,
+            is_active=True,
+        )
+        manifest_linux = ReleaseManifest(
+            version="1.0.0",
+            platform="linux-amd64",
+            checksum=checksum_linux,
+            is_active=True,
+        )
+        test_db_session.add_all([manifest_darwin, manifest_linux])
+        test_db_session.commit()
+
+        # Register darwin agent
+        token1 = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        result1 = service.register_agent(
+            plaintext_token=token1.plaintext_token,
+            name="Darwin Agent",
+            hostname="mac-host",
+            version="1.0.0",
+            binary_checksum=checksum_darwin,
+            platform="darwin-arm64",
+        )
+        assert result1.agent is not None
+
+        # Register linux agent
+        token2 = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        result2 = service.register_agent(
+            plaintext_token=token2.plaintext_token,
+            name="Linux Agent",
+            hostname="linux-host",
+            version="1.0.0",
+            binary_checksum=checksum_linux,
+            platform="linux-amd64",
+        )
+        assert result2.agent is not None
+
+
+class TestAgentAttestationProductionMode:
+    """Tests for REQUIRE_AGENT_ATTESTATION environment variable.
+
+    When REQUIRE_AGENT_ATTESTATION=true (production mode), attestation
+    is mandatory even if no manifests exist. This prevents accidental
+    deployment without proper attestation configuration.
+    """
+
+    @patch.dict(os.environ, {'REQUIRE_AGENT_ATTESTATION': 'true'})
+    def test_production_mode_rejects_when_no_manifests(
+        self, test_db_session, test_team, test_user
+    ):
+        """With REQUIRE_AGENT_ATTESTATION=true, reject if no manifests exist."""
+        service = AgentService(test_db_session)
+
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Should fail because no manifests exist
+        with pytest.raises(ValidationError, match="no release manifests are configured"):
+            service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="Production Agent",
+                hostname="prod-host",
+                version="1.0.0",
+                binary_checksum="a" * 64,
+                platform="darwin-arm64",
+            )
+
+    @patch.dict(os.environ, {'REQUIRE_AGENT_ATTESTATION': 'true'})
+    def test_production_mode_allows_with_valid_manifest(
+        self, test_db_session, test_team, test_user
+    ):
+        """With REQUIRE_AGENT_ATTESTATION=true, allow if checksum matches manifest."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create a manifest
+        checksum = "b" * 64
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            platform="darwin-arm64",
+            checksum=checksum,
+            is_active=True,
+        )
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Should succeed because manifest exists and checksum matches
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Production Agent",
+            hostname="prod-host",
+            version="1.0.0",
+            binary_checksum=checksum,
+            platform="darwin-arm64",
+        )
+        assert result.agent is not None
+
+    @patch.dict(os.environ, {'REQUIRE_AGENT_ATTESTATION': 'false'})
+    def test_dev_mode_allows_without_manifests(
+        self, test_db_session, test_team, test_user
+    ):
+        """With REQUIRE_AGENT_ATTESTATION=false (default), allow bootstrap mode."""
+        service = AgentService(test_db_session)
+
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Should succeed in bootstrap mode
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Dev Agent",
+            hostname="dev-host",
+            version="1.0.0-dev",
+        )
+        assert result.agent is not None
+
+    def test_default_is_dev_mode(
+        self, test_db_session, test_team, test_user
+    ):
+        """Without REQUIRE_AGENT_ATTESTATION set, default to allowing bootstrap."""
+        service = AgentService(test_db_session)
+
+        # Ensure env var is not set (or remove if set)
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('REQUIRE_AGENT_ATTESTATION', None)
+
+            token_result = service.create_registration_token(
+                team_id=test_team.id,
+                created_by_user_id=test_user.id,
+            )
+
+            # Should succeed - default is bootstrap allowed
+            result = service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="Default Mode Agent",
+                hostname="default-host",
+                version="1.0.0",
+            )
+            assert result.agent is not None

@@ -76,6 +76,9 @@ from backend.src.models.team import Team
 from backend.src.models.user import User, UserStatus, UserType
 from backend.src.models.api_token import ApiToken
 
+# Agent Attestation (Issue #90 - Phase 14)
+from backend.src.models.release_manifest import ReleaseManifest
+
 # Export Base and all models
 __all__ = [
     "Base",
@@ -124,4 +127,6 @@ __all__ = [
     "UserStatus",
     "UserType",
     "ApiToken",
+    # Agent Attestation (Issue #90 - Phase 14)
+    "ReleaseManifest",
 ]

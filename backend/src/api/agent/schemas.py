@@ -63,6 +63,15 @@ class AgentRegistrationRequest(BaseModel):
         max_length=64,
         description="SHA-256 checksum of agent binary"
     )
+    platform: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Agent platform identifier (e.g., 'darwin-arm64', 'linux-amd64')"
+    )
+    development_mode: bool = Field(
+        False,
+        description="Whether agent is running in development mode"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -81,7 +90,9 @@ class AgentRegistrationRequest(BaseModel):
                     "/Volumes/External"
                 ],
                 "version": "1.0.0",
-                "binary_checksum": "abc123def456..."
+                "binary_checksum": "abc123def456...",
+                "platform": "darwin-arm64",
+                "development_mode": False
             }
         }
     }

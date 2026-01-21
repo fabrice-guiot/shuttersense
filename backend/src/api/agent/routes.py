@@ -153,6 +153,8 @@ async def register_agent(
             authorized_roots=data.authorized_roots,
             version=data.version,
             binary_checksum=data.binary_checksum,
+            platform=data.platform,
+            development_mode=data.development_mode,
         )
 
         # Broadcast pool status update after registration
