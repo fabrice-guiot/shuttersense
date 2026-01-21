@@ -321,7 +321,7 @@
 
 ### Backend Tests for User Story 6
 
-- [ ] T131 [P] [US6] Integration tests for agent connector endpoints in `backend/tests/integration/test_agent_connector_api.py` (list, metadata, report-capability)
+- [x] T131 [P] [US6] Integration tests for agent connector endpoints in `backend/tests/integration/test_agent_connector_api.py` (list, metadata, report-capability) - 16 tests
 
 ### Backend Implementation for User Story 6
 
@@ -332,9 +332,9 @@
 ### Agent Tests for User Story 6
 
 - [x] T135 [P] [US6] Unit tests for credential store in `agent/tests/unit/test_credential_store.py` (encryption, storage, retrieval) - 26 tests
-- [ ] T136 [P] [US6] Unit tests for connectors CLI commands in `agent/tests/unit/test_cli_connectors.py` (list, configure)
-- [ ] T137 [P] [US6] Unit tests for capabilities CLI command in `agent/tests/unit/test_cli_capabilities.py`
-- [ ] T138 [US6] Integration tests for credential configuration flow in `agent/tests/integration/test_credential_config.py`
+- [x] T136 [P] [US6] Unit tests for connectors CLI commands in `agent/tests/unit/test_cli_connectors.py` (list, show, remove, test) - 15 tests
+- [x] T137 [P] [US6] Unit tests for capabilities CLI command in `agent/tests/unit/test_cli_capabilities.py` - 5 tests
+- [x] T138 [US6] Integration tests for credential configuration flow in `agent/tests/integration/test_credential_config.py` - 12 tests
 
 ### Agent Implementation for User Story 6
 
