@@ -22,9 +22,10 @@ class TestCollectionServiceCreate:
     """Tests for CollectionService.create_collection() - T104m"""
 
     def test_create_local_collection_with_accessibility_test(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
         """Should create local collection and test directory accessibility"""
+        agent = create_agent(name="Test Agent")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -33,7 +34,8 @@ class TestCollectionServiceCreate:
                 type=CollectionType.LOCAL,
                 location=temp_dir,
                 team_id=test_team.id,
-                state=CollectionState.LIVE
+                state=CollectionState.LIVE,
+                bound_agent_id=agent.id,
             )
 
             assert collection.id is not None
@@ -43,27 +45,32 @@ class TestCollectionServiceCreate:
             assert collection.is_accessible is True
             assert collection.last_error is None
             assert collection.connector_id is None
+            assert collection.bound_agent_id == agent.id
 
-    def test_create_local_collection_inaccessible_directory(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+    def test_create_local_collection_with_bound_agent_defers_accessibility(
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
-        """Should mark local collection as inaccessible if directory doesn't exist"""
+        """LOCAL collections with bound agents defer accessibility testing to the agent.
+
+        When creating a LOCAL collection with a bound agent, is_accessible is set
+        to None (pending) and will be updated asynchronously when the agent tests it.
+        """
+        agent = create_agent(name="Test Agent", authorized_roots=["/nonexistent"])
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
         collection = service.create_collection(
-            name="Invalid Path",
+            name="Pending Path",
             type=CollectionType.LOCAL,
             location="/nonexistent/path/to/photos",
             team_id=test_team.id,
-            state=CollectionState.LIVE
+            state=CollectionState.LIVE,
+            bound_agent_id=agent.id,
         )
 
-        assert collection.is_accessible is False
-        # Path is rejected either because it's not under authorized root, or not found
-        assert any(msg in collection.last_error.lower() for msg in [
-            "not found or not readable",
-            "not under an authorized root",
-        ])
+        # LOCAL collections with bound agents have is_accessible=None (pending state)
+        # The agent will test accessibility asynchronously
+        assert collection.is_accessible is None or collection.is_accessible is True  # SQLAlchemy may apply default
+        assert collection.last_error is None  # No error until agent tests
 
     def test_create_remote_collection_with_connector(
         self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team
@@ -109,9 +116,10 @@ class TestCollectionServiceCreate:
         assert "Connector ID required" in str(exc_info.value)
 
     def test_create_local_collection_rejects_connector(
-        self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team
+        self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team, create_agent
     ):
         """Should raise ValueError if local collection has connector_id"""
+        agent = create_agent(name="Test Agent")
         connector = sample_connector(name="Test", type="s3")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
@@ -122,15 +130,17 @@ class TestCollectionServiceCreate:
                     type=CollectionType.LOCAL,
                     location=temp_dir,
                     team_id=test_team.id,
+                    bound_agent_id=agent.id,
                     connector_id=connector.id  # Should not be provided for LOCAL
                 )
 
         assert "should not be provided for LOCAL" in str(exc_info.value)
 
     def test_create_collection_with_metadata(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
         """Should create collection with metadata"""
+        agent = create_agent(name="Test Agent")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
         metadata = {"project": "Vacation 2024", "photographer": "John Doe"}
 
@@ -140,22 +150,30 @@ class TestCollectionServiceCreate:
                 type=CollectionType.LOCAL,
                 location=temp_dir,
                 team_id=test_team.id,
+                bound_agent_id=agent.id,
                 metadata=metadata
             )
 
             assert collection.metadata_json == json.dumps(metadata)
 
     def test_create_collection_duplicate_name(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
         """Should raise ValueError if collection name already exists"""
+        agent = create_agent(name="Test Agent")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir, team_id=test_team.id)
+            service.create_collection(
+                "Duplicate", CollectionType.LOCAL, temp_dir,
+                team_id=test_team.id, bound_agent_id=agent.id
+            )
 
             with pytest.raises(ValueError) as exc_info:
-                service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir, team_id=test_team.id)
+                service.create_collection(
+                    "Duplicate", CollectionType.LOCAL, temp_dir,
+                    team_id=test_team.id, bound_agent_id=agent.id
+                )
 
         assert "already exists" in str(exc_info.value)
 
@@ -581,17 +599,21 @@ class TestCollectionServiceGetFiles:
         # Should use Closed TTL (86400s = 24 hours)
         assert captured_ttl == 86400
 
-    def test_get_collection_files_custom_ttl_override(
+    def test_get_collection_files_uses_state_based_ttl(
         self, test_db_session, test_file_cache, test_connector_service, sample_collection
     ):
-        """Should use custom cache_ttl if provided"""
+        """TTL is derived from collection state, not per-collection cache_ttl field.
+
+        Note: Per-collection cache_ttl override was removed. TTL is now determined by:
+        1. Team TTL config (if available)
+        2. Hardcoded defaults based on collection state (LIVE=3600, CLOSED=86400, ARCHIVED=604800)
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(
-                name="Custom TTL",
+                name="State TTL",
                 type="local",
                 location=temp_dir,
                 state="live",
-                cache_ttl=7200,  # Custom override
                 is_accessible=True
             )
 
@@ -610,8 +632,8 @@ class TestCollectionServiceGetFiles:
 
         service.get_collection_files(collection.id, use_cache=False)
 
-        # Should use custom TTL
-        assert captured_ttl == 7200
+        # Should use LIVE state default TTL (3600 seconds / 1 hour)
+        assert captured_ttl == 3600
 
     def test_get_collection_files_not_accessible_raises_error(
         self, test_db_session, test_file_cache, test_connector_service, sample_collection

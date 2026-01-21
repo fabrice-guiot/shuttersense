@@ -169,12 +169,14 @@ def seed_first_team(
         if _shutdown_requested:
             return team_guid, None
 
-        # Seed default data for the team (categories, event statuses)
-        categories_created, configs_created = seed_service.seed_team_defaults(team_id)
-        if categories_created > 0 or configs_created > 0:
+        # Seed default data for the team (categories, event statuses, TTL configs)
+        categories_created, statuses_created, ttl_configs_created = seed_service.seed_team_defaults(team_id)
+        total_configs = statuses_created + ttl_configs_created
+        if categories_created > 0 or total_configs > 0:
             print(f"\n[SEEDED] Default data for team")
             print(f"  Categories: {categories_created}")
-            print(f"  Event statuses: {configs_created}")
+            print(f"  Event statuses: {statuses_created}")
+            print(f"  TTL configs: {ttl_configs_created}")
         else:
             # Check if already seeded
             summary = seed_service.get_seed_summary(team_id)

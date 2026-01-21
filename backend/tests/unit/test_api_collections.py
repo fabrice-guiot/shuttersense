@@ -13,8 +13,10 @@ from fastapi.testclient import TestClient
 class TestCollectionAPICreate:
     """Tests for POST /api/collections - T104w"""
 
-    def test_create_local_collection_with_accessibility_test(self, test_client, sample_collection_data):
+    def test_create_local_collection_with_accessibility_test(self, test_client, sample_collection_data, create_agent):
         """Should create local collection with accessibility test - T104w"""
+        agent = create_agent(name="Test Agent")
+
         with tempfile.TemporaryDirectory() as temp_dir:
             data = sample_collection_data(
                 name="Local Photos",
@@ -22,6 +24,8 @@ class TestCollectionAPICreate:
                 location=temp_dir,
                 state="live"
             )
+            # Add bound_agent_guid for LOCAL collection
+            data["bound_agent_guid"] = agent.guid
 
             response = test_client.post("/api/collections", json=data)
 
@@ -29,24 +33,29 @@ class TestCollectionAPICreate:
             json_data = response.json()
             assert json_data["name"] == "Local Photos"
             assert json_data["type"] == "local"
-            assert json_data["is_accessible"] is True
-            assert json_data["last_error"] is None
+            # LOCAL collections with bound agents have is_accessible=None initially (pending)
+            # The actual value depends on whether the agent tests it
+            assert json_data["bound_agent"]["guid"] == agent.guid
 
-    def test_create_local_collection_inaccessible_directory(self, test_client, sample_collection_data):
-        """Should create collection but mark as inaccessible"""
+    def test_create_local_collection_inaccessible_directory(self, test_client, sample_collection_data, create_agent):
+        """Should create LOCAL collection with pending accessibility (agent tests later)."""
+        # Create agent with /nonexistent as authorized root so collection can be created
+        agent = create_agent(name="Test Agent", authorized_roots=["/nonexistent"])
+
         data = sample_collection_data(
             name="Inaccessible",
             type="local",
             location="/nonexistent/directory"
         )
+        data["bound_agent_guid"] = agent.guid
 
         response = test_client.post("/api/collections", json=data)
 
-        # Service creates collection but marks it as inaccessible
+        # LOCAL collections with bound agents are created with is_accessible=None (pending)
+        # The agent will test accessibility asynchronously
         assert response.status_code == 201
         json_data = response.json()
-        assert json_data["is_accessible"] is False
-        assert json_data["last_error"] is not None
+        assert json_data["bound_agent"]["guid"] == agent.guid
 
     def test_create_remote_collection_with_connector(self, test_client, sample_connector, sample_collection_data):
         """Should create remote collection with valid connector - T104w"""
@@ -67,10 +76,12 @@ class TestCollectionAPICreate:
         assert json_data["type"] == "s3"
         assert json_data["connector"]["guid"] == connector.guid
 
-    def test_create_collection_duplicate_name(self, test_client, sample_collection):
+    def test_create_collection_duplicate_name(self, test_client, sample_collection, create_agent):
         """Should return 409 for duplicate name"""
+        agent = create_agent(name="Test Agent")
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            sample_collection(name="Existing Collection", type="local", location=temp_dir)
+            sample_collection(name="Existing Collection", type="local", location=temp_dir, bound_agent_id=agent.id)
 
             # Try to create another with same name
             with tempfile.TemporaryDirectory() as temp_dir2:
@@ -78,7 +89,8 @@ class TestCollectionAPICreate:
                     "name": "Existing Collection",
                     "type": "local",
                     "location": temp_dir2,
-                    "state": "live"
+                    "state": "live",
+                    "bound_agent_guid": agent.guid
                 }
 
                 response = test_client.post("/api/collections", json=data)
@@ -220,15 +232,19 @@ class TestCollectionAPIUpdate:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
-    def test_update_collection_location_retests_accessibility(self, test_client, sample_collection):
+    def test_update_collection_location_retests_accessibility(self, test_client, sample_collection, create_agent):
         """Should re-test accessibility when location changes"""
+        # Create agent with both temp and nonexistent roots
+        agent = create_agent(name="Test Agent", authorized_roots=["/nonexistent"])
+
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create collection with accessible location
             collection = sample_collection(
                 name="Location Test",
                 type="local",
                 location=temp_dir,
-                is_accessible=True
+                is_accessible=True,
+                bound_agent_id=agent.id
             )
 
             # Update to an invalid location
@@ -243,10 +259,12 @@ class TestCollectionAPIUpdate:
             assert json_data["location"] == "/nonexistent/invalid/path"
             # Accessibility should be re-tested and now False
             assert json_data["is_accessible"] is False
-            assert json_data["last_error"] is not None
+            assert json_data["accessibility_message"] is not None
 
-    def test_update_collection_location_to_accessible(self, test_client, sample_collection):
+    def test_update_collection_location_to_accessible(self, test_client, sample_collection, create_agent):
         """Should set is_accessible=True when location becomes accessible"""
+        agent = create_agent(name="Test Agent", authorized_roots=["/nonexistent"])
+
         with tempfile.TemporaryDirectory() as temp_dir1, \
              tempfile.TemporaryDirectory() as temp_dir2:
             # Create collection with inaccessible location
@@ -255,7 +273,7 @@ class TestCollectionAPIUpdate:
                 type="local",
                 location="/nonexistent/path",
                 is_accessible=False,
-                last_error="Not found"
+                bound_agent_id=agent.id
             )
 
             # Update to a valid location
@@ -270,7 +288,7 @@ class TestCollectionAPIUpdate:
             assert json_data["location"] == temp_dir2
             # Accessibility should be re-tested and now True
             assert json_data["is_accessible"] is True
-            assert json_data["last_error"] is None
+            assert json_data["accessibility_message"] is None
 
 
 class TestCollectionAPIDelete:
@@ -317,10 +335,12 @@ class TestCollectionAPIDelete:
 class TestCollectionAPITestAccessibility:
     """Tests for POST /api/collections/{guid}/test - T104x"""
 
-    def test_test_local_collection_accessible(self, test_client, sample_collection):
+    def test_test_local_collection_accessible(self, test_client, sample_collection, create_agent):
         """Should test local collection accessibility - T104x"""
+        agent = create_agent(name="Test Agent")
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            collection = sample_collection(name="Test", type="local", location=temp_dir)
+            collection = sample_collection(name="Test", type="local", location=temp_dir, bound_agent_id=agent.id)
 
             response = test_client.post(f"/api/collections/{collection.guid}/test")
 
@@ -332,16 +352,19 @@ class TestCollectionAPITestAccessibility:
             assert "collection" in json_data
             assert json_data["collection"]["guid"] == collection.guid
             assert json_data["collection"]["is_accessible"] is True
-            assert json_data["collection"]["last_error"] is None
+            assert json_data["collection"]["accessibility_message"] is None
 
-    def test_test_local_collection_inaccessible(self, test_client, sample_collection):
+    def test_test_local_collection_inaccessible(self, test_client, sample_collection, create_agent):
         """Should detect inaccessible local collection"""
+        # Include /nonexistent in authorized roots so the collection can be created
+        agent = create_agent(name="Test Agent", authorized_roots=["/nonexistent"])
+
         collection = sample_collection(
             name="Inaccessible",
             type="local",
             location="/nonexistent/path",
             is_accessible=False,
-            last_error="Directory not found"
+            bound_agent_id=agent.id
         )
 
         response = test_client.post(f"/api/collections/{collection.guid}/test")
@@ -359,7 +382,7 @@ class TestCollectionAPITestAccessibility:
         assert "collection" in json_data
         assert json_data["collection"]["guid"] == collection.guid
         assert json_data["collection"]["is_accessible"] is False
-        assert json_data["collection"]["last_error"] is not None
+        assert json_data["collection"]["accessibility_message"] is not None
 
     def test_test_remote_collection_with_connector(self, test_client, sample_connector, sample_collection, mocker):
         """Should test remote collection via connector"""

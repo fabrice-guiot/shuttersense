@@ -684,8 +684,9 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 - [ ] T211 [P] Update `.specify/memory/constitution.md` with Agent-Only Execution principle
 - [ ] T212 [P] Update `CLAUDE.md` with agent architecture, GUID prefixes, header pattern
-- [ ] T213 [P] Update `README.md` with agent requirement section
-- [ ] T214 Create `docs/agent-installation.md` (download, register, start, configure, troubleshoot)
+- [ ] T213 Create `docs/agent-build.md` (build, register manifest)
+- [ ] T213b Create `docs/agent-installation.md` (download, register, start, configure, troubleshoot)
+- [ ] T214 [P] Update `README.md` with agent requirement section (Reference Build and Installation documentations)
 - [ ] T215 [P] Add "No agents available" warning to job creation UI in `frontend/src/components/jobs/JobCreateForm.tsx`
 - [ ] T216 Run quickstart.md validation (manual test)
 - [ ] T217 Create agent packaging scripts in `agent/packaging/` (build_macos.sh, build_windows.sh, build_linux.sh)

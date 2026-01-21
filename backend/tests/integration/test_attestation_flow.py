@@ -134,7 +134,7 @@ class TestAttestationFlowIntegration:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": known_checksum,
                 "is_active": True,
             },
@@ -161,7 +161,7 @@ class TestAttestationFlowIntegration:
                 "authorized_roots": ["/photos"],
                 "version": "1.0.0",
                 "binary_checksum": known_checksum,
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
             },
         )
 
@@ -181,7 +181,7 @@ class TestAttestationFlowIntegration:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": "a" * 64,
                 "is_active": True,
             },
@@ -209,7 +209,7 @@ class TestAttestationFlowIntegration:
                 "authorized_roots": ["/photos"],
                 "version": "1.0.0",
                 "binary_checksum": unknown_checksum,
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
             },
         )
 
@@ -228,7 +228,7 @@ class TestAttestationFlowIntegration:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": "a" * 64,
                 "is_active": True,
             },
@@ -274,7 +274,7 @@ class TestAttestationFlowIntegration:
             "/api/admin/release-manifests",
             json={
                 "version": "0.9.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": deactivated_checksum,
                 "is_active": False,  # Inactive from start
             },
@@ -286,7 +286,7 @@ class TestAttestationFlowIntegration:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": "d" * 64,
                 "is_active": True,
             },
@@ -312,7 +312,7 @@ class TestAttestationFlowIntegration:
                 "authorized_roots": ["/photos"],
                 "version": "0.9.0",
                 "binary_checksum": deactivated_checksum,
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
             },
         )
 
@@ -330,7 +330,7 @@ class TestAttestationFlowIntegration:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": "e" * 64,
                 "notes": "Initial release",
                 "is_active": True,

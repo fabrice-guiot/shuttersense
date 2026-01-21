@@ -313,7 +313,7 @@ def sample_collection_data():
 @pytest.fixture
 def sample_collection(test_db_session, sample_collection_data, test_team):
     """Factory for creating sample Collection models in the database."""
-    def _create(connector_guid=None, connector_id=None, team_id=None, **kwargs):
+    def _create(connector_guid=None, connector_id=None, team_id=None, bound_agent_id=None, **kwargs):
         import json
         from backend.src.services.guid import GuidService
 
@@ -333,6 +333,7 @@ def sample_collection(test_db_session, sample_collection_data, test_team):
             location=data['location'],
             state=data['state'],
             connector_id=resolved_connector_id,
+            bound_agent_id=bound_agent_id,
             cache_ttl=data['cache_ttl'],
             is_accessible=data['is_accessible'],
             last_error=data['last_error'],
@@ -675,3 +676,78 @@ def other_team_client(test_db_session, test_session_factory, test_cache, test_jo
 
     # Clear overrides
     app.dependency_overrides.clear()
+
+
+# ============================================================================
+# Agent Fixtures (Phase 6)
+# ============================================================================
+
+@pytest.fixture
+def create_agent(test_db_session, test_team, test_user):
+    """Factory fixture to create test agents for use across tests."""
+    from backend.src.services.agent_service import AgentService
+    from backend.src.models.agent import AgentStatus
+
+    def _create_agent(
+        name="Test Agent",
+        status=AgentStatus.ONLINE,
+        team=None,
+        user=None,
+        authorized_roots=None,
+        capabilities=None,
+    ):
+        """Create an agent with given parameters.
+
+        Args:
+            name: Agent name
+            status: Agent status (default ONLINE)
+            team: Team to use (defaults to test_team)
+            user: User to use (defaults to test_user)
+            authorized_roots: List of authorized filesystem roots (default: common temp paths)
+            capabilities: List of agent capabilities
+
+        Returns:
+            Created Agent instance
+        """
+        import tempfile
+
+        team = team or test_team
+        user = user or test_user
+
+        # Default authorized roots include temp directories for tests
+        if authorized_roots is None:
+            temp_base = tempfile.gettempdir()
+            authorized_roots = [temp_base, "/tmp", "/private/var", "/var"]
+
+        # Default capabilities
+        if capabilities is None:
+            capabilities = ["local_filesystem", "tool:photostats:1.0.0"]
+
+        service = AgentService(test_db_session)
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=team.id,
+            created_by_user_id=user.id,
+        )
+
+        # Register agent (uses RegistrationResult dataclass)
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name=name,
+            version="1.0.0",
+            capabilities=capabilities,
+            authorized_roots=authorized_roots,
+            platform="test-platform",
+        )
+        agent = result.agent
+
+        # Update status if needed
+        if status != AgentStatus.ONLINE:
+            agent.status = status
+            test_db_session.commit()
+            test_db_session.refresh(agent)
+
+        return agent
+
+    return _create_agent
