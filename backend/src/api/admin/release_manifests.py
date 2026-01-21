@@ -41,11 +41,10 @@ class ReleaseManifestCreateRequest(BaseModel):
         max_length=50,
         description="Semantic version (e.g., '1.0.0', '1.2.3-beta')"
     )
-    platform: str = Field(
+    platforms: List[str] = Field(
         ...,
         min_length=1,
-        max_length=50,
-        description="Platform identifier (e.g., 'darwin-arm64', 'linux-amd64')"
+        description="Platform identifiers (e.g., ['darwin-arm64', 'darwin-amd64'])"
     )
     checksum: str = Field(
         ...,
@@ -68,9 +67,9 @@ class ReleaseManifestCreateRequest(BaseModel):
         "json_schema_extra": {
             "example": {
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64", "darwin-amd64"],
                 "checksum": "a" * 64,
-                "notes": "Initial release for macOS Apple Silicon",
+                "notes": "macOS universal binary (Apple Silicon + Intel)",
                 "is_active": True,
             }
         }
@@ -96,7 +95,7 @@ class ReleaseManifestResponse(BaseModel):
 
     guid: str = Field(..., description="Release manifest GUID (rel_xxx)")
     version: str = Field(..., description="Semantic version")
-    platform: str = Field(..., description="Platform identifier")
+    platforms: List[str] = Field(..., description="Platform identifiers")
     checksum: str = Field(..., description="SHA-256 checksum")
     is_active: bool = Field(..., description="Whether manifest is active")
     notes: Optional[str] = Field(None, description="Optional notes")
@@ -133,7 +132,7 @@ def manifest_to_response(manifest: ReleaseManifest) -> ReleaseManifestResponse:
     return ReleaseManifestResponse(
         guid=manifest.guid,
         version=manifest.version,
-        platform=manifest.platform,
+        platforms=manifest.platforms,
         checksum=manifest.checksum,
         is_active=manifest.is_active,
         notes=manifest.notes,
@@ -162,31 +161,39 @@ async def create_release_manifest(
     **Requires super admin privileges.**
 
     - **version**: Semantic version string
-    - **platform**: Target platform (darwin-arm64, linux-amd64, etc.)
+    - **platforms**: Target platforms (can include multiple for universal binaries)
     - **checksum**: SHA-256 hash of the binary (64 hex chars)
     - **notes**: Optional notes about this release
     - **is_active**: Whether to allow registration with this checksum
     """
     try:
-        # Check for duplicate (version, platform)
+        # Validate platforms list is not empty
+        if not request.platforms:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="At least one platform is required"
+            )
+
+        # Check for duplicate (version, checksum)
         existing = db.query(ReleaseManifest).filter(
             ReleaseManifest.version == request.version.strip(),
-            ReleaseManifest.platform == request.platform.lower(),
+            ReleaseManifest.checksum == request.checksum.lower(),
         ).first()
 
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Manifest already exists for version {request.version} on {request.platform}"
+                detail=f"Manifest already exists for version {request.version} with this checksum"
             )
 
         manifest = ReleaseManifest(
             version=request.version,
-            platform=request.platform,
             checksum=request.checksum,
             notes=request.notes,
             is_active=request.is_active,
         )
+        # Set platforms using the property setter (normalizes to lowercase)
+        manifest.platforms = request.platforms
 
         db.add(manifest)
         db.commit()
@@ -200,7 +207,7 @@ async def create_release_manifest(
                 "admin_guid": ctx.user_guid,
                 "manifest_guid": manifest.guid,
                 "version": manifest.version,
-                "platform": manifest.platform,
+                "platforms": manifest.platforms,
                 "is_active": manifest.is_active,
             }
         )
@@ -214,7 +221,7 @@ async def create_release_manifest(
 @router.get("", response_model=ReleaseManifestListResponse)
 async def list_release_manifests(
     active_only: bool = Query(False, description="Only return active manifests"),
-    platform: Optional[str] = Query(None, description="Filter by platform"),
+    platform: Optional[str] = Query(None, description="Filter by platform (manifests containing this platform)"),
     version: Optional[str] = Query(None, description="Filter by version"),
     ctx: TenantContext = Depends(require_super_admin),
     db: Session = Depends(get_db),
@@ -226,7 +233,7 @@ async def list_release_manifests(
 
     Query parameters:
     - **active_only**: If true, only return active manifests
-    - **platform**: Filter by platform identifier
+    - **platform**: Filter by platform (returns manifests that support this platform)
     - **version**: Filter by version string
     """
     query = db.query(ReleaseManifest)
@@ -234,16 +241,17 @@ async def list_release_manifests(
     if active_only:
         query = query.filter(ReleaseManifest.is_active == True)
 
-    if platform:
-        query = query.filter(ReleaseManifest.platform == platform.lower())
-
     if version:
         query = query.filter(ReleaseManifest.version == version)
 
     manifests = query.order_by(
         ReleaseManifest.version.desc(),
-        ReleaseManifest.platform,
     ).all()
+
+    # Filter by platform in Python since JSON array filtering is dialect-specific
+    if platform:
+        platform_lower = platform.lower()
+        manifests = [m for m in manifests if m.supports_platform(platform_lower)]
 
     # Count active
     active_count = sum(1 for m in manifests if m.is_active)
@@ -272,15 +280,19 @@ async def get_release_manifest_stats(
         ReleaseManifest.is_active == True
     ).scalar() or 0
 
-    # Get unique platforms and versions
-    platforms = [
-        row[0] for row in
-        db.query(ReleaseManifest.platform).distinct().order_by(ReleaseManifest.platform).all()
-    ]
+    # Get unique versions
     versions = [
         row[0] for row in
         db.query(ReleaseManifest.version).distinct().order_by(ReleaseManifest.version.desc()).all()
     ]
+
+    # Get unique platforms by iterating through all manifests
+    # (JSON array aggregation is dialect-specific, so we do it in Python)
+    all_manifests = db.query(ReleaseManifest).all()
+    platforms_set: set[str] = set()
+    for manifest in all_manifests:
+        platforms_set.update(manifest.platforms)
+    platforms = sorted(platforms_set)
 
     return ReleaseManifestStatsResponse(
         total_count=total_count,
@@ -370,7 +382,7 @@ async def update_release_manifest(
                     "admin_guid": ctx.user_guid,
                     "manifest_guid": manifest.guid,
                     "version": manifest.version,
-                    "platform": manifest.platform,
+                    "platforms": manifest.platforms,
                 }
             )
 
@@ -424,7 +436,7 @@ async def delete_release_manifest(
             "admin_guid": ctx.user_guid,
             "manifest_guid": manifest.guid,
             "version": manifest.version,
-            "platform": manifest.platform,
+            "platforms": manifest.platforms,
             "checksum": manifest.checksum,
         }
     )

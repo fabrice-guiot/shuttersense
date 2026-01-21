@@ -448,19 +448,20 @@ class AgentService:
                 "Ensure you are running an official release."
             )
 
-        # Checksum found - verify platform matches if both are provided
-        if platform and manifest.platform != platform.lower():
+        # Checksum found - verify platform is supported if provided
+        if platform and not manifest.supports_platform(platform):
+            supported_platforms = ', '.join(manifest.platforms)
             logger.warning(
                 "Agent registration denied: platform mismatch",
                 extra={
                     "binary_checksum": binary_checksum,
                     "agent_platform": platform,
-                    "manifest_platform": manifest.platform,
+                    "manifest_platforms": manifest.platforms,
                     "manifest_version": manifest.version
                 }
             )
             raise ValidationError(
-                f"Binary attestation failed: checksum is for {manifest.platform}, "
+                f"Binary attestation failed: checksum is for [{supported_platforms}], "
                 f"but agent reports {platform}"
             )
 
@@ -469,7 +470,7 @@ class AgentService:
             "Agent binary attestation successful",
             extra={
                 "binary_checksum": binary_checksum,
-                "platform": manifest.platform,
+                "platforms": manifest.platforms,
                 "version": manifest.version,
                 "development_mode": development_mode
             }

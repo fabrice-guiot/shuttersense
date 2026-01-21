@@ -3,10 +3,11 @@ Unit tests for ReleaseManifest model.
 
 Tests:
 - GUID generation and format
-- Field validation (checksum, platform, version)
-- Unique constraint on (version, platform)
+- Field validation (checksum, platforms, version)
+- Unique constraint on (version, checksum)
 - find_by_checksum class method
 - is_active filtering
+- Multi-platform support
 """
 
 import pytest
@@ -22,9 +23,9 @@ class TestReleaseManifestModel:
         """ReleaseManifest generates GUID with rel_ prefix."""
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -37,9 +38,9 @@ class TestReleaseManifestModel:
         """New manifests are active by default."""
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="linux-amd64",
             checksum="b" * 64,
         )
+        manifest.platforms = ["linux-amd64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -51,9 +52,9 @@ class TestReleaseManifestModel:
         before = datetime.utcnow()
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="windows-amd64",
             checksum="c" * 64,
         )
+        manifest.platforms = ["windows-amd64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -67,10 +68,10 @@ class TestReleaseManifestModel:
         """String representation includes key fields."""
         manifest = ReleaseManifest(
             version="1.2.3",
-            platform="darwin-arm64",
             checksum="d" * 64,
             is_active=False,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -89,9 +90,9 @@ class TestChecksumValidation:
         checksum = "abcdef1234567890" * 4  # 64 chars
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -102,9 +103,9 @@ class TestChecksumValidation:
         checksum = "ABCDEF1234567890" * 4
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
         )
+        manifest.platforms = ["darwin-arm64"]
 
         assert manifest.checksum == checksum.lower()
 
@@ -113,7 +114,6 @@ class TestChecksumValidation:
         with pytest.raises(ValueError, match="64 hex characters"):
             ReleaseManifest(
                 version="1.0.0",
-                platform="darwin-arm64",
                 checksum="abc123",
             )
 
@@ -122,7 +122,6 @@ class TestChecksumValidation:
         with pytest.raises(ValueError, match="64 hex characters"):
             ReleaseManifest(
                 version="1.0.0",
-                platform="darwin-arm64",
                 checksum="a" * 65,
             )
 
@@ -131,7 +130,6 @@ class TestChecksumValidation:
         with pytest.raises(ValueError, match="valid hexadecimal"):
             ReleaseManifest(
                 version="1.0.0",
-                platform="darwin-arm64",
                 checksum="g" * 64,  # 'g' is not valid hex
             )
 
@@ -140,7 +138,6 @@ class TestChecksumValidation:
         with pytest.raises(ValueError, match="required"):
             ReleaseManifest(
                 version="1.0.0",
-                platform="darwin-arm64",
                 checksum="",
             )
 
@@ -152,9 +149,9 @@ class TestVersionValidation:
         """Standard semver versions are accepted."""
         manifest = ReleaseManifest(
             version="1.2.3",
-            platform="darwin-arm64",
             checksum="a" * 64,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -164,9 +161,9 @@ class TestVersionValidation:
         """Pre-release versions are accepted."""
         manifest = ReleaseManifest(
             version="1.0.0-beta.1",
-            platform="darwin-arm64",
             checksum="b" * 64,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -176,9 +173,9 @@ class TestVersionValidation:
         """Version whitespace is trimmed."""
         manifest = ReleaseManifest(
             version="  1.0.0  ",
-            platform="darwin-arm64",
             checksum="c" * 64,
         )
+        manifest.platforms = ["darwin-arm64"]
         assert manifest.version == "1.0.0"
 
     def test_empty_version_rejected(self):
@@ -186,7 +183,6 @@ class TestVersionValidation:
         with pytest.raises(ValueError, match="required"):
             ReleaseManifest(
                 version="",
-                platform="darwin-arm64",
                 checksum="a" * 64,
             )
 
@@ -195,92 +191,144 @@ class TestVersionValidation:
         with pytest.raises(ValueError, match="required"):
             ReleaseManifest(
                 version="   ",
-                platform="darwin-arm64",
                 checksum="a" * 64,
             )
 
 
-class TestPlatformValidation:
-    """Tests for platform field validation."""
+class TestPlatformsProperty:
+    """Tests for platforms property and multi-platform support."""
 
-    def test_valid_platforms(self, test_db_session):
-        """All standard platforms are accepted."""
-        platforms = [
-            'darwin-arm64',
-            'darwin-amd64',
-            'linux-amd64',
-            'linux-arm64',
-            'windows-amd64',
-        ]
-        for i, platform in enumerate(platforms):
-            manifest = ReleaseManifest(
-                version=f"1.0.{i}",
-                platform=platform,
-                checksum=f"{i}" * 64,
-            )
-            test_db_session.add(manifest)
-
-        test_db_session.commit()
-
-    def test_platform_normalized_to_lowercase(self):
-        """Platform is normalized to lowercase."""
+    def test_single_platform(self, test_db_session):
+        """Single platform is stored and retrieved correctly."""
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="DARWIN-ARM64",
             checksum="a" * 64,
         )
-        assert manifest.platform == "darwin-arm64"
-
-    def test_unknown_platform_accepted(self, test_db_session):
-        """Unknown platforms are accepted for flexibility."""
-        manifest = ReleaseManifest(
-            version="1.0.0",
-            platform="freebsd-amd64",
-            checksum="a" * 64,
-        )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
+        test_db_session.refresh(manifest)
 
-        assert manifest.platform == "freebsd-amd64"
+        assert manifest.platforms == ["darwin-arm64"]
+
+    def test_multiple_platforms(self, test_db_session):
+        """Multiple platforms are stored and retrieved correctly."""
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum="a" * 64,
+        )
+        manifest.platforms = ["darwin-arm64", "darwin-amd64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+        test_db_session.refresh(manifest)
+
+        assert set(manifest.platforms) == {"darwin-arm64", "darwin-amd64"}
+
+    def test_platforms_normalized_to_lowercase(self, test_db_session):
+        """Platforms are normalized to lowercase."""
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum="a" * 64,
+        )
+        manifest.platforms = ["DARWIN-ARM64", "Linux-AMD64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+        test_db_session.refresh(manifest)
+
+        assert set(manifest.platforms) == {"darwin-arm64", "linux-amd64"}
+
+    def test_supports_platform_true(self, test_db_session):
+        """supports_platform returns True for supported platforms."""
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum="a" * 64,
+        )
+        manifest.platforms = ["darwin-arm64", "darwin-amd64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+        test_db_session.refresh(manifest)
+
+        assert manifest.supports_platform("darwin-arm64") is True
+        assert manifest.supports_platform("darwin-amd64") is True
+
+    def test_supports_platform_false(self, test_db_session):
+        """supports_platform returns False for unsupported platforms."""
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum="a" * 64,
+        )
+        manifest.platforms = ["darwin-arm64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+        test_db_session.refresh(manifest)
+
+        assert manifest.supports_platform("linux-amd64") is False
+
+    def test_supports_platform_case_insensitive(self, test_db_session):
+        """supports_platform is case-insensitive."""
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum="a" * 64,
+        )
+        manifest.platforms = ["darwin-arm64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+        test_db_session.refresh(manifest)
+
+        assert manifest.supports_platform("DARWIN-ARM64") is True
+
+    def test_empty_platforms(self, test_db_session):
+        """Empty platforms list works correctly."""
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum="a" * 64,
+        )
+        manifest.platforms = []
+        test_db_session.add(manifest)
+        test_db_session.commit()
+        test_db_session.refresh(manifest)
+
+        assert manifest.platforms == []
+        assert manifest.supports_platform("darwin-arm64") is False
 
 
 class TestUniqueConstraint:
-    """Tests for (version, platform) unique constraint."""
+    """Tests for (version, checksum) unique constraint."""
 
-    def test_duplicate_version_platform_rejected(self, test_db_session):
-        """Same version+platform with different checksum is rejected."""
+    def test_duplicate_version_checksum_rejected(self, test_db_session):
+        """Same version+checksum is rejected."""
         from sqlalchemy.exc import IntegrityError
 
         manifest1 = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
         )
+        manifest1.platforms = ["darwin-arm64"]
         test_db_session.add(manifest1)
         test_db_session.commit()
 
         manifest2 = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
-            checksum="b" * 64,  # Different checksum
+            checksum="a" * 64,  # Same checksum
         )
+        manifest2.platforms = ["linux-amd64"]  # Different platforms
         test_db_session.add(manifest2)
 
         with pytest.raises(IntegrityError):
             test_db_session.commit()
 
-    def test_same_version_different_platform_allowed(self, test_db_session):
-        """Same version on different platforms is allowed."""
+    def test_same_version_different_checksum_allowed(self, test_db_session):
+        """Same version with different checksum is allowed."""
         manifest1 = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
         )
+        manifest1.platforms = ["darwin-arm64"]
         manifest2 = ReleaseManifest(
             version="1.0.0",
-            platform="linux-amd64",
-            checksum="b" * 64,
+            checksum="b" * 64,  # Different checksum
         )
+        manifest2.platforms = ["linux-amd64"]
         test_db_session.add(manifest1)
         test_db_session.add(manifest2)
         test_db_session.commit()
@@ -288,18 +336,18 @@ class TestUniqueConstraint:
         assert manifest1.id is not None
         assert manifest2.id is not None
 
-    def test_same_platform_different_version_allowed(self, test_db_session):
-        """Different versions on same platform is allowed."""
+    def test_different_version_same_checksum_allowed(self, test_db_session):
+        """Different versions with same checksum is allowed."""
         manifest1 = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
         )
+        manifest1.platforms = ["darwin-arm64"]
         manifest2 = ReleaseManifest(
             version="1.1.0",
-            platform="darwin-arm64",
-            checksum="b" * 64,
+            checksum="a" * 64,  # Same checksum (e.g., re-tagged build)
         )
+        manifest2.platforms = ["darwin-arm64"]
         test_db_session.add(manifest1)
         test_db_session.add(manifest2)
         test_db_session.commit()
@@ -316,9 +364,9 @@ class TestFindByChecksum:
         checksum = "a" * 64
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -332,9 +380,9 @@ class TestFindByChecksum:
         checksum = "abcdef" + "0" * 58
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -354,10 +402,10 @@ class TestFindByChecksum:
         checksum = "a" * 64
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
             is_active=False,  # Inactive
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -370,10 +418,10 @@ class TestFindByChecksum:
         checksum = "a" * 64
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
             is_active=False,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -383,3 +431,20 @@ class TestFindByChecksum:
 
         assert found is not None
         assert found.id == manifest.id
+
+    def test_find_multiplatform_manifest(self, test_db_session):
+        """Can find manifest with multiple platforms by checksum."""
+        checksum = "a" * 64
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum=checksum,
+        )
+        manifest.platforms = ["darwin-arm64", "darwin-amd64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        found = ReleaseManifest.find_by_checksum(test_db_session, checksum)
+
+        assert found is not None
+        assert found.id == manifest.id
+        assert set(found.platforms) == {"darwin-arm64", "darwin-amd64"}

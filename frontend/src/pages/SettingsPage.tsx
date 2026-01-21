@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plug, Cog, Tag, Key, Building2 } from 'lucide-react'
+import { Plug, Cog, Tag, Key, Building2, Package } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { ConnectorsTab } from '@/components/settings/ConnectorsTab'
@@ -17,6 +17,7 @@ import { ConfigTab } from '@/components/settings/ConfigTab'
 import { CategoriesTab } from '@/components/settings/CategoriesTab'
 import { TokensTab } from '@/components/settings/TokensTab'
 import { TeamsTab } from '@/components/settings/TeamsTab'
+import { ReleaseManifestsTab } from '@/components/settings/ReleaseManifestsTab'
 import { useIsSuperAdmin } from '@/hooks/useAuth'
 
 // Base tab configuration - order: Config, Categories, Connectors, Tokens
@@ -43,7 +44,7 @@ const BASE_TABS = [
   },
 ] as const
 
-// Super admin only tab
+// Super admin only tabs
 const TEAMS_TAB = {
   id: 'teams',
   label: 'Teams',
@@ -51,14 +52,21 @@ const TEAMS_TAB = {
   superAdminOnly: true,
 } as const
 
-type TabId = 'config' | 'categories' | 'connectors' | 'tokens' | 'teams'
+const RELEASE_MANIFESTS_TAB = {
+  id: 'release-manifests',
+  label: 'Release Manifests',
+  icon: Package,
+  superAdminOnly: true,
+} as const
+
+type TabId = 'config' | 'categories' | 'connectors' | 'tokens' | 'teams' | 'release-manifests'
 
 const DEFAULT_TAB: TabId = 'config'
 
 export default function SettingsPage() {
   const isSuperAdmin = useIsSuperAdmin()
 
-  // Build tabs list - include Teams tab for super admins
+  // Build tabs list - include admin-only tabs for super admins
   const tabs = useMemo(() => {
     const allTabs: Array<{
       id: TabId
@@ -68,6 +76,7 @@ export default function SettingsPage() {
     }> = [...BASE_TABS]
     if (isSuperAdmin) {
       allTabs.push(TEAMS_TAB)
+      allTabs.push(RELEASE_MANIFESTS_TAB)
     }
     return allTabs
   }, [isSuperAdmin])
@@ -132,6 +141,12 @@ export default function SettingsPage() {
         {isSuperAdmin && (
           <TabsContent value="teams" className="mt-6">
             <TeamsTab />
+          </TabsContent>
+        )}
+
+        {isSuperAdmin && (
+          <TabsContent value="release-manifests" className="mt-6">
+            <ReleaseManifestsTab />
           </TabsContent>
         )}
       </Tabs>

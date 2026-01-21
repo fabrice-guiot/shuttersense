@@ -7,8 +7,11 @@ Create Date: 2026-01-21
 Stores known-good checksums for released agent binaries.
 During registration, an agent's checksum is validated against this table.
 """
+from typing import Any
+
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -20,10 +23,20 @@ depends_on = None
 
 def upgrade() -> None:
     """Create release_manifests table."""
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+
+    # Use native UUID type for PostgreSQL, LargeBinary for SQLite
+    uuid_type: Any
+    if dialect == 'postgresql':
+        uuid_type = postgresql.UUID(as_uuid=True)
+    else:
+        uuid_type = sa.LargeBinary(length=16)
+
     op.create_table(
         'release_manifests',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('uuid', sa.LargeBinary(length=16), nullable=False),
+        sa.Column('uuid', uuid_type, nullable=False),
         sa.Column('version', sa.String(length=50), nullable=False),
         sa.Column('platform', sa.String(length=50), nullable=False),
         sa.Column('checksum', sa.String(length=64), nullable=False),

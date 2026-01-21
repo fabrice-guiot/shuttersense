@@ -114,7 +114,7 @@ class TestAdminReleaseManifestCreate:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": "a" * 64,
                 "notes": "Initial release",
                 "is_active": True,
@@ -124,28 +124,46 @@ class TestAdminReleaseManifestCreate:
         assert response.status_code == 201
         data = response.json()
         assert data["version"] == "1.0.0"
-        assert data["platform"] == "darwin-arm64"
+        assert data["platforms"] == ["darwin-arm64"]
         assert data["checksum"] == "a" * 64
         assert data["notes"] == "Initial release"
         assert data["is_active"] is True
         assert data["guid"].startswith("rel_")
 
-    def test_create_manifest_normalizes_platform_lowercase(
+    def test_create_manifest_multiple_platforms(
         self, super_admin_client, test_db_session
     ):
-        """Platform is normalized to lowercase."""
+        """Can create manifest with multiple platforms (universal binary)."""
         response = super_admin_client.post(
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "DARWIN-ARM64",
+                "platforms": ["darwin-arm64", "darwin-amd64"],
                 "checksum": "b" * 64,
+                "notes": "macOS universal binary",
             },
         )
 
         assert response.status_code == 201
         data = response.json()
-        assert data["platform"] == "darwin-arm64"
+        assert set(data["platforms"]) == {"darwin-arm64", "darwin-amd64"}
+
+    def test_create_manifest_normalizes_platform_lowercase(
+        self, super_admin_client, test_db_session
+    ):
+        """Platforms are normalized to lowercase."""
+        response = super_admin_client.post(
+            "/api/admin/release-manifests",
+            json={
+                "version": "1.0.1",
+                "platforms": ["DARWIN-ARM64", "Linux-AMD64"],
+                "checksum": "c" * 64,
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert set(data["platforms"]) == {"darwin-arm64", "linux-amd64"}
 
     def test_create_manifest_normalizes_checksum_lowercase(
         self, super_admin_client, test_db_session
@@ -154,8 +172,8 @@ class TestAdminReleaseManifestCreate:
         response = super_admin_client.post(
             "/api/admin/release-manifests",
             json={
-                "version": "1.0.1",
-                "platform": "linux-amd64",
+                "version": "1.0.2",
+                "platforms": ["linux-amd64"],
                 "checksum": "ABCDEF" + "1" * 58,
             },
         )
@@ -164,31 +182,56 @@ class TestAdminReleaseManifestCreate:
         data = response.json()
         assert data["checksum"] == ("abcdef" + "1" * 58)
 
-    def test_create_manifest_duplicate_version_platform_rejected(
+    def test_create_manifest_duplicate_version_checksum_rejected(
         self, super_admin_client, test_db_session
     ):
-        """Duplicate (version, platform) is rejected."""
+        """Duplicate (version, checksum) is rejected."""
         # Create first manifest
         manifest = ReleaseManifest(
             version="2.0.0",
-            platform="darwin-arm64",
-            checksum="c" * 64,
+            checksum="d" * 64,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
-        # Try to create duplicate
+        # Try to create duplicate (same version and checksum)
         response = super_admin_client.post(
             "/api/admin/release-manifests",
             json={
                 "version": "2.0.0",
-                "platform": "darwin-arm64",
-                "checksum": "d" * 64,
+                "platforms": ["linux-amd64"],  # Different platform doesn't matter
+                "checksum": "d" * 64,  # Same checksum
             },
         )
 
         assert response.status_code == 409
         assert "already exists" in response.json()["detail"]
+
+    def test_create_manifest_same_version_different_checksum_allowed(
+        self, super_admin_client, test_db_session
+    ):
+        """Same version with different checksum is allowed (different binaries)."""
+        # Create first manifest
+        manifest = ReleaseManifest(
+            version="2.0.0",
+            checksum="e" * 64,
+        )
+        manifest.platforms = ["darwin-arm64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        # Create second manifest with same version but different checksum
+        response = super_admin_client.post(
+            "/api/admin/release-manifests",
+            json={
+                "version": "2.0.0",
+                "platforms": ["linux-amd64"],
+                "checksum": "f" * 64,  # Different checksum
+            },
+        )
+
+        assert response.status_code == 201
 
     def test_create_manifest_invalid_checksum_rejected(
         self, super_admin_client, test_db_session
@@ -198,8 +241,23 @@ class TestAdminReleaseManifestCreate:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": "short",
+            },
+        )
+
+        assert response.status_code == 422
+
+    def test_create_manifest_empty_platforms_rejected(
+        self, super_admin_client, test_db_session
+    ):
+        """Empty platforms list is rejected."""
+        response = super_admin_client.post(
+            "/api/admin/release-manifests",
+            json={
+                "version": "1.0.0",
+                "platforms": [],
+                "checksum": "a" * 64,
             },
         )
 
@@ -213,7 +271,7 @@ class TestAdminReleaseManifestCreate:
             "/api/admin/release-manifests",
             json={
                 "version": "1.0.0",
-                "platform": "darwin-arm64",
+                "platforms": ["darwin-arm64"],
                 "checksum": "e" * 64,
             },
         )
@@ -232,9 +290,9 @@ class TestAdminReleaseManifestList:
         for i, platform in enumerate(["darwin-arm64", "linux-amd64"]):
             manifest = ReleaseManifest(
                 version="1.0.0",
-                platform=platform,
                 checksum=str(i) * 64,
             )
+            manifest.platforms = [platform]
             test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -252,16 +310,16 @@ class TestAdminReleaseManifestList:
         # Create active and inactive manifests
         active = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="1" * 64,
             is_active=True,
         )
+        active.platforms = ["darwin-arm64"]
         inactive = ReleaseManifest(
             version="0.9.0",
-            platform="darwin-arm64",
             checksum="2" * 64,
             is_active=False,
         )
+        inactive.platforms = ["darwin-arm64"]
         test_db_session.add_all([active, inactive])
         test_db_session.commit()
 
@@ -277,14 +335,26 @@ class TestAdminReleaseManifestList:
     def test_list_manifests_filter_by_platform(
         self, super_admin_client, test_db_session
     ):
-        """Can filter by platform."""
-        for i, platform in enumerate(["darwin-arm64", "linux-amd64"]):
-            manifest = ReleaseManifest(
-                version="1.0.0",
-                platform=platform,
-                checksum=str(i) * 64,  # Use valid hex characters
-            )
-            test_db_session.add(manifest)
+        """Can filter by platform (includes manifests that support the platform)."""
+        # Create manifest with single platform
+        manifest1 = ReleaseManifest(
+            version="1.0.0",
+            checksum="0" * 64,
+        )
+        manifest1.platforms = ["darwin-arm64"]
+        # Create manifest with multiple platforms (universal binary)
+        manifest2 = ReleaseManifest(
+            version="1.0.1",
+            checksum="1" * 64,
+        )
+        manifest2.platforms = ["darwin-arm64", "darwin-amd64"]
+        # Create manifest for a different platform
+        manifest3 = ReleaseManifest(
+            version="1.0.0",
+            checksum="2" * 64,
+        )
+        manifest3.platforms = ["linux-amd64"]
+        test_db_session.add_all([manifest1, manifest2, manifest3])
         test_db_session.commit()
 
         response = super_admin_client.get(
@@ -293,8 +363,10 @@ class TestAdminReleaseManifestList:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["total_count"] == 1
-        assert data["manifests"][0]["platform"] == "darwin-arm64"
+        # Should return both manifests that support darwin-arm64
+        assert data["total_count"] == 2
+        versions = {m["version"] for m in data["manifests"]}
+        assert versions == {"1.0.0", "1.0.1"}
 
 
 class TestAdminReleaseManifestUpdate:
@@ -306,10 +378,10 @@ class TestAdminReleaseManifestUpdate:
         """Can activate an inactive manifest."""
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
             is_active=False,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -329,10 +401,10 @@ class TestAdminReleaseManifestUpdate:
         """Can deactivate an active manifest."""
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="b" * 64,
             is_active=True,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -352,9 +424,9 @@ class TestAdminReleaseManifestUpdate:
         """Can update manifest notes."""
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="c" * 64,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -387,9 +459,9 @@ class TestAdminReleaseManifestDelete:
         """Super admin can delete a manifest."""
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
         test_db_session.refresh(manifest)
@@ -424,12 +496,13 @@ class TestAdminReleaseManifestStats:
     ):
         """Super admin can get manifest statistics."""
         # Create manifests across platforms and versions
-        manifests = [
-            ReleaseManifest(version="1.0.0", platform="darwin-arm64", checksum="1" * 64, is_active=True),
-            ReleaseManifest(version="1.0.0", platform="linux-amd64", checksum="2" * 64, is_active=True),
-            ReleaseManifest(version="0.9.0", platform="darwin-arm64", checksum="3" * 64, is_active=False),
-        ]
-        test_db_session.add_all(manifests)
+        manifest1 = ReleaseManifest(version="1.0.0", checksum="1" * 64, is_active=True)
+        manifest1.platforms = ["darwin-arm64"]
+        manifest2 = ReleaseManifest(version="1.0.0", checksum="2" * 64, is_active=True)
+        manifest2.platforms = ["linux-amd64"]
+        manifest3 = ReleaseManifest(version="0.9.0", checksum="3" * 64, is_active=False)
+        manifest3.platforms = ["darwin-arm64"]
+        test_db_session.add_all([manifest1, manifest2, manifest3])
         test_db_session.commit()
 
         response = super_admin_client.get(
@@ -442,3 +515,22 @@ class TestAdminReleaseManifestStats:
         assert data["active_count"] == 2
         assert set(data["platforms"]) == {"darwin-arm64", "linux-amd64"}
         assert set(data["versions"]) == {"1.0.0", "0.9.0"}
+
+    def test_get_stats_with_multiplatform_manifest(
+        self, super_admin_client, test_db_session
+    ):
+        """Stats correctly aggregate platforms from multi-platform manifests."""
+        # Create a multi-platform manifest (universal binary)
+        manifest = ReleaseManifest(version="1.0.0", checksum="1" * 64, is_active=True)
+        manifest.platforms = ["darwin-arm64", "darwin-amd64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        response = super_admin_client.get(
+            "/api/admin/release-manifests/stats"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_count"] == 1
+        assert set(data["platforms"]) == {"darwin-arm64", "darwin-amd64"}

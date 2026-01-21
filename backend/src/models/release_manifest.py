@@ -8,14 +8,17 @@ only trusted binaries can connect.
 Design Rationale:
 - Release manifests are global (not team-scoped) since they're about binaries
 - Super admin endpoint manages manifest entries
-- Platform/version/checksum uniquely identifies a valid binary
+- Version/checksum uniquely identifies a valid binary
+- Platforms stored as JSON array for universal binaries (e.g., macOS universal)
 - Inactive entries allow deprecating old versions without breaking existing agents
 """
 
+import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import validates
 
 from backend.src.models import Base
@@ -34,7 +37,7 @@ class ReleaseManifest(Base, GuidMixin):
         uuid: UUIDv7 for external identification (inherited from GuidMixin)
         guid: GUID string property (rel_xxx, inherited from GuidMixin)
         version: Semantic version string (e.g., "1.0.0", "1.2.3-beta")
-        platform: Target platform identifier (e.g., "darwin-arm64", "linux-amd64")
+        platforms_json: List of target platforms (e.g., ["darwin-arm64", "darwin-amd64"])
         checksum: SHA-256 hash of the binary (64 hex characters)
         is_active: Whether this version is allowed for registration
         notes: Optional notes about this release
@@ -42,13 +45,13 @@ class ReleaseManifest(Base, GuidMixin):
         updated_at: When this manifest entry was last modified
 
     Constraints:
-        - (version, platform) must be unique
+        - (version, checksum) must be unique
         - checksum must be 64 hex characters (SHA-256)
-        - platform must be a valid identifier
+        - platforms must be valid identifiers
 
     Indexes:
         - checksum (for fast lookup during registration)
-        - (version, platform) unique constraint
+        - (version, checksum) unique constraint
         - is_active (for filtering active versions)
     """
 
@@ -62,7 +65,13 @@ class ReleaseManifest(Base, GuidMixin):
 
     # Release identification
     version = Column(String(50), nullable=False, index=True)
-    platform = Column(String(50), nullable=False, index=True)
+
+    # Platforms as JSON array (JSONB for PostgreSQL, falls back to Text for SQLite)
+    platforms_json = Column(
+        JSONB().with_variant(Text, "sqlite"),
+        nullable=False,
+        default="[]"
+    )
 
     # Binary checksum (SHA-256 = 64 hex chars)
     checksum = Column(String(64), nullable=False, index=True)
@@ -84,7 +93,7 @@ class ReleaseManifest(Base, GuidMixin):
 
     # Table-level constraints
     __table_args__ = (
-        Index('uq_release_version_platform', 'version', 'platform', unique=True),
+        Index('uq_release_version_checksum', 'version', 'checksum', unique=True),
     )
 
     # Valid platforms
@@ -95,6 +104,45 @@ class ReleaseManifest(Base, GuidMixin):
         'linux-arm64',    # Linux ARM64
         'windows-amd64',  # Windows x86_64
     ]
+
+    @property
+    def platforms(self) -> List[str]:
+        """
+        Get platforms list from JSON column.
+
+        Returns:
+            List of platform identifier strings
+        """
+        if self.platforms_json is None:
+            return []
+        if isinstance(self.platforms_json, str):
+            # SQLite returns string, parse it
+            return json.loads(self.platforms_json) if self.platforms_json else []
+        if isinstance(self.platforms_json, list):
+            return self.platforms_json
+        return []
+
+    @platforms.setter
+    def platforms(self, value: List[str]) -> None:
+        """
+        Set platforms list, normalizing to lowercase.
+
+        Args:
+            value: List of platform identifier strings
+        """
+        # For SQLite compatibility, serialize to JSON string
+        # PostgreSQL JSONB handles lists natively, but we serialize for both
+        if value is None:
+            self.platforms_json = "[]"  # type: ignore
+        elif isinstance(value, list):
+            normalized = [p.lower() for p in value]
+            self.platforms_json = json.dumps(normalized)  # type: ignore
+        else:
+            self.platforms_json = value  # type: ignore
+
+    def supports_platform(self, platform: str) -> bool:
+        """Check if this manifest supports the given platform."""
+        return platform.lower() in self.platforms
 
     @validates('checksum')
     def validate_checksum(self, key: str, value: str) -> str:
@@ -110,14 +158,6 @@ class ReleaseManifest(Base, GuidMixin):
             raise ValueError("Checksum must be valid hexadecimal")
         return value
 
-    @validates('platform')
-    def validate_platform(self, key: str, value: str) -> str:
-        """Validate platform is a known identifier."""
-        if not value:
-            raise ValueError("Platform is required")
-        # Allow unknown platforms for flexibility, but warn if not standard
-        return value.lower()
-
     @validates('version')
     def validate_version(self, key: str, value: str) -> str:
         """Validate version is not empty."""
@@ -126,9 +166,10 @@ class ReleaseManifest(Base, GuidMixin):
         return value.strip()
 
     def __repr__(self) -> str:
+        platforms_str = ', '.join(self.platforms) if self.platforms else 'none'
         return (
             f"<ReleaseManifest(guid='{self.guid}', "
-            f"version='{self.version}', platform='{self.platform}', "
+            f"version='{self.version}', platforms=[{platforms_str}], "
             f"active={self.is_active})>"
         )
 

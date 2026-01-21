@@ -964,10 +964,10 @@ class TestAgentBinaryAttestation:
         checksum = "b" * 64
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
             is_active=True,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -1000,10 +1000,10 @@ class TestAgentBinaryAttestation:
         # Create a release manifest
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
             is_active=True,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -1035,10 +1035,10 @@ class TestAgentBinaryAttestation:
         # Create a release manifest
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum="a" * 64,
             is_active=True,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -1070,10 +1070,10 @@ class TestAgentBinaryAttestation:
         checksum = "c" * 64
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
             is_active=True,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -1084,7 +1084,7 @@ class TestAgentBinaryAttestation:
         )
 
         # Try to register with wrong platform
-        with pytest.raises(ValidationError, match="checksum is for darwin-arm64"):
+        with pytest.raises(ValidationError, match="checksum is for"):
             service.register_agent(
                 plaintext_token=token_result.plaintext_token,
                 name="Wrong Platform Agent",
@@ -1106,10 +1106,10 @@ class TestAgentBinaryAttestation:
         checksum_lower = "abcdef" + "1" * 58
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum_lower,
             is_active=True,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
@@ -1143,18 +1143,18 @@ class TestAgentBinaryAttestation:
         checksum = "d" * 64
         inactive_manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
             is_active=False,  # Inactive
         )
+        inactive_manifest.platforms = ["darwin-arm64"]
         # Also create an active manifest with different checksum
         # (so we're not in bootstrap mode)
         active_manifest = ReleaseManifest(
             version="1.1.0",
-            platform="darwin-arm64",
             checksum="e" * 64,
             is_active=True,
         )
+        active_manifest.platforms = ["darwin-arm64"]
         test_db_session.add_all([inactive_manifest, active_manifest])
         test_db_session.commit()
 
@@ -1183,22 +1183,22 @@ class TestAgentBinaryAttestation:
 
         service = AgentService(test_db_session)
 
-        # Create manifests for multiple platforms
+        # Create manifests for multiple platforms (separate binaries)
         checksum_darwin = "f" * 64
         checksum_linux = "0" * 64
 
         manifest_darwin = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum_darwin,
             is_active=True,
         )
+        manifest_darwin.platforms = ["darwin-arm64"]
         manifest_linux = ReleaseManifest(
             version="1.0.0",
-            platform="linux-amd64",
             checksum=checksum_linux,
             is_active=True,
         )
+        manifest_linux.platforms = ["linux-amd64"]
         test_db_session.add_all([manifest_darwin, manifest_linux])
         test_db_session.commit()
 
@@ -1231,6 +1231,70 @@ class TestAgentBinaryAttestation:
             platform="linux-amd64",
         )
         assert result2.agent is not None
+
+    def test_registration_universal_binary_multiple_platforms(
+        self, test_db_session, test_team, test_user
+    ):
+        """Test registration works with universal binary that supports multiple platforms."""
+        from backend.src.models.release_manifest import ReleaseManifest
+
+        service = AgentService(test_db_session)
+
+        # Create a universal binary manifest (same checksum for multiple platforms)
+        universal_checksum = "1" * 64
+        manifest = ReleaseManifest(
+            version="1.0.0",
+            checksum=universal_checksum,
+            is_active=True,
+        )
+        manifest.platforms = ["darwin-arm64", "darwin-amd64"]
+        test_db_session.add(manifest)
+        test_db_session.commit()
+
+        # Register darwin-arm64 agent
+        token1 = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        result1 = service.register_agent(
+            plaintext_token=token1.plaintext_token,
+            name="Mac M1 Agent",
+            hostname="mac-m1-host",
+            version="1.0.0",
+            binary_checksum=universal_checksum,
+            platform="darwin-arm64",
+        )
+        assert result1.agent is not None
+
+        # Register darwin-amd64 agent (same checksum, different platform)
+        token2 = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        result2 = service.register_agent(
+            plaintext_token=token2.plaintext_token,
+            name="Mac Intel Agent",
+            hostname="mac-intel-host",
+            version="1.0.0",
+            binary_checksum=universal_checksum,
+            platform="darwin-amd64",
+        )
+        assert result2.agent is not None
+
+        # linux-amd64 should still fail
+        token3 = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        with pytest.raises(ValidationError, match="checksum is for"):
+            service.register_agent(
+                plaintext_token=token3.plaintext_token,
+                name="Linux Agent",
+                hostname="linux-host",
+                version="1.0.0",
+                binary_checksum=universal_checksum,
+                platform="linux-amd64",  # Not in the universal binary platforms
+            )
 
 
 class TestAgentAttestationProductionMode:
@@ -1277,10 +1341,10 @@ class TestAgentAttestationProductionMode:
         checksum = "b" * 64
         manifest = ReleaseManifest(
             version="1.0.0",
-            platform="darwin-arm64",
             checksum=checksum,
             is_active=True,
         )
+        manifest.platforms = ["darwin-arm64"]
         test_db_session.add(manifest)
         test_db_session.commit()
 
