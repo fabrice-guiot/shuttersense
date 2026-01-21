@@ -36,6 +36,7 @@ class ToolMode(str, Enum):
 
 class JobStatus(str, Enum):
     """Job execution status."""
+    SCHEDULED = "scheduled"
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -142,6 +143,7 @@ class JobResponse(BaseModel):
     status: JobStatus = Field(..., description="Current job status")
     position: Optional[int] = Field(None, ge=1, description="Queue position if queued")
     created_at: datetime = Field(..., description="Job creation time")
+    scheduled_for: Optional[datetime] = Field(None, description="When job is scheduled to run")
     started_at: Optional[datetime] = Field(None, description="Execution start time")
     completed_at: Optional[datetime] = Field(None, description="Execution end time")
     progress: Optional[ProgressData] = Field(None, description="Progress data if running")
@@ -203,6 +205,7 @@ class QueueStatusResponse(BaseModel):
 
     Provides counts for each job state and the current running job ID.
     """
+    scheduled_count: int = Field(0, ge=0, description="Scheduled jobs (upcoming)")
     queued_count: int = Field(0, ge=0, description="Jobs waiting in queue")
     running_count: int = Field(0, ge=0, description="Currently running jobs")
     completed_count: int = Field(0, ge=0, description="Completed jobs")
@@ -213,6 +216,7 @@ class QueueStatusResponse(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
+                "scheduled_count": 3,
                 "queued_count": 2,
                 "running_count": 1,
                 "completed_count": 10,

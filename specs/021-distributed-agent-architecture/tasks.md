@@ -532,7 +532,7 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ---
 
-## Phase 13: User Story 11 - Automatic Collection Refresh Scheduling (Priority: P2)
+## Phase 13: User Story 11 - Automatic Collection Refresh Scheduling (Priority: P2) ✅
 
 **Goal**: Collection analysis automatically re-runs based on configurable TTL
 
@@ -540,28 +540,48 @@ The original design called for a new Jobs page, but the existing Analytics > Run
 
 ### Backend Tests for User Story 11
 
-- [ ] T182 [P] [US11] Unit tests for scheduled job creation in `backend/tests/unit/services/test_scheduled_jobs.py` (auto-create, unique constraint)
-- [ ] T183 [P] [US11] Integration tests for scheduling in `backend/tests/integration/test_collection_scheduling.py` (TTL, manual refresh cancels scheduled)
+- [x] T182 [P] [US11] Unit tests for scheduled job creation in `backend/tests/unit/services/test_scheduled_jobs.py` (auto-create, unique constraint) - 10 tests
+- [x] T183 [P] [US11] Integration tests for scheduling in `backend/tests/integration/test_scheduled_jobs.py` (TTL, manual refresh cancels scheduled) - 9 tests
 
 ### Backend Implementation for User Story 11
 
-- [ ] T184 [US11] Create scheduled job on completion if TTL configured in `backend/src/services/job_service.py`
-- [ ] T185 [US11] Include SCHEDULED jobs in claim query (where scheduled_for <= NOW) in `backend/src/services/job_coordinator_service.py`
-- [ ] T186 [US11] Enforce unique scheduled job per (collection, tool) in `backend/src/services/job_service.py`
-- [ ] T187 [US11] Cancel scheduled job on manual refresh in `backend/src/services/job_service.py`
-- [ ] T188 [US11] Cascade delete scheduled jobs on collection deletion in `backend/src/services/collection_service.py`
+- [x] T184 [US11] Create scheduled job on completion if TTL configured in `backend/src/services/job_coordinator_service.py`
+- [x] T185 [US11] Include SCHEDULED jobs in claim query (where scheduled_for <= NOW) in `backend/src/services/job_coordinator_service.py`
+- [x] T186 [US11] Enforce unique scheduled job per (collection, tool) in `backend/src/services/job_coordinator_service.py`
+- [x] T187 [US11] Cancel scheduled job on manual refresh in `backend/src/services/tool_service.py` (new scheduled job created on completion of the manual refresh ones)
+- [x] T188 [US11] Cascade delete scheduled jobs on collection deletion in `backend/src/services/collection_service.py`
 
 ### Frontend Tests for User Story 11
 
-- [ ] T189 [P] [US11] Component tests for collection refresh settings in `frontend/tests/components/collections/CollectionForm.test.tsx` (TTL fields)
-- [ ] T190 [P] [US11] Component tests for upcoming jobs section in `frontend/tests/pages/JobsPage.test.tsx`
+- [x] T189 [P] [US11] Component tests for collection refresh settings in `frontend/tests/components/CollectionForm.test.tsx` (Next Scheduled Refresh display) - 6 tests
+- [x] T190 [P] [US11] Integration tests for scheduled jobs in `frontend/tests/integration/scheduled-jobs.test.tsx` - 7 tests
 
 ### Frontend Implementation for User Story 11
 
-- [ ] T191 [US11] Add auto_refresh and refresh_interval_hours to collection form in `frontend/src/components/collections/CollectionForm.tsx`
-- [ ] T192 [US11] Display "Upcoming" scheduled jobs section in `frontend/src/pages/JobsPage.tsx`
+- [x] T191 [US11] Add calculated next expected refresh datetime (calculated based on last recorded refresh and TTL from status) to collection form in `frontend/src/components/collections/CollectionForm.tsx`
+- [x] T192 [US11] Display "Upcoming" scheduled jobs state subtab in "Runs" tab in `frontend/src/pages/AnalyticsPage.tsx`
 
-**Checkpoint**: Automatic collection refresh scheduling works end-to-end
+**Checkpoint**: Automatic collection refresh scheduling works end-to-end ✅
+
+### Implementation Notes (Phase 13)
+
+**Backend Implementation:**
+- Scheduled job creation happens in `complete_job()` in `job_coordinator_service.py` when team TTL config is set
+- TTL is derived from team-level configuration per collection state (live, closed, archived)
+- Unique constraint enforced via query check before creation (cancels existing scheduled job for same collection/tool)
+- SCHEDULED jobs included in claim query when `scheduled_for <= NOW`
+- `scheduled_count` field added to queue status response (separate from `queued_count`)
+- Status filter in `list_jobs` updated to handle SCHEDULED status correctly
+
+**Frontend Implementation:**
+- CollectionForm displays "Next Scheduled Refresh" section for existing collections
+- Shows various states: "Never scanned", "Auto-refresh disabled", "Refresh pending", or future datetime
+- AnalyticsPage "Runs" tab includes "Upcoming" sub-tab for scheduled jobs
+- Mock handlers updated for `scheduled_count` and `addScheduledJob` helper
+
+**Bug Fixes:**
+- Fixed `list_jobs` status filter to correctly map JobStatus.SCHEDULED to DBJobStatus.SCHEDULED
+- Fixed queue status to count SCHEDULED jobs separately from PENDING
 
 ---
 

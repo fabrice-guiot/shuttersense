@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, TestTube, Bot } from 'lucide-react'
+import { Loader2, TestTube, Bot, CalendarClock } from 'lucide-react'
+import { formatDateTime } from '@/utils/dateFormat'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -102,6 +103,32 @@ function getStateDescription(state: string): string {
     default:
       return ''
   }
+}
+
+/**
+ * Calculate the next expected refresh datetime based on last scan and TTL
+ */
+function calculateNextRefresh(
+  lastScannedAt: string | null,
+  cacheTtl: number | null
+): { datetime: string | null; label: string } {
+  if (!lastScannedAt) {
+    return { datetime: null, label: 'Never scanned' }
+  }
+
+  if (!cacheTtl || cacheTtl <= 0) {
+    return { datetime: null, label: 'Auto-refresh disabled' }
+  }
+
+  const lastScan = new Date(lastScannedAt)
+  const nextRefresh = new Date(lastScan.getTime() + cacheTtl * 1000)
+  const now = new Date()
+
+  if (nextRefresh <= now) {
+    return { datetime: nextRefresh.toISOString(), label: 'Refresh pending' }
+  }
+
+  return { datetime: nextRefresh.toISOString(), label: formatDateTime(nextRefresh.toISOString()) }
 }
 
 // ============================================================================
@@ -417,6 +444,27 @@ export default function CollectionForm({
               </FormItem>
             )}
           />
+
+          {/* Next Expected Refresh (read-only, only for existing collections) */}
+          {isEdit && collection && (
+            <div className="rounded-md border border-border bg-muted/50 p-3">
+              <div className="flex items-center gap-2 text-sm">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Next Scheduled Refresh:</span>
+                <span className="text-muted-foreground">
+                  {(() => {
+                    const result = calculateNextRefresh(collection.last_scanned_at, collection.cache_ttl)
+                    return result.label
+                  })()}
+                </span>
+              </div>
+              {collection.last_scanned_at && (
+                <div className="mt-1 ml-6 text-xs text-muted-foreground">
+                  Last scanned: {formatDateTime(collection.last_scanned_at)}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Pipeline (Optional) */}
           <FormField

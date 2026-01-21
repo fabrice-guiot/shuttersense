@@ -24,8 +24,11 @@ import json
 import secrets
 from base64 import b64encode, b64decode
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from backend.src.services.config_service import ConfigService
 
 from sqlalchemy.orm import Session, lazyload
 from sqlalchemy import and_, or_
@@ -92,14 +95,16 @@ class JobCoordinatorService:
         ...     print(f"Signing secret: {result.signing_secret}")
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, config_service: Optional["ConfigService"] = None):
         """
         Initialize the job coordinator service.
 
         Args:
             db: SQLAlchemy database session
+            config_service: Optional config service for TTL lookups (auto-created if None)
         """
         self.db = db
+        self._config_service = config_service
         # Check if using SQLite (doesn't support FOR UPDATE SKIP LOCKED)
         self._is_sqlite = self._check_is_sqlite()
 
@@ -109,6 +114,13 @@ class JobCoordinatorService:
             return self.db.bind.dialect.name == "sqlite"
         except Exception:
             return False
+
+    def _get_config_service(self) -> "ConfigService":
+        """Get or create the config service instance."""
+        if self._config_service is None:
+            from backend.src.services.config_service import ConfigService
+            self._config_service = ConfigService(self.db)
+        return self._config_service
 
     # =========================================================================
     # Job Claiming
@@ -749,6 +761,9 @@ class JobCoordinatorService:
         job.complete(result_id=result.id)
         job.progress = None  # Clear progress
 
+        # Create scheduled follow-up job if TTL is configured
+        scheduled_job = self._maybe_create_scheduled_job(job)
+
         self.db.commit()
 
         logger.info(
@@ -757,7 +772,8 @@ class JobCoordinatorService:
                 "job_guid": job.guid,
                 "result_guid": result.guid,
                 "files_scanned": completion_data.files_scanned,
-                "issues_found": completion_data.issues_found
+                "issues_found": completion_data.issues_found,
+                "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
             }
         )
 
@@ -918,6 +934,151 @@ class JobCoordinatorService:
                     "image_count": results.get("image_count")
                 }
             )
+
+    # =========================================================================
+    # Scheduled Job Creation (Auto-Refresh)
+    # =========================================================================
+
+    def _maybe_create_scheduled_job(self, completed_job: Job) -> Optional[Job]:
+        """
+        Create a scheduled follow-up job if TTL is configured.
+
+        After a job completes successfully, this method checks if the collection
+        has a TTL configured (from team settings) and creates a SCHEDULED job
+        for the next refresh.
+
+        Rules:
+        - collection_test jobs don't create scheduled follow-ups
+        - Jobs without a collection don't create scheduled follow-ups
+        - If a SCHEDULED job already exists for (collection, tool), don't create duplicate
+        - TTL of 0 means scheduling is disabled
+
+        Args:
+            completed_job: The job that just completed
+
+        Returns:
+            The created scheduled job, or None if not applicable
+        """
+        # Skip collection_test jobs - they don't need scheduling
+        if completed_job.tool == "collection_test":
+            return None
+
+        # Skip jobs without a collection
+        if not completed_job.collection_id or not completed_job.collection:
+            return None
+
+        collection = completed_job.collection
+
+        # Get TTL from team config
+        config_service = self._get_config_service()
+        ttl_config = config_service.get_collection_ttl(completed_job.team_id)
+
+        # Get TTL for collection's current state
+        state_value = collection.state.value if hasattr(collection.state, 'value') else str(collection.state)
+        ttl_seconds = ttl_config.get(state_value, 0)
+
+        # TTL of 0 means scheduling is disabled
+        if ttl_seconds <= 0:
+            logger.debug(
+                "Skipping scheduled job creation - TTL is 0 or disabled",
+                extra={
+                    "job_guid": completed_job.guid,
+                    "collection_guid": collection.guid,
+                    "state": state_value
+                }
+            )
+            return None
+
+        # Check if a SCHEDULED job already exists for this (collection, tool)
+        existing_scheduled = self.db.query(Job).filter(
+            Job.collection_id == collection.id,
+            Job.tool == completed_job.tool,
+            Job.status == JobStatus.SCHEDULED,
+        ).first()
+
+        if existing_scheduled:
+            logger.debug(
+                "Skipping scheduled job creation - already exists",
+                extra={
+                    "job_guid": completed_job.guid,
+                    "existing_scheduled_guid": existing_scheduled.guid
+                }
+            )
+            return None
+
+        # Calculate scheduled time
+        scheduled_for = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+
+        # Create the scheduled job, inheriting from completed job
+        scheduled_job = Job(
+            team_id=completed_job.team_id,
+            collection_id=collection.id,
+            pipeline_id=completed_job.pipeline_id,
+            pipeline_version=completed_job.pipeline_version,
+            tool=completed_job.tool,
+            mode=completed_job.mode,
+            status=JobStatus.SCHEDULED,
+            scheduled_for=scheduled_for,
+            parent_job_id=completed_job.id,
+            bound_agent_id=collection.bound_agent_id,  # Inherit from collection
+            required_capabilities=completed_job.required_capabilities,
+        )
+
+        self.db.add(scheduled_job)
+        self.db.flush()  # Get the ID assigned
+
+        logger.info(
+            "Created scheduled job for auto-refresh",
+            extra={
+                "scheduled_job_guid": scheduled_job.guid,
+                "parent_job_guid": completed_job.guid,
+                "collection_guid": collection.guid,
+                "tool": completed_job.tool,
+                "scheduled_for": scheduled_for.isoformat(),
+                "ttl_seconds": ttl_seconds
+            }
+        )
+
+        return scheduled_job
+
+    def cancel_scheduled_jobs_for_collection(
+        self,
+        collection_id: int,
+        tool: str
+    ) -> int:
+        """
+        Cancel scheduled jobs for a collection and tool.
+
+        Called when a manual job is created to prevent duplicate scheduling.
+        The manual job's completion will create a new scheduled job.
+
+        Args:
+            collection_id: Collection internal ID
+            tool: Tool name (e.g., "photostats")
+
+        Returns:
+            Number of scheduled jobs cancelled
+        """
+        scheduled_jobs = self.db.query(Job).filter(
+            Job.collection_id == collection_id,
+            Job.tool == tool,
+            Job.status == JobStatus.SCHEDULED,
+        ).all()
+
+        cancelled_count = 0
+        for job in scheduled_jobs:
+            job.cancel()
+            cancelled_count += 1
+            logger.info(
+                "Cancelled scheduled job due to manual refresh",
+                extra={
+                    "cancelled_job_guid": job.guid,
+                    "collection_id": collection_id,
+                    "tool": tool
+                }
+            )
+
+        return cancelled_count
 
     def fail_job(
         self,

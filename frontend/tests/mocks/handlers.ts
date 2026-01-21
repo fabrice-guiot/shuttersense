@@ -1031,13 +1031,25 @@ export const handlers = [
 
   http.get(`${BASE_URL}/tools/jobs`, ({ request }) => {
     const url = new URL(request.url)
-    const status = url.searchParams.get('status') as JobStatus | null
+    const statusParams = url.searchParams.getAll('status') as JobStatus[]
+    const limit = parseInt(url.searchParams.get('limit') ?? '50', 10)
+    const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
 
     let filteredJobs = jobs
-    if (status) {
-      filteredJobs = jobs.filter((j) => j.status === status)
+    if (statusParams.length > 0) {
+      filteredJobs = jobs.filter((j) => statusParams.includes(j.status))
     }
-    return HttpResponse.json(filteredJobs)
+
+    // Apply pagination
+    const total = filteredJobs.length
+    const paginatedJobs = filteredJobs.slice(offset, offset + limit)
+
+    return HttpResponse.json({
+      items: paginatedJobs,
+      total: total,
+      limit: limit,
+      offset: offset,
+    })
   }),
 
   http.get(`${BASE_URL}/tools/jobs/:id`, ({ params }) => {
@@ -1053,9 +1065,9 @@ export const handlers = [
     if (!job) {
       return new HttpResponse(null, { status: 404 })
     }
-    if (job.status !== 'queued') {
+    if (job.status !== 'queued' && job.status !== 'scheduled') {
       return HttpResponse.json(
-        { detail: 'Only queued jobs can be cancelled' },
+        { detail: 'Only queued or scheduled jobs can be cancelled' },
         { status: 400 }
       )
     }
@@ -1066,6 +1078,7 @@ export const handlers = [
 
   http.get(`${BASE_URL}/tools/queue/status`, () => {
     const queueStatus: QueueStatusResponse = {
+      scheduled_count: jobs.filter((j) => j.status === 'scheduled').length,
       queued_count: jobs.filter((j) => j.status === 'queued').length,
       running_count: jobs.filter((j) => j.status === 'running').length,
       completed_count: jobs.filter((j) => j.status === 'completed').length,
@@ -2739,6 +2752,37 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
     return HttpResponse.json({ matches })
   }),
 ]
+
+// Helper to add a scheduled job (for testing upcoming jobs)
+export function addScheduledJob(
+  collectionGuid: string,
+  tool: ToolType,
+  scheduledForHoursFromNow: number = 1
+): JobResponse {
+  const scheduledFor = new Date()
+  scheduledFor.setHours(scheduledFor.getHours() + scheduledForHoursFromNow)
+
+  const job: JobResponse = {
+    id: generateJobGuid(),
+    collection_guid: collectionGuid,
+    tool: tool,
+    mode: 'collection',
+    pipeline_guid: null,
+    status: 'scheduled',
+    position: null,
+    created_at: new Date().toISOString(),
+    scheduled_for: scheduledFor.toISOString(),
+    started_at: null,
+    completed_at: null,
+    progress: null,
+    error_message: null,
+    result_guid: null,
+    agent_guid: null,
+    agent_name: null,
+  }
+  jobs.push(job)
+  return job
+}
 
 // Helper to reset mock data (useful for tests)
 export function resetMockData(): void {

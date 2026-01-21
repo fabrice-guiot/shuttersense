@@ -17,7 +17,8 @@ import {
   FileText,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  CalendarClock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -62,7 +63,7 @@ export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState(urlTab)
 
   // Runs sub-tab state for per-status pagination
-  const [runsSubTab, setRunsSubTab] = useState<'active' | 'completed' | 'failed'>('active')
+  const [runsSubTab, setRunsSubTab] = useState<'upcoming' | 'active' | 'completed' | 'failed'>('active')
   const [jobsPage, setJobsPage] = useState(1)
   const jobsPerPage = 20
 
@@ -304,8 +305,10 @@ export default function AnalyticsPage() {
   }
 
   // Map runs sub-tab to status filter(s)
-  const getStatusesForSubTab = (subTab: 'active' | 'completed' | 'failed'): ('queued' | 'running' | 'completed' | 'failed' | 'cancelled')[] => {
+  const getStatusesForSubTab = (subTab: 'upcoming' | 'active' | 'completed' | 'failed'): ('scheduled' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled')[] => {
     switch (subTab) {
+      case 'upcoming':
+        return ['scheduled']
       case 'active':
         return ['queued', 'running']
       case 'completed':
@@ -331,7 +334,7 @@ export default function AnalyticsPage() {
 
   // Handle runs sub-tab change - reset to page 1
   const handleRunsSubTabChange = (value: string) => {
-    setRunsSubTab(value as 'active' | 'completed' | 'failed')
+    setRunsSubTab(value as 'upcoming' | 'active' | 'completed' | 'failed')
     setJobsPage(1)
   }
 
@@ -587,6 +590,13 @@ export default function AnalyticsPage() {
         <TabsContent value="runs">
           <Tabs value={runsSubTab} onValueChange={handleRunsSubTabChange} className="w-full">
             <TabsList>
+              <TabsTrigger value="upcoming" className="gap-2">
+                <CalendarClock className="h-4 w-4" />
+                Upcoming
+                {queueStatus && queueStatus.scheduled_count > 0 && (
+                  <span className="ml-1 text-xs">({queueStatus.scheduled_count})</span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="active" className="gap-2">
                 <Clock className="h-4 w-4" />
                 Active
@@ -609,6 +619,22 @@ export default function AnalyticsPage() {
                 )}
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="upcoming" className="mt-6">
+              {jobsLoading && jobs.length === 0 ? (
+                <div className="flex justify-center py-8">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                </div>
+              ) : (
+                <>
+                  {renderJobGrid(
+                    jobs,
+                    'No scheduled jobs. Jobs are automatically scheduled after analysis based on collection TTL settings.'
+                  )}
+                  {renderJobsPagination()}
+                </>
+              )}
+            </TabsContent>
 
             <TabsContent value="active" className="mt-6">
               {jobsLoading && jobs.length === 0 ? (

@@ -55,15 +55,16 @@ def _convert_db_job_status(db_status) -> JobStatus:
     """Convert DB Job status to schema JobStatus.
 
     Maps DB JobStatus enum values to API JobStatus:
-    - PENDING, SCHEDULED -> queued
+    - SCHEDULED -> scheduled (for upcoming tab)
+    - PENDING -> queued
     - ASSIGNED, RUNNING -> running
     - COMPLETED, FAILED, CANCELLED -> as-is
     """
     from backend.src.models.job import JobStatus as DBJobStatus
 
     status_map = {
+        DBJobStatus.SCHEDULED: JobStatus.SCHEDULED,
         DBJobStatus.PENDING: JobStatus.QUEUED,
-        DBJobStatus.SCHEDULED: JobStatus.QUEUED,
         DBJobStatus.ASSIGNED: JobStatus.RUNNING,  # Assigned = agent working on it
         DBJobStatus.RUNNING: JobStatus.RUNNING,
         DBJobStatus.COMPLETED: JobStatus.COMPLETED,
@@ -115,6 +116,7 @@ def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
         status=_convert_db_job_status(job.status),
         position=position,
         created_at=job.created_at,
+        scheduled_for=job.scheduled_for,
         started_at=job.started_at,
         completed_at=job.completed_at,
         progress=progress,
@@ -159,6 +161,7 @@ class JobAdapter:
             status=_convert_status(job.status),
             position=position,
             created_at=job.created_at,
+            scheduled_for=None,  # In-memory jobs are not scheduled
             started_at=job.started_at,
             completed_at=job.completed_at,
             progress=progress,
@@ -413,6 +416,7 @@ class ToolService:
             status=JobStatus.QUEUED,  # PENDING maps to QUEUED in API schema
             position=None,  # Agent jobs don't have queue position
             created_at=job.created_at,
+            scheduled_for=job.scheduled_for,
             started_at=job.started_at,
             completed_at=job.completed_at,
             progress=None,
@@ -453,14 +457,15 @@ class ToolService:
             ConflictError: If same tool already running on collection
         """
         from backend.src.services.exceptions import ConflictError
+        from backend.src.services.job_coordinator_service import JobCoordinatorService
 
-        # Check for existing active job in persistent queue
+        # Check for existing active job in persistent queue (excluding SCHEDULED)
+        # SCHEDULED jobs will be cancelled, not considered conflicts
         existing = self.db.query(Job).filter(
             Job.collection_id == collection.id,
             Job.tool == tool.value,
             Job.status.in_([
                 PersistentJobStatus.PENDING,
-                PersistentJobStatus.SCHEDULED,
                 PersistentJobStatus.ASSIGNED,
                 PersistentJobStatus.RUNNING,
             ])
@@ -471,6 +476,22 @@ class ToolService:
                 message=f"Tool {tool.value} is already running on collection {collection.id}",
                 existing_job_id=existing.guid,
                 position=None  # Persistent jobs don't have a simple queue position
+            )
+
+        # Cancel any scheduled jobs for this collection/tool
+        # Manual refresh supersedes scheduled refresh
+        coordinator = JobCoordinatorService(self.db)
+        cancelled_count = coordinator.cancel_scheduled_jobs_for_collection(
+            collection_id=collection.id,
+            tool=tool.value
+        )
+        if cancelled_count > 0:
+            logger.info(
+                f"Cancelled {cancelled_count} scheduled job(s) due to manual refresh",
+                extra={
+                    "collection_id": collection.id,
+                    "tool": tool.value
+                }
             )
 
         # Create persistent job record
@@ -507,6 +528,7 @@ class ToolService:
             status=JobStatus.QUEUED,  # PENDING maps to QUEUED in API schema
             position=None,  # Agent jobs don't have queue position
             created_at=job.created_at,
+            scheduled_for=job.scheduled_for,
             started_at=job.started_at,
             completed_at=job.completed_at,
             progress=None,
@@ -625,8 +647,10 @@ class ToolService:
         if statuses:
             db_statuses = []
             for requested_status in statuses:
-                if requested_status == JobStatus.QUEUED:
-                    db_statuses.extend([DBJobStatus.PENDING, DBJobStatus.SCHEDULED])
+                if requested_status == JobStatus.SCHEDULED:
+                    db_statuses.append(DBJobStatus.SCHEDULED)
+                elif requested_status == JobStatus.QUEUED:
+                    db_statuses.append(DBJobStatus.PENDING)
                 elif requested_status == JobStatus.RUNNING:
                     db_statuses.extend([DBJobStatus.ASSIGNED, DBJobStatus.RUNNING])
                 elif requested_status == JobStatus.COMPLETED:
@@ -882,6 +906,7 @@ class ToolService:
         db_counts = db_query.group_by(Job.status).all()
 
         # Map database statuses to queue status categories
+        db_scheduled = 0
         db_queued = 0
         db_running = 0
         db_completed = 0
@@ -889,7 +914,9 @@ class ToolService:
         db_cancelled = 0
 
         for status, count in db_counts:
-            if status in (PersistentJobStatus.PENDING, PersistentJobStatus.SCHEDULED):
+            if status == PersistentJobStatus.SCHEDULED:
+                db_scheduled += count
+            elif status == PersistentJobStatus.PENDING:
                 db_queued += count
             elif status in (PersistentJobStatus.ASSIGNED, PersistentJobStatus.RUNNING):
                 db_running += count
@@ -902,6 +929,7 @@ class ToolService:
 
         # Combine in-memory and database counts
         return {
+            'scheduled_count': db_scheduled,
             'queued_count': inmemory_status.get('queued_count', 0) + db_queued,
             'running_count': inmemory_status.get('running_count', 0) + db_running,
             'completed_count': inmemory_status.get('completed_count', 0) + db_completed,

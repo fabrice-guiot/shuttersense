@@ -288,4 +288,198 @@ describe('CollectionForm', () => {
       expect(boundAgentElements.length).toBeGreaterThan(0)
     })
   })
+
+  // =========================================================================
+  // Next Scheduled Refresh Tests (Phase 13 - Issue #90)
+  // =========================================================================
+
+  describe('Next Scheduled Refresh', () => {
+    it('should not show refresh info when creating new collection', () => {
+      render(
+        <CollectionForm
+          collection={null}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      expect(screen.queryByText(/Next Scheduled Refresh/i)).not.toBeInTheDocument()
+    })
+
+    it('should show "Never scanned" when collection has no last_scanned_at', () => {
+      const collectionNeverScanned: Collection = {
+        guid: 'col_01hgw2bbg00000000000000001',
+        name: 'Never Scanned Collection',
+        type: 'local',
+        location: '/photos',
+        state: 'live',
+        connector_guid: null,
+        pipeline_guid: null,
+        pipeline_version: null,
+        pipeline_name: null,
+        cache_ttl: 3600,
+        is_accessible: true,
+        accessibility_message: null,
+        last_scanned_at: null,
+        bound_agent: null,
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      }
+
+      render(
+        <CollectionForm
+          collection={collectionNeverScanned}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      expect(screen.getByText(/Next Scheduled Refresh/i)).toBeInTheDocument()
+      expect(screen.getByText(/Never scanned/i)).toBeInTheDocument()
+    })
+
+    it('should show "Auto-refresh disabled" when collection has no cache_ttl', () => {
+      const collectionNoTtl: Collection = {
+        guid: 'col_01hgw2bbg00000000000000001',
+        name: 'No TTL Collection',
+        type: 'local',
+        location: '/photos',
+        state: 'live',
+        connector_guid: null,
+        pipeline_guid: null,
+        pipeline_version: null,
+        pipeline_name: null,
+        cache_ttl: null,
+        is_accessible: true,
+        accessibility_message: null,
+        last_scanned_at: '2025-01-15T10:00:00Z',
+        bound_agent: null,
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      }
+
+      render(
+        <CollectionForm
+          collection={collectionNoTtl}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      expect(screen.getByText(/Next Scheduled Refresh/i)).toBeInTheDocument()
+      expect(screen.getByText(/Auto-refresh disabled/i)).toBeInTheDocument()
+    })
+
+    it('should show "Refresh pending" when next refresh is in the past', () => {
+      // Use a date that's definitely in the past relative to the test run
+      const pastDate = new Date()
+      pastDate.setDate(pastDate.getDate() - 1) // Yesterday
+
+      const collectionPastDue: Collection = {
+        guid: 'col_01hgw2bbg00000000000000001',
+        name: 'Past Due Collection',
+        type: 'local',
+        location: '/photos',
+        state: 'live',
+        connector_guid: null,
+        pipeline_guid: null,
+        pipeline_version: null,
+        pipeline_name: null,
+        cache_ttl: 3600, // 1 hour TTL, but last scan was yesterday
+        is_accessible: true,
+        accessibility_message: null,
+        last_scanned_at: pastDate.toISOString(),
+        bound_agent: null,
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      }
+
+      render(
+        <CollectionForm
+          collection={collectionPastDue}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      expect(screen.getByText(/Next Scheduled Refresh/i)).toBeInTheDocument()
+      expect(screen.getByText(/Refresh pending/i)).toBeInTheDocument()
+    })
+
+    it('should show last scanned timestamp when available', () => {
+      const collectionWithScan: Collection = {
+        guid: 'col_01hgw2bbg00000000000000001',
+        name: 'Scanned Collection',
+        type: 'local',
+        location: '/photos',
+        state: 'live',
+        connector_guid: null,
+        pipeline_guid: null,
+        pipeline_version: null,
+        pipeline_name: null,
+        cache_ttl: null,
+        is_accessible: true,
+        accessibility_message: null,
+        last_scanned_at: '2025-01-15T10:00:00Z',
+        bound_agent: null,
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      }
+
+      render(
+        <CollectionForm
+          collection={collectionWithScan}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      expect(screen.getByText(/Last scanned/i)).toBeInTheDocument()
+    })
+
+    it('should show future refresh datetime when scheduled', () => {
+      // Use a date that will result in a future next refresh
+      const recentDate = new Date()
+      recentDate.setMinutes(recentDate.getMinutes() - 30) // 30 minutes ago
+
+      const collectionWithFutureRefresh: Collection = {
+        guid: 'col_01hgw2bbg00000000000000001',
+        name: 'Future Refresh Collection',
+        type: 'local',
+        location: '/photos',
+        state: 'live',
+        connector_guid: null,
+        pipeline_guid: null,
+        pipeline_version: null,
+        pipeline_name: null,
+        cache_ttl: 3600, // 1 hour TTL, scanned 30 min ago = refresh in ~30 min
+        is_accessible: true,
+        accessibility_message: null,
+        last_scanned_at: recentDate.toISOString(),
+        bound_agent: null,
+        created_at: '2025-01-01T09:00:00Z',
+        updated_at: '2025-01-01T09:00:00Z',
+      }
+
+      render(
+        <CollectionForm
+          collection={collectionWithFutureRefresh}
+          connectors={mockConnectors}
+          onSubmit={mockOnSubmit}
+          onCancel={mockOnCancel}
+        />
+      )
+
+      expect(screen.getByText(/Next Scheduled Refresh/i)).toBeInTheDocument()
+      // Should show a formatted date/time, not "Never scanned" or "Refresh pending"
+      expect(screen.queryByText(/Never scanned/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Refresh pending/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Auto-refresh disabled/i)).not.toBeInTheDocument()
+    })
+  })
 })

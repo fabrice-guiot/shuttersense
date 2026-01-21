@@ -13,7 +13,7 @@ export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation' | 
 
 export type ToolMode = 'collection' | 'display_graph'
 
-export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type JobStatus = 'scheduled' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface ProgressData {
   /** Current stage of execution */
@@ -45,6 +45,8 @@ export interface Job {
   position: number | null
   /** When job was created */
   created_at: string // ISO 8601 timestamp
+  /** When job is scheduled to run (null for non-scheduled jobs) */
+  scheduled_for: string | null // ISO 8601 timestamp
   /** When job started executing */
   started_at: string | null // ISO 8601 timestamp
   /** When job completed */
@@ -122,6 +124,8 @@ export interface ConflictResponse {
 }
 
 export interface QueueStatusResponse {
+  /** Number of scheduled jobs (upcoming) */
+  scheduled_count: number
   /** Number of queued jobs */
   queued_count: number
   /** Number of running jobs */
