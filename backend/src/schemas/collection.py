@@ -598,7 +598,8 @@ class CollectionResponse(BaseModel):
         default=None,
         description="Accessibility flag: True=accessible, False=not accessible, None=pending/testing"
     )
-    last_error: Optional[str]
+    accessibility_message: Optional[str] = Field(default=None, description="Accessibility error message")
+    last_scanned_at: Optional[datetime] = Field(default=None, description="Last completed scan timestamp")
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
@@ -616,9 +617,13 @@ class CollectionResponse(BaseModel):
 
         # Copy basic attributes
         for attr in ['guid', 'name', 'type', 'location', 'state', 'pipeline_version',
-                     'cache_ttl', 'is_accessible', 'last_error', 'created_at', 'updated_at']:
+                     'cache_ttl', 'is_accessible', 'accessibility_message', 'created_at', 'updated_at']:
             if hasattr(data, attr):
                 result[attr] = getattr(data, attr)
+
+        # Map last_refresh_at (DB field) to last_scanned_at (API field)
+        if hasattr(data, 'last_refresh_at'):
+            result['last_scanned_at'] = getattr(data, 'last_refresh_at')
 
         # Deserialize metadata_json
         if hasattr(data, 'metadata_json'):

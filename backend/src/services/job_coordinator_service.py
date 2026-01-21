@@ -935,13 +935,13 @@ class JobCoordinatorService:
                 }
             )
 
-        # Update last_scanned_at for all tool completions
-        collection.last_scanned_at = datetime.utcnow()
+        # Update last_refresh_at for all tool completions
+        collection.last_refresh_at = datetime.utcnow()
         logger.debug(
-            "Updated collection last_scanned_at",
+            "Updated collection last_refresh_at",
             extra={
                 "collection_id": job.collection_id,
-                "last_scanned_at": collection.last_scanned_at.isoformat()
+                "last_refresh_at": collection.last_refresh_at.isoformat()
             }
         )
 
