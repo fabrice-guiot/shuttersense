@@ -94,11 +94,11 @@ function getConnectorsForType(
 function getStateDescription(state: string): string {
   switch (state) {
     case 'live':
-      return '1hr cache (default)'
+      return 'Active work, frequent changes'
     case 'closed':
-      return '24hr cache (default)'
+      return 'Finished work, infrequent changes'
     case 'archived':
-      return '7d cache (default)'
+      return 'Long-term storage'
     default:
       return ''
   }
@@ -136,7 +136,6 @@ export default function CollectionForm({
       state: collection?.state || 'live',
       location: collection?.location || '',
       connector_guid: collection?.connector_guid || null,
-      cache_ttl: collection?.cache_ttl || null,
       pipeline_guid: collection?.pipeline_guid || null,
       bound_agent_guid: collection?.bound_agent?.guid || null
     }
@@ -168,7 +167,6 @@ export default function CollectionForm({
         state: collection.state,
         location: collection.location,
         connector_guid: collection.connector_guid,
-        cache_ttl: collection.cache_ttl,
         pipeline_guid: collection.pipeline_guid,
         bound_agent_guid: collection.bound_agent?.guid || null
       })
@@ -413,33 +411,7 @@ export default function CollectionForm({
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  Determines default cache TTL and collection lifecycle
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Cache TTL (Optional) */}
-          <FormField
-            control={form.control}
-            name="cache_ttl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Cache TTL (Optional)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    placeholder="3600"
-                    value={field.value || ''}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      field.onChange(value ? parseInt(value) : null)
-                    }}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Custom cache TTL in seconds (overrides state-based default)
+                  Collection lifecycle stage. Cache TTL is configured per-state in Settings.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

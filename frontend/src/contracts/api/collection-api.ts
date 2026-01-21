@@ -51,7 +51,6 @@ export interface CollectionCreateRequest {
   location: string
   connector_guid: string | null  // null for LOCAL, required for remote
   pipeline_guid?: string | null  // Optional: assign specific pipeline (pip_xxx)
-  cache_ttl: number | null
   bound_agent_guid?: string | null  // Optional: bind LOCAL collection to agent (agt_xxx)
 }
 
@@ -62,7 +61,6 @@ export interface CollectionUpdateRequest {
   location?: string
   connector_guid?: string | null  // null for LOCAL, required for remote
   pipeline_guid?: string | null  // Optional: update pipeline assignment (pip_xxx)
-  cache_ttl?: number | null
   bound_agent_guid?: string | null  // Optional: update bound agent (agt_xxx, LOCAL only)
 }
 
@@ -162,7 +160,8 @@ export interface CollectionDeleteConflictResponse {
  * Validation Rules:
  *   - LOCAL type: connector_guid MUST be null
  *   - Remote types (S3/GCS/SMB): connector_guid MUST be provided (con_xxx format)
- *   - cache_ttl: optional, must be positive integer if provided
+ *
+ * Note: Cache TTL is derived from collection state and team-level configuration.
  *
  * Response: 201 CollectionDetailResponse
  * Errors:

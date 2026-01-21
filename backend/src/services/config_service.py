@@ -32,7 +32,7 @@ from backend.src.utils.logging_config import get_logger
 logger = get_logger("services")
 
 # Valid configuration categories
-VALID_CATEGORIES = {"extensions", "cameras", "processing_methods", "event_statuses"}
+VALID_CATEGORIES = {"extensions", "cameras", "processing_methods", "event_statuses", "collection_ttl"}
 
 # Import session expiry time (1 hour)
 IMPORT_SESSION_TTL = timedelta(hours=1)
@@ -333,7 +333,8 @@ class ConfigService:
             "extensions": {},
             "cameras": {},
             "processing_methods": {},
-            "event_statuses": {}
+            "event_statuses": {},
+            "collection_ttl": {}
         }
 
         configs = self.db.query(Configuration).filter(
@@ -349,6 +350,8 @@ class ConfigService:
                 result["processing_methods"][config.key] = config.value_json
             elif config.category == "event_statuses":
                 result["event_statuses"][config.key] = config.value_json
+            elif config.category == "collection_ttl":
+                result["collection_ttl"][config.key] = config.value_json
 
         return result
 
@@ -399,6 +402,50 @@ class ConfigService:
         # Sort by display_order
         statuses.sort(key=lambda x: x["display_order"])
         return statuses
+
+    def get_collection_ttl(self, team_id: int) -> Dict[str, int]:
+        """
+        Get collection TTL values for a team.
+
+        Returns TTL values (in seconds) for each collection state.
+        Falls back to hardcoded defaults if team config is missing.
+
+        Args:
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Dict mapping state to TTL in seconds: {'live': 3600, 'closed': 86400, 'archived': 604800}
+        """
+        # Hardcoded defaults as fallback
+        defaults = {
+            'live': 3600,       # 1 hour
+            'closed': 86400,   # 24 hours
+            'archived': 604800  # 7 days
+        }
+
+        configs = self.db.query(Configuration).filter(
+            Configuration.category == "collection_ttl",
+            Configuration.team_id == team_id
+        ).all()
+
+        if not configs:
+            logger.debug(f"No collection TTL config found for team {team_id}, using defaults")
+            return defaults
+
+        # Build result from configs
+        result = {}
+        for config in configs:
+            value = config.value_json if isinstance(config.value_json, dict) else {}
+            ttl_value = value.get("value")
+            if ttl_value is not None and isinstance(ttl_value, (int, float)):
+                result[config.key] = int(ttl_value)
+
+        # Fill in any missing states with defaults
+        for state, default_ttl in defaults.items():
+            if state not in result:
+                result[state] = default_ttl
+
+        return result
 
     # =========================================================================
     # Extension Seeding

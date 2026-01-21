@@ -33,6 +33,7 @@ from backend.src.schemas.collection import (
     CollectionStatsResponse,
 )
 from backend.src.services.collection_service import CollectionService
+from backend.src.services.config_service import ConfigService
 from backend.src.services.connector_service import ConnectorService
 from backend.src.services.guid import GuidService
 from backend.src.utils.cache import FileListingCache
@@ -71,16 +72,23 @@ def get_connector_service(
     return ConnectorService(db=db, encryptor=encryptor)
 
 
+def get_config_service(db: Session = Depends(get_db)) -> ConfigService:
+    """Create ConfigService instance with dependencies."""
+    return ConfigService(db=db)
+
+
 def get_collection_service(
     db: Session = Depends(get_db),
     file_cache: FileListingCache = Depends(get_file_cache),
-    connector_service: ConnectorService = Depends(get_connector_service)
+    connector_service: ConnectorService = Depends(get_connector_service),
+    config_service: ConfigService = Depends(get_config_service)
 ) -> CollectionService:
     """Create CollectionService instance with dependencies."""
     return CollectionService(
         db=db,
         file_cache=file_cache,
-        connector_service=connector_service
+        connector_service=connector_service,
+        config_service=config_service
     )
 
 
@@ -300,7 +308,6 @@ async def create_collection(
             connector_id=connector_id,
             bound_agent_id=bound_agent_id,
             pipeline_id=pipeline_id,
-            cache_ttl=collection.cache_ttl,
             metadata=collection.metadata
         )
 
@@ -513,7 +520,6 @@ async def update_collection(
             state=collection_update.state,
             pipeline_id=pipeline_id,
             bound_agent_id=bound_agent_id,
-            cache_ttl=collection_update.cache_ttl,
             metadata=collection_update.metadata
         )
 

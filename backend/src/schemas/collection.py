@@ -423,8 +423,11 @@ class CollectionCreate(BaseModel):
         connector_guid: Required for remote collections (con_xxx format)
         bound_agent_guid: Agent for LOCAL collections (agt_xxx format)
         pipeline_guid: Explicit pipeline assignment (NULL = use default at runtime)
-        cache_ttl: Override default cache TTL (seconds)
         metadata: User-defined metadata
+
+    Note:
+        Cache TTL is derived from the collection state and team-level configuration.
+        Configure TTL values in Settings > Configuration > Collection Cache TTL.
 
     Example:
         >>> collection = CollectionCreate(
@@ -442,7 +445,6 @@ class CollectionCreate(BaseModel):
     connector_guid: Optional[str] = Field(default=None, description="Connector GUID (con_xxx, required for remote)")
     bound_agent_guid: Optional[str] = Field(default=None, description="Bound agent GUID (agt_xxx, for LOCAL collections)")
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = use default)")
-    cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800, description="Cache TTL in seconds (max 7 days)")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="User-defined metadata")
 
     @model_validator(mode='after')
@@ -475,7 +477,6 @@ class CollectionCreate(BaseModel):
                 "state": "live",
                 "connector_guid": "con_01hgw2bbg0000000000000001",
                 "pipeline_guid": "pip_01hgw2bbg0000000000000001",
-                "cache_ttl": 7200,
                 "metadata": {"year": 2024, "season": "summer", "location": "Hawaii"}
             }
         }
@@ -494,25 +495,24 @@ class CollectionUpdate(BaseModel):
         state: New state (LIVE, CLOSED, ARCHIVED)
         pipeline_guid: New pipeline assignment (pip_xxx, set to explicit None to clear)
         bound_agent_guid: Bound agent for LOCAL collections (agt_xxx, set to None to unbind)
-        cache_ttl: New cache TTL override
         metadata: New metadata
 
     Note:
         - Cannot change collection type or connector_guid after creation
-        - Changing state invalidates cache (new TTL applies)
+        - Changing state invalidates cache (new TTL applies based on team config)
         - Setting pipeline_guid assigns a pipeline and pins the current version
         - Use clear_pipeline endpoint to explicitly remove assignment
         - bound_agent_guid can only be set for LOCAL collections
+        - Cache TTL is derived from state and team config (Settings > Configuration)
 
     Example:
-        >>> update = CollectionUpdate(state=CollectionState.ARCHIVED, cache_ttl=86400)
+        >>> update = CollectionUpdate(state=CollectionState.ARCHIVED)
     """
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     location: Optional[str] = Field(default=None, min_length=1, max_length=1024)
     state: Optional[CollectionState] = Field(default=None)
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = keep current)")
     bound_agent_guid: Optional[str] = Field(default=None, description="Bound agent GUID (agt_xxx, for LOCAL collections)")
-    cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800)
     metadata: Optional[Dict[str, Any]] = Field(default=None)
 
     model_config = {
@@ -521,7 +521,6 @@ class CollectionUpdate(BaseModel):
                 "state": "archived",
                 "pipeline_guid": "pip_01hgw2bbg0000000000000002",
                 "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
-                "cache_ttl": 86400,
                 "metadata": {"archived_by": "admin", "reason": "project completed"}
             }
         }

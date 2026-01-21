@@ -394,18 +394,19 @@ class TestCollectionModel:
         assert collection.is_accessible is False
         assert collection.last_error == "Directory not found"
 
-    def test_collection_get_effective_cache_ttl_custom(self, test_db_session):
-        """Test get_effective_cache_ttl returns custom TTL when set."""
+    def test_collection_get_effective_cache_ttl_with_team_config(self, test_db_session):
+        """Test get_effective_cache_ttl returns team TTL config when provided."""
         collection = Collection(
             name="Custom TTL Collection",
             type=CollectionType.LOCAL,
             location="/photos/custom",
             state=CollectionState.LIVE,
-            cache_ttl=7200
         )
 
-        ttl = collection.get_effective_cache_ttl()
-        assert ttl == 7200
+        # Provide team TTL config
+        team_ttl_config = {'live': 1800, 'closed': 43200, 'archived': 259200}
+        ttl = collection.get_effective_cache_ttl(team_ttl_config)
+        assert ttl == 1800  # Uses team config for 'live' state
 
     def test_collection_get_effective_cache_ttl_live_default(self, test_db_session):
         """Test get_effective_cache_ttl returns Live state default."""

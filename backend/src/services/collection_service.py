@@ -29,6 +29,7 @@ from backend.src.utils.logging_config import get_logger
 from backend.src.utils.security_settings import is_path_authorized
 from backend.src.services.connector_service import ConnectorService
 from backend.src.services.guid import GuidService
+from backend.src.services.config_service import ConfigService
 
 
 logger = get_logger("services")
@@ -59,7 +60,8 @@ class CollectionService:
         self,
         db: Session,
         file_cache: FileListingCache,
-        connector_service: ConnectorService
+        connector_service: ConnectorService,
+        config_service: Optional[ConfigService] = None
     ):
         """
         Initialize collection service.
@@ -68,10 +70,12 @@ class CollectionService:
             db: SQLAlchemy database session
             file_cache: File listing cache for remote storage
             connector_service: Connector service for remote storage access
+            config_service: Config service for team TTL settings (optional)
         """
         self.db = db
         self.file_cache = file_cache
         self.connector_service = connector_service
+        self.config_service = config_service
 
     def create_collection(
         self,
@@ -83,7 +87,6 @@ class CollectionService:
         connector_id: Optional[int] = None,
         bound_agent_id: Optional[int] = None,
         pipeline_id: Optional[int] = None,
-        cache_ttl: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Collection:
         """
@@ -104,8 +107,11 @@ class CollectionService:
             connector_id: Connector ID (required for remote types, None for LOCAL)
             bound_agent_id: Agent ID for LOCAL collections (optional)
             pipeline_id: Optional explicit pipeline assignment (NULL = use default)
-            cache_ttl: Custom cache TTL override (seconds)
             metadata: Optional user-defined metadata
+
+        Note:
+            Cache TTL is derived from collection state and team-level configuration.
+            Configure TTL values in Settings > Configuration > Collection Cache TTL.
 
         Returns:
             Created Collection instance
@@ -189,6 +195,7 @@ class CollectionService:
             metadata_json = json.dumps(metadata) if metadata else None
 
             # Create collection with team_id for tenant isolation
+            # Note: cache_ttl is derived from state + team config, not stored per-collection
             collection = Collection(
                 name=name,
                 type=type,
@@ -199,7 +206,6 @@ class CollectionService:
                 bound_agent_id=bound_agent_id,
                 pipeline_id=pipeline_id,
                 pipeline_version=pipeline_version,
-                cache_ttl=cache_ttl,
                 is_accessible=is_accessible,
                 last_error=last_error,
                 metadata_json=metadata_json
@@ -349,13 +355,12 @@ class CollectionService:
         state: Optional[CollectionState] = None,
         pipeline_id: Optional[int] = None,
         bound_agent_id: Optional[int] = ...,  # Use sentinel to differentiate None (unbind) from not provided
-        cache_ttl: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Collection:
         """
         Update collection properties.
 
-        Invalidates cache if state changes (different TTL applies).
+        Invalidates cache if state changes (different TTL applies based on team config).
         Only updates fields that are not None (except bound_agent_id which can be
         explicitly set to None to unbind).
 
@@ -366,8 +371,11 @@ class CollectionService:
             state: New lifecycle state
             pipeline_id: New pipeline assignment (validates pipeline is active)
             bound_agent_id: Bound agent ID (None to unbind, ... to keep current)
-            cache_ttl: New cache TTL override
             metadata: New metadata
+
+        Note:
+            Cache TTL is derived from collection state and team-level configuration.
+            Configure TTL values in Settings > Configuration > Collection Cache TTL.
 
         Returns:
             Updated Collection instance
@@ -416,9 +424,6 @@ class CollectionService:
                     raise ValueError(f"Pipeline '{pipeline.name}' is not active. Only active pipelines can be assigned to collections.")
                 collection.pipeline_id = pipeline_id
                 collection.pipeline_version = pipeline.version
-
-            if cache_ttl is not None:
-                collection.cache_ttl = cache_ttl
 
             if metadata is not None:
                 collection.metadata_json = json.dumps(metadata)
@@ -809,8 +814,13 @@ class CollectionService:
 
         files = self._fetch_collection_files(collection)
 
+        # Get team TTL config if config_service is available
+        team_ttl_config = None
+        if self.config_service and collection.team_id:
+            team_ttl_config = self.config_service.get_collection_ttl(collection.team_id)
+
         # Update cache with collection's effective TTL
-        ttl = collection.get_effective_cache_ttl()
+        ttl = collection.get_effective_cache_ttl(team_ttl_config)
         self.file_cache.set(collection_id, files, ttl)
 
         logger.info(
@@ -877,8 +887,13 @@ class CollectionService:
                 file_count
             )
 
+        # Get team TTL config if config_service is available
+        team_ttl_config = None
+        if self.config_service and collection.team_id:
+            team_ttl_config = self.config_service.get_collection_ttl(collection.team_id)
+
         # Refresh cache
-        ttl = collection.get_effective_cache_ttl()
+        ttl = collection.get_effective_cache_ttl(team_ttl_config)
         self.file_cache.invalidate(collection_id)
         self.file_cache.set(collection_id, files, ttl)
 

@@ -613,6 +613,11 @@ let configData = {
     'completed': { label: 'Completed', display_order: 2 },
     'cancelled': { label: 'Cancelled', display_order: 3 },
   } as Record<string, { label: string; display_order: number }>,
+  collection_ttl: {
+    'live': { value: 3600, label: 'Live (1 hour)' },
+    'closed': { value: 86400, label: 'Closed (24 hours)' },
+    'archived': { value: 604800, label: 'Archived (7 days)' },
+  } as Record<string, { value: number; label: string }>,
   importSessions: {} as Record<string, ImportSessionResponse>,
   lastImport: null as string | null,
 }
@@ -1747,6 +1752,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
       cameras: configData.cameras,
       processing_methods: configData.processing_methods,
       event_statuses: configData.event_statuses,
+      collection_ttl: configData.collection_ttl,
     }
     return HttpResponse.json(response)
   }),
@@ -3004,6 +3010,11 @@ export function resetMockData(): void {
       'confirmed': { label: 'Confirmed', display_order: 1 },
       'completed': { label: 'Completed', display_order: 2 },
       'cancelled': { label: 'Cancelled', display_order: 3 },
+    },
+    collection_ttl: {
+      'live': { value: 3600, label: 'Live (1 hour)' },
+      'closed': { value: 86400, label: 'Closed (24 hours)' },
+      'archived': { value: 604800, label: 'Archived (7 days)' },
     },
     importSessions: {},
     lastImport: null,

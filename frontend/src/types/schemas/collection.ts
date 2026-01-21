@@ -41,12 +41,6 @@ export const collectionFormSchema = z
       ])
       .optional()
       .transform((val) => val ?? null),  // Convert undefined to null
-    cache_ttl: z
-      .number()
-      .int('Cache TTL must be an integer')
-      .positive('Cache TTL must be positive')
-      .nullable()
-      .optional(),
     pipeline_guid: z
       .string()
       .nullable()
@@ -123,7 +117,6 @@ export function getDefaultCollectionFormValues(type: CollectionType = 'local'): 
     state: 'live',
     location: '',
     connector_guid: type === 'local' ? null : undefined,
-    cache_ttl: null,
     pipeline_guid: null,
     bound_agent_guid: null
   }

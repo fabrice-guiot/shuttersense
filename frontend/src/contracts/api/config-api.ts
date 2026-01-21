@@ -9,7 +9,7 @@
 // Entity Types
 // ============================================================================
 
-export type ConfigCategory = 'extensions' | 'cameras' | 'processing_methods' | 'event_statuses'
+export type ConfigCategory = 'extensions' | 'cameras' | 'processing_methods' | 'event_statuses' | 'collection_ttl'
 
 export type ConfigSource = 'database' | 'yaml_import'
 
@@ -42,6 +42,13 @@ export interface EventStatusConfig {
   label: string
   /** Order in dropdowns/lists */
   display_order: number
+}
+
+export interface CollectionTTLConfig {
+  /** TTL value in seconds */
+  value: number
+  /** Human-readable label for display */
+  label: string
 }
 
 export interface EventStatusItem {
@@ -80,6 +87,7 @@ export interface ConfigurationResponse {
   cameras: Record<string, CameraConfig>
   processing_methods: Record<string, string>
   event_statuses: Record<string, EventStatusConfig>
+  collection_ttl: Record<string, CollectionTTLConfig>
 }
 
 export interface CategoryConfigResponse {
@@ -254,6 +262,7 @@ export const CATEGORY_LABELS: Record<ConfigCategory, string> = {
   cameras: 'Camera Mappings',
   processing_methods: 'Processing Methods',
   event_statuses: 'Event Statuses',
+  collection_ttl: 'Collection Cache TTL',
 }
 
 /**
@@ -264,6 +273,7 @@ export const CATEGORY_DESCRIPTIONS: Record<ConfigCategory, string> = {
   cameras: 'Map camera IDs to camera names and serial numbers',
   processing_methods: 'Define processing method codes and descriptions',
   event_statuses: 'Configure available event status options',
+  collection_ttl: 'Configure cache duration for collection file listings',
 }
 
 // ============================================================================
