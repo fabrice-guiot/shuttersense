@@ -110,11 +110,13 @@ Storage optimization is critical for:
 
 **Acceptance Criteria:**
 - Config Tab in Settings page includes "Storage" section with retention configuration
-- Retention period configurable in days (7, 30, 90, 180, 365, or unlimited)
-- Default retention: 7 days
-- Retention applies to jobs ONLY, NOT their associated analysis results (for these we can introduce a separate retention time)
-- Failed jobs/results can have separate (shorter) retention period: same for both the failed job and the failed result record.
-- Orphaned Analysis results (because the original job has been purged) can have a separate longer retention period (default: unlimited).
+- Retention period configurable in days (1, 2, 5, 7, 14, 30, 90, 180, 365, or unlimited)
+- Default retention for completed jobs: 2 days
+- Default retention for completed results: unlimited
+- Default retention for failed jobs: 7 days
+- Retention applies to completed jobs separately from analysis results 
+- Failed jobs/results have separate (shorter) retention period that applies to the pair (Job+result).
+- Completed analysis results have a separate longer retention period than the job that procuded them (no CASCADE delete).
 - Changes take effect on next job creation (cleanup runs then)
 
 **Technical Notes:**
@@ -647,8 +649,9 @@ WHERE download_report_from IS NOT NULL;
 def cleanup_old_results(
     db: Session,
     team_id: int,
-    completed_days: int,
-    failed_days: int,
+    job_completed_days: int,
+    result_completed_days: int,
+    job_failed_days: int,
     preserve_count: int = 1
 ):
     """Delete old results while preserving minimum per collection+tool."""
@@ -658,6 +661,12 @@ def cleanup_old_results(
     cutoff_job_failed = datetime.utcnow() - timedelta(days=job_failed_days)
 
     # Subquery: results to preserve (most recent N per collection+tool)
+    # Consider alternative approach for performance: 
+    # select the most recent N per (collection_id, tool) using a window function
+    # (e.g., row_number() OVER (PARTITION BY AnalysisResult.collection_id,
+    # AnalysisResult.tool ORDER BY AnalysisResult.created_at DESC)) and filter
+    # row_number <= preserve_count, then delete AnalysisResult rows where id NOT IN
+    # that preserve_subq (i.e., exclude preserved IDs)
     preserve_subq = (
         db.query(AnalysisResult.id)
         .filter(AnalysisResult.team_id == team_id)
@@ -1083,6 +1092,11 @@ result_retention:
 ---
 
 ## Revision History
+
+- **2026-01-22 (v1.2)**: CodeRabbit.ai review
+  - Fixed consistency of new Settings definition
+  - Fixed sample Python code for Cleanup based on Settings
+  - Added a comment in that code for alternative Query for preserving Analysis Results
 
 - **2026-01-22 (v1.1)**: Stakeholder review
   - Refined Settings and their default values
