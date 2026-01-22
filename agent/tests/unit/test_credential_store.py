@@ -7,6 +7,8 @@ for connector credentials.
 Issue #90 - Distributed Agent Architecture (Phase 8)
 """
 
+import sys
+
 import pytest
 from pathlib import Path
 
@@ -274,6 +276,7 @@ class TestCredentialStore:
         cred_file = tmp_path / "credentials" / "con_test_path.json"
         assert cred_file.exists()
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Unix file permissions not applicable on Windows")
     def test_directory_permissions(self, tmp_path):
         """Test that directories are created with restricted permissions."""
         store = CredentialStore(base_dir=tmp_path / "secure")
@@ -290,6 +293,7 @@ class TestCredentialStore:
         assert base_mode == 0o700
         assert creds_mode == 0o700
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Unix file permissions not applicable on Windows")
     def test_file_permissions(self, tmp_path):
         """Test that credential files are created with restricted permissions."""
         store = CredentialStore(base_dir=tmp_path)
