@@ -3,7 +3,7 @@
 **Issue**: TBD
 **Status**: Draft
 **Created**: 2026-01-22
-**Last Updated**: 2026-01-22
+**Last Updated**: 2026-01-22 (v1.1)
 **Related Documents**:
 - [021-distributed-agent-architecture.md](./021-distributed-agent-architecture.md) (Agent architecture)
 - [000-remove-cli-direct-usage.md](./000-remove-cli-direct-usage.md) (Agent CLI commands)
@@ -582,7 +582,35 @@ gui = [
 
 ### Auto-Start File Formats
 
+Auto-start files MUST use the actual running binary path, not hardcoded paths. The agent provides a helper function to detect the correct path:
+
+**Binary Path Detection (`get_agent_binary_path`):**
+```python
+import sys
+import os
+
+def get_agent_binary_path() -> str:
+    """
+    Return the absolute path to the agent binary.
+
+    - Frozen (PyInstaller): Returns sys.executable (the packaged binary)
+    - Development mode: Returns os.path.abspath(sys.argv[0])
+
+    This path is used when generating auto-start entries to ensure
+    the correct binary is launched on OS startup.
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        return sys.executable
+    else:
+        # Running as Python script (dev mode)
+        return os.path.abspath(sys.argv[0])
+```
+
 **macOS LaunchAgent (`ai.shuttersense.agent.plist`):**
+
+Generated dynamically with `{binary_path}` from `get_agent_binary_path()`:
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -592,7 +620,7 @@ gui = [
     <string>ai.shuttersense.agent</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Applications/ShutterSense Agent.app/Contents/MacOS/shuttersense-agent</string>
+        <string>{binary_path}</string>
         <string>gui</string>
     </array>
     <key>RunAtLoad</key>
@@ -604,11 +632,14 @@ gui = [
 ```
 
 **Linux XDG Autostart (`shuttersense-agent.desktop`):**
+
+Generated dynamically with `{binary_path}` from `get_agent_binary_path()`:
+
 ```ini
 [Desktop Entry]
 Type=Application
 Name=ShutterSense Agent
-Exec=/usr/local/bin/shuttersense-agent gui
+Exec={binary_path} gui
 Icon=shuttersense-agent
 Terminal=false
 Categories=Utility;
@@ -616,11 +647,19 @@ X-GNOME-Autostart-enabled=true
 ```
 
 **Windows Registry:**
+
+Generated dynamically with `{binary_path}` from `get_agent_binary_path()`:
+
 ```
 Key: HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 Name: ShutterSenseAgent
-Value: "C:\Program Files\ShutterSense\shuttersense-agent.exe" gui
+Value: "{binary_path}" gui
 ```
+
+**Implementation Notes:**
+- All auto-start generation code MUST use `get_agent_binary_path()` instead of hardcoded paths
+- The helper handles both PyInstaller-frozen binaries and development mode
+- Paths with spaces are properly quoted in Windows registry and work correctly in plist/desktop files
 
 ---
 
@@ -873,6 +912,12 @@ Bundle size difference: ~80MB smaller than PySide6 version.
 ---
 
 ## Revision History
+
+- **2026-01-22 (v1.1)**: Dynamic binary path detection for auto-start
+  - Added `get_agent_binary_path()` helper specification
+  - Auto-start files now use detected binary path instead of hardcoded paths
+  - Handles PyInstaller frozen binaries and development mode
+  - Updated macOS plist, Linux desktop, and Windows registry examples
 
 - **2026-01-22 (v1.0)**: Initial draft
   - Defined system tray GUI for agent
