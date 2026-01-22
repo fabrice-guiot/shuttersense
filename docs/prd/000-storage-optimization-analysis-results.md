@@ -109,17 +109,18 @@ Storage optimization is critical for:
 **So that** old results are automatically cleaned up
 
 **Acceptance Criteria:**
-- Settings page includes "Storage" section with retention configuration
+- Config Tab in Settings page includes "Storage" section with retention configuration
 - Retention period configurable in days (7, 30, 90, 180, 365, or unlimited)
-- Default retention: 90 days
-- Retention applies to jobs and their associated analysis results
-- Failed results can have separate (shorter) retention period
+- Default retention: 7 days
+- Retention applies to jobs ONLY, NOT their associated analysis results (for these we can introduce a separate retention time)
+- Failed jobs/results can have separate (shorter) retention period: same for both the failed job and the failed result record.
+- Orphaned Analysis results (because the original job has been purged) can have a separate longer retention period (default: unlimited).
 - Changes take effect on next job creation (cleanup runs then)
 
 **Technical Notes:**
-- Store as team-level Configuration entry (category: `result_retention`)
+- Store as team-level Configuration entry (category: `result_retention`). Requires seeding when a new team is created.
 - Cleanup runs during job creation to avoid background job complexity
-- Preserve at least one result per (collection, tool) pair regardless of age
+- Preserve at least one result per (collection, tool) pair regardless of age and result (success or failure)
 
 ---
 
@@ -135,8 +136,8 @@ Storage optimization is critical for:
   - **PhotoStats/Photo Pairing**: collection_guid, file_list_hash, configuration_hash
   - **Pipeline Validation**: collection_guid, pipeline_guid, pipeline_version, file_list_hash, configuration_hash
   - **Display-Graph mode**: pipeline_guid, pipeline_version only (no collection)
-- Input State hash is SHA-256 of sorted component values
-- Input State stored as JSONB for debugging/audit purposes
+- Input State hash is SHA-256 of sorted component values (file_list should also be sorted)
+- Input State stored as JSONB for debugging/audit purposes. Only if DEBUG mode is enabled, as the file_list will be very long (will most likely require chunk upload of the JSON data from the agent-side job).
 
 **Technical Notes:**
 - Add `input_state_hash` (varchar 64) and `input_state_json` (JSONB) to AnalysisResult
@@ -154,14 +155,14 @@ Storage optimization is critical for:
 
 **Acceptance Criteria:**
 - Job claim response includes `previous_result` object when available
-- Previous result contains: guid, input_state_hash, input_state_json
-- Only most recent COMPLETED result for same (collection, tool) is returned
+- Previous result contains: guid, input_state_hash, input_state_json (optional)
+- Only most recent successfully COMPLETED result for same (collection, tool, pipeline GUID and pipeline version, depending on what is relevant to the tool) is returned
 - Returns null if no previous successful result exists
-- Agent can compare current Input State against previous
+- Agent can compare current Input State against previous (especially the hashes that cannot be compared server side)
 
 **Technical Notes:**
 - Modify `/api/jobs/claim` response schema
-- Query: most recent AnalysisResult WHERE collection_id=X AND tool=Y AND status=COMPLETED ORDER BY created_at DESC LIMIT 1
+- Query: most recent AnalysisResult WHERE collection_id=X AND tool=Y AND status=COMPLETED ORDER BY created_at DESC LIMIT 1 (this example query applies to a tool that depends only on collection)
 - Agent computes current Input State before tool execution
 
 ---
@@ -178,13 +179,14 @@ Storage optimization is critical for:
 - New result has `no_change_copy=true` flag
 - New result has `download_report_from` pointing to source result GUID
 - No HTML report stored in the new result (references source)
-- Results JSON is NOT copied (fetched from source when needed)
+- Results JSON is copied 
 - Created/completed timestamps reflect actual job timing
+- Previous result's record is deleted IF it has `no_change_copy=true` flag (it was itself a copy pointing to an earlier record).
 
 **Technical Notes:**
 - Add NO_CHANGE to ResultStatus enum
 - Add `no_change_copy` boolean (default false) to AnalysisResult
-- Add `download_report_from` (varchar, nullable) to AnalysisResult - stores source result GUID
+- Add `download_report_from` (varchar, nullable) to AnalysisResult - stores source result GUID unless source result also has `download_report_from`: in that case, keep the `download_report_from` from source.
 - On complete with NO_CHANGE: create minimal result record with reference
 
 ---
@@ -220,7 +222,7 @@ Storage optimization is critical for:
 - Report download checks `download_report_from` before serving
 - If `download_report_from` is set, retrieve report from referenced result
 - If referenced result is deleted, return appropriate error
-- Report filename reflects the requested result's metadata (not source)
+- Report filename reflects the referenced result's metadata (not requested)
 - Chain following limited to 1 level (no transitive references)
 
 **Technical Notes:**
@@ -258,16 +260,15 @@ Storage optimization is critical for:
 **So that** I can track collection changes over time
 
 **Acceptance Criteria:**
-- Trend charts display Input State transition points
-- No-change results optionally hidden (filter option)
-- Trend shows "stable period" between state changes
-- Hover/detail shows Input State information for each point
-- Storage savings indicator shows deduplication effectiveness
+- Trend charts display Input State transition points (use different symbol, not color)
+- Trend shows "stable period" between 2 results with same Input state separated by more than a day
+- No Input State information displayed in the "Trends" graph
+- (Optionally) Storage savings indicator shows deduplication effectiveness
 
 **Technical Notes:**
 - Frontend enhancement to results history view
-- Add `input_state_changed` derived boolean for display
-- Consider aggregation for long time ranges
+- Add `input_state_changed` derived boolean for display (derived from `no_change_copy=false`)
+- Consider aggregation for long time ranges (Series per week, per month instead of per Day)
 
 ---
 
@@ -287,7 +288,7 @@ Add the following fields to the existing AnalysisResult model:
 **Design Notes:**
 - `input_state_hash` indexed for efficient comparison queries
 - Null `input_state_hash` indicates pre-optimization result (backward compatible)
-- `download_report_from` stores full GUID (e.g., `res_01hgw2bbg0000000000000003`)
+- `download_report_from` stores full GUID (e.g., `res_01hgw2bbg0000000000000003`). Consider also storing the target result ID for Database FK.
 
 ---
 
@@ -330,8 +331,9 @@ New team-level configuration entries:
 
 | Category | Key | Type | Default | Description |
 |----------|-----|------|---------|-------------|
-| `result_retention` | `completed_days` | Integer | 90 | Days to retain completed results |
-| `result_retention` | `failed_days` | Integer | 14 | Days to retain failed results |
+| `result_retention` | `job_completed_days` | Integer | 7 | Days to retain completed jobs |
+| `result_retention` | `job_failed_days` | Integer | 7 | Days to retain failed jobs (and their associated results) |
+| `result_retention` | `result_completed_days` | Integer | 0 | Days to retain successful results (default to 'unlimited' represented by 0) |
 | `result_retention` | `preserve_per_collection` | Integer | 1 | Minimum results to keep per (collection, tool) |
 
 ---
@@ -384,17 +386,18 @@ class ResultStatus(str, Enum):
 #### FR-100: Retention Policy Configuration
 
 - **FR-100.1**: Store retention settings as team Configuration entries
-- **FR-100.2**: Support completed_days setting (7, 30, 90, 180, 365, 0=unlimited)
-- **FR-100.3**: Support failed_days setting (independent from completed)
-- **FR-100.4**: Support preserve_per_collection minimum (default 1)
-- **FR-100.5**: Display retention settings in Settings > Storage section
-- **FR-100.6**: Validate settings on save (failed_days <= completed_days when both set)
+- **FR-100.2**: Support `job_completed_days` setting (1, 2, 5, 7, 14, 30, 90, 180, 365, 0=unlimited, default 2)
+- **FR-100.3**: Support `job_failed_days` setting (independent from `job_completed_days`, default 7)
+- **FR-100.4**: Support `result_completed_days` setting (independent from `job_completed_days`, default 0)
+- **FR-100.5**: Support `preserve_per_collection` minimum (default 1)
+- **FR-100.6**: Display retention settings in Settings > Config Tab > Storage section
+- **FR-100.7**: Validate settings on save (`job_failed_days` <= `job_completed_days` <= `result_completed_days` when more than one set)
 
 #### FR-200: Input State Tracking
 
 - **FR-200.1**: Compute Input State hash for each tool execution
-- **FR-200.2**: Store `input_state_hash` and `input_state_json` on AnalysisResult
-- **FR-200.3**: Agent computes file_list_hash by listing collection files
+- **FR-200.2**: Store `input_state_hash` and `input_state_json` (if provided) on AnalysisResult
+- **FR-200.3**: Agent computes file_list_hash after listing collection files
 - **FR-200.4**: Agent computes configuration_hash from tool-relevant config
 - **FR-200.5**: Input State components vary by tool type (see entity definition)
 - **FR-200.6**: Null Input State for pre-migration results (backward compatible)
@@ -403,7 +406,7 @@ class ResultStatus(str, Enum):
 
 - **FR-300.1**: Job claim response includes `previous_result` when available
 - **FR-300.2**: Previous result contains guid, input_state_hash, input_state_json
-- **FR-300.3**: Query returns most recent COMPLETED result for (collection, tool)
+- **FR-300.3**: Query returns most recent COMPLETED result for (collection, tool, and potentially pipeline and pipeline version)
 - **FR-300.4**: Returns null previous_result if no prior result exists
 - **FR-300.5**: Pipeline validation includes pipeline_guid in matching criteria
 
@@ -414,8 +417,8 @@ class ResultStatus(str, Enum):
 - **FR-400.3**: NO_CHANGE completion requires `referenced_result_guid`
 - **FR-400.4**: Server creates AnalysisResult with `no_change_copy=true`
 - **FR-400.5**: New result stores reference GUID in `download_report_from`
-- **FR-400.6**: No results_json or report_html stored for NO_CHANGE results
-- **FR-400.7**: metrics (files_scanned, issues_found) copied from referenced result
+- **FR-400.6**: No report_html stored for NO_CHANGE results
+- **FR-400.7**: results_json and metrics (files_scanned, issues_found) copied from referenced result
 
 #### FR-500: Report Retrieval with References
 
@@ -428,12 +431,14 @@ class ResultStatus(str, Enum):
 #### FR-600: Automatic Cleanup
 
 - **FR-600.1**: Cleanup triggered during job creation
-- **FR-600.2**: Delete jobs older than team's completed_days setting
-- **FR-600.3**: Delete failed jobs older than team's failed_days setting
-- **FR-600.4**: Preserve minimum results per (collection, tool) regardless of age
-- **FR-600.5**: Handle orphaned references (result points to deleted source)
-- **FR-600.6**: Batch deletions to limit transaction size
-- **FR-600.7**: Skip cleanup if retention is unlimited (0 days)
+- **FR-600.2**: Delete jobs older than team's `job_completed_days` setting. Does not delete linked results.
+- **FR-600.3**: Delete results older than team's `result_completed_days` setting. 
+- **FR-600.4**: Delete failed jobs older than team's `job_failed_days` setting. Deletes linked results.
+- **FR-600.5**: Preserve minimum results per (collection, tool) regardless of age and status
+- **FR-600.6**: Handle orphaned references (result points to deleted source)
+- **FR-600.7**: Batch deletions to limit transaction size
+- **FR-600.8**: Skip cleanup if retention is unlimited (0 days)
+- **FR-600.9**: Cleanup redundant `no_change_copy` results (by deleting previous result if itself is a copy)
 
 #### FR-700: API and UI Updates
 
@@ -598,9 +603,8 @@ Agent                              Server
   │                                  │   status = 'no_change'
   │                                  │   no_change_copy = true
   │                                  │   download_report_from = ref_guid
-  │                                  │   results_json = null
   │                                  │   report_html = null
-  │                                  │   Copy: files_scanned, issues_found
+  │                                  │   Copy: results_json, files_scanned, issues_found
   │                                  │
   │  200 OK                          │
   │<────────────────────────────────│
@@ -649,8 +653,9 @@ def cleanup_old_results(
 ):
     """Delete old results while preserving minimum per collection+tool."""
 
-    cutoff_completed = datetime.utcnow() - timedelta(days=completed_days)
-    cutoff_failed = datetime.utcnow() - timedelta(days=failed_days)
+    cutoff_job_completed = datetime.utcnow() - timedelta(days=job_completed_days)
+    cutoff_result_completed = datetime.utcnow() - timedelta(days=result_completed_days)
+    cutoff_job_failed = datetime.utcnow() - timedelta(days=job_failed_days)
 
     # Subquery: results to preserve (most recent N per collection+tool)
     preserve_subq = (
@@ -667,21 +672,31 @@ def cleanup_old_results(
         .subquery()
     )
 
-    # Delete old completed results (except preserved)
-    if completed_days > 0:
+    # Delete old completed jobs
+    # Make sure no CASCADE delete of Results
+    if job_completed_days > 0:
         db.query(Job).filter(
             Job.team_id == team_id,
             Job.status == JobStatus.COMPLETED,
-            Job.completed_at < cutoff_completed,
-            ~Job.result_id.in_(preserve_subq)
+            Job.completed_at < cutoff_job_completed,
+        ).delete(synchronize_session=False)
+
+    # Delete old completed results (except preserved)
+    if result_completed_days > 0:
+        db.query(AnalysisResult).filter(
+            AnalysisResult.team_id == team_id,
+            AnalysisResult.status == ResultStatus.COMPLETED,
+            AnalysisResult.created_at < cutoff_result_completed,
+            AnalysisResult.id.in_(preserve_subq)
         ).delete(synchronize_session=False)
 
     # Delete old failed results
-    if failed_days > 0:
+    # Make sure CASCADE delete of Results
+    if job_failed_days > 0:
         db.query(Job).filter(
             Job.team_id == team_id,
             Job.status == JobStatus.FAILED,
-            Job.completed_at < cutoff_failed
+            Job.completed_at < cutoff_job_failed
         ).delete(synchronize_session=False)
 
     db.commit()
@@ -781,6 +796,8 @@ def cleanup_old_results(
    - Create minimal AnalysisResult record
    - Copy metrics from referenced result
    - Set reference fields appropriately
+   - Check cleanup requirements for referenced result
+   - Update storage savings calculation (if referenced result gets deleted)
 
 **Checkpoint**: Agent skips execution when Input State unchanged
 
@@ -929,21 +946,21 @@ def cleanup_old_results(
 
 ## Open Questions
 
-1. **Reference Pinning**: Should results referenced by `download_report_from` be exempt from retention cleanup?
+1. **Reference Pinning**: Should results referenced by `download_report_from` be exempt from retention cleanup? This would offer additional protection regarding data loss.
 
-2. **Cascading References**: If result A references result B, and B references C, should we follow the chain or flatten to direct reference?
+2. **Cascading References**: If result A references result B, and B references C, should we follow the chain or flatten to direct reference? This should never happen: would be an indication of data corruption, or failure in the "No Change" tool result report handling.
 
-3. **Partial Changes**: What if only some Input State components change? Should we store delta or full results?
+3. **Partial Changes**: What if only some Input State components change? Should we store delta or full results? This applies only to the DEBUG mode, so it's not relevant for the normal use case.
 
-4. **Configuration Change Detection**: Should configuration changes be detected separately from file changes?
+4. **Configuration Change Detection**: Should configuration changes be detected separately from file changes? This would be interesting for the Trend charts to only display transition points for actual Collection changes.
 
-5. **Manual Override**: Should users be able to force full execution even if Input State matches?
+5. **Manual Override**: Should users be able to force full execution even if Input State matches? This will need to be implemented at some point.
 
-6. **Storage Quota**: Should teams have storage quotas in addition to retention periods?
+6. **Storage Quota**: Should teams have storage quotas in addition to retention periods? Consider for a future Epic.
 
-7. **Archive Option**: Should old results be archived (downloadable) rather than deleted?
+7. **Archive Option**: Should old results be archived (downloadable) rather than deleted? Consider for a future Epic.
 
-8. **Notification**: Should cleanup notify team admins of deleted result counts?
+8. **Notification**: Should cleanup notify team admins of deleted result counts? Consider keeping a metric for Deleted Jobs and Deleted Results as part of the Storage Savings metrics.
 
 ---
 
@@ -1039,8 +1056,9 @@ def cleanup_old_results(
 
 ```yaml
 result_retention:
-  completed_days: 90      # 3 months
-  failed_days: 14         # 2 weeks
+  job_completed_days: 2      # 2 days
+  result_completed_days: 0      # unlimited
+  job_failed_days: 7         # 1 week
   preserve_per_collection: 1  # Always keep latest
 ```
 
@@ -1065,6 +1083,11 @@ result_retention:
 ---
 
 ## Revision History
+
+- **2026-01-22 (v1.1)**: Stakeholder review
+  - Refined Settings and their default values
+  - Added JSON Result copy
+  - Added intermediate Copied results cleanup
 
 - **2026-01-22 (v1.0)**: Initial draft
   - Defined Input State tracking concept
