@@ -359,12 +359,57 @@ class TestIsSafeStaticFilePath:
 
 
 class TestCollectionPathSecurity:
-    """Integration tests for collection path security."""
+    """Integration tests for collection path security with bound agents."""
 
-    def test_collection_creation_requires_authorized_roots(self, test_db_session, test_encryptor, test_team):
-        """Test that collection creation validates against authorized roots."""
+    def test_collection_creation_requires_authorized_roots(self, test_db_session, test_encryptor, test_team, test_user):
+        """Test that collection creation validates against agent's authorized roots."""
         from backend.src.services.collection_service import CollectionService
         from backend.src.services.connector_service import ConnectorService
+        from backend.src.services.agent_service import AgentService
+        from backend.src.models import CollectionType, CollectionState
+        from backend.src.utils.cache import FileListingCache
+        from backend.src.services.exceptions import ValidationError
+
+        # Create an agent with NO authorized roots for the temp directory
+        agent_service = AgentService(test_db_session)
+        token_result = agent_service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+        reg_result = agent_service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Restricted Agent",
+            version="1.0.0",
+            capabilities=["local_filesystem"],
+            authorized_roots=["/some/other/path"],  # NOT the temp directory
+        )
+        agent = reg_result.agent
+        test_db_session.commit()
+
+        cache = FileListingCache()
+        connector_service = ConnectorService(test_db_session, test_encryptor)
+        service = CollectionService(test_db_session, cache, connector_service)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Collection creation should fail because temp_dir is not in agent's authorized roots
+            try:
+                service.create_collection(
+                    name="Test Collection",
+                    type=CollectionType.LOCAL,
+                    location=temp_dir,
+                    state=CollectionState.LIVE,
+                    team_id=test_team.id,
+                    bound_agent_id=agent.id,
+                )
+                assert False, "Expected ValueError for unauthorized path"
+            except ValueError as e:
+                assert "authorized" in str(e).lower()
+
+    def test_collection_creation_succeeds_with_authorized_root(self, test_db_session, test_encryptor, test_team, test_user):
+        """Test that collection creation succeeds when path is under agent's authorized root."""
+        from backend.src.services.collection_service import CollectionService
+        from backend.src.services.connector_service import ConnectorService
+        from backend.src.services.agent_service import AgentService
         from backend.src.models import CollectionType, CollectionState
         from backend.src.utils.cache import FileListingCache
 
@@ -373,51 +418,34 @@ class TestCollectionPathSecurity:
         service = CollectionService(test_db_session, cache, connector_service)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # With no authorized roots, creation should fail
-            with patch.dict(os.environ, {}, clear=True):
-                os.environ.pop(ENV_AUTHORIZED_LOCAL_ROOTS, None)
-                # Keep required env vars
-                os.environ['SHUSAI_MASTER_KEY'] = 'test-key-for-testing-123'
-                os.environ['SHUSAI_DB_URL'] = 'sqlite:///:memory:'
-                clear_security_settings_cache()
+            # Create an agent with the temp directory in its authorized roots
+            agent_service = AgentService(test_db_session)
+            token_result = agent_service.create_registration_token(
+                team_id=test_team.id,
+                created_by_user_id=test_user.id,
+            )
+            temp_base = tempfile.gettempdir()
+            reg_result = agent_service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="Authorized Agent",
+                version="1.0.0",
+                capabilities=["local_filesystem"],
+                authorized_roots=[temp_base, "/tmp", "/private/var", "/var"],
+            )
+            agent = reg_result.agent
+            test_db_session.commit()
 
-                result = service.create_collection(
-                    name="Test Collection",
-                    type=CollectionType.LOCAL,
-                    location=temp_dir,
-                    state=CollectionState.LIVE,
-                    team_id=test_team.id
-                )
+            result = service.create_collection(
+                name="Test Collection",
+                type=CollectionType.LOCAL,
+                location=temp_dir,
+                state=CollectionState.LIVE,
+                team_id=test_team.id,
+                bound_agent_id=agent.id,
+            )
 
-                # Should fail because path is not authorized
-                assert result.is_accessible is False
-                assert result.last_error is not None
-                assert "disabled" in result.last_error.lower()
-
-    def test_collection_creation_succeeds_with_authorized_root(self, test_db_session, test_encryptor, test_team):
-        """Test that collection creation succeeds when path is under authorized root."""
-        from backend.src.services.collection_service import CollectionService
-        from backend.src.services.connector_service import ConnectorService
-        from backend.src.models import CollectionType, CollectionState
-        from backend.src.utils.cache import FileListingCache
-
-        cache = FileListingCache()
-        connector_service = ConnectorService(test_db_session, test_encryptor)
-        service = CollectionService(test_db_session, cache, connector_service)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Configure the temp directory as an authorized root
-            with patch.dict(os.environ, {ENV_AUTHORIZED_LOCAL_ROOTS: temp_dir}):
-                clear_security_settings_cache()
-
-                result = service.create_collection(
-                    name="Test Collection",
-                    type=CollectionType.LOCAL,
-                    location=temp_dir,
-                    state=CollectionState.LIVE,
-                    team_id=test_team.id
-                )
-
-                # Should succeed because path is authorized
-                assert result.is_accessible is True
-                assert result.last_error is None
+            # Should succeed because path is under agent's authorized roots
+            # For LOCAL collections with agents, accessibility is deferred (pending)
+            # The actual check will happen when agent reports back
+            assert result is not None
+            assert result.bound_agent_id == agent.id

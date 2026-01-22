@@ -39,10 +39,12 @@ import { Badge } from '@/components/ui/badge'
 import { useConfig, useConfigStats } from '@/hooks/useConfig'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventStatusesSection } from '@/components/settings/EventStatusesSection'
+import { CollectionTTLSection } from '@/components/settings/CollectionTTLSection'
 import type {
   ConfigCategory,
   ImportSessionResponse,
-  EventStatusConfig
+  EventStatusConfig,
+  CollectionTTLConfig
 } from '@/contracts/api/config-api'
 import { cn } from '@/lib/utils'
 
@@ -673,6 +675,14 @@ export function ConfigTab() {
           }}
           onDelete={async (key) => {
             await deleteConfigValue('event_statuses', key)
+            refetchStats()
+          }}
+        />
+        <CollectionTTLSection
+          ttlConfig={(configuration?.collection_ttl || {}) as Record<string, CollectionTTLConfig>}
+          loading={loading}
+          onUpdate={async (key, value) => {
+            await updateConfigValue('collection_ttl', key, { value })
             refetchStats()
           }}
         />

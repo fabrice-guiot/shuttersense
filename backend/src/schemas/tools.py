@@ -16,7 +16,7 @@ Design:
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
@@ -25,6 +25,7 @@ class ToolType(str, Enum):
     PHOTOSTATS = "photostats"
     PHOTO_PAIRING = "photo_pairing"
     PIPELINE_VALIDATION = "pipeline_validation"
+    COLLECTION_TEST = "collection_test"  # Accessibility test for LOCAL collections
 
 
 class ToolMode(str, Enum):
@@ -35,6 +36,7 @@ class ToolMode(str, Enum):
 
 class JobStatus(str, Enum):
     """Job execution status."""
+    SCHEDULED = "scheduled"
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -141,11 +143,14 @@ class JobResponse(BaseModel):
     status: JobStatus = Field(..., description="Current job status")
     position: Optional[int] = Field(None, ge=1, description="Queue position if queued")
     created_at: datetime = Field(..., description="Job creation time")
+    scheduled_for: Optional[datetime] = Field(None, description="When job is scheduled to run")
     started_at: Optional[datetime] = Field(None, description="Execution start time")
     completed_at: Optional[datetime] = Field(None, description="Execution end time")
     progress: Optional[ProgressData] = Field(None, description="Progress data if running")
     error_message: Optional[str] = Field(None, description="Error details if failed")
     result_guid: Optional[str] = Field(None, description="Analysis result GUID when completed")
+    agent_guid: Optional[str] = Field(None, description="GUID of assigned agent (agt_xxx)")
+    agent_name: Optional[str] = Field(None, description="Name of assigned agent")
 
     model_config = {
         "from_attributes": True,
@@ -163,7 +168,32 @@ class JobResponse(BaseModel):
                     "total_files": 500,
                     "issues_found": 3,
                     "percentage": 30.0
-                }
+                },
+                "agent_guid": "agt_01hgw2bbg0000000000000001",
+                "agent_name": "My MacBook"
+            }
+        }
+    }
+
+
+class JobListResponse(BaseModel):
+    """
+    Paginated job list response.
+
+    Contains a list of jobs with pagination metadata.
+    """
+    items: List[JobResponse] = Field(..., description="List of jobs")
+    total: int = Field(..., ge=0, description="Total number of jobs matching filters")
+    limit: int = Field(..., ge=1, description="Maximum items per page")
+    offset: int = Field(..., ge=0, description="Number of items skipped")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "items": [],
+                "total": 25,
+                "limit": 20,
+                "offset": 0
             }
         }
     }
@@ -175,6 +205,7 @@ class QueueStatusResponse(BaseModel):
 
     Provides counts for each job state and the current running job ID.
     """
+    scheduled_count: int = Field(0, ge=0, description="Scheduled jobs (upcoming)")
     queued_count: int = Field(0, ge=0, description="Jobs waiting in queue")
     running_count: int = Field(0, ge=0, description="Currently running jobs")
     completed_count: int = Field(0, ge=0, description="Completed jobs")
@@ -185,6 +216,7 @@ class QueueStatusResponse(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
+                "scheduled_count": 3,
                 "queued_count": 2,
                 "running_count": 1,
                 "completed_count": 10,

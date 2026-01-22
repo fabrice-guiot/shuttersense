@@ -227,6 +227,9 @@ config/config.yaml
 backend/.env
 backend/alembic.ini
 
+# Agent-specific
+agent/src/_version.py
+
 # Frontend-specific
 frontend/node_modules/
 frontend/dist/

@@ -128,40 +128,44 @@ class TestConnectorModel:
 
         assert connector.type == ConnectorType.SMB
 
-    def test_connector_name_uniqueness(self, test_db_session, test_encryptor):
-        """Test connector names must be unique."""
+    def test_connector_name_uniqueness(self, test_db_session, test_encryptor, test_team):
+        """Test connector names must be unique within a team (team-scoped uniqueness)."""
         encrypted_creds = test_encryptor.encrypt('{"test": "creds"}')
 
         connector1 = Connector(
             name="Duplicate Name",
             type=ConnectorType.S3,
-            credentials=encrypted_creds
+            credentials=encrypted_creds,
+            team_id=test_team.id,  # Same team
         )
         test_db_session.add(connector1)
         test_db_session.commit()
 
-        # Try to create another connector with same name
+        # Try to create another connector with same name in same team
         connector2 = Connector(
             name="Duplicate Name",
             type=ConnectorType.GCS,
-            credentials=encrypted_creds
+            credentials=encrypted_creds,
+            team_id=test_team.id,  # Same team - should fail
         )
         test_db_session.add(connector2)
 
         with pytest.raises(IntegrityError):
             test_db_session.commit()
 
-    def test_connector_credentials_required(self, test_db_session):
-        """Test connector credentials are required."""
+    def test_connector_credentials_nullable_for_agent_mode(self, test_db_session, test_team):
+        """Test connector credentials can be null (for agent-stored credentials)."""
         connector = Connector(
-            name="No Creds Connector",
+            name="Agent Mode Connector",
             type=ConnectorType.S3,
-            credentials=None  # Invalid
+            credentials=None,  # Valid for AGENT or PENDING modes
+            team_id=test_team.id,
         )
         test_db_session.add(connector)
+        test_db_session.commit()
 
-        with pytest.raises(IntegrityError):
-            test_db_session.commit()
+        assert connector.id is not None
+        assert connector.credentials is None
 
     def test_connector_with_metadata(self, test_db_session, test_encryptor):
         """Test creating connector with metadata_json."""
@@ -392,18 +396,19 @@ class TestCollectionModel:
         assert collection.is_accessible is False
         assert collection.last_error == "Directory not found"
 
-    def test_collection_get_effective_cache_ttl_custom(self, test_db_session):
-        """Test get_effective_cache_ttl returns custom TTL when set."""
+    def test_collection_get_effective_cache_ttl_with_team_config(self, test_db_session):
+        """Test get_effective_cache_ttl returns team TTL config when provided."""
         collection = Collection(
             name="Custom TTL Collection",
             type=CollectionType.LOCAL,
             location="/photos/custom",
             state=CollectionState.LIVE,
-            cache_ttl=7200
         )
 
-        ttl = collection.get_effective_cache_ttl()
-        assert ttl == 7200
+        # Provide team TTL config
+        team_ttl_config = {'live': 1800, 'closed': 43200, 'archived': 259200}
+        ttl = collection.get_effective_cache_ttl(team_ttl_config)
+        assert ttl == 1800  # Uses team config for 'live' state
 
     def test_collection_get_effective_cache_ttl_live_default(self, test_db_session):
         """Test get_effective_cache_ttl returns Live state default."""

@@ -30,6 +30,8 @@ from uuid_extensions import uuid7
 #   ten - Team (tenancy boundary)
 #   usr - User (authenticated user)
 #   tok - ApiToken (API access token)
+#   agt - Agent (remote processing agent)
+#   art - AgentRegistrationToken (one-time agent registration token)
 # In-memory entities (transient):
 #   job - Tool execution job
 #   imp - Config import session
@@ -47,6 +49,8 @@ ENTITY_PREFIXES = {
     "ten": "Team",
     "usr": "User",
     "tok": "ApiToken",
+    "agt": "Agent",
+    "art": "AgentRegistrationToken",
     "job": "Job",
     "imp": "ImportSession",
 }
@@ -57,7 +61,7 @@ CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # Pattern for validating GUIDs
 # Format: {3-char prefix}_{26-char Crockford Base32}
 GUID_PATTERN = re.compile(
-    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|ten|usr|tok|job|imp)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|ten|usr|tok|agt|art|job|imp)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
     re.IGNORECASE
 )
 

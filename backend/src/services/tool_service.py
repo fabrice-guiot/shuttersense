@@ -1,20 +1,23 @@
 """
-Tool service for executing analysis tools and managing jobs.
+Tool service for managing analysis tool jobs.
 
-Provides job queue management and tool execution for:
-- PhotoStats: Collection statistics and orphan detection
-- Photo Pairing: Filename pattern analysis and grouping
-- Pipeline Validation: Consistency checking against pipelines
+Provides job queue management for:
+(No tool at the moment uses server-side execution)
 
 Design:
-- Uses singleton JobQueue for global job storage across requests
-- Async tool execution with progress callbacks
-- WebSocket progress broadcasting
+- Jobs are persisted to database for agent execution (default)
+- In-memory queue retained for potential future server-side tools
+- WebSocket progress broadcasting for real-time updates
 - Result persistence to database
 - Collection statistics update after completion
+
+Note: Server-side tool execution is deprecated. All tools are now
+executed by remote agents via the persistent job queue. The in-memory
+queue architecture is retained for potential future server-side tools.
 """
 
 import asyncio
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -23,6 +26,7 @@ from sqlalchemy.orm import Session
 from backend.src.models import (
     Collection, AnalysisResult, Pipeline, ResultStatus
 )
+from backend.src.models.job import Job, JobStatus as PersistentJobStatus
 from backend.src.schemas.tools import (
     ToolType, ToolMode, JobStatus, ProgressData, JobResponse
 )
@@ -32,7 +36,6 @@ from backend.src.utils.job_queue import (
     JobQueue, AnalysisJob, get_job_queue,
     JobStatus as QueueJobStatus, create_job_id
 )
-from version import __version__ as TOOL_VERSION
 
 
 logger = get_logger("services")
@@ -46,6 +49,82 @@ def _convert_status(queue_status: QueueJobStatus) -> JobStatus:
 def _convert_to_queue_status(schema_status: JobStatus) -> QueueJobStatus:
     """Convert schema JobStatus to JobQueue status."""
     return QueueJobStatus(schema_status.value)
+
+
+def _convert_db_job_status(db_status) -> JobStatus:
+    """Convert DB Job status to schema JobStatus.
+
+    Maps DB JobStatus enum values to API JobStatus:
+    - SCHEDULED -> scheduled (for upcoming tab)
+    - PENDING -> queued
+    - ASSIGNED, RUNNING -> running
+    - COMPLETED, FAILED, CANCELLED -> as-is
+    """
+    from backend.src.models.job import JobStatus as DBJobStatus
+
+    status_map = {
+        DBJobStatus.SCHEDULED: JobStatus.SCHEDULED,
+        DBJobStatus.PENDING: JobStatus.QUEUED,
+        DBJobStatus.ASSIGNED: JobStatus.RUNNING,  # Assigned = agent working on it
+        DBJobStatus.RUNNING: JobStatus.RUNNING,
+        DBJobStatus.COMPLETED: JobStatus.COMPLETED,
+        DBJobStatus.FAILED: JobStatus.FAILED,
+        DBJobStatus.CANCELLED: JobStatus.CANCELLED,
+    }
+    return status_map.get(db_status, JobStatus.QUEUED)
+
+
+def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
+    """Convert DB Job model to JobResponse.
+
+    Args:
+        job: Job model instance from database
+        position: Queue position (if applicable)
+
+    Returns:
+        JobResponse schema instance
+    """
+    # Convert progress dict to ProgressData if present
+    progress = None
+    if job.progress:
+        progress = ProgressData(
+            stage=job.progress.get("stage", "unknown"),
+            files_scanned=job.progress.get("files_scanned"),
+            total_files=job.progress.get("total_files"),
+            issues_found=job.progress.get("issues_found", 0),
+            percentage=job.progress.get("percentage", 0)
+        )
+
+    # Convert mode string to ToolMode enum if present
+    mode = ToolMode(job.mode) if job.mode else None
+
+    # Get GUIDs from relationships
+    collection_guid = job.collection.guid if job.collection else None
+    pipeline_guid = job.pipeline.guid if job.pipeline else None
+    result_guid = job.result.guid if job.result else None
+
+    # Get agent info from relationship (set when job is assigned)
+    agent_guid = job.agent.guid if job.agent else None
+    agent_name = job.agent.name if job.agent else None
+
+    return JobResponse(
+        id=job.guid,  # Use guid as the external ID
+        collection_guid=collection_guid,
+        tool=ToolType(job.tool),
+        mode=mode,
+        pipeline_guid=pipeline_guid,
+        status=_convert_db_job_status(job.status),
+        position=position,
+        created_at=job.created_at,
+        scheduled_for=job.scheduled_for,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        progress=progress,
+        error_message=job.error_message,
+        result_guid=result_guid,
+        agent_guid=agent_guid,
+        agent_name=agent_name,
+    )
 
 
 class JobAdapter:
@@ -82,11 +161,14 @@ class JobAdapter:
             status=_convert_status(job.status),
             position=position,
             created_at=job.created_at,
+            scheduled_for=None,  # In-memory jobs are not scheduled
             started_at=job.started_at,
             completed_at=job.completed_at,
             progress=progress,
             error_message=job.error_message,
             result_guid=job.result_guid,
+            agent_guid=None,  # In-memory jobs don't have agents
+            agent_name=None,
         )
 
 
@@ -142,8 +224,9 @@ class ToolService:
         """
         Queue a tool execution job.
 
-        Creates a new job and adds it to the execution queue.
-        If no job is currently running, starts execution immediately.
+        By default, jobs are persisted to the database for agent execution.
+        Only tool types explicitly listed in INMEMORY_JOB_TYPES environment
+        variable will use in-memory queue for server-side execution.
 
         Args:
             tool: Tool to run
@@ -158,6 +241,8 @@ class ToolService:
             ValueError: If collection doesn't exist or pipeline required but missing
             ConflictError: If same tool already running on collection
         """
+        from backend.src.config.settings import get_settings
+
         # Handle display_graph mode (pipeline-only validation)
         if tool == ToolType.PIPELINE_VALIDATION and mode == ToolMode.DISPLAY_GRAPH:
             return self._run_display_graph_tool(pipeline_id)
@@ -187,16 +272,6 @@ class ToolService:
             # For PhotoStats and PhotoPairing, capture pipeline info but don't require it
             resolved_pipeline_id, pipeline_version = self._get_pipeline_for_collection(collection)
 
-        # Check for existing job on same collection/tool
-        existing = self._queue.find_active_job(collection_id, tool.value)
-        if existing:
-            from backend.src.services.exceptions import ConflictError
-            raise ConflictError(
-                message=f"Tool {tool.value} is already running on collection {collection_id}",
-                existing_job_id=existing.id,
-                position=self._queue.get_position(existing.id)
-            )
-
         # Determine mode string for job
         mode_str = mode.value if mode else None
 
@@ -210,7 +285,33 @@ class ToolService:
             if pipeline:
                 pipeline_guid = pipeline.guid
 
-        # Create new job
+        # Check settings to determine job execution mode
+        settings = get_settings()
+
+        # DEFAULT: Create persistent job for agent execution
+        # Only use in-memory queue if tool type is explicitly whitelisted
+        if not settings.is_inmemory_job_type(tool.value):
+            return self._create_persistent_job(
+                collection=collection,
+                tool=tool,
+                mode_str=mode_str,
+                pipeline_id=resolved_pipeline_id,
+                pipeline_guid=pipeline_guid,
+                pipeline_version=pipeline_version,
+            )
+
+        # IN-MEMORY MODE: Tool type is whitelisted for server-side execution
+        # Check for existing job on same collection/tool in in-memory queue
+        existing = self._queue.find_active_job(collection_id, tool.value)
+        if existing:
+            from backend.src.services.exceptions import ConflictError
+            raise ConflictError(
+                message=f"Tool {tool.value} is already running on collection {collection_id}",
+                existing_job_id=existing.id,
+                position=self._queue.get_position(existing.id)
+            )
+
+        # Create new in-memory job for server-side execution
         job = AnalysisJob(
             id=create_job_id(),
             collection_id=collection_id,
@@ -223,14 +324,15 @@ class ToolService:
         )
         position = self._queue.enqueue(job)
 
-        logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_guid}")
+        logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_guid} (in-memory server execution)")
         return JobAdapter.to_response(job, position)
 
     def _run_display_graph_tool(self, pipeline_id: Optional[int]) -> JobResponse:
         """
-        Queue a display-graph mode pipeline validation job.
+        Queue a display-graph mode pipeline validation job for agent execution.
 
         This mode validates the pipeline definition without a collection.
+        Jobs are routed to the persistent queue for agents to claim.
 
         Args:
             pipeline_id: Pipeline ID to validate
@@ -240,7 +342,10 @@ class ToolService:
 
         Raises:
             ValueError: If pipeline_id not provided or pipeline is invalid
+            ConflictError: If job already exists for this pipeline
         """
+        from backend.src.services.exceptions import ConflictError
+
         if not pipeline_id:
             raise ValueError("pipeline_id is required for display_graph mode")
 
@@ -255,43 +360,189 @@ class ToolService:
         if not pipeline.is_valid:
             raise ValueError(f"Pipeline '{pipeline.name}' is not valid")
 
-        # Check for existing display_graph job on same pipeline
-        # Use a special key format for pipeline-only jobs
-        with self._queue._lock:
-            for job in self._queue._jobs.values():
-                if (job.tool == ToolType.PIPELINE_VALIDATION.value and
-                    job.mode == ToolMode.DISPLAY_GRAPH.value and
-                    job.pipeline_id == pipeline_id and
-                    job.status in (QueueJobStatus.QUEUED, QueueJobStatus.RUNNING)):
-                    from backend.src.services.exceptions import ConflictError
-                    raise ConflictError(
-                        message=f"Pipeline validation (display_graph) is already running for pipeline {pipeline_id}",
-                        existing_job_id=job.id,
-                        position=self._queue.get_position(job.id)
-                    )
+        # Check for existing active job in persistent queue
+        existing = self.db.query(Job).filter(
+            Job.pipeline_id == pipeline_id,
+            Job.tool == ToolType.PIPELINE_VALIDATION.value,
+            Job.mode == ToolMode.DISPLAY_GRAPH.value,
+            Job.status.in_([
+                PersistentJobStatus.PENDING,
+                PersistentJobStatus.SCHEDULED,
+                PersistentJobStatus.ASSIGNED,
+                PersistentJobStatus.RUNNING,
+            ])
+        ).first()
+
+        if existing:
+            raise ConflictError(
+                message=f"Pipeline validation (display_graph) is already running for pipeline {pipeline_id}",
+                existing_job_id=existing.guid,
+                position=None
+            )
 
         # Get pipeline GUID from model property
         pipeline_guid = pipeline.guid
 
-        # Create job without collection_id
-        job = AnalysisJob(
-            id=create_job_id(),
+        # Create persistent job for agent execution
+        # No bound_agent since this is pipeline-only - any agent can claim it
+        job = Job(
+            team_id=pipeline.team_id,
             collection_id=None,  # No collection for display_graph mode
-            collection_guid=None,
-            tool=ToolType.PIPELINE_VALIDATION.value,
             pipeline_id=pipeline.id,
-            pipeline_guid=pipeline_guid,
             pipeline_version=pipeline.version,
+            tool=ToolType.PIPELINE_VALIDATION.value,
             mode=ToolMode.DISPLAY_GRAPH.value,
+            status=PersistentJobStatus.PENDING,
+            bound_agent_id=None,  # Unbound - any agent can claim
+            required_capabilities=[ToolType.PIPELINE_VALIDATION.value],
         )
-        position = self._queue.enqueue(job)
 
-        logger.info(f"Job {job.id} queued for pipeline_validation (display_graph) on pipeline {pipeline_guid}")
-        return JobAdapter.to_response(job, position)
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+
+        logger.info(
+            f"Job {job.guid} created for pipeline_validation (display_graph) on pipeline {pipeline_guid} "
+            f"(agent execution, unbound)"
+        )
+
+        # Convert persistent Job to JobResponse
+        return JobResponse(
+            id=job.guid,
+            collection_guid=None,
+            tool=ToolType.PIPELINE_VALIDATION,
+            mode=ToolMode.DISPLAY_GRAPH,
+            pipeline_guid=pipeline_guid,
+            status=JobStatus.QUEUED,  # PENDING maps to QUEUED in API schema
+            position=None,  # Agent jobs don't have queue position
+            created_at=job.created_at,
+            scheduled_for=job.scheduled_for,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            progress=None,
+            error_message=job.error_message,
+            result_guid=None,
+            agent_guid=None,  # No agent assigned yet
+            agent_name=None,
+        )
+
+    def _create_persistent_job(
+        self,
+        collection: Collection,
+        tool: ToolType,
+        mode_str: Optional[str],
+        pipeline_id: Optional[int],
+        pipeline_guid: Optional[str],
+        pipeline_version: Optional[int],
+    ) -> JobResponse:
+        """
+        Create a persistent job in the database for agent execution.
+
+        This is the default job creation path. Jobs are stored in the
+        persistent job queue (Job model) and claimed by available agents.
+        For LOCAL collections with bound agents, the job is bound to that agent.
+
+        Args:
+            collection: The collection to analyze
+            tool: Tool to run
+            mode_str: Execution mode string
+            pipeline_id: Resolved pipeline ID
+            pipeline_guid: Pipeline GUID for response
+            pipeline_version: Pipeline version
+
+        Returns:
+            JobResponse with the created job details
+
+        Raises:
+            ConflictError: If same tool already running on collection
+        """
+        from backend.src.services.exceptions import ConflictError
+        from backend.src.services.job_coordinator_service import JobCoordinatorService
+
+        # Check for existing active job in persistent queue (excluding SCHEDULED)
+        # SCHEDULED jobs will be cancelled, not considered conflicts
+        existing = self.db.query(Job).filter(
+            Job.collection_id == collection.id,
+            Job.tool == tool.value,
+            Job.status.in_([
+                PersistentJobStatus.PENDING,
+                PersistentJobStatus.ASSIGNED,
+                PersistentJobStatus.RUNNING,
+            ])
+        ).first()
+
+        if existing:
+            raise ConflictError(
+                message=f"Tool {tool.value} is already running on collection {collection.id}",
+                existing_job_id=existing.guid,
+                position=None  # Persistent jobs don't have a simple queue position
+            )
+
+        # Cancel any scheduled jobs for this collection/tool
+        # Manual refresh supersedes scheduled refresh
+        coordinator = JobCoordinatorService(self.db)
+        cancelled_count = coordinator.cancel_scheduled_jobs_for_collection(
+            collection_id=collection.id,
+            tool=tool.value
+        )
+        if cancelled_count > 0:
+            logger.info(
+                f"Cancelled {cancelled_count} scheduled job(s) due to manual refresh",
+                extra={
+                    "collection_id": collection.id,
+                    "tool": tool.value
+                }
+            )
+
+        # Create persistent job record
+        job = Job(
+            team_id=collection.team_id,
+            collection_id=collection.id,
+            pipeline_id=pipeline_id,
+            pipeline_version=pipeline_version,
+            tool=tool.value,
+            mode=mode_str,
+            status=PersistentJobStatus.PENDING,
+            bound_agent_id=collection.bound_agent_id,
+            required_capabilities=[tool.value],  # Basic capability requirement
+        )
+
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+
+        # Log job creation with binding info
+        binding_info = f"bound to agent {collection.bound_agent_id}" if collection.bound_agent_id else "unbound (any agent)"
+        logger.info(
+            f"Job {job.guid} created for {tool.value} on collection {collection.guid} "
+            f"(persistent queue, {binding_info})"
+        )
+
+        # Convert persistent Job to JobResponse
+        return JobResponse(
+            id=job.guid,
+            collection_guid=collection.guid,
+            tool=ToolType(tool.value),
+            mode=ToolMode(mode_str) if mode_str else None,
+            pipeline_guid=pipeline_guid,
+            status=JobStatus.QUEUED,  # PENDING maps to QUEUED in API schema
+            position=None,  # Agent jobs don't have queue position
+            created_at=job.created_at,
+            scheduled_for=job.scheduled_for,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            progress=None,
+            error_message=job.error_message,
+            result_guid=None,
+            agent_guid=None,  # No agent assigned yet
+            agent_name=None,
+        )
 
     def get_job(self, job_id: str) -> Optional[JobResponse]:
         """
         Get job by ID (GUID format: job_xxx).
+
+        Checks both in-memory queue and database for the job.
 
         Args:
             job_id: Job identifier in GUID format
@@ -299,100 +550,393 @@ class ToolService:
         Returns:
             Job response if found, None otherwise
         """
+        # First check in-memory queue
         job = self._queue.get_job(job_id)
-        if not job:
+        if job:
+            position = self._queue.get_position(job_id)
+            return JobAdapter.to_response(job, position)
+
+        # Then check database for persisted jobs
+        from backend.src.models.job import Job as DBJob
+
+        try:
+            job_uuid = DBJob.parse_guid(job_id)
+        except ValueError:
             return None
-        position = self._queue.get_position(job_id)
-        return JobAdapter.to_response(job, position)
+
+        db_job = self.db.query(DBJob).filter(DBJob.uuid == job_uuid).first()
+        if db_job:
+            return _db_job_to_response(db_job)
+
+        return None
 
     def list_jobs(
         self,
-        status: Optional[JobStatus] = None,
+        statuses: Optional[List[JobStatus]] = None,
         collection_id: Optional[int] = None,
-        tool: Optional[ToolType] = None
-    ) -> List[JobResponse]:
+        tool: Optional[ToolType] = None,
+        team_id: Optional[int] = None,
+        agent_id: Optional[int] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[List[JobResponse], int]:
         """
-        List jobs with optional filtering.
+        List jobs with optional filtering and pagination.
+
+        Combines jobs from both in-memory queue and database.
 
         Args:
-            status: Filter by job status
+            statuses: Filter by job status(es) - can specify multiple
             collection_id: Filter by collection
             tool: Filter by tool type
+            team_id: Filter by team (for tenant isolation)
+            agent_id: Filter by agent (internal ID)
+            limit: Maximum number of jobs to return (default 50, max 100)
+            offset: Number of jobs to skip (for pagination)
 
         Returns:
-            List of matching job responses
+            Tuple of (list of matching job responses, total count)
         """
-        # Get all jobs from queue
-        queue_status = self._queue.get_queue_status()
+        from sqlalchemy import func
+        from backend.src.models.job import Job as DBJob
+        from backend.src.models.job import JobStatus as DBJobStatus
+
         all_jobs = []
+        seen_job_ids = set()
 
-        # Access internal jobs dict (we need to iterate all jobs)
-        with self._queue._lock:
-            for job in self._queue._jobs.values():
-                # Apply filters
-                if status and job.status.value != status.value:
-                    continue
-                if collection_id and job.collection_id != collection_id:
-                    continue
-                if tool and job.tool != tool.value:
-                    continue
+        # 1. Get jobs from in-memory queue (if no team/agent filter applied)
+        # In-memory jobs don't have team/agent context, so skip if those filters are applied
+        if team_id is None and agent_id is None:
+            with self._queue._lock:
+                for job in self._queue._jobs.values():
+                    # Apply filters
+                    if statuses:
+                        # Check if job status matches any of the requested statuses
+                        job_status_matches = any(
+                            job.status.value == requested_status.value for requested_status in statuses
+                        )
+                        if not job_status_matches:
+                            continue
+                    if collection_id and job.collection_id != collection_id:
+                        continue
+                    if tool and job.tool != tool.value:
+                        continue
 
-                position = None
-                if job.status == QueueJobStatus.QUEUED:
-                    try:
-                        position = self._queue._queue.index(job.id) + 1
-                    except ValueError:
-                        pass
+                    position = None
+                    if job.status == QueueJobStatus.QUEUED:
+                        try:
+                            position = self._queue._queue.index(job.id) + 1
+                        except ValueError:
+                            pass
 
-                all_jobs.append(JobAdapter.to_response(job, position))
+                    all_jobs.append(JobAdapter.to_response(job, position))
+                    seen_job_ids.add(job.id)
 
-        # Sort by created_at descending
-        return sorted(all_jobs, key=lambda j: j.created_at, reverse=True)
+        # 2. Get jobs from database (persisted jobs for agents)
+        db_query = self.db.query(DBJob)
 
-    def cancel_job(self, job_id: str) -> Optional[JobResponse]:
+        # Apply team filter for tenant isolation
+        if team_id is not None:
+            db_query = db_query.filter(DBJob.team_id == team_id)
+
+        # Apply agent filter
+        if agent_id is not None:
+            db_query = db_query.filter(DBJob.agent_id == agent_id)
+
+        # Map API statuses to DB statuses for filtering
+        if statuses:
+            db_statuses = []
+            for requested_status in statuses:
+                if requested_status == JobStatus.SCHEDULED:
+                    db_statuses.append(DBJobStatus.SCHEDULED)
+                elif requested_status == JobStatus.QUEUED:
+                    db_statuses.append(DBJobStatus.PENDING)
+                elif requested_status == JobStatus.RUNNING:
+                    db_statuses.extend([DBJobStatus.ASSIGNED, DBJobStatus.RUNNING])
+                elif requested_status == JobStatus.COMPLETED:
+                    db_statuses.append(DBJobStatus.COMPLETED)
+                elif requested_status == JobStatus.FAILED:
+                    db_statuses.append(DBJobStatus.FAILED)
+                elif requested_status == JobStatus.CANCELLED:
+                    db_statuses.append(DBJobStatus.CANCELLED)
+
+            if db_statuses:
+                # Remove duplicates while preserving order
+                db_statuses = list(dict.fromkeys(db_statuses))
+                db_query = db_query.filter(DBJob.status.in_(db_statuses))
+
+        if collection_id:
+            db_query = db_query.filter(DBJob.collection_id == collection_id)
+
+        if tool:
+            db_query = db_query.filter(DBJob.tool == tool.value)
+
+        # Count in-memory jobs that match filters
+        inmemory_count = len(all_jobs)
+
+        # Get total count from database
+        db_total = db_query.count()
+        total_count = db_total + inmemory_count
+
+        # Determine how to combine in-memory and DB jobs for this page
+        # Strategy: in-memory jobs come first (they're typically newer/active)
+
+        # If offset is beyond all in-memory jobs, we only need DB jobs
+        if offset >= inmemory_count:
+            # Skip all in-memory jobs, fetch from DB with adjusted offset
+            db_offset = offset - inmemory_count
+            db_jobs = db_query.order_by(DBJob.created_at.desc()).offset(db_offset).limit(limit).all()
+
+            result_jobs = []
+            for db_job in db_jobs:
+                if db_job.guid not in seen_job_ids:
+                    result_jobs.append(_db_job_to_response(db_job))
+
+            return result_jobs, total_count
+
+        # Offset is within in-memory jobs - need some in-memory + possibly some DB
+        # First, sort in-memory jobs by created_at desc
+        all_jobs = sorted(all_jobs, key=lambda j: j.created_at, reverse=True)
+
+        # Take the in-memory jobs for this page
+        inmemory_for_page = all_jobs[offset:offset + limit]
+        remaining_slots = limit - len(inmemory_for_page)
+
+        if remaining_slots > 0:
+            # Need DB jobs to fill the rest of the page
+            db_jobs = db_query.order_by(DBJob.created_at.desc()).limit(remaining_slots).all()
+
+            for db_job in db_jobs:
+                if db_job.guid not in seen_job_ids:
+                    inmemory_for_page.append(_db_job_to_response(db_job))
+
+        return inmemory_for_page, total_count
+
+    def cancel_job(self, job_id: str, team_id: Optional[int] = None) -> Optional[JobResponse]:
         """
-        Cancel a queued job.
+        Cancel a job (queued or running).
 
-        Only queued jobs can be cancelled. Running jobs cannot be
-        interrupted safely.
+        For queued jobs (in-memory or database PENDING/SCHEDULED):
+        - Cancel immediately
+
+        For running jobs (database ASSIGNED/RUNNING):
+        - Set status to CANCELLED
+        - Queue a cancel_job command to the agent
 
         Args:
             job_id: Job identifier in GUID format (job_xxx)
+            team_id: Optional team ID for tenant isolation (required for DB jobs)
 
         Returns:
             Cancelled job response if found and cancellable, None otherwise
 
         Raises:
-            ValueError: If job is running and cannot be cancelled
+            ValueError: If job cannot be cancelled (already completed)
         """
-        job = self._queue.get_job(job_id)
-        if not job:
+        from backend.src.services.agent_service import AgentService
+
+        # 1. Check in-memory queue first
+        inmemory_job = self._queue.get_job(job_id)
+        if inmemory_job:
+            if inmemory_job.status == QueueJobStatus.RUNNING:
+                raise ValueError("Cannot cancel running in-memory job")
+
+            if inmemory_job.status != QueueJobStatus.QUEUED:
+                return JobAdapter.to_response(inmemory_job)
+
+            try:
+                self._queue.cancel(job_id)
+            except ValueError:
+                pass
+
+            inmemory_job = self._queue.get_job(job_id)
+            logger.info(f"Job {job_id} cancelled (in-memory)")
+            return JobAdapter.to_response(inmemory_job) if inmemory_job else None
+
+        # 2. Check database for persistent job
+        try:
+            job_uuid = Job.parse_guid(job_id)
+        except ValueError:
             return None
 
-        if job.status == QueueJobStatus.RUNNING:
-            raise ValueError("Cannot cancel running job")
+        query = self.db.query(Job).filter(Job.uuid == job_uuid)
+        if team_id is not None:
+            query = query.filter(Job.team_id == team_id)
+        db_job = query.first()
 
-        if job.status != QueueJobStatus.QUEUED:
-            return JobAdapter.to_response(job)  # Already completed/failed/cancelled
+        if not db_job:
+            return None
 
-        try:
-            self._queue.cancel(job_id)
-        except ValueError:
-            pass  # Job may have already been processed
+        # Check if already in terminal state
+        if db_job.status in (
+            PersistentJobStatus.COMPLETED,
+            PersistentJobStatus.FAILED,
+            PersistentJobStatus.CANCELLED,
+        ):
+            if db_job.status == PersistentJobStatus.CANCELLED:
+                return _db_job_to_response(db_job)
+            raise ValueError(f"Cannot cancel job in {db_job.status.value} state")
 
-        # Refetch to get updated status
-        job = self._queue.get_job(job_id)
-        logger.info(f"Job {job_id} cancelled")
-        return JobAdapter.to_response(job) if job else None
+        # 3. For PENDING/SCHEDULED, cancel directly
+        if db_job.status in (PersistentJobStatus.PENDING, PersistentJobStatus.SCHEDULED):
+            db_job.status = PersistentJobStatus.CANCELLED
+            db_job.completed_at = datetime.utcnow()
+            self.db.commit()
+            logger.info(f"Job {job_id} cancelled (database, was pending)")
+            return _db_job_to_response(db_job)
 
-    def get_queue_status(self) -> Dict[str, Any]:
+        # 4. For ASSIGNED/RUNNING, set cancelled and queue command to agent
+        if db_job.status in (PersistentJobStatus.ASSIGNED, PersistentJobStatus.RUNNING):
+            agent_id = db_job.agent_id
+            db_job.status = PersistentJobStatus.CANCELLED
+            db_job.completed_at = datetime.utcnow()
+            self.db.commit()
+
+            # Queue cancel command to agent if assigned
+            if agent_id:
+                agent_service = AgentService(self.db)
+                agent_service.queue_command(agent_id, f"cancel_job:{job_id}")
+                logger.info(f"Job {job_id} cancelled, command queued to agent {agent_id}")
+            else:
+                logger.info(f"Job {job_id} cancelled (database, was running without agent)")
+
+            return _db_job_to_response(db_job)
+
+        return None
+
+    def retry_job(self, job_id: str, team_id: Optional[int] = None) -> Optional[JobResponse]:
         """
-        Get queue statistics.
+        Retry a failed job by creating a new job with the same parameters.
+
+        Creates a new job with:
+        - Same tool, collection, pipeline, mode, and parameters
+        - Status set to PENDING
+        - Incremented retry_count
+        - parent_job_id set to the original job
+
+        Args:
+            job_id: Job identifier in GUID format (job_xxx)
+            team_id: Optional team ID for tenant isolation
+
+        Returns:
+            New job response if successful, None if job not found
+
+        Raises:
+            ValueError: If job is not in FAILED status or cannot be retried
+        """
+        # Parse job GUID
+        try:
+            job_uuid = Job.parse_guid(job_id)
+        except ValueError:
+            return None
+
+        query = self.db.query(Job).filter(Job.uuid == job_uuid)
+        if team_id is not None:
+            query = query.filter(Job.team_id == team_id)
+        original_job = query.first()
+
+        if not original_job:
+            return None
+
+        # Validate job can be retried
+        if original_job.status != PersistentJobStatus.FAILED:
+            raise ValueError(f"Cannot retry job in {original_job.status.value} status")
+
+        # Create new job with same parameters
+        # Note: parameters is a derived property, not stored directly
+        # required_capabilities_json needs JSON serialization for SQLite
+        new_job = Job(
+            team_id=original_job.team_id,
+            collection_id=original_job.collection_id,
+            pipeline_id=original_job.pipeline_id,
+            pipeline_version=original_job.pipeline_version,
+            tool=original_job.tool,
+            mode=original_job.mode,
+            status=PersistentJobStatus.PENDING,
+            bound_agent_id=original_job.bound_agent_id,
+            required_capabilities_json=json.dumps(original_job.required_capabilities),
+            priority=original_job.priority,
+            retry_count=original_job.retry_count + 1,
+            max_retries=original_job.max_retries,
+            parent_job_id=original_job.id,  # Link to original job
+        )
+
+        self.db.add(new_job)
+        self.db.commit()
+        self.db.refresh(new_job)
+
+        logger.info(
+            f"Job {job_id} retried as {new_job.guid} "
+            f"(retry_count={new_job.retry_count})"
+        )
+
+        return _db_job_to_response(new_job)
+
+    def get_queue_status(self, team_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get queue statistics from both in-memory queue and database.
+
+        Combines counts from:
+        - In-memory JobQueue (for server-side executed jobs)
+        - Database Job table (for agent-executed jobs)
+
+        Args:
+            team_id: Optional team ID to filter by (for tenant isolation)
 
         Returns:
             Dictionary with job counts by status and current job ID
         """
-        return self._queue.get_queue_status()
+        from sqlalchemy import func
+
+        # Get in-memory queue status
+        inmemory_status = self._queue.get_queue_status()
+
+        # Query database for persistent job counts
+        # PENDING, SCHEDULED -> queued
+        # ASSIGNED, RUNNING -> running
+        db_query = self.db.query(
+            Job.status,
+            func.count(Job.id).label('count')
+        )
+
+        # Apply team filter if provided
+        if team_id is not None:
+            db_query = db_query.filter(Job.team_id == team_id)
+
+        db_counts = db_query.group_by(Job.status).all()
+
+        # Map database statuses to queue status categories
+        db_scheduled = 0
+        db_queued = 0
+        db_running = 0
+        db_completed = 0
+        db_failed = 0
+        db_cancelled = 0
+
+        for status, count in db_counts:
+            if status == PersistentJobStatus.SCHEDULED:
+                db_scheduled += count
+            elif status == PersistentJobStatus.PENDING:
+                db_queued += count
+            elif status in (PersistentJobStatus.ASSIGNED, PersistentJobStatus.RUNNING):
+                db_running += count
+            elif status == PersistentJobStatus.COMPLETED:
+                db_completed += count
+            elif status == PersistentJobStatus.FAILED:
+                db_failed += count
+            elif status == PersistentJobStatus.CANCELLED:
+                db_cancelled += count
+
+        # Combine in-memory and database counts
+        return {
+            'scheduled_count': db_scheduled,
+            'queued_count': inmemory_status.get('queued_count', 0) + db_queued,
+            'running_count': inmemory_status.get('running_count', 0) + db_running,
+            'completed_count': inmemory_status.get('completed_count', 0) + db_completed,
+            'failed_count': inmemory_status.get('failed_count', 0) + db_failed,
+            'cancelled_count': inmemory_status.get('cancelled_count', 0) + db_cancelled,
+            'current_job_id': inmemory_status.get('current_job_id'),
+        }
 
     async def process_queue(self) -> None:
         """
@@ -445,41 +989,10 @@ class ToolService:
             await self._broadcast_progress(job)
 
             try:
-                # Execute the appropriate tool in a thread pool to avoid blocking
-                # the event loop. This allows other API requests to be processed
-                # while the tool runs.
-                if job.tool == "photostats":
-                    results = await self._run_photostats_threaded(job, db)
-                elif job.tool == "photo_pairing":
-                    results = await self._run_photo_pairing_threaded(job, db)
-                elif job.tool == "pipeline_validation":
-                    # Check if this is display_graph mode
-                    if job.mode == ToolMode.DISPLAY_GRAPH.value:
-                        results = await self._run_display_graph_threaded(job, db)
-                    else:
-                        results = await self._run_pipeline_validation_threaded(job, db)
-                else:
-                    raise ValueError(f"Unknown tool: {job.tool}")
-
-                # Store result in database
-                result = self._store_result(job, results, db)
-
-                # Update job status
-                job.status = QueueJobStatus.COMPLETED
-                job.completed_at = datetime.utcnow()
-                job.result_id = result.id
-                # Set result GUID from model property
-                job.result_guid = result.guid
-
-                # Update collection statistics (best effort, don't fail job if this fails)
-                # Skip for display_graph mode (no collection)
-                if job.collection_id:
-                    try:
-                        self._update_collection_stats(job.collection_id, results, db)
-                    except Exception as stats_error:
-                        logger.warning(f"Failed to update collection stats for job {job.id}: {stats_error}")
-
-                logger.info(f"Job {job.id} completed successfully")
+                # Server-side tool execution is deprecated.
+                # All tools are now executed by remote agents via the persistent job queue.
+                # This architecture is retained for potential future server-side tools.
+                raise ValueError(f"The following tool cannot be executed server-side: {job.tool}")
 
             except Exception as e:
                 logger.error(f"Job {job.id} failed: {e}")
@@ -532,1949 +1045,6 @@ class ToolService:
             except Exception:
                 pass
 
-    # =========================================================================
-    # Threaded Tool Wrappers
-    # =========================================================================
-    # These methods wrap the tool execution in asyncio.to_thread() to run
-    # blocking I/O and CPU-intensive operations in a thread pool, preventing
-    # them from blocking the event loop and allowing concurrent API requests.
-
-    async def _run_photostats_threaded(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """Run photostats in a thread pool to avoid blocking the event loop."""
-        # Capture the event loop before entering the thread
-        loop = asyncio.get_running_loop()
-        return await asyncio.to_thread(self._run_photostats_sync, job, db, loop)
-
-    async def _run_photo_pairing_threaded(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """Run photo pairing in a thread pool to avoid blocking the event loop."""
-        loop = asyncio.get_running_loop()
-        return await asyncio.to_thread(self._run_photo_pairing_sync, job, db, loop)
-
-    async def _run_pipeline_validation_threaded(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """Run pipeline validation in a thread pool to avoid blocking the event loop."""
-        loop = asyncio.get_running_loop()
-        return await asyncio.to_thread(self._run_pipeline_validation_sync, job, db, loop)
-
-    async def _run_display_graph_threaded(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """Run display graph in a thread pool to avoid blocking the event loop."""
-        loop = asyncio.get_running_loop()
-        return await asyncio.to_thread(self._run_display_graph_sync, job, db, loop)
-
-    def _broadcast_progress_sync(self, job: AnalysisJob, loop: asyncio.AbstractEventLoop) -> None:
-        """
-        Synchronous wrapper for broadcasting progress from within a thread.
-        Schedules the async broadcast on the event loop.
-
-        Args:
-            job: Job with progress to broadcast
-            loop: The main event loop (captured before entering the thread)
-        """
-        if self.websocket_manager and loop:
-            asyncio.run_coroutine_threadsafe(self._broadcast_progress(job), loop)
-
-    # =========================================================================
-    # Synchronous Tool Implementations
-    # =========================================================================
-    # These are the actual tool implementations that run in threads.
-    # They use _broadcast_progress_sync for progress updates.
-
-    def _run_photostats_sync(self, job: AnalysisJob, db: Session, loop: asyncio.AbstractEventLoop) -> Dict[str, Any]:
-        """
-        Synchronous PhotoStats execution for thread pool.
-        """
-        import tempfile
-        import os
-        from collections import defaultdict
-
-        collection = db.query(Collection).filter(
-            Collection.id == job.collection_id
-        ).first()
-
-        # Initialize progress
-        job.progress = {"stage": "initializing", "percentage": 0}
-        self._broadcast_progress_sync(job, loop)
-
-        # Check if this is a local or remote collection
-        is_local = collection.type.value.lower() == "local"
-
-        if is_local:
-            # Use native PhotoStats tool for local collections
-            from photo_stats import PhotoStats
-            stats_tool = PhotoStats(collection.location)
-
-            job.progress = {"stage": "scanning", "percentage": 10}
-            self._broadcast_progress_sync(job, loop)
-
-            job.progress = {"stage": "analyzing", "percentage": 30}
-            self._broadcast_progress_sync(job, loop)
-
-            results = stats_tool.scan_folder()
-
-            job.progress = {"stage": "generating_report", "percentage": 80}
-            self._broadcast_progress_sync(job, loop)
-
-            # Generate HTML report
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-                temp_path = f.name
-
-            try:
-                report_path = stats_tool.generate_html_report(temp_path)
-                if report_path and report_path.exists():
-                    report_html = report_path.read_text()
-                else:
-                    report_html = None
-            finally:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-
-        else:
-            # Use FileListingAdapter for remote collections
-            import time
-            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
-            from utils.config_manager import PhotoAdminConfig
-
-            config = PhotoAdminConfig()
-
-            # Get encryptor from app state if available
-            encryptor = getattr(self, '_encryptor', None)
-
-            # Start timing for scan duration
-            scan_start = time.time()
-
-            job.progress = {"stage": "scanning", "percentage": 10}
-            self._broadcast_progress_sync(job, loop)
-
-            # Create adapter and list files
-            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
-
-            # Get all photo and metadata files
-            all_extensions = config.photo_extensions | config.metadata_extensions
-            file_infos = adapter.list_files(extensions=all_extensions)
-
-            job.progress = {"stage": "analyzing", "percentage": 30}
-            self._broadcast_progress_sync(job, loop)
-
-            # Process files similar to PhotoStats.scan_folder()
-            results = self._process_photostats_files(file_infos, config)
-
-            # Record scan duration
-            results['scan_time'] = time.time() - scan_start
-
-            job.progress = {"stage": "generating_report", "percentage": 80}
-            self._broadcast_progress_sync(job, loop)
-
-            # Generate HTML report using template
-            report_html = self._generate_photostats_report(results, collection.location)
-
-        job.progress = {
-            "stage": "completed",
-            "percentage": 100,
-            "files_scanned": results.get('total_files', 0),
-            "issues_found": len(results.get('orphaned_images', [])) + len(results.get('orphaned_xmp', []))
-        }
-        self._broadcast_progress_sync(job, loop)
-
-        return {
-            "results": {
-                "total_size": results.get("total_size", 0),
-                "total_files": results.get("total_files", 0),
-                "file_counts": results.get("file_counts", {}),
-                "orphaned_images": results.get("orphaned_images", []),
-                "orphaned_xmp": results.get("orphaned_xmp", [])
-            },
-            "report_html": report_html,
-            "files_scanned": results.get('total_files', 0),
-            "issues_found": len(results.get('orphaned_images', [])) + len(results.get('orphaned_xmp', []))
-        }
-
-    def _run_photo_pairing_sync(self, job: AnalysisJob, db: Session, loop: asyncio.AbstractEventLoop) -> Dict[str, Any]:
-        """
-        Synchronous Photo Pairing execution for thread pool.
-        """
-        import tempfile
-        import os
-        import time
-        from pathlib import Path
-
-        collection = db.query(Collection).filter(
-            Collection.id == job.collection_id
-        ).first()
-
-        job.progress = {"stage": "initializing", "percentage": 0}
-        self._broadcast_progress_sync(job, loop)
-
-        # Import photo_pairing functions and config
-        from photo_pairing import (
-            build_imagegroups, calculate_analytics, generate_html_report
-        )
-        from utils.config_manager import PhotoAdminConfig
-
-        config = PhotoAdminConfig()
-        scan_start = time.time()
-
-        # Check if this is a local or remote collection
-        is_local = collection.type.value.lower() == "local"
-
-        job.progress = {"stage": "scanning", "percentage": 10}
-        self._broadcast_progress_sync(job, loop)
-
-        if is_local:
-            # Use native scan_folder for local collections
-            from photo_pairing import scan_folder
-            folder_path = Path(collection.location)
-            photo_files = list(scan_folder(folder_path, config.photo_extensions))
-        else:
-            # Use FileListingAdapter for remote collections
-            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
-
-            # Get encryptor from app state if available
-            encryptor = getattr(self, '_encryptor', None)
-
-            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
-            file_infos = adapter.list_files(extensions=config.photo_extensions)
-
-            # Convert FileInfo to VirtualPath for use with build_imagegroups
-            photo_files = [fi.to_virtual_path("") for fi in file_infos]
-            folder_path = VirtualPath("", 0, "")
-
-        job.progress = {"stage": "analyzing", "percentage": 30}
-        self._broadcast_progress_sync(job, loop)
-
-        # Build image groups
-        result = build_imagegroups(photo_files, folder_path)
-        imagegroups = result.get('imagegroups', [])
-        invalid_files = result.get('invalid_files', [])
-
-        job.progress = {"stage": "calculating_analytics", "percentage": 50}
-        self._broadcast_progress_sync(job, loop)
-
-        # Calculate analytics (skip interactive prompts - use existing mappings)
-        analytics = calculate_analytics(
-            imagegroups,
-            config.camera_mappings,
-            config.processing_methods
-        )
-
-        scan_duration = time.time() - scan_start
-
-        job.progress = {"stage": "generating_report", "percentage": 80}
-        self._broadcast_progress_sync(job, loop)
-
-        # Generate HTML report
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-            temp_path = f.name
-
-        try:
-            # For remote collections, use collection.location as display path
-            display_path = folder_path if is_local else Path(collection.location)
-            generate_html_report(analytics, invalid_files, temp_path, display_path, scan_duration)
-            if os.path.exists(temp_path):
-                with open(temp_path, 'r') as f:
-                    report_html = f.read()
-            else:
-                report_html = None
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-
-        stats = analytics.get('statistics', {})
-        total_files = stats.get('total_files_scanned', len(photo_files))
-        total_images = stats.get('total_images', 0)
-
-        job.progress = {
-            "stage": "completed",
-            "files_scanned": total_files,
-            "total_files": total_files,
-            "issues_found": len(invalid_files),
-            "percentage": 100
-        }
-        self._broadcast_progress_sync(job, loop)
-
-        return {
-            "results": {
-                "group_count": len(imagegroups),
-                "image_count": total_images,
-                "camera_usage": analytics.get('camera_usage', {}),
-                "invalid_files_count": len(invalid_files),
-                "method_usage": analytics.get('method_usage', {})
-            },
-            "report_html": report_html,
-            "files_scanned": total_files,
-            "issues_found": len(invalid_files)
-        }
-
-    def _run_pipeline_validation_sync(self, job: AnalysisJob, db: Session, loop: asyncio.AbstractEventLoop) -> Dict[str, Any]:
-        """
-        Synchronous Pipeline Validation execution for thread pool.
-        Mirrors the async version's logic but uses sync broadcast.
-        """
-        import time
-        from pathlib import Path
-
-        # Get collection and pipeline
-        collection = db.query(Collection).filter(
-            Collection.id == job.collection_id
-        ).first()
-
-        if not collection:
-            raise ValueError(f"Collection {job.collection_id} not found")
-
-        pipeline = db.query(Pipeline).filter(
-            Pipeline.id == job.pipeline_id
-        ).first()
-
-        if not pipeline:
-            raise ValueError(f"Pipeline {job.pipeline_id} not found")
-
-        job.progress = {"stage": "initializing", "percentage": 0}
-        self._broadcast_progress_sync(job, loop)
-
-        # Import pipeline processor and adapter
-        from backend.src.utils.pipeline_adapter import convert_db_pipeline_to_config
-        from utils.pipeline_processor import (
-            validate_all_images,
-            ValidationStatus,
-        )
-        from utils.config_manager import PhotoAdminConfig
-
-        config = PhotoAdminConfig()
-        scan_start = time.time()
-
-        # Convert database pipeline to PipelineConfig
-        job.progress = {"stage": "loading_pipeline", "percentage": 2}
-        self._broadcast_progress_sync(job, loop)
-
-        pipeline_config = convert_db_pipeline_to_config(
-            pipeline.nodes_json,
-            pipeline.edges_json
-        )
-
-        # Check if local or remote collection
-        is_local = collection.type.value.lower() == "local"
-
-        job.progress = {"stage": "scanning", "percentage": 4}
-        self._broadcast_progress_sync(job, loop)
-
-        if is_local:
-            # Use Photo Pairing for local collections
-            folder_path = Path(collection.location)
-
-            # Import photo_pairing
-            import photo_pairing
-            from photo_pairing import scan_folder, build_imagegroups
-
-            # Scan for photo files
-            photo_files = list(scan_folder(folder_path, config.photo_extensions))
-
-            job.progress = {"stage": "building_imagegroups", "percentage": 6}
-            self._broadcast_progress_sync(job, loop)
-
-            # Build image groups
-            result = build_imagegroups(photo_files, folder_path)
-            imagegroups = result.get('imagegroups', [])
-            invalid_files = result.get('invalid_files', [])
-        else:
-            # Use FileListingAdapter for remote collections
-            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
-            import photo_pairing
-
-            encryptor = getattr(self, '_encryptor', None)
-            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
-
-            # Get all photo files
-            file_infos = adapter.list_files(extensions=config.photo_extensions)
-
-            job.progress = {"stage": "building_imagegroups", "percentage": 6}
-            self._broadcast_progress_sync(job, loop)
-
-            # Convert to VirtualPath for photo_pairing
-            photo_files = [fi.to_virtual_path("") for fi in file_infos]
-            folder_path = VirtualPath("", 0, "")
-
-            # Build image groups
-            result = photo_pairing.build_imagegroups(photo_files, folder_path)
-            imagegroups = result.get('imagegroups', [])
-            invalid_files = result.get('invalid_files', [])
-
-        job.progress = {"stage": "validating", "percentage": 8}
-        self._broadcast_progress_sync(job, loop)
-
-        # Flatten imagegroups to specific images
-        from pipeline_validation import (
-            flatten_imagegroups_to_specific_images,
-            add_metadata_files_to_specific_images
-        )
-        from utils.pipeline_processor import validate_specific_image
-
-        specific_images = flatten_imagegroups_to_specific_images(imagegroups)
-
-        # Add metadata files (XMP, etc.) for local collections
-        if is_local:
-            add_metadata_files_to_specific_images(specific_images, folder_path, config)
-
-        # Validate all images against pipeline with progress updates
-        # Progress range: 10% to 90% (80% range for validation - the heavy lifting)
-        total_images = len(specific_images)
-        validation_results = []
-
-        # Classify overall results (worst status per image)
-        overall_status_counts = {
-            ValidationStatus.CONSISTENT: 0,
-            ValidationStatus.CONSISTENT_WITH_WARNING: 0,
-            ValidationStatus.PARTIAL: 0,
-            ValidationStatus.INCONSISTENT: 0,
-        }
-
-        # Collect per-termination statistics
-        termination_stats: Dict[str, Dict[str, int]] = {}
-
-        # Validate each image with progress updates
-        last_broadcast_pct = 0
-        for idx, specific_image in enumerate(specific_images):
-            result = validate_specific_image(specific_image, pipeline_config, show_progress=False)
-            validation_results.append(result)
-
-            # Update statistics as we go
-            overall_status_counts[result.overall_status] = overall_status_counts.get(result.overall_status, 0) + 1
-
-            for term_match in result.termination_matches:
-                term_type = term_match.termination_type
-                match_status = term_match.status
-
-                if term_type not in termination_stats:
-                    termination_stats[term_type] = {
-                        "CONSISTENT": 0,
-                        "CONSISTENT_WITH_WARNING": 0,
-                        "PARTIAL": 0,
-                        "INCONSISTENT": 0,
-                    }
-
-                if match_status == ValidationStatus.CONSISTENT:
-                    termination_stats[term_type]["CONSISTENT"] += 1
-                elif match_status == ValidationStatus.CONSISTENT_WITH_WARNING:
-                    termination_stats[term_type]["CONSISTENT_WITH_WARNING"] += 1
-                elif match_status == ValidationStatus.PARTIAL:
-                    termination_stats[term_type]["PARTIAL"] += 1
-                elif match_status == ValidationStatus.INCONSISTENT:
-                    termination_stats[term_type]["INCONSISTENT"] += 1
-
-            # Broadcast progress every 2% or at least every 50 images
-            current_pct = int((idx + 1) / total_images * 80) + 10  # 10% to 90%
-            if current_pct >= last_broadcast_pct + 2 or (idx + 1) % 50 == 0 or idx == total_images - 1:
-                issues_so_far = (
-                    overall_status_counts[ValidationStatus.PARTIAL] +
-                    overall_status_counts[ValidationStatus.INCONSISTENT]
-                )
-                job.progress = {
-                    "stage": "analyzing",
-                    "percentage": current_pct,
-                    "files_scanned": idx + 1,
-                    "total_files": total_images,
-                    "issues_found": issues_so_far
-                }
-                self._broadcast_progress_sync(job, loop)
-                last_broadcast_pct = current_pct
-
-        job.progress = {"stage": "generating_report", "percentage": 92}
-        self._broadcast_progress_sync(job, loop)
-
-        scan_duration = time.time() - scan_start
-
-        # Generate HTML report
-        report_html = self._generate_pipeline_validation_report(
-            validation_results,
-            pipeline.name,
-            collection.location,
-            scan_duration,
-            len(imagegroups),
-            len(specific_images),
-            overall_status_counts,
-            termination_stats
-        )
-
-        # Calculate issues (PARTIAL + INCONSISTENT based on overall status)
-        issues_found = (
-            overall_status_counts[ValidationStatus.PARTIAL] +
-            overall_status_counts[ValidationStatus.INCONSISTENT]
-        )
-
-        job.progress = {
-            "stage": "completed",
-            "percentage": 100,
-            "files_scanned": len(specific_images),
-            "total_files": len(specific_images),
-            "issues_found": issues_found
-        }
-        self._broadcast_progress_sync(job, loop)
-
-        # Build per-termination consistency counts for frontend
-        by_termination = {}
-        for term_type, counts in termination_stats.items():
-            by_termination[term_type] = {
-                "CONSISTENT": counts.get("CONSISTENT", 0) + counts.get("CONSISTENT_WITH_WARNING", 0),
-                "PARTIAL": counts.get("PARTIAL", 0),
-                "INCONSISTENT": counts.get("INCONSISTENT", 0)
-            }
-
-        return {
-            "results": {
-                "pipeline_name": pipeline.name,
-                "pipeline_id": pipeline.id,
-                "total_images": len(specific_images),
-                "group_count": len(imagegroups),
-                # Overall consistency (worst status per image)
-                "overall_consistency": {
-                    "CONSISTENT": overall_status_counts[ValidationStatus.CONSISTENT] + overall_status_counts[ValidationStatus.CONSISTENT_WITH_WARNING],
-                    "PARTIAL": overall_status_counts[ValidationStatus.PARTIAL],
-                    "INCONSISTENT": overall_status_counts[ValidationStatus.INCONSISTENT]
-                },
-                # Per-termination type breakdown
-                "by_termination": by_termination,
-                "invalid_files_count": len(invalid_files),
-                "scan_duration": scan_duration
-            },
-            "report_html": report_html,
-            "files_scanned": len(specific_images),
-            "issues_found": issues_found
-        }
-
-    def _run_display_graph_sync(self, job: AnalysisJob, db: Session, loop: asyncio.AbstractEventLoop) -> Dict[str, Any]:
-        """
-        Synchronous Display Graph execution for thread pool.
-        """
-        import time
-        start_time = time.time()
-
-        job.progress = {"stage": "initializing", "percentage": 0}
-        self._broadcast_progress_sync(job, loop)
-
-        # Get pipeline
-        pipeline = db.query(Pipeline).filter(Pipeline.id == job.pipeline_id).first()
-        if not pipeline:
-            raise ValueError(f"Pipeline {job.pipeline_id} not found")
-
-        job.progress = {"stage": "building_graph", "percentage": 20}
-        self._broadcast_progress_sync(job, loop)
-
-        # Convert pipeline to PipelineConfig
-        from backend.src.utils.pipeline_adapter import convert_db_pipeline_to_config
-        pipeline_config = convert_db_pipeline_to_config(
-            pipeline.nodes_json,
-            pipeline.edges_json
-        )
-
-        job.progress = {"stage": "enumerating_paths", "percentage": 40}
-        self._broadcast_progress_sync(job, loop)
-
-        # Enumerate paths through the pipeline
-        from utils.pipeline_processor import enumerate_paths_with_pairing, generate_expected_files
-        paths = enumerate_paths_with_pairing(pipeline_config)
-
-        job.progress = {"stage": "calculating_kpis", "percentage": 50}
-        self._broadcast_progress_sync(job, loop)
-
-        # Extract sample_filename from Capture node for expected file generation
-        capture_node = next(
-            (n for n in pipeline.nodes_json if n.get('type') == 'capture'),
-            None
-        )
-        sample_base = capture_node.get('properties', {}).get('sample_filename', 'XXXX0001') if capture_node else 'XXXX0001'
-
-        # Calculate KPIs
-        total_paths = len(paths)
-        non_truncated_count = 0
-        truncated_count = 0
-        non_truncated_by_termination: Dict[str, int] = {}
-        path_details = []
-
-        for idx, path in enumerate(paths):
-            if not path:
-                continue
-
-            # Get termination info from last node
-            termination_node = path[-1]
-            is_truncated = termination_node.get('truncated', False)
-            term_type = termination_node.get('term_type', 'Unknown')
-
-            if is_truncated:
-                truncated_count += 1
-            else:
-                non_truncated_count += 1
-                non_truncated_by_termination[term_type] = non_truncated_by_termination.get(term_type, 0) + 1
-
-            # Check if path contains a Pairing node (correct check)
-            is_pairing_path = any(node.get('type') == 'Pairing' for node in path)
-
-            # Build node IDs list (filter out None values)
-            node_ids = [node.get('id') or 'unknown' for node in path]
-
-            # Generate expected files for this path (filter out None values)
-            raw_expected_files = generate_expected_files(path, sample_base) or []
-            expected_files = [f for f in raw_expected_files if f is not None]
-
-            path_details.append({
-                "path_number": idx + 1,
-                "nodes": node_ids,
-                "termination": term_type or 'Unknown',
-                "is_pairing_path": is_pairing_path,
-                "is_truncated": is_truncated,
-                "expected_files": expected_files
-            })
-
-        job.progress = {"stage": "generating_report", "percentage": 70}
-        self._broadcast_progress_sync(job, loop)
-
-        # Calculate scan duration
-        scan_duration = time.time() - start_time
-
-        # Generate HTML report
-        report_html = self._generate_display_graph_report(
-            pipeline.name,
-            pipeline.version,
-            path_details,
-            scan_duration
-        )
-
-        job.progress = {
-            "stage": "completed",
-            "percentage": 100
-        }
-        self._broadcast_progress_sync(job, loop)
-
-        return {
-            "results": {
-                "pipeline_name": pipeline.name,
-                "pipeline_id": pipeline.id,
-                "pipeline_version": pipeline.version,
-                "total_paths": total_paths,
-                "non_truncated_paths": non_truncated_count,
-                "truncated_paths": truncated_count,
-                "non_truncated_by_termination": non_truncated_by_termination,
-                "paths": path_details,
-                "scan_duration": scan_duration
-            },
-            "report_html": report_html,
-            "pipeline_id": pipeline.id,
-            "pipeline_version": pipeline.version
-        }
-
-    async def _run_photostats(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """
-        Execute PhotoStats tool.
-
-        Supports both local and remote collections using FileListingAdapter.
-        For local collections, uses the native PhotoStats tool.
-        For remote collections, uses file listing adapter and processes files.
-
-        Args:
-            job: Job being executed
-            db: Database session for this job execution
-
-        Returns:
-            PhotoStats results dictionary
-        """
-        import tempfile
-        import os
-        from collections import defaultdict
-
-        collection = db.query(Collection).filter(
-            Collection.id == job.collection_id
-        ).first()
-
-        # Initialize progress
-        job.progress = {"stage": "initializing", "percentage": 0}
-        await self._broadcast_progress(job)
-
-        # Check if this is a local or remote collection
-        is_local = collection.type.value.lower() == "local"
-
-        if is_local:
-            # Use native PhotoStats tool for local collections
-            from photo_stats import PhotoStats
-            stats_tool = PhotoStats(collection.location)
-
-            job.progress = {"stage": "scanning", "percentage": 10}
-            await self._broadcast_progress(job)
-
-            job.progress = {"stage": "analyzing", "percentage": 30}
-            await self._broadcast_progress(job)
-
-            results = stats_tool.scan_folder()
-
-            job.progress = {"stage": "generating_report", "percentage": 80}
-            await self._broadcast_progress(job)
-
-            # Generate HTML report
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-                temp_path = f.name
-
-            try:
-                report_path = stats_tool.generate_html_report(temp_path)
-                if report_path and report_path.exists():
-                    report_html = report_path.read_text()
-                else:
-                    report_html = None
-            finally:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-
-        else:
-            # Use FileListingAdapter for remote collections
-            import time
-            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
-            from utils.config_manager import PhotoAdminConfig
-
-            config = PhotoAdminConfig()
-
-            # Get encryptor from app state if available
-            encryptor = getattr(self, '_encryptor', None)
-
-            # Start timing for scan duration
-            scan_start = time.time()
-
-            job.progress = {"stage": "scanning", "percentage": 10}
-            await self._broadcast_progress(job)
-
-            # Create adapter and list files
-            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
-
-            # Get all photo and metadata files
-            all_extensions = config.photo_extensions | config.metadata_extensions
-            file_infos = adapter.list_files(extensions=all_extensions)
-
-            job.progress = {"stage": "analyzing", "percentage": 30}
-            await self._broadcast_progress(job)
-
-            # Process files similar to PhotoStats.scan_folder()
-            results = self._process_photostats_files(file_infos, config)
-
-            # Record scan duration
-            results['scan_time'] = time.time() - scan_start
-
-            job.progress = {"stage": "generating_report", "percentage": 80}
-            await self._broadcast_progress(job)
-
-            # Generate HTML report using template
-            report_html = self._generate_photostats_report(results, collection.location)
-
-        job.progress = {
-            "stage": "completed",
-            "files_scanned": results.get("total_files", 0),
-            "total_files": results.get("total_files", 0),
-            "issues_found": len(results.get("orphaned_images", [])) + len(results.get("orphaned_xmp", [])),
-            "percentage": 100
-        }
-        await self._broadcast_progress(job)
-
-        return {
-            "results": results,
-            "report_html": report_html,
-            "files_scanned": results.get("total_files", 0),
-            "issues_found": len(results.get("orphaned_images", [])) + len(results.get("orphaned_xmp", []))
-        }
-
-    def _process_photostats_files(self, file_infos: List, config) -> Dict[str, Any]:
-        """
-        Process file list to generate PhotoStats results.
-
-        Replicates PhotoStats.scan_folder() logic for remote files.
-
-        Args:
-            file_infos: List of FileInfo objects
-            config: PhotoAdminConfig with extensions configuration
-
-        Returns:
-            Results dictionary matching PhotoStats output format
-        """
-        from collections import defaultdict
-
-        stats = {
-            'total_files': 0,
-            'total_size': 0,
-            'file_counts': defaultdict(int),
-            'file_sizes': defaultdict(list),
-            'orphaned_images': [],
-            'orphaned_xmp': [],
-            'paired_files': [],
-            'scan_time': 0,
-            'storage_by_type': defaultdict(int)  # For storage distribution chart
-        }
-
-        # Group files by extension and base name
-        all_files = {}
-        for fi in file_infos:
-            ext = fi.extension.lower()
-            if ext in config.photo_extensions or ext in config.metadata_extensions:
-                all_files[fi.path] = {
-                    'extension': ext,
-                    'size': fi.size,
-                    'name': fi.name
-                }
-                stats['file_counts'][ext] += 1
-                stats['total_files'] += 1
-                stats['file_sizes'][ext].append(fi.size)
-                stats['total_size'] += fi.size
-
-        # Group files by base name for pairing analysis and storage distribution
-        file_groups = defaultdict(lambda: {'files': [], 'image_ext': None, 'image_size': 0, 'sidecar_size': 0})
-        for path, info in all_files.items():
-            # Get base name without extension
-            base_name = info['name'].rsplit('.', 1)[0] if '.' in info['name'] else info['name']
-            # Get directory path
-            dir_path = path.rsplit('/', 1)[0] if '/' in path else ''
-            key = f"{dir_path}/{base_name}" if dir_path else base_name
-            file_groups[key]['files'].append((path, info['extension'], info['size']))
-
-            # Track sizes for storage distribution
-            if info['extension'] in config.photo_extensions:
-                file_groups[key]['image_ext'] = info['extension']
-                file_groups[key]['image_size'] = info['size']
-            elif info['extension'] in config.metadata_extensions:
-                file_groups[key]['sidecar_size'] = info['size']
-
-        # Analyze orphans and calculate storage distribution
-        orphaned_sidecar_size = 0
-        for base_key, group in file_groups.items():
-            files = group['files']
-            extensions = {ext for _, ext, _ in files}
-
-            # Check for images that require sidecar but don't have one
-            has_xmp = '.xmp' in extensions
-            for path, ext, _ in files:
-                if ext in config.require_sidecar and not has_xmp:
-                    stats['orphaned_images'].append(path)
-                elif ext == '.xmp':
-                    # Check if XMP has corresponding image
-                    image_exts = extensions - {'.xmp'}
-                    if not image_exts:
-                        stats['orphaned_xmp'].append(path)
-                    else:
-                        stats['paired_files'].append(path)
-
-            # Calculate storage distribution (image + paired sidecar)
-            if group['image_ext']:
-                combined_size = group['image_size'] + group['sidecar_size']
-                stats['storage_by_type'][group['image_ext']] += combined_size
-            elif group['sidecar_size'] > 0:
-                orphaned_sidecar_size += group['sidecar_size']
-
-        # Add orphaned sidecar storage
-        if orphaned_sidecar_size > 0:
-            stats['storage_by_type']['orphaned_sidecars'] = orphaned_sidecar_size
-
-        return stats
-
-    def _generate_photostats_report(self, results: Dict[str, Any], location: str) -> str:
-        """
-        Generate HTML report for PhotoStats results.
-
-        Uses Jinja2 template with ReportContext to match CLI tool format.
-
-        Args:
-            results: PhotoStats results dictionary
-            location: Collection location for report header
-
-        Returns:
-            HTML report string
-        """
-        from jinja2 import Environment, FileSystemLoader
-        from pathlib import Path
-        from datetime import datetime
-        from dataclasses import dataclass, field
-        from typing import List, Optional
-
-        # Define report data structures (matching utils/report_renderer.py)
-        @dataclass
-        class KPICard:
-            title: str
-            value: str
-            status: str
-            unit: Optional[str] = None
-
-        @dataclass
-        class ReportSection:
-            title: str
-            type: str
-            data: Optional[Dict[str, Any]] = None
-            html_content: Optional[str] = None
-            description: Optional[str] = None
-
-        @dataclass
-        class WarningMessage:
-            message: str
-            details: Optional[List[str]] = None
-            severity: str = "medium"
-
-        def format_size(size_bytes: int) -> str:
-            """Format bytes to human-readable size."""
-            for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-                if size_bytes < 1024.0:
-                    return f"{size_bytes:.2f} {unit}"
-                size_bytes /= 1024.0
-            return f"{size_bytes:.2f} PB"
-
-        try:
-            # Build KPI cards
-            total_images = sum(
-                count for ext, count in results.get('file_counts', {}).items()
-                if ext not in {'.xmp'}
-            )
-            kpis = [
-                KPICard(
-                    title="Total Images",
-                    value=str(total_images),
-                    status="success",
-                    unit="files"
-                ),
-                KPICard(
-                    title="Total Size",
-                    value=format_size(results.get('total_size', 0)),
-                    status="info"
-                ),
-                KPICard(
-                    title="Orphaned Images",
-                    value=str(len(results.get('orphaned_images', []))),
-                    status="warning" if results.get('orphaned_images') else "success",
-                    unit="files"
-                ),
-                KPICard(
-                    title="Orphaned Sidecars",
-                    value=str(len(results.get('orphaned_xmp', []))),
-                    status="warning" if results.get('orphaned_xmp') else "success",
-                    unit="files"
-                )
-            ]
-
-            # Build chart sections
-            file_counts = results.get('file_counts', {})
-            image_labels = [ext.upper() for ext in file_counts.keys() if ext != '.xmp']
-            image_counts = [file_counts[ext] for ext in file_counts.keys() if ext != '.xmp']
-
-            sections = [
-                ReportSection(
-                    title="📊 Image Type Distribution",
-                    type="chart_pie",
-                    data={
-                        "labels": image_labels,
-                        "values": image_counts
-                    },
-                    description="Number of images by file type"
-                )
-            ]
-
-            # Add Storage Distribution section (bar chart)
-            storage_by_type = results.get('storage_by_type', {})
-            if storage_by_type:
-                # Order by extension, put orphaned_sidecars last
-                storage_labels = []
-                storage_sizes = []
-                for ext, size in storage_by_type.items():
-                    if ext != 'orphaned_sidecars':
-                        storage_labels.append(ext.upper())
-                        storage_sizes.append(round(size / 1024 / 1024, 2))  # Convert to MB
-                # Add orphaned sidecars last if present
-                if 'orphaned_sidecars' in storage_by_type:
-                    storage_labels.append('ORPHANED SIDECARS')
-                    storage_sizes.append(round(storage_by_type['orphaned_sidecars'] / 1024 / 1024, 2))
-
-                if storage_labels:
-                    sections.append(
-                        ReportSection(
-                            title="💾 Storage Distribution",
-                            type="chart_bar",
-                            data={
-                                "labels": storage_labels,
-                                "values": storage_sizes
-                            },
-                            description="Storage usage by image type (including paired sidecars) in MB"
-                        )
-                    )
-
-            # Add file pairing status
-            orphaned_count = len(results.get('orphaned_images', [])) + len(results.get('orphaned_xmp', []))
-            if orphaned_count > 0:
-                rows = []
-                for file_path in results.get('orphaned_images', [])[:100]:
-                    rows.append([Path(file_path).name, "Missing XMP sidecar"])
-                for file_path in results.get('orphaned_xmp', [])[:100]:
-                    rows.append([Path(file_path).name, "Missing image file"])
-
-                sections.append(
-                    ReportSection(
-                        title="🔗 File Pairing Status",
-                        type="table",
-                        data={
-                            "headers": ["File", "Issue"],
-                            "rows": rows
-                        },
-                        description=f"Found {orphaned_count} orphaned files"
-                    )
-                )
-            else:
-                sections.append(
-                    ReportSection(
-                        title="🔗 File Pairing Status",
-                        type="html",
-                        html_content='<div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;"><strong>✓ All image files have corresponding XMP metadata files!</strong></div>'
-                    )
-                )
-
-            # Build warnings
-            warnings = []
-            if orphaned_count > 0:
-                orphaned_details = []
-                if results.get('orphaned_images'):
-                    orphaned_details.append(f"{len(results['orphaned_images'])} images without XMP files")
-                if results.get('orphaned_xmp'):
-                    orphaned_details.append(f"{len(results['orphaned_xmp'])} XMP files without images")
-                warnings.append(
-                    WarningMessage(
-                        message=f"Found {orphaned_count} orphaned files",
-                        details=orphaned_details,
-                        severity="medium"
-                    )
-                )
-
-            # Load and render template
-            template_dir = Path(__file__).parent.parent.parent.parent / "templates"
-            if template_dir.exists():
-                env = Environment(
-                    loader=FileSystemLoader(str(template_dir)),
-                    autoescape=True,
-                    trim_blocks=True,
-                    lstrip_blocks=True
-                )
-                template = env.get_template("photo_stats.html.j2")
-                return template.render(
-                    tool_name="PhotoStats",
-                    tool_version=TOOL_VERSION,
-                    scan_path=location,
-                    scan_timestamp=datetime.now(),
-                    scan_duration=results.get('scan_time', 0),
-                    kpis=kpis,
-                    sections=sections,
-                    warnings=warnings,
-                    errors=[],
-                    footer_note=None
-                )
-
-        except Exception as e:
-            logger.warning(f"Failed to render template: {e}")
-
-        # Fallback: simple HTML report
-        return f"""
-        <html>
-        <head><title>PhotoStats Report</title></head>
-        <body>
-            <h1>PhotoStats Report</h1>
-            <p>Location: {location}</p>
-            <p>Total Files: {results.get('total_files', 0)}</p>
-            <p>Total Size: {results.get('total_size', 0)} bytes</p>
-            <p>Orphaned Images: {len(results.get('orphaned_images', []))}</p>
-            <p>Orphaned XMP: {len(results.get('orphaned_xmp', []))}</p>
-        </body>
-        </html>
-        """
-
-    async def _run_photo_pairing(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """
-        Execute Photo Pairing tool.
-
-        Supports both local and remote collections using FileListingAdapter.
-        Photo Pairing analyzes filename patterns and groups files.
-
-        Args:
-            job: Job being executed
-            db: Database session for this job execution
-
-        Returns:
-            Photo Pairing results dictionary
-        """
-        import tempfile
-        import os
-        import time
-        from pathlib import Path
-
-        collection = db.query(Collection).filter(
-            Collection.id == job.collection_id
-        ).first()
-
-        job.progress = {"stage": "initializing", "percentage": 0}
-        await self._broadcast_progress(job)
-
-        # Import photo_pairing functions and config
-        from photo_pairing import (
-            build_imagegroups, calculate_analytics, generate_html_report
-        )
-        from utils.config_manager import PhotoAdminConfig
-
-        config = PhotoAdminConfig()
-        scan_start = time.time()
-
-        # Check if this is a local or remote collection
-        is_local = collection.type.value.lower() == "local"
-
-        job.progress = {"stage": "scanning", "percentage": 10}
-        await self._broadcast_progress(job)
-
-        if is_local:
-            # Use native scan_folder for local collections
-            from photo_pairing import scan_folder
-            folder_path = Path(collection.location)
-            photo_files = list(scan_folder(folder_path, config.photo_extensions))
-        else:
-            # Use FileListingAdapter for remote collections
-            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
-
-            # Get encryptor from app state if available
-            encryptor = getattr(self, '_encryptor', None)
-
-            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
-            file_infos = adapter.list_files(extensions=config.photo_extensions)
-
-            # Convert FileInfo to VirtualPath for use with build_imagegroups
-            # Use empty string as base so relative_to works correctly
-            photo_files = [fi.to_virtual_path("") for fi in file_infos]
-            folder_path = VirtualPath("", 0, "")
-
-        job.progress = {"stage": "analyzing", "percentage": 30}
-        await self._broadcast_progress(job)
-
-        # Build image groups
-        result = build_imagegroups(photo_files, folder_path)
-        imagegroups = result.get('imagegroups', [])
-        invalid_files = result.get('invalid_files', [])
-
-        job.progress = {"stage": "calculating_analytics", "percentage": 50}
-        await self._broadcast_progress(job)
-
-        # Calculate analytics (skip interactive prompts - use existing mappings)
-        analytics = calculate_analytics(
-            imagegroups,
-            config.camera_mappings,
-            config.processing_methods
-        )
-
-        scan_duration = time.time() - scan_start
-
-        job.progress = {"stage": "generating_report", "percentage": 80}
-        await self._broadcast_progress(job)
-
-        # Generate HTML report
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-            temp_path = f.name
-
-        try:
-            # For remote collections, use collection.location as display path
-            display_path = folder_path if is_local else Path(collection.location)
-            generate_html_report(analytics, invalid_files, temp_path, display_path, scan_duration)
-            if os.path.exists(temp_path):
-                with open(temp_path, 'r') as f:
-                    report_html = f.read()
-            else:
-                report_html = None
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-
-        stats = analytics.get('statistics', {})
-        total_files = stats.get('total_files_scanned', len(photo_files))
-        total_images = stats.get('total_images', 0)
-
-        job.progress = {
-            "stage": "completed",
-            "files_scanned": total_files,
-            "total_files": total_files,
-            "issues_found": len(invalid_files),
-            "percentage": 100
-        }
-        await self._broadcast_progress(job)
-
-        return {
-            "results": {
-                "group_count": len(imagegroups),
-                "image_count": total_images,
-                "camera_usage": analytics.get('camera_usage', {}),
-                "invalid_files_count": len(invalid_files),
-                "method_usage": analytics.get('method_usage', {})
-            },
-            "report_html": report_html,
-            "files_scanned": total_files,
-            "issues_found": len(invalid_files)
-        }
-
-    async def _run_pipeline_validation(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """
-        Execute Pipeline Validation tool.
-
-        Integrates database-stored pipelines with the CLI validation logic by:
-        1. Loading pipeline from database and converting to PipelineConfig
-        2. Running Photo Pairing to get ImageGroups
-        3. Validating images against pipeline paths
-        4. Generating HTML report
-
-        Args:
-            job: Job being executed
-            db: Database session for this job execution
-
-        Returns:
-            Pipeline Validation results dictionary
-        """
-        import time
-        import tempfile
-        import os
-        from pathlib import Path
-
-        collection = db.query(Collection).filter(
-            Collection.id == job.collection_id
-        ).first()
-
-        if not collection:
-            raise ValueError(f"Collection {job.collection_id} not found")
-
-        pipeline = db.query(Pipeline).filter(
-            Pipeline.id == job.pipeline_id
-        ).first()
-
-        if not pipeline:
-            raise ValueError(f"Pipeline {job.pipeline_id} not found")
-
-        # Initialize progress
-        job.progress = {"stage": "initializing", "percentage": 0}
-        await self._broadcast_progress(job)
-
-        # Import pipeline processor and adapter
-        from backend.src.utils.pipeline_adapter import convert_db_pipeline_to_config
-        from utils.pipeline_processor import (
-            validate_all_images,
-            classify_validation_status,
-            ValidationStatus,
-        )
-        from utils.config_manager import PhotoAdminConfig
-        from utils.report_renderer import ReportRenderer
-
-        config = PhotoAdminConfig()
-        scan_start = time.time()
-
-        # Convert database pipeline to PipelineConfig
-        job.progress = {"stage": "loading_pipeline", "percentage": 5}
-        await self._broadcast_progress(job)
-
-        pipeline_config = convert_db_pipeline_to_config(
-            pipeline.nodes_json,
-            pipeline.edges_json
-        )
-
-        # Check if local or remote collection
-        is_local = collection.type.value.lower() == "local"
-
-        job.progress = {"stage": "scanning", "percentage": 10}
-        await self._broadcast_progress(job)
-
-        if is_local:
-            # Use Photo Pairing for local collections
-            folder_path = Path(collection.location)
-
-            # Import photo_pairing
-            import photo_pairing
-            from photo_pairing import scan_folder, build_imagegroups
-
-            # Scan for photo files
-            photo_files = list(scan_folder(folder_path, config.photo_extensions))
-
-            job.progress = {"stage": "building_imagegroups", "percentage": 20}
-            await self._broadcast_progress(job)
-
-            # Build image groups
-            result = build_imagegroups(photo_files, folder_path)
-            imagegroups = result.get('imagegroups', [])
-            invalid_files = result.get('invalid_files', [])
-        else:
-            # Use FileListingAdapter for remote collections
-            from backend.src.utils.file_listing import FileListingFactory, VirtualPath
-            import photo_pairing
-
-            encryptor = getattr(self, '_encryptor', None)
-            adapter = FileListingFactory.create_adapter(collection, db, encryptor)
-
-            # Get all photo files
-            file_infos = adapter.list_files(extensions=config.photo_extensions)
-
-            job.progress = {"stage": "building_imagegroups", "percentage": 20}
-            await self._broadcast_progress(job)
-
-            # Convert to VirtualPath for photo_pairing
-            photo_files = [fi.to_virtual_path("") for fi in file_infos]
-            folder_path = VirtualPath("", 0, "")
-
-            # Build image groups
-            result = photo_pairing.build_imagegroups(photo_files, folder_path)
-            imagegroups = result.get('imagegroups', [])
-            invalid_files = result.get('invalid_files', [])
-
-        job.progress = {"stage": "validating", "percentage": 40}
-        await self._broadcast_progress(job)
-
-        # Flatten imagegroups to specific images
-        from pipeline_validation import (
-            flatten_imagegroups_to_specific_images,
-            add_metadata_files_to_specific_images
-        )
-
-        specific_images = flatten_imagegroups_to_specific_images(imagegroups)
-
-        # Add metadata files (XMP, etc.) for local collections
-        if is_local:
-            add_metadata_files_to_specific_images(specific_images, folder_path, config)
-
-        # Validate all images against pipeline
-        job.progress = {"stage": "analyzing", "percentage": 60}
-        await self._broadcast_progress(job)
-
-        validation_results = validate_all_images(specific_images, pipeline_config)
-
-        # Classify overall results (worst status per image)
-        overall_status_counts = {
-            ValidationStatus.CONSISTENT: 0,
-            ValidationStatus.CONSISTENT_WITH_WARNING: 0,
-            ValidationStatus.PARTIAL: 0,
-            ValidationStatus.INCONSISTENT: 0,
-        }
-
-        # Collect per-termination statistics
-        termination_stats: Dict[str, Dict[str, int]] = {}
-
-        for result in validation_results:
-            overall_status_counts[result.overall_status] = overall_status_counts.get(result.overall_status, 0) + 1
-
-            # Process each termination match
-            for term_match in result.termination_matches:
-                term_type = term_match.termination_type
-                match_status = term_match.status
-
-                if term_type not in termination_stats:
-                    termination_stats[term_type] = {
-                        "CONSISTENT": 0,
-                        "CONSISTENT_WITH_WARNING": 0,
-                        "PARTIAL": 0,
-                        "INCONSISTENT": 0,
-                    }
-
-                if match_status == ValidationStatus.CONSISTENT:
-                    termination_stats[term_type]["CONSISTENT"] += 1
-                elif match_status == ValidationStatus.CONSISTENT_WITH_WARNING:
-                    termination_stats[term_type]["CONSISTENT_WITH_WARNING"] += 1
-                elif match_status == ValidationStatus.PARTIAL:
-                    termination_stats[term_type]["PARTIAL"] += 1
-                elif match_status == ValidationStatus.INCONSISTENT:
-                    termination_stats[term_type]["INCONSISTENT"] += 1
-
-        scan_duration = time.time() - scan_start
-
-        job.progress = {"stage": "generating_report", "percentage": 80}
-        await self._broadcast_progress(job)
-
-        # Generate HTML report
-        report_html = self._generate_pipeline_validation_report(
-            validation_results,
-            pipeline.name,
-            collection.location,
-            scan_duration,
-            len(imagegroups),
-            len(specific_images),
-            overall_status_counts,
-            termination_stats
-        )
-
-        # Calculate issues (PARTIAL + INCONSISTENT based on overall status)
-        issues_found = (
-            overall_status_counts[ValidationStatus.PARTIAL] +
-            overall_status_counts[ValidationStatus.INCONSISTENT]
-        )
-
-        job.progress = {
-            "stage": "completed",
-            "files_scanned": len(specific_images),
-            "total_files": len(specific_images),
-            "issues_found": issues_found,
-            "percentage": 100
-        }
-        await self._broadcast_progress(job)
-
-        # Build per-termination consistency counts for frontend
-        by_termination = {}
-        for term_type, stats in termination_stats.items():
-            by_termination[term_type] = {
-                "CONSISTENT": stats["CONSISTENT"] + stats["CONSISTENT_WITH_WARNING"],
-                "PARTIAL": stats["PARTIAL"],
-                "INCONSISTENT": stats["INCONSISTENT"],
-            }
-
-        return {
-            "results": {
-                "pipeline_name": pipeline.name,
-                "pipeline_id": pipeline.id,
-                "total_images": len(specific_images),
-                "group_count": len(imagegroups),
-                # Overall consistency (worst status per image)
-                "overall_consistency": {
-                    "CONSISTENT": overall_status_counts[ValidationStatus.CONSISTENT] + overall_status_counts[ValidationStatus.CONSISTENT_WITH_WARNING],
-                    "PARTIAL": overall_status_counts[ValidationStatus.PARTIAL],
-                    "INCONSISTENT": overall_status_counts[ValidationStatus.INCONSISTENT],
-                },
-                # Per-termination type breakdown
-                "by_termination": by_termination,
-                "invalid_files_count": len(invalid_files),
-                "scan_duration": scan_duration
-            },
-            "report_html": report_html,
-            "files_scanned": len(specific_images),
-            "issues_found": issues_found
-        }
-
-    def _generate_pipeline_validation_report(
-        self,
-        validation_results: list,
-        pipeline_name: str,
-        location: str,
-        scan_duration: float,
-        group_count: int,
-        image_count: int,
-        status_counts: dict,
-        termination_stats: Optional[Dict[str, Dict[str, int]]] = None
-    ) -> str:
-        """
-        Generate HTML report for Pipeline Validation results.
-
-        Args:
-            validation_results: List of ValidationResult objects
-            pipeline_name: Name of the pipeline used
-            location: Collection location
-            scan_duration: Time taken to scan
-            group_count: Number of image groups
-            image_count: Number of specific images validated
-            status_counts: Dict mapping ValidationStatus to count (overall)
-            termination_stats: Dict mapping termination type to status counts
-
-        Returns:
-            HTML report string
-        """
-        from jinja2 import Environment, FileSystemLoader
-        from pathlib import Path
-        from datetime import datetime
-        from dataclasses import dataclass
-        from typing import Optional
-        from utils.pipeline_processor import ValidationStatus
-
-        @dataclass
-        class KPICard:
-            title: str
-            value: str
-            status: str
-            unit: Optional[str] = None
-
-        @dataclass
-        class ReportSection:
-            title: str
-            type: str
-            data: Optional[Dict[str, Any]] = None
-            html_content: Optional[str] = None
-            description: Optional[str] = None
-
-        @dataclass
-        class WarningMessage:
-            message: str
-            details: Optional[List[str]] = None
-            severity: str = "medium"
-
-        try:
-            # Build KPI cards
-            consistent_pct = (
-                status_counts[ValidationStatus.CONSISTENT] / image_count * 100
-                if image_count > 0 else 0
-            )
-
-            kpis = [
-                KPICard(
-                    title="Total Images",
-                    value=str(image_count),
-                    status="info",
-                    unit="images"
-                ),
-                KPICard(
-                    title="Consistent",
-                    value=str(status_counts[ValidationStatus.CONSISTENT]),
-                    status="success",
-                    unit="images"
-                ),
-                KPICard(
-                    title="Partial",
-                    value=str(status_counts[ValidationStatus.PARTIAL]),
-                    status="warning" if status_counts[ValidationStatus.PARTIAL] > 0 else "success",
-                    unit="images"
-                ),
-                KPICard(
-                    title="Inconsistent",
-                    value=str(status_counts[ValidationStatus.INCONSISTENT]),
-                    status="error" if status_counts[ValidationStatus.INCONSISTENT] > 0 else "success",
-                    unit="images"
-                )
-            ]
-
-            # Build chart sections
-            sections = [
-                ReportSection(
-                    title="📊 Overall Status Distribution",
-                    type="chart_pie",
-                    data={
-                        "labels": ["Consistent", "With Warning", "Partial", "Inconsistent"],
-                        "values": [
-                            status_counts[ValidationStatus.CONSISTENT],
-                            status_counts[ValidationStatus.CONSISTENT_WITH_WARNING],
-                            status_counts[ValidationStatus.PARTIAL],
-                            status_counts[ValidationStatus.INCONSISTENT]
-                        ]
-                    },
-                    description="Overall validation status (worst status per image across all termination types)"
-                )
-            ]
-
-            # Add per-termination charts
-            if termination_stats:
-                for term_type in sorted(termination_stats.keys()):
-                    stats = termination_stats[term_type]
-                    sections.append(
-                        ReportSection(
-                            title=f"📊 {term_type}",
-                            type="chart_pie",
-                            data={
-                                "labels": ["Consistent", "With Warning", "Partial", "Inconsistent"],
-                                "values": [
-                                    stats.get("CONSISTENT", 0),
-                                    stats.get("CONSISTENT_WITH_WARNING", 0),
-                                    stats.get("PARTIAL", 0),
-                                    stats.get("INCONSISTENT", 0)
-                                ]
-                            },
-                            description=f"Validation status for {term_type} termination type"
-                        )
-                    )
-
-            # Add issues table if there are any
-            partial_and_inconsistent = [
-                r for r in validation_results
-                if r.overall_status in [ValidationStatus.PARTIAL, ValidationStatus.INCONSISTENT]
-            ]
-
-            if partial_and_inconsistent:
-                rows = []
-                for result in partial_and_inconsistent[:100]:  # Limit to 100
-                    # Find a termination match that shows the problem (PARTIAL or INCONSISTENT)
-                    # This helps debugging by showing what's actually missing
-                    problem_match = None
-
-                    # First, prefer PARTIAL matches (they show what's missing)
-                    for match in result.termination_matches:
-                        if match.status == ValidationStatus.PARTIAL:
-                            problem_match = match
-                            break
-
-                    # If no PARTIAL, try INCONSISTENT
-                    if not problem_match:
-                        for match in result.termination_matches:
-                            if match.status == ValidationStatus.INCONSISTENT:
-                                problem_match = match
-                                break
-
-                    # Fallback to first match if somehow all are CONSISTENT
-                    if not problem_match and result.termination_matches:
-                        problem_match = result.termination_matches[0]
-
-                    # Show full file lists for debugging - actual files and missing files
-                    actual_files_str = ", ".join(result.actual_files) if result.actual_files else "(none)"
-                    missing_files_str = ", ".join(problem_match.missing_files) if problem_match and problem_match.missing_files else "(none)"
-
-                    rows.append([
-                        result.base_filename,
-                        result.overall_status.value,
-                        problem_match.termination_type if problem_match else "None",
-                        actual_files_str,
-                        missing_files_str
-                    ])
-
-                sections.append(
-                    ReportSection(
-                        title="⚠️ Images Requiring Attention",
-                        type="table",
-                        data={
-                            "headers": ["Image", "Status", "Termination", "Actual Files", "Missing Files"],
-                            "rows": rows
-                        },
-                        description=f"Found {len(partial_and_inconsistent)} images that are partial or inconsistent"
-                    )
-                )
-            else:
-                sections.append(
-                    ReportSection(
-                        title="✓ Validation Complete",
-                        type="html",
-                        html_content='<div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;"><strong>✓ All images are consistent with the pipeline!</strong></div>'
-                    )
-                )
-
-            # Build warnings
-            warnings = []
-            if status_counts[ValidationStatus.INCONSISTENT] > 0:
-                warnings.append(
-                    WarningMessage(
-                        message=f"Found {status_counts[ValidationStatus.INCONSISTENT]} inconsistent images",
-                        details=["These images do not match any expected workflow path"],
-                        severity="high"
-                    )
-                )
-            if status_counts[ValidationStatus.PARTIAL] > 0:
-                warnings.append(
-                    WarningMessage(
-                        message=f"Found {status_counts[ValidationStatus.PARTIAL]} partially processed images",
-                        details=["These images are missing expected files"],
-                        severity="medium"
-                    )
-                )
-
-            # Load and render template (reuse pipeline_validation template if exists, otherwise use base)
-            template_dir = Path(__file__).parent.parent.parent.parent / "templates"
-            if template_dir.exists():
-                env = Environment(
-                    loader=FileSystemLoader(str(template_dir)),
-                    autoescape=True,
-                    trim_blocks=True,
-                    lstrip_blocks=True
-                )
-
-                # Try to use pipeline_validation template, fall back to photo_stats
-                try:
-                    template = env.get_template("pipeline_validation.html.j2")
-                except:
-                    template = env.get_template("photo_stats.html.j2")
-
-                return template.render(
-                    tool_name=f"Pipeline Validation ({pipeline_name})",
-                    tool_version=TOOL_VERSION,
-                    scan_path=location,
-                    scan_timestamp=datetime.now(),
-                    scan_duration=scan_duration,
-                    kpis=kpis,
-                    sections=sections,
-                    warnings=warnings,
-                    errors=[],
-                    footer_note=f"Validated against pipeline: {pipeline_name}"
-                )
-
-        except Exception as e:
-            logger.warning(f"Failed to render template: {e}")
-
-        # Fallback: simple HTML report
-        return f"""
-        <html>
-        <head><title>Pipeline Validation Report</title></head>
-        <body>
-            <h1>Pipeline Validation Report</h1>
-            <p>Pipeline: {pipeline_name}</p>
-            <p>Location: {location}</p>
-            <p>Total Images: {image_count}</p>
-            <p>Consistent: {status_counts.get(ValidationStatus.CONSISTENT, 0)}</p>
-            <p>Partial: {status_counts.get(ValidationStatus.PARTIAL, 0)}</p>
-            <p>Inconsistent: {status_counts.get(ValidationStatus.INCONSISTENT, 0)}</p>
-        </body>
-        </html>
-        """
-
-    async def _run_display_graph(self, job: AnalysisJob, db: Session) -> Dict[str, Any]:
-        """
-        Execute Pipeline Validation in display-graph mode.
-
-        This mode validates the pipeline definition only (no collection needed).
-        It enumerates all possible paths through the pipeline graph and generates
-        expected filename patterns for each path.
-
-        Args:
-            job: Job being executed (with pipeline_id, no collection_id)
-            db: Database session for this job execution
-
-        Returns:
-            Display-graph results dictionary with paths and report
-        """
-        import time
-        from pathlib import Path
-        from jinja2 import Environment, FileSystemLoader
-        from datetime import datetime
-        from dataclasses import dataclass
-
-        pipeline = db.query(Pipeline).filter(
-            Pipeline.id == job.pipeline_id
-        ).first()
-
-        if not pipeline:
-            raise ValueError(f"Pipeline {job.pipeline_id} not found")
-
-        # Initialize progress
-        job.progress = {"stage": "initializing", "percentage": 0}
-        await self._broadcast_progress(job)
-
-        scan_start = time.time()
-
-        # Import pipeline processor
-        from backend.src.utils.pipeline_adapter import convert_db_pipeline_to_config
-        from utils.pipeline_processor import enumerate_paths_with_pairing, generate_expected_files
-
-        job.progress = {"stage": "loading_pipeline", "percentage": 10}
-        await self._broadcast_progress(job)
-
-        # Convert database pipeline to PipelineConfig
-        pipeline_config = convert_db_pipeline_to_config(
-            pipeline.nodes_json,
-            pipeline.edges_json
-        )
-
-        # Extract sample_filename from Capture node for expected file generation
-        capture_node = next(
-            (n for n in pipeline.nodes_json if n.get('type') == 'capture'),
-            None
-        )
-        base_filename = capture_node.get('properties', {}).get('sample_filename', 'XXXX0001') if capture_node else 'XXXX0001'
-
-        job.progress = {"stage": "analyzing_paths", "percentage": 30}
-        await self._broadcast_progress(job)
-
-        # Enumerate all paths through the pipeline
-        paths = enumerate_paths_with_pairing(pipeline_config)
-
-        job.progress = {"stage": "generating_patterns", "percentage": 60}
-        await self._broadcast_progress(job)
-
-        # Build path details for report
-        # Each path is a list of node info dicts: {'id': ..., 'type': ..., ...}
-        path_details = []
-        for i, path in enumerate(paths):
-            # Extract node IDs from path (each step is a dict with 'id' key)
-            node_sequence = [step.get('id') for step in path if step.get('id')]
-
-            # Get termination info from last node
-            last_node = path[-1] if path else {}
-            if last_node.get('type') == 'Termination':
-                termination_type = last_node.get('term_type', 'Unknown')
-                is_truncated = last_node.get('truncated', False)
-            else:
-                termination_type = 'None'
-                is_truncated = False
-
-            # Check if path contains a Pairing node
-            has_pairing = any(step.get('type') == 'Pairing' for step in path)
-
-            # Generate expected filename pattern using sample_filename from Capture node
-            expected_files = generate_expected_files(path, base_filename, "")
-
-            path_details.append({
-                "path_number": i + 1,
-                "nodes": node_sequence,
-                "termination": termination_type,
-                "is_pairing_path": has_pairing,
-                "is_truncated": is_truncated,
-                "expected_files": expected_files
-            })
-
-        scan_duration = time.time() - scan_start
-
-        job.progress = {"stage": "generating_report", "percentage": 80}
-        await self._broadcast_progress(job)
-
-        # Generate HTML report
-        report_html = self._generate_display_graph_report(
-            pipeline.name,
-            pipeline.version,
-            path_details,
-            scan_duration
-        )
-
-        job.progress = {
-            "stage": "completed",
-            "files_scanned": None,  # No files scanned in display-graph mode
-            "total_files": None,
-            "issues_found": 0,
-            "percentage": 100
-        }
-        await self._broadcast_progress(job)
-
-        return {
-            "results": {
-                "pipeline_name": pipeline.name,
-                "pipeline_id": pipeline.id,
-                "pipeline_version": pipeline.version,
-                "total_paths": len(paths),
-                "pairing_paths": sum(1 for p in path_details if p.get("is_pairing_path")),
-                "paths": path_details,
-                "scan_duration": scan_duration
-            },
-            "report_html": report_html,
-            "files_scanned": None,
-            "issues_found": 0
-        }
-
-    def _generate_display_graph_report(
-        self,
-        pipeline_name: str,
-        pipeline_version: int,
-        path_details: List[Dict[str, Any]],
-        scan_duration: float
-    ) -> str:
-        """
-        Generate HTML report for display-graph mode.
-
-        Args:
-            pipeline_name: Name of the pipeline
-            pipeline_version: Version number
-            path_details: List of path detail dictionaries
-            scan_duration: Time taken to analyze
-
-        Returns:
-            HTML report string
-        """
-        from jinja2 import Environment, FileSystemLoader
-        from pathlib import Path
-        from datetime import datetime
-        from dataclasses import dataclass
-
-        @dataclass
-        class KPICard:
-            title: str
-            value: str
-            status: str
-            unit: Optional[str] = None
-
-        @dataclass
-        class ReportSection:
-            title: str
-            type: str
-            data: Optional[Dict[str, Any]] = None
-            html_content: Optional[str] = None
-            description: Optional[str] = None
-
-        try:
-            total_paths = len(path_details)
-            pairing_paths = sum(1 for p in path_details if p.get("is_pairing_path"))
-
-            # Build KPI cards
-            kpis = [
-                KPICard(
-                    title="Pipeline Version",
-                    value=str(pipeline_version),
-                    status="info"
-                ),
-                KPICard(
-                    title="Total Paths",
-                    value=str(total_paths),
-                    status="info",
-                    unit="paths"
-                ),
-                KPICard(
-                    title="Pairing Paths",
-                    value=str(pairing_paths),
-                    status="info" if pairing_paths > 0 else "warning",
-                    unit="paths"
-                ),
-                KPICard(
-                    title="Analysis Time",
-                    value=f"{scan_duration:.2f}",
-                    status="success",
-                    unit="seconds"
-                )
-            ]
-
-            # Build path table
-            rows = []
-            for path in path_details:
-                nodes_str = " → ".join(path["nodes"])
-                # Show all expected files in the full HTML report
-                files_str = ", ".join(path["expected_files"])
-
-                rows.append([
-                    str(path["path_number"]),
-                    nodes_str,
-                    path["termination"],
-                    "Yes" if path.get("is_pairing_path") else "No",
-                    files_str
-                ])
-
-            sections = [
-                ReportSection(
-                    title="📊 Pipeline Graph Analysis",
-                    type="html",
-                    html_content=f'''
-                    <div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;">
-                        <strong>✓ Pipeline definition validated successfully!</strong>
-                        <p style="margin-top: 10px;">Found {total_paths} valid paths through the pipeline graph.</p>
-                    </div>
-                    '''
-                ),
-                ReportSection(
-                    title="🔀 Enumerated Paths",
-                    type="table",
-                    data={
-                        "headers": ["#", "Node Sequence", "Termination", "Pairing", "Expected Files"],
-                        "rows": rows
-                    },
-                    description=f"All {total_paths} paths through the pipeline"
-                )
-            ]
-
-            # Load and render template
-            template_dir = Path(__file__).parent.parent.parent.parent / "templates"
-            if template_dir.exists():
-                env = Environment(
-                    loader=FileSystemLoader(str(template_dir)),
-                    autoescape=True,
-                    trim_blocks=True,
-                    lstrip_blocks=True
-                )
-
-                # Try to use pipeline_validation template, fall back to photo_stats
-                try:
-                    template = env.get_template("pipeline_validation.html.j2")
-                except Exception:
-                    template = env.get_template("photo_stats.html.j2")
-
-                return template.render(
-                    tool_name=f"Pipeline Graph Analysis ({pipeline_name})",
-                    tool_version=TOOL_VERSION,
-                    scan_path=f"Pipeline: {pipeline_name} v{pipeline_version}",
-                    scan_timestamp=datetime.now(),
-                    scan_duration=scan_duration,
-                    kpis=kpis,
-                    sections=sections,
-                    warnings=[],
-                    errors=[],
-                    footer_note=f"Analyzed pipeline: {pipeline_name} (version {pipeline_version})"
-                )
-
-        except Exception as e:
-            logger.warning(f"Failed to render display-graph template: {e}")
-
-        # Fallback: simple HTML report
-        return f"""
-        <html>
-        <head><title>Pipeline Graph Analysis</title></head>
-        <body>
-            <h1>Pipeline Graph Analysis</h1>
-            <p>Pipeline: {pipeline_name} (version {pipeline_version})</p>
-            <p>Total Paths: {len(path_details)}</p>
-            <h2>Paths</h2>
-            <ul>
-                {"".join(f"<li>Path {p['path_number']}: {' → '.join(p['nodes'])} → {p['termination']}</li>" for p in path_details)}
-            </ul>
-        </body>
-        </html>
-        """
-
     def _store_result(self, job: AnalysisJob, tool_results: Dict[str, Any], db: Session) -> AnalysisResult:
         """
         Store successful tool execution result.
@@ -2487,7 +1057,24 @@ class ToolService:
         Returns:
             Created AnalysisResult
         """
+        # Get team_id from collection or pipeline (required for multi-tenancy)
+        team_id = None
+        if job.collection_id:
+            collection = db.query(Collection).filter(
+                Collection.id == job.collection_id
+            ).first()
+            if collection:
+                team_id = collection.team_id
+        elif job.pipeline_id:
+            # For display_graph mode (no collection), get team_id from pipeline
+            pipeline = db.query(Pipeline).filter(
+                Pipeline.id == job.pipeline_id
+            ).first()
+            if pipeline:
+                team_id = pipeline.team_id
+
         result = AnalysisResult(
+            team_id=team_id,
             collection_id=job.collection_id,
             tool=job.tool,  # AnalysisJob.tool is already a string
             pipeline_id=job.pipeline_id,
@@ -2518,7 +1105,24 @@ class ToolService:
         Returns:
             Created AnalysisResult
         """
+        # Get team_id from collection or pipeline (required for multi-tenancy)
+        team_id = None
+        if job.collection_id:
+            collection = db.query(Collection).filter(
+                Collection.id == job.collection_id
+            ).first()
+            if collection:
+                team_id = collection.team_id
+        elif job.pipeline_id:
+            # For display_graph mode (no collection), get team_id from pipeline
+            pipeline = db.query(Pipeline).filter(
+                Pipeline.id == job.pipeline_id
+            ).first()
+            if pipeline:
+                team_id = pipeline.team_id
+
         result = AnalysisResult(
+            team_id=team_id,
             collection_id=job.collection_id,
             tool=job.tool,  # AnalysisJob.tool is already a string
             pipeline_id=job.pipeline_id,

@@ -106,19 +106,20 @@ class ReportRenderer:
             lstrip_blocks=True
         )
 
-    def render_report(
+    def render_to_string(
         self,
         context: ReportContext,
-        template_name: str,
-        output_path: str
-    ) -> None:
+        template_name: str = "pipeline_validation.html.j2"
+    ) -> str:
         """
-        Render an HTML report using a Jinja2 template.
+        Render an HTML report to a string.
 
         Args:
             context: ReportContext containing all data for the report
-            template_name: Name of the template file (e.g., 'photo_stats.html.j2')
-            output_path: Path where the HTML report should be saved
+            template_name: Name of the template file
+
+        Returns:
+            Rendered HTML as a string
 
         Raises:
             TemplateNotFound: If the template file doesn't exist
@@ -141,6 +142,41 @@ class ReportRenderer:
                 errors=context.errors,
                 footer_note=context.footer_note
             )
+
+            return html_content
+
+        except TemplateNotFound as e:
+            raise TemplateNotFound(
+                f"Template '{template_name}' not found in templates/ directory.\n"
+                f"Available templates: {self._list_available_templates()}"
+            )
+        except TemplateError as e:
+            raise TemplateError(
+                f"Error rendering template '{template_name}': {e}\n"
+                f"Please check template syntax and data structure."
+            )
+
+    def render_report(
+        self,
+        context: ReportContext,
+        template_name: str,
+        output_path: str
+    ) -> None:
+        """
+        Render an HTML report using a Jinja2 template.
+
+        Args:
+            context: ReportContext containing all data for the report
+            template_name: Name of the template file (e.g., 'photo_stats.html.j2')
+            output_path: Path where the HTML report should be saved
+
+        Raises:
+            TemplateNotFound: If the template file doesn't exist
+            TemplateError: If template rendering fails
+        """
+        try:
+            # Render to string first
+            html_content = self.render_to_string(context, template_name)
 
             # Atomic file write: write to temp file first, then rename
             temp_path = f"{output_path}.tmp"

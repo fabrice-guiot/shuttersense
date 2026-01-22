@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Plus } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Plus, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -8,11 +9,12 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useCollections, useCollectionStats } from '../hooks/useCollections'
 import { useConnectors } from '../hooks/useConnectors'
 import { usePipelines } from '../hooks/usePipelines'
 import { useTools } from '../hooks/useTools'
+import { useAgentPoolStatus } from '../hooks/useAgentPoolStatus'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { CollectionList } from '../components/collections/CollectionList'
 import { FiltersSection } from '../components/collections/FiltersSection'
@@ -29,14 +31,40 @@ export default function CollectionsPage() {
     setSearch,
     filters,
     setFilters,
+    fetchCollections,
     createCollection,
     updateCollection,
     deleteCollection,
     testCollection
   } = useCollections()
 
+  const { connectors } = useConnectors()
+  const { pipelines } = usePipelines()
+
+  // KPI Stats for header (Issue #37)
+  const { stats, refetch: refetchStats } = useCollectionStats()
+  const { setStats } = useHeaderStats()
+
+  // Callback to refresh collections when a collection_test job completes
+  const handleJobComplete = useCallback((job: { tool: string }) => {
+    if (job.tool === 'collection_test') {
+      // Refresh collections list to show updated accessibility status
+      fetchCollections(filters)
+      refetchStats()
+    }
+  }, [fetchCollections, filters, refetchStats])
+
   // Tools hook for running analysis on collections
-  const { runAllTools } = useTools({ autoFetch: false })
+  // Enable WebSocket to receive job completion events
+  const { runAllTools } = useTools({
+    autoFetch: false,
+    useWebSocket: true,
+    onJobComplete: handleJobComplete
+  })
+
+  // Agent pool status for warning banner
+  const { poolStatus } = useAgentPoolStatus()
+  const noAgentsAvailable = poolStatus?.online_count === 0
 
   // Filter UI state (for select components)
   const [selectedState, setSelectedState] = useState<CollectionState | 'ALL' | ''>('ALL')
@@ -51,13 +79,6 @@ export default function CollectionsPage() {
       accessible_only: accessibleOnly || undefined
     })
   }, [selectedState, selectedType, accessibleOnly, setFilters])
-
-  const { connectors } = useConnectors()
-  const { pipelines } = usePipelines()
-
-  // KPI Stats for header (Issue #37)
-  const { stats, refetch: refetchStats } = useCollectionStats()
-  const { setStats } = useHeaderStats()
 
   // Update header stats when data changes
   useEffect(() => {
@@ -136,6 +157,20 @@ export default function CollectionsPage() {
           New Collection
         </Button>
       </div>
+
+      {/* No Agents Warning (Issue #90 - T215) */}
+      {noAgentsAvailable && (
+        <Alert variant="warning">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>No agents available</AlertTitle>
+          <AlertDescription>
+            Analysis jobs require at least one agent to process. Jobs will remain queued until an agent becomes available.{' '}
+            <Link to="/agents" className="underline hover:no-underline">
+              Manage agents
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Error Alert */}
       {error && (

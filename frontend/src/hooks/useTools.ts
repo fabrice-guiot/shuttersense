@@ -13,6 +13,7 @@ import type {
   ToolType,
   ToolRunRequest,
   JobListQueryParams,
+  JobListResponse,
   QueueStatusResponse,
   ProgressData,
   WebSocketMessage,
@@ -29,6 +30,8 @@ interface UseToolsOptions {
   pollInterval?: number  // Poll interval in ms (0 to disable)
   /** Enable WebSocket for real-time job updates (default: true) */
   useWebSocket?: boolean
+  /** Callback fired when a job transitions to running state */
+  onJobStart?: (job: Job) => void
   /** Callback fired when a job transitions to a terminal state (completed, failed, cancelled) */
   onJobComplete?: (job: Job) => void
 }
@@ -38,20 +41,30 @@ interface UseToolsReturn {
   loading: boolean
   error: string | null
   wsConnected: boolean
-  fetchJobs: (params?: JobListQueryParams) => Promise<Job[]>
+  /** Total number of jobs matching filters (for pagination) */
+  total: number
+  /** Current page limit */
+  limit: number
+  /** Current offset */
+  offset: number
+  fetchJobs: (params?: JobListQueryParams) => Promise<JobListResponse>
   runTool: (request: ToolRunRequest) => Promise<Job>
   runAllTools: (collectionGuid: string) => Promise<RunAllToolsResponse>
   cancelJob: (jobId: string) => Promise<Job>
+  retryJob: (jobId: string) => Promise<Job>
   getJob: (jobId: string) => Promise<Job>
 }
 
 export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
-  const { autoFetch = true, pollInterval = 0, useWebSocket = true, onJobComplete } = options
+  const { autoFetch = true, pollInterval = 0, useWebSocket = true, onJobStart, onJobComplete } = options
 
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [limit, setLimit] = useState(50)
+  const [offset, setOffset] = useState(0)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -60,15 +73,18 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
   const maxReconnectAttempts = 5
 
   /**
-   * Fetch jobs with optional filters
+   * Fetch jobs with optional filters and pagination
    */
   const fetchJobs = useCallback(async (params: JobListQueryParams = {}) => {
     setLoading(true)
     setError(null)
     try {
-      const data = await toolsService.listJobs(params)
-      setJobs(data)
-      return data
+      const response = await toolsService.listJobs(params)
+      setJobs(response.items)
+      setTotal(response.total)
+      setLimit(response.limit)
+      setOffset(response.offset)
+      return response
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to load jobs'
       setError(errorMessage)
@@ -176,6 +192,32 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
   }, [])
 
   /**
+   * Retry a failed job
+   */
+  const retryJob = useCallback(async (jobId: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const newJob = await toolsService.retryJob(jobId)
+      // Add the new retry job to the front of the list
+      setJobs(prev => [newJob, ...prev])
+      toast.success('Job retry started', {
+        description: `New job ${newJob.id.slice(0, 8)} created`
+      })
+      return newJob
+    } catch (err: any) {
+      const errorMessage = err.userMessage || 'Failed to retry job'
+      setError(errorMessage)
+      toast.error('Failed to retry job', {
+        description: errorMessage
+      })
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  /**
    * Get a specific job
    */
   const getJob = useCallback(async (jobId: string) => {
@@ -225,6 +267,7 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
           const updatedJob = message.job as Job
           const terminalStatuses: JobStatus[] = ['completed', 'failed', 'cancelled']
           const isTerminal = terminalStatuses.includes(updatedJob.status)
+          const isRunning = updatedJob.status === 'running'
 
           setJobs(prev => {
             const existingIndex = prev.findIndex(j => j.id === updatedJob.id)
@@ -232,6 +275,13 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
               const existingJob = prev[existingIndex]
               // Check if this is a transition to terminal state
               const wasTerminal = terminalStatuses.includes(existingJob.status)
+              const wasRunning = existingJob.status === 'running'
+
+              // Notify on job start (transition to running)
+              if (isRunning && !wasRunning && onJobStart) {
+                setTimeout(() => onJobStart(updatedJob), 0)
+              }
+              // Notify on job complete (transition to terminal)
               if (isTerminal && !wasTerminal && onJobComplete) {
                 // Defer callback to avoid state update during render
                 setTimeout(() => onJobComplete(updatedJob), 0)
@@ -242,6 +292,10 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
               return newJobs
             } else {
               // New job - add to front
+              // If it's already running (e.g., first update), notify
+              if (isRunning && onJobStart) {
+                setTimeout(() => onJobStart(updatedJob), 0)
+              }
               // If it's already terminal (e.g., fast completion), still notify
               if (isTerminal && onJobComplete) {
                 setTimeout(() => onJobComplete(updatedJob), 0)
@@ -274,7 +328,7 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     }
 
     wsRef.current = ws
-  }, [useWebSocket, onJobComplete])
+  }, [useWebSocket, onJobStart, onJobComplete])
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -315,10 +369,14 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     loading,
     error,
     wsConnected,
+    total,
+    limit,
+    offset,
     fetchJobs,
     runTool,
     runAllTools,
     cancelJob,
+    retryJob,
     getJob
   }
 }

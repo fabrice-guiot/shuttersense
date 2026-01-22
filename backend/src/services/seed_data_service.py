@@ -44,6 +44,13 @@ DEFAULT_EVENT_STATUSES = [
     {'key': 'cancelled', 'label': 'Cancelled', 'display_order': 3},
 ]
 
+# Default collection TTL values by state (in seconds)
+DEFAULT_COLLECTION_TTL = {
+    'live': {'value': 3600, 'label': 'Live (1 hour)'},
+    'closed': {'value': 86400, 'label': 'Closed (24 hours)'},
+    'archived': {'value': 604800, 'label': 'Archived (7 days)'},
+}
+
 
 class SeedDataService:
     """
@@ -67,7 +74,7 @@ class SeedDataService:
         """
         self.db = db
 
-    def seed_team_defaults(self, team_id: int) -> Tuple[int, int]:
+    def seed_team_defaults(self, team_id: int) -> Tuple[int, int, int]:
         """
         Seed all default data for a team.
 
@@ -78,19 +85,21 @@ class SeedDataService:
             team_id: Team ID to seed data for
 
         Returns:
-            Tuple of (categories_created, configs_created)
+            Tuple of (categories_created, event_statuses_created, ttl_configs_created)
         """
         categories_created = self.seed_categories(team_id)
-        configs_created = self.seed_event_statuses(team_id)
+        event_statuses_created = self.seed_event_statuses(team_id)
+        ttl_configs_created = self.seed_collection_ttl(team_id)
 
-        if categories_created > 0 or configs_created > 0:
+        total_configs = event_statuses_created + ttl_configs_created
+        if categories_created > 0 or total_configs > 0:
             self.db.commit()
             logger.info(
                 f"Seeded team {team_id}: {categories_created} categories, "
-                f"{configs_created} event statuses"
+                f"{event_statuses_created} event statuses, {ttl_configs_created} TTL configs"
             )
 
-        return categories_created, configs_created
+        return categories_created, event_statuses_created, ttl_configs_created
 
     def seed_categories(self, team_id: int) -> int:
         """
@@ -178,6 +187,49 @@ class SeedDataService:
 
         return created_count
 
+    def seed_collection_ttl(self, team_id: int) -> int:
+        """
+        Seed default collection TTL configurations for a team.
+
+        Creates collection TTL configurations for each collection state
+        (live, closed, archived) if they don't already exist for this team.
+
+        Args:
+            team_id: Team ID to seed collection TTL for
+
+        Returns:
+            Number of TTL configurations created
+        """
+        created_count = 0
+
+        for state_key, ttl_data in DEFAULT_COLLECTION_TTL.items():
+            # Check if TTL config already exists for this team
+            existing = self.db.query(Configuration).filter(
+                Configuration.team_id == team_id,
+                Configuration.category == 'collection_ttl',
+                Configuration.key == state_key
+            ).first()
+
+            if existing:
+                logger.debug(
+                    f"Collection TTL '{state_key}' already exists for team {team_id}"
+                )
+                continue
+
+            config = Configuration(
+                team_id=team_id,
+                category='collection_ttl',
+                key=state_key,
+                value_json=ttl_data,
+                description=f"Collection cache TTL for {state_key} state",
+                source=ConfigSource.DATABASE,
+            )
+            self.db.add(config)
+            created_count += 1
+            logger.debug(f"Created collection TTL '{state_key}' for team {team_id}")
+
+        return created_count
+
     def get_seed_summary(self, team_id: int) -> Dict[str, Any]:
         """
         Get summary of seeded data for a team.
@@ -197,12 +249,19 @@ class SeedDataService:
             Configuration.category == 'event_statuses'
         ).scalar() or 0
 
+        collection_ttl_count = self.db.query(func.count(Configuration.id)).filter(
+            Configuration.team_id == team_id,
+            Configuration.category == 'collection_ttl'
+        ).scalar() or 0
+
         return {
             'team_id': team_id,
             'categories': categories_count,
             'event_statuses': event_statuses_count,
+            'collection_ttl': collection_ttl_count,
             'expected_categories': len(DEFAULT_CATEGORIES),
             'expected_event_statuses': len(DEFAULT_EVENT_STATUSES),
+            'expected_collection_ttl': len(DEFAULT_COLLECTION_TTL),
         }
 
     def migrate_orphaned_data(self, team_id: int) -> Tuple[int, int]:

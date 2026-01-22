@@ -81,6 +81,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        # Skip WebSocket connections - BaseHTTPMiddleware doesn't handle them properly
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+
         response = await call_next(request)
 
         # Prevent MIME type sniffing
@@ -150,6 +154,10 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        # Skip WebSocket connections - BaseHTTPMiddleware doesn't handle them properly
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
+
         content_length = request.headers.get("content-length")
 
         if content_length:
@@ -309,6 +317,8 @@ else:
     cors_origins = [
         "http://localhost:3000",  # React dev server
         "http://127.0.0.1:3000",  # React dev server (alternative)
+        "http://localhost:8000",  # Backend serving SPA
+        "http://127.0.0.1:8000",  # Backend serving SPA (alternative)
     ]
 
 app.add_middleware(
@@ -390,8 +400,8 @@ def custom_openapi():
     }
 
     # Apply security globally to all endpoints except public ones
-    # Public endpoints: /health, /api/version, /api/auth/*
-    public_paths = {"/health", "/api/version"}
+    # Public endpoints: /health, /api/version, /api/auth/*, /api/agent/v1/register
+    public_paths = {"/health", "/api/version", "/api/agent/v1/register"}
     public_prefixes = ["/api/auth/"]
 
     for path, path_item in openapi_schema.get("paths", {}).items():
@@ -497,7 +507,8 @@ async def database_exception_handler(
             "path": request.url.path,
             "method": request.method,
             "error": str(exc),
-        }
+        },
+        exc_info=True,  # Include full traceback for debugging
     )
 
     return JSONResponse(
@@ -586,6 +597,7 @@ from backend.src.api import auth as auth_router
 from backend.src.api import users as users_router
 from backend.src.api import tokens as tokens_router
 from backend.src.api.admin import teams_router as admin_teams_router
+from backend.src.api.admin import release_manifests_router as admin_release_manifests_router
 
 app.include_router(collections.router, prefix="/api")
 app.include_router(connectors.router, prefix="/api")
@@ -611,6 +623,11 @@ app.include_router(tokens_router.router)
 
 # Admin routes (super admin only)
 app.include_router(admin_teams_router, prefix="/api/admin")
+app.include_router(admin_release_manifests_router, prefix="/api/admin")
+
+# Agent API routes (Issue #90 - Distributed Agent Architecture)
+from backend.src.api.agent import router as agent_router
+app.include_router(agent_router)
 
 
 # ============================================================================

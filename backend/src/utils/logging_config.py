@@ -153,7 +153,7 @@ def configure_logging() -> Dict[str, logging.Logger]:
     log_dir = _get_log_dir() if is_prod else None
 
     # Logger names
-    logger_names = ["api", "services", "tools", "db", "websocket", "auth"]
+    logger_names = ["api", "services", "tools", "db", "websocket", "auth", "agent", "job_coordinator"]
     loggers = {}
 
     for logger_name in logger_names:

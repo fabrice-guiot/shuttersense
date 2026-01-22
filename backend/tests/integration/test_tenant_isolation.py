@@ -425,6 +425,27 @@ class TestAutoTeamAssignment:
         """
         Verify that creating a collection automatically assigns it to user's team.
         """
+        import tempfile
+
+        # Create an agent for Team A
+        from backend.src.services.agent_service import AgentService
+        agent_service = AgentService(test_db_session)
+
+        token_result = agent_service.create_registration_token(
+            team_id=team_a.id,
+            created_by_user_id=user_a.id
+        )
+        temp_base = tempfile.gettempdir()
+        result = agent_service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Team A Agent",
+            version="1.0.0",
+            capabilities=["local_filesystem"],
+            authorized_roots=[temp_base, "/tmp", "/private/var", "/var"],
+        )
+        agent = result.agent
+        test_db_session.commit()
+
         ctx = mock_tenant_context(team_a, user_a)
 
         from backend.src.api.collections import get_file_cache, get_credential_encryptor
@@ -437,16 +458,16 @@ class TestAutoTeamAssignment:
         app.dependency_overrides[get_credential_encryptor] = lambda: test_encryptor
         app.dependency_overrides[require_auth] = lambda: ctx
 
-        with patch('backend.src.services.collection_service.CollectionService._test_accessibility',
-                   return_value=(True, None)):
+        with tempfile.TemporaryDirectory() as temp_dir:
             with TestClient(app) as client:
                 response = client.post(
                     "/api/collections",
                     json={
                         "name": "New Collection",
                         "type": "local",
-                        "location": "/photos/new",
-                        "state": "live"
+                        "location": temp_dir,
+                        "state": "live",
+                        "bound_agent_guid": agent.guid,
                     }
                 )
 

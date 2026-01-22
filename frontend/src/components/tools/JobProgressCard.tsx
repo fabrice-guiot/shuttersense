@@ -12,7 +12,10 @@ import {
   XCircle,
   AlertCircle,
   Loader2,
-  X
+  X,
+  Monitor,
+  RefreshCw,
+  CalendarClock
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +38,7 @@ import { formatRelativeTime } from '@/utils/dateFormat'
 interface JobProgressCardProps {
   job: Job
   onCancel?: (jobId: string) => void
+  onRetry?: (jobId: string) => void
   onViewResult?: (resultGuid: string) => void
   className?: string
 }
@@ -44,6 +48,12 @@ const STATUS_CONFIG: Record<
   JobStatus,
   { icon: typeof Clock; color: string; label: string; badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline' }
 > = {
+  scheduled: {
+    icon: CalendarClock,
+    color: 'text-purple-500',
+    label: 'Scheduled',
+    badgeVariant: 'secondary'
+  },
   queued: {
     icon: Clock,
     color: 'text-yellow-500',
@@ -90,6 +100,7 @@ const TOOL_LABELS: Record<string, string> = {
 export function JobProgressCard({
   job,
   onCancel,
+  onRetry,
   onViewResult,
   className
 }: JobProgressCardProps) {
@@ -117,7 +128,7 @@ export function JobProgressCard({
     return formatRelativeTime(dateString)
   }
 
-  const canCancel = currentStatus === 'queued'
+  const canCancel = currentStatus === 'queued' || currentStatus === 'scheduled'
   const hasResult = currentStatus === 'completed' && job.result_guid !== null
 
   return (
@@ -186,6 +197,13 @@ export function JobProgressCard({
           </div>
         )}
 
+        {/* Scheduled time for scheduled jobs */}
+        {currentStatus === 'scheduled' && job.scheduled_for && (
+          <div className="text-sm text-muted-foreground">
+            Scheduled for: <span className="font-medium">{formatJobDate(job.scheduled_for)}</span>
+          </div>
+        )}
+
         {/* Error message for failed jobs */}
         {currentStatus === 'failed' && job.error_message && (
           <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
@@ -197,6 +215,16 @@ export function JobProgressCard({
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="text-muted-foreground">Collection:</div>
           <div className="font-medium">{job.collection_guid || 'N/A'}</div>
+
+          {job.agent_name && (
+            <>
+              <div className="text-muted-foreground">Agent:</div>
+              <div className="flex items-center gap-1">
+                <Monitor className="h-3 w-3" />
+                {job.agent_name}
+              </div>
+            </>
+          )}
 
           <div className="text-muted-foreground">Created:</div>
           <div>{formatJobDate(job.created_at)}</div>
@@ -226,6 +254,19 @@ export function JobProgressCard({
           >
             <CheckCircle className="mr-2 h-4 w-4" />
             View Result
+          </Button>
+        )}
+
+        {/* Retry button for failed jobs */}
+        {currentStatus === 'failed' && onRetry && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => onRetry(job.id)}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Retry
           </Button>
         )}
       </CardContent>

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { CloudCheck, Edit, Trash2 } from 'lucide-react'
+import { Bot, CloudCheck, Edit, Trash2 } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -33,7 +33,8 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import type { Connector, ConnectorType } from '@/contracts/api/connector-api'
+import type { Connector, ConnectorType, CredentialLocation } from '@/contracts/api/connector-api'
+import type { Agent } from '@/contracts/api/agent-api'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/utils/dateFormat'
 
@@ -47,6 +48,8 @@ export interface ConnectorListProps {
   onEdit: (connector: Connector) => void
   onDelete: (connector: Connector) => void
   onTest: (connector: Connector) => void
+  /** List of agents (to show which have credentials for agent-based connectors) */
+  agents?: Agent[]
   className?: string
 }
 
@@ -71,6 +74,25 @@ function isBetaConnectorType(type: ConnectorType): boolean {
   return BETA_CONNECTOR_TYPES.has(type)
 }
 
+const CREDENTIAL_LOCATION_LABELS: Record<CredentialLocation, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+  server: { label: 'Server', variant: 'default' },
+  agent: { label: 'Agent', variant: 'secondary' },
+  pending: { label: 'Pending Config', variant: 'outline' }
+}
+
+function getCredentialLocationDisplay(location: CredentialLocation): { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' } {
+  return CREDENTIAL_LOCATION_LABELS[location] || { label: location, variant: 'outline' }
+}
+
+/**
+ * Get agents that have credentials for a specific connector.
+ * Agents report connector credentials as capabilities with format "connector:{guid}"
+ */
+function getAgentsWithCredentials(connectorGuid: string, agents: Agent[]): Agent[] {
+  const capability = `connector:${connectorGuid}`
+  return agents.filter(agent => agent.capabilities.includes(capability))
+}
+
 
 // ============================================================================
 // Component
@@ -82,6 +104,7 @@ export function ConnectorList({
   onEdit,
   onDelete,
   onTest,
+  agents = [],
   className
 }: ConnectorListProps) {
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -218,6 +241,7 @@ export function ConnectorList({
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Credentials</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -226,7 +250,7 @@ export function ConnectorList({
             <TableBody>
               {filteredConnectors.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     No connectors match the current filters
                   </TableCell>
                 </TableRow>
@@ -247,6 +271,54 @@ export function ConnectorList({
                       </div>
                     </TableCell>
                     <TableCell>
+                      {(() => {
+                        const { label, variant } = getCredentialLocationDisplay(connector.credential_location)
+                        const agentsWithCreds = connector.credential_location !== 'server'
+                          ? getAgentsWithCredentials(connector.guid, agents)
+                          : []
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Badge variant={variant}>{label}</Badge>
+                            {connector.credential_location === 'agent' && agentsWithCreds.length > 0 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 text-xs text-muted-foreground cursor-help">
+                                      <Bot className="h-3 w-3" />
+                                      {agentsWithCreds.length}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="max-w-xs">
+                                    <div className="text-sm">
+                                      <div className="font-medium mb-1">Agents with credentials:</div>
+                                      <ul className="list-none space-y-0.5">
+                                        {agentsWithCreds.map(agent => (
+                                          <li key={agent.guid} className="flex items-center gap-1">
+                                            <span className={cn(
+                                              "h-2 w-2 rounded-full",
+                                              agent.status === 'online' ? "bg-green-500" : "bg-gray-400"
+                                            )} />
+                                            {agent.name}
+                                            <span className="text-muted-foreground">({agent.hostname})</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            {connector.credential_location === 'pending' && (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">
+                                Needs config
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={connector.is_active ? 'default' : 'outline'}>
                         {connector.is_active ? 'Active' : 'Inactive'}
                       </Badge>
@@ -263,12 +335,19 @@ export function ConnectorList({
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => onTest(connector)}
+                                disabled={connector.credential_location !== 'server'}
                                 aria-label="Test Connection"
                               >
                                 <CloudCheck className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Test Connection</TooltipContent>
+                            <TooltipContent>
+                              {connector.credential_location === 'server'
+                                ? 'Test Connection'
+                                : connector.credential_location === 'pending'
+                                  ? 'Cannot test: credentials not configured'
+                                  : 'Cannot test from server: credentials on agent'}
+                            </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
 

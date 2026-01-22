@@ -5,7 +5,7 @@ Centralized settings loaded from environment variables.
 """
 
 from functools import lru_cache
-from typing import Optional
+from typing import List, Optional, Set
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
@@ -18,6 +18,7 @@ class AppSettings(BaseSettings):
     Environment Variables:
         JWT_SECRET_KEY: Secret key for signing JWT API tokens (required for API tokens)
         JWT_TOKEN_EXPIRY_DAYS: Default token expiry in days (default: 90)
+        INMEMORY_JOB_TYPES: Comma-separated list of tool types to run in-memory (default: empty)
     """
 
     # JWT settings for API tokens
@@ -32,6 +33,16 @@ class AppSettings(BaseSettings):
         validation_alias="JWT_TOKEN_EXPIRY_DAYS",
         ge=1,
         le=365,
+    )
+
+    # Job execution settings
+    # By default, all jobs are persisted to DB for agent execution.
+    # Only tool types listed here will use in-memory queue for server-side execution.
+    # Example: "photostats,photo_pairing" to run these tools in-memory on server
+    inmemory_job_types: str = Field(
+        default="",
+        validation_alias="INMEMORY_JOB_TYPES",
+        description="Comma-separated list of tool types to run in-memory on server (default: empty = all jobs go to agents)"
     )
 
     class Config:
@@ -50,6 +61,30 @@ class AppSettings(BaseSettings):
     def jwt_configured(self) -> bool:
         """Check if JWT is properly configured."""
         return bool(self.jwt_secret_key)
+
+    @property
+    def inmemory_job_types_set(self) -> Set[str]:
+        """
+        Get the set of tool types allowed to run in-memory.
+
+        Returns:
+            Set of tool type strings (e.g., {"photostats", "photo_pairing"})
+        """
+        if not self.inmemory_job_types:
+            return set()
+        return {t.strip().lower() for t in self.inmemory_job_types.split(",") if t.strip()}
+
+    def is_inmemory_job_type(self, tool_type: str) -> bool:
+        """
+        Check if a tool type should run in-memory on the server.
+
+        Args:
+            tool_type: Tool type string (e.g., "photostats")
+
+        Returns:
+            True if this tool type is configured to run in-memory
+        """
+        return tool_type.lower() in self.inmemory_job_types_set
 
 
 @lru_cache()

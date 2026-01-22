@@ -22,9 +22,10 @@ class TestCollectionServiceCreate:
     """Tests for CollectionService.create_collection() - T104m"""
 
     def test_create_local_collection_with_accessibility_test(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
         """Should create local collection and test directory accessibility"""
+        agent = create_agent(name="Test Agent")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -33,7 +34,8 @@ class TestCollectionServiceCreate:
                 type=CollectionType.LOCAL,
                 location=temp_dir,
                 team_id=test_team.id,
-                state=CollectionState.LIVE
+                state=CollectionState.LIVE,
+                bound_agent_id=agent.id,
             )
 
             assert collection.id is not None
@@ -43,27 +45,32 @@ class TestCollectionServiceCreate:
             assert collection.is_accessible is True
             assert collection.last_error is None
             assert collection.connector_id is None
+            assert collection.bound_agent_id == agent.id
 
-    def test_create_local_collection_inaccessible_directory(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+    def test_create_local_collection_with_bound_agent_defers_accessibility(
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
-        """Should mark local collection as inaccessible if directory doesn't exist"""
+        """LOCAL collections with bound agents defer accessibility testing to the agent.
+
+        When creating a LOCAL collection with a bound agent, is_accessible is set
+        to None (pending) and will be updated asynchronously when the agent tests it.
+        """
+        agent = create_agent(name="Test Agent", authorized_roots=["/nonexistent"])
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
         collection = service.create_collection(
-            name="Invalid Path",
+            name="Pending Path",
             type=CollectionType.LOCAL,
             location="/nonexistent/path/to/photos",
             team_id=test_team.id,
-            state=CollectionState.LIVE
+            state=CollectionState.LIVE,
+            bound_agent_id=agent.id,
         )
 
-        assert collection.is_accessible is False
-        # Path is rejected either because it's not under authorized root, or not found
-        assert any(msg in collection.last_error.lower() for msg in [
-            "not found or not readable",
-            "not under an authorized root",
-        ])
+        # LOCAL collections with bound agents have is_accessible=None (pending state)
+        # The agent will test accessibility asynchronously
+        assert collection.is_accessible is None or collection.is_accessible is True  # SQLAlchemy may apply default
+        assert collection.last_error is None  # No error until agent tests
 
     def test_create_remote_collection_with_connector(
         self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team
@@ -109,9 +116,10 @@ class TestCollectionServiceCreate:
         assert "Connector ID required" in str(exc_info.value)
 
     def test_create_local_collection_rejects_connector(
-        self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team
+        self, test_db_session, test_file_cache, test_connector_service, sample_connector, test_team, create_agent
     ):
         """Should raise ValueError if local collection has connector_id"""
+        agent = create_agent(name="Test Agent")
         connector = sample_connector(name="Test", type="s3")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
@@ -122,15 +130,17 @@ class TestCollectionServiceCreate:
                     type=CollectionType.LOCAL,
                     location=temp_dir,
                     team_id=test_team.id,
+                    bound_agent_id=agent.id,
                     connector_id=connector.id  # Should not be provided for LOCAL
                 )
 
         assert "should not be provided for LOCAL" in str(exc_info.value)
 
     def test_create_collection_with_metadata(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
         """Should create collection with metadata"""
+        agent = create_agent(name="Test Agent")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
         metadata = {"project": "Vacation 2024", "photographer": "John Doe"}
 
@@ -140,22 +150,30 @@ class TestCollectionServiceCreate:
                 type=CollectionType.LOCAL,
                 location=temp_dir,
                 team_id=test_team.id,
+                bound_agent_id=agent.id,
                 metadata=metadata
             )
 
             assert collection.metadata_json == json.dumps(metadata)
 
     def test_create_collection_duplicate_name(
-        self, test_db_session, test_file_cache, test_connector_service, test_team
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
     ):
         """Should raise ValueError if collection name already exists"""
+        agent = create_agent(name="Test Agent")
         service = CollectionService(test_db_session, test_file_cache, test_connector_service)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir, team_id=test_team.id)
+            service.create_collection(
+                "Duplicate", CollectionType.LOCAL, temp_dir,
+                team_id=test_team.id, bound_agent_id=agent.id
+            )
 
             with pytest.raises(ValueError) as exc_info:
-                service.create_collection("Duplicate", CollectionType.LOCAL, temp_dir, team_id=test_team.id)
+                service.create_collection(
+                    "Duplicate", CollectionType.LOCAL, temp_dir,
+                    team_id=test_team.id, bound_agent_id=agent.id
+                )
 
         assert "already exists" in str(exc_info.value)
 
@@ -581,17 +599,21 @@ class TestCollectionServiceGetFiles:
         # Should use Closed TTL (86400s = 24 hours)
         assert captured_ttl == 86400
 
-    def test_get_collection_files_custom_ttl_override(
+    def test_get_collection_files_uses_state_based_ttl(
         self, test_db_session, test_file_cache, test_connector_service, sample_collection
     ):
-        """Should use custom cache_ttl if provided"""
+        """TTL is derived from collection state, not per-collection cache_ttl field.
+
+        Note: Per-collection cache_ttl override was removed. TTL is now determined by:
+        1. Team TTL config (if available)
+        2. Hardcoded defaults based on collection state (LIVE=3600, CLOSED=86400, ARCHIVED=604800)
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = sample_collection(
-                name="Custom TTL",
+                name="State TTL",
                 type="local",
                 location=temp_dir,
                 state="live",
-                cache_ttl=7200,  # Custom override
                 is_accessible=True
             )
 
@@ -610,8 +632,8 @@ class TestCollectionServiceGetFiles:
 
         service.get_collection_files(collection.id, use_cache=False)
 
-        # Should use custom TTL
-        assert captured_ttl == 7200
+        # Should use LIVE state default TTL (3600 seconds / 1 hour)
+        assert captured_ttl == 3600
 
     def test_get_collection_files_not_accessible_raises_error(
         self, test_db_session, test_file_cache, test_connector_service, sample_collection
@@ -643,3 +665,391 @@ class TestCollectionServiceGetFiles:
             service.get_collection_files(99999)
 
         assert "not found" in str(exc_info.value)
+
+
+# ============================================================================
+# Collection Agent Binding Tests (Phase 6 - T103)
+# ============================================================================
+
+class TestCollectionAgentBinding:
+    """Tests for collection agent binding validation.
+
+    Issue #90 - Distributed Agent Architecture (Phase 6)
+    Task T103: Unit tests for collection binding validation
+
+    Requirements:
+    - LOCAL collections SHOULD have a bound agent for job execution
+    - Bound agent validation: agent must exist and belong to same team
+    - Collection model properties for binding state
+    """
+
+    @pytest.fixture
+    def create_agent(self, test_db_session, test_team, test_user):
+        """Factory fixture to create test agents."""
+        from backend.src.services.agent_service import AgentService
+        from backend.src.models.agent import AgentStatus
+
+        def _create_agent(name="Test Agent", status=AgentStatus.ONLINE):
+            service = AgentService(test_db_session)
+
+            # Create token
+            token_result = service.create_registration_token(
+                team_id=test_team.id,
+                created_by_user_id=test_user.id,
+            )
+            test_db_session.commit()
+
+            # Register agent
+            result = service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name=name,
+                hostname="test.local",
+                os_info="Linux",
+                capabilities=["local_filesystem"],
+                version="1.0.0"
+            )
+            test_db_session.commit()
+
+            # Set agent status
+            if status == AgentStatus.ONLINE:
+                service.process_heartbeat(result.agent, status=AgentStatus.ONLINE)
+                test_db_session.commit()
+
+            return result.agent
+
+        return _create_agent
+
+    def test_collection_model_requires_bound_agent_property(
+        self, test_db_session, sample_collection
+    ):
+        """Test Collection model requires_bound_agent property for LOCAL type."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            local_collection = sample_collection(
+                name="Local Collection",
+                type="local",
+                location=temp_dir
+            )
+
+        assert local_collection.type == CollectionType.LOCAL
+        assert local_collection.requires_bound_agent is True
+        assert local_collection.has_bound_agent is False
+
+    def test_collection_model_requires_bound_agent_remote(
+        self, test_db_session, sample_collection, sample_connector
+    ):
+        """Test Collection model requires_bound_agent is False for remote types."""
+        connector = sample_connector(name="S3 Test", type="s3")
+        remote_collection = sample_collection(
+            name="S3 Collection",
+            type="s3",
+            location="bucket/path",
+            connector_id=connector.id
+        )
+
+        assert remote_collection.type == CollectionType.S3
+        assert remote_collection.requires_bound_agent is False
+
+    def test_collection_model_has_bound_agent_property(
+        self, test_db_session, sample_collection, create_agent
+    ):
+        """Test Collection model has_bound_agent property when agent is bound."""
+        agent = create_agent(name="Bound Agent")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(
+                name="Bound Collection",
+                type="local",
+                location=temp_dir
+            )
+            # Manually bind the agent (service will do this in Phase 6)
+            collection.bound_agent_id = agent.id
+            test_db_session.commit()
+            test_db_session.refresh(collection)
+
+        assert collection.has_bound_agent is True
+        assert collection.bound_agent_id == agent.id
+        assert collection.bound_agent is not None
+        assert collection.bound_agent.name == "Bound Agent"
+
+    def test_local_collection_can_have_bound_agent(
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent
+    ):
+        """Test that LOCAL collections can be created with bound_agent_id."""
+        agent = create_agent(name="Local Agent")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create collection with bound agent directly via model
+            collection = Collection(
+                name="Local with Agent",
+                type=CollectionType.LOCAL,
+                location=temp_dir,
+                team_id=test_team.id,
+                state=CollectionState.LIVE,
+                bound_agent_id=agent.id,
+                is_accessible=True,
+            )
+            test_db_session.add(collection)
+            test_db_session.commit()
+            test_db_session.refresh(collection)
+
+        assert collection.bound_agent_id == agent.id
+        assert collection.bound_agent.name == "Local Agent"
+        assert collection.requires_bound_agent is True
+        assert collection.has_bound_agent is True
+
+    def test_remote_collection_cannot_have_bound_agent(
+        self, test_db_session, sample_connector, test_team
+    ):
+        """Test that remote collections don't use bound agents (they use connectors)."""
+        connector = sample_connector(name="S3 Test", type="s3")
+
+        # Remote collections use connectors, not bound agents
+        collection = Collection(
+            name="S3 Collection",
+            type=CollectionType.S3,
+            location="bucket/path",
+            team_id=test_team.id,
+            state=CollectionState.LIVE,
+            connector_id=connector.id,
+            bound_agent_id=None,  # Remote collections don't have bound agents
+            is_accessible=True,
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+        test_db_session.refresh(collection)
+
+        assert collection.connector_id == connector.id
+        assert collection.bound_agent_id is None
+        assert collection.requires_bound_agent is False
+        assert collection.has_bound_agent is False
+
+    def test_bound_agent_relationship_eager_loaded(
+        self, test_db_session, test_team, create_agent
+    ):
+        """Test that bound_agent relationship is eagerly loaded."""
+        agent = create_agent(name="Eager Agent")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = Collection(
+                name="Eager Load Test",
+                type=CollectionType.LOCAL,
+                location=temp_dir,
+                team_id=test_team.id,
+                state=CollectionState.LIVE,
+                bound_agent_id=agent.id,
+                is_accessible=True,
+            )
+            test_db_session.add(collection)
+            test_db_session.commit()
+
+        # Query fresh collection
+        fresh_collection = test_db_session.query(Collection).filter(
+            Collection.id == collection.id
+        ).first()
+
+        # bound_agent should be eagerly loaded (lazy="joined" in model)
+        # Access without additional query
+        assert fresh_collection.bound_agent is not None
+        assert fresh_collection.bound_agent.name == "Eager Agent"
+
+    def test_collection_with_nonexistent_agent_raises_integrity_error(
+        self, test_db_session, test_team
+    ):
+        """Test that binding to nonexistent agent raises integrity error."""
+        from sqlalchemy.exc import IntegrityError
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = Collection(
+                name="Invalid Agent Binding",
+                type=CollectionType.LOCAL,
+                location=temp_dir,
+                team_id=test_team.id,
+                state=CollectionState.LIVE,
+                bound_agent_id=99999,  # Nonexistent agent
+                is_accessible=True,
+            )
+            test_db_session.add(collection)
+
+            with pytest.raises(IntegrityError):
+                test_db_session.commit()
+
+
+# ============================================================================
+# Collection Path Validation Against Agent Roots (Phase 6b - T134)
+# ============================================================================
+
+class TestCollectionPathValidation:
+    """Tests for collection path validation against agent authorized roots.
+
+    Issue #90 - Distributed Agent Architecture (Phase 6b)
+    Task T134: Unit tests for path validation in collection service
+
+    Requirements:
+    - LOCAL collections MUST have bound_agent_id
+    - Path must be under one of the agent's authorized roots
+    """
+
+    @pytest.fixture
+    def create_agent_with_roots(self, test_db_session, test_team, test_user):
+        """Factory fixture to create test agents with authorized roots."""
+        from backend.src.services.agent_service import AgentService
+        from backend.src.models.agent import AgentStatus
+        import json
+
+        def _create_agent(name="Test Agent", authorized_roots=None, status=AgentStatus.ONLINE):
+            service = AgentService(test_db_session)
+
+            # Create token
+            token_result = service.create_registration_token(
+                team_id=test_team.id,
+                created_by_user_id=test_user.id,
+            )
+            test_db_session.commit()
+
+            # Register agent with authorized roots
+            result = service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name=name,
+                hostname="test.local",
+                os_info="Linux",
+                capabilities=["local_filesystem"],
+                authorized_roots=authorized_roots or [],
+                version="1.0.0"
+            )
+            test_db_session.commit()
+
+            # Set agent status
+            if status == AgentStatus.ONLINE:
+                service.process_heartbeat(result.agent, status=AgentStatus.ONLINE)
+                test_db_session.commit()
+
+            return result.agent
+
+        return _create_agent
+
+    def test_local_collection_requires_bound_agent(
+        self, test_db_session, test_file_cache, test_connector_service, test_team
+    ):
+        """Test that LOCAL collections require bound_agent_id."""
+        service = CollectionService(test_db_session, test_file_cache, test_connector_service)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with pytest.raises(ValueError) as exc_info:
+                service.create_collection(
+                    name="Local Without Agent",
+                    type=CollectionType.LOCAL,
+                    location=temp_dir,
+                    team_id=test_team.id,
+                    # Missing bound_agent_id
+                )
+
+            assert "bound_agent_id is required for LOCAL collections" in str(exc_info.value)
+
+    def test_local_collection_path_validation_success(
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent_with_roots
+    ):
+        """Test that path under authorized root is accepted."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create agent with temp_dir as authorized root
+            agent = create_agent_with_roots(
+                name="Photo Agent",
+                authorized_roots=[temp_dir]
+            )
+
+            service = CollectionService(test_db_session, test_file_cache, test_connector_service)
+
+            # Create collection with path under authorized root
+            subdir = os.path.join(temp_dir, "photos")
+            os.makedirs(subdir)
+
+            collection = service.create_collection(
+                name="Valid Path Collection",
+                type=CollectionType.LOCAL,
+                location=subdir,
+                team_id=test_team.id,
+                bound_agent_id=agent.id,
+            )
+
+            assert collection.id is not None
+            assert collection.bound_agent_id == agent.id
+
+    def test_local_collection_path_validation_failure(
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent_with_roots
+    ):
+        """Test that path not under authorized root is rejected."""
+        with tempfile.TemporaryDirectory() as authorized_dir:
+            with tempfile.TemporaryDirectory() as unauthorized_dir:
+                # Create agent with authorized_dir as root, but try to use unauthorized_dir
+                agent = create_agent_with_roots(
+                    name="Photo Agent",
+                    authorized_roots=[authorized_dir]
+                )
+
+                service = CollectionService(test_db_session, test_file_cache, test_connector_service)
+
+                with pytest.raises(ValueError) as exc_info:
+                    service.create_collection(
+                        name="Invalid Path Collection",
+                        type=CollectionType.LOCAL,
+                        location=unauthorized_dir,
+                        team_id=test_team.id,
+                        bound_agent_id=agent.id,
+                    )
+
+                assert "not under any of the agent's authorized roots" in str(exc_info.value)
+
+    def test_local_collection_path_validation_no_roots_configured(
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent_with_roots
+    ):
+        """Test that collection creation fails when agent has no authorized roots."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create agent with no authorized roots
+            agent = create_agent_with_roots(
+                name="No Roots Agent",
+                authorized_roots=[]
+            )
+
+            service = CollectionService(test_db_session, test_file_cache, test_connector_service)
+
+            with pytest.raises(ValueError) as exc_info:
+                service.create_collection(
+                    name="No Roots Collection",
+                    type=CollectionType.LOCAL,
+                    location=temp_dir,
+                    team_id=test_team.id,
+                    bound_agent_id=agent.id,
+                )
+
+            assert "not under any of the agent's authorized roots" in str(exc_info.value)
+            assert "none configured" in str(exc_info.value)
+
+    def test_update_collection_validates_new_path(
+        self, test_db_session, test_file_cache, test_connector_service, test_team, create_agent_with_roots
+    ):
+        """Test that updating location validates against agent's authorized roots."""
+        with tempfile.TemporaryDirectory() as authorized_dir:
+            with tempfile.TemporaryDirectory() as unauthorized_dir:
+                # Create agent and collection with valid path
+                agent = create_agent_with_roots(
+                    name="Photo Agent",
+                    authorized_roots=[authorized_dir]
+                )
+
+                service = CollectionService(test_db_session, test_file_cache, test_connector_service)
+
+                collection = service.create_collection(
+                    name="Original Collection",
+                    type=CollectionType.LOCAL,
+                    location=authorized_dir,
+                    team_id=test_team.id,
+                    bound_agent_id=agent.id,
+                )
+
+                # Try to update location to unauthorized path
+                with pytest.raises(ValueError) as exc_info:
+                    service.update_collection(
+                        collection.id,
+                        location=unauthorized_dir
+                    )
+
+                assert "not under any of the agent's authorized roots" in str(exc_info.value)

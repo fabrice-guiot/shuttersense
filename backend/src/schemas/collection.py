@@ -19,6 +19,7 @@ from typing import Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.src.models import CollectionType, CollectionState, ConnectorType
+from backend.src.models.connector import CredentialLocation
 
 
 # ============================================================================
@@ -162,53 +163,95 @@ class ConnectorCreate(BaseModel):
     Fields:
         name: User-friendly connector name (must be unique)
         type: Connector type (S3, GCS, SMB)
-        credentials: Type-specific credentials object
+        credential_location: Where credentials are stored (server/agent/pending)
+        credentials: Type-specific credentials object (required when location=server)
         metadata: Optional user-defined metadata
 
+    Credential Location Modes:
+        - server: Credentials encrypted on server (default, current behavior)
+        - agent: Credentials stored only on agent(s), server has none
+        - pending: Placeholder connector awaiting credential configuration
+
     Example:
+        >>> # Server credentials (default)
         >>> connector = ConnectorCreate(
         ...     name="My AWS Account",
         ...     type=ConnectorType.S3,
         ...     credentials={"aws_access_key_id": "...", "aws_secret_access_key": "..."},
-        ...     metadata={"team": "engineering", "cost_center": "123"}
+        ... )
+        >>> # Agent-only credentials
+        >>> connector = ConnectorCreate(
+        ...     name="NAS Storage",
+        ...     type=ConnectorType.SMB,
+        ...     credential_location=CredentialLocation.AGENT,
         ... )
     """
     name: str = Field(..., min_length=1, max_length=255, description="Unique connector name")
     type: ConnectorType = Field(..., description="Connector type")
-    credentials: Dict[str, Any] = Field(..., description="Connector credentials")
+    credential_location: CredentialLocation = Field(
+        default=CredentialLocation.SERVER,
+        description="Where credentials are stored (server/agent/pending)"
+    )
+    credentials: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Connector credentials (required when credential_location=server)"
+    )
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="User-defined metadata")
+    is_active: bool = Field(default=True, description="Whether connector is active")
 
     @model_validator(mode='after')
     def validate_credentials_match_type(self):
-        """Validate credentials structure matches connector type."""
-        if not self.type or not self.credentials:
-            return self
+        """Validate credentials are required for server mode and match connector type."""
+        # Cannot activate a connector with pending credentials
+        if self.credential_location == CredentialLocation.PENDING and self.is_active:
+            raise ValueError("Cannot activate connector with pending credentials. Configure credentials first.")
 
-        # Validate credentials based on type
-        try:
-            if self.type == ConnectorType.S3:
-                S3Credentials(**self.credentials)
-            elif self.type == ConnectorType.GCS:
-                GCSCredentials(**self.credentials)
-            elif self.type == ConnectorType.SMB:
-                SMBCredentials(**self.credentials)
-        except Exception as e:
-            raise ValueError(f"Invalid credentials for {self.type.value}: {str(e)}")
+        # Credentials required when location is SERVER
+        if self.credential_location == CredentialLocation.SERVER:
+            if not self.credentials:
+                raise ValueError("Credentials are required when credential_location is 'server'")
+
+            # Validate credentials structure based on type
+            try:
+                if self.type == ConnectorType.S3:
+                    S3Credentials(**self.credentials)
+                elif self.type == ConnectorType.GCS:
+                    GCSCredentials(**self.credentials)
+                elif self.type == ConnectorType.SMB:
+                    SMBCredentials(**self.credentials)
+            except Exception as e:
+                raise ValueError(f"Invalid credentials for {self.type.value}: {str(e)}")
+
+        # For AGENT or PENDING, credentials should not be provided
+        elif self.credentials:
+            raise ValueError(
+                f"Credentials should not be provided when credential_location is '{self.credential_location.value}'. "
+                "For agent credentials, configure them on the agent using CLI."
+            )
 
         return self
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "name": "Production AWS",
-                "type": "s3",
-                "credentials": {
-                    "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
-                    "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-                    "region": "us-west-2"
+            "examples": [
+                {
+                    "name": "Production AWS",
+                    "type": "s3",
+                    "credential_location": "server",
+                    "credentials": {
+                        "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+                        "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                        "region": "us-west-2"
+                    },
+                    "metadata": {"team": "engineering", "environment": "production"}
                 },
-                "metadata": {"team": "engineering", "environment": "production"}
-            }
+                {
+                    "name": "Office NAS",
+                    "type": "smb",
+                    "credential_location": "agent",
+                    "metadata": {"location": "office"}
+                }
+            ]
         }
     }
 
@@ -221,15 +264,30 @@ class ConnectorUpdate(BaseModel):
 
     Fields:
         name: New connector name
-        credentials: New credentials (will be re-encrypted)
+        credential_location: New credential storage location
+        credentials: New credentials (will be re-encrypted, only when location=server)
+        update_credentials: Whether to update credentials (false = keep existing)
         metadata: New metadata
         is_active: Active status
+
+    Note:
+        Changing credential_location from server to agent will clear server credentials.
+        Changing from agent to server requires providing new credentials.
+        When update_credentials=false, the credentials field is ignored.
 
     Example:
         >>> update = ConnectorUpdate(name="Updated AWS Account", is_active=False)
     """
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    credential_location: Optional[CredentialLocation] = Field(
+        default=None,
+        description="New credential storage location"
+    )
     credentials: Optional[Dict[str, Any]] = Field(default=None)
+    update_credentials: bool = Field(
+        default=True,
+        description="Whether to update credentials (false = keep existing)"
+    )
     metadata: Optional[Dict[str, Any]] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
 
@@ -237,7 +295,9 @@ class ConnectorUpdate(BaseModel):
         "json_schema_extra": {
             "example": {
                 "name": "Updated Connector Name",
+                "credential_location": "server",
                 "is_active": True,
+                "update_credentials": False,
                 "metadata": {"team": "platform"}
             }
         }
@@ -254,6 +314,7 @@ class ConnectorResponse(BaseModel):
         guid: External identifier (con_xxx)
         name: Connector name
         type: ConnectorType
+        credential_location: Where credentials are stored (server/agent/pending)
         metadata: User-defined metadata
         is_active: Active status
         last_validated: Last successful connection test
@@ -267,6 +328,9 @@ class ConnectorResponse(BaseModel):
     guid: str = Field(..., description="External identifier (con_xxx)")
     name: str
     type: ConnectorType
+    credential_location: CredentialLocation = Field(
+        description="Where credentials are stored (server/agent/pending)"
+    )
     metadata: Optional[Dict[str, Any]] = None
     is_active: bool
     last_validated: Optional[datetime]
@@ -347,6 +411,7 @@ class CollectionCreate(BaseModel):
     Validates:
     - Remote collections (S3/GCS/SMB) require connector_guid
     - Local collections cannot have connector_guid
+    - Local collections can optionally specify bound_agent_guid
     - Location format is reasonable
     - State defaults to LIVE
 
@@ -356,9 +421,13 @@ class CollectionCreate(BaseModel):
         location: File path or remote location
         state: Collection state (defaults to LIVE)
         connector_guid: Required for remote collections (con_xxx format)
+        bound_agent_guid: Agent for LOCAL collections (agt_xxx format)
         pipeline_guid: Explicit pipeline assignment (NULL = use default at runtime)
-        cache_ttl: Override default cache TTL (seconds)
         metadata: User-defined metadata
+
+    Note:
+        Cache TTL is derived from the collection state and team-level configuration.
+        Configure TTL values in Settings > Configuration > Collection Cache TTL.
 
     Example:
         >>> collection = CollectionCreate(
@@ -374,8 +443,8 @@ class CollectionCreate(BaseModel):
     location: str = Field(..., min_length=1, max_length=1024, description="File path or remote location")
     state: CollectionState = Field(default=CollectionState.LIVE, description="Collection state")
     connector_guid: Optional[str] = Field(default=None, description="Connector GUID (con_xxx, required for remote)")
+    bound_agent_guid: Optional[str] = Field(default=None, description="Bound agent GUID (agt_xxx, for LOCAL collections)")
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = use default)")
-    cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800, description="Cache TTL in seconds (max 7 days)")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="User-defined metadata")
 
     @model_validator(mode='after')
@@ -383,15 +452,19 @@ class CollectionCreate(BaseModel):
         """Validate connector_guid is provided for remote collections and absent for local."""
         # Check collection type requirements first (more specific error messages)
 
-        # Local collections cannot have connector_guid
+        # Local collections require bound_agent_guid and cannot have connector_guid
         if self.type == CollectionType.LOCAL:
             if self.connector_guid is not None:
                 raise ValueError("connector_guid must be null for LOCAL collections")
+            if self.bound_agent_guid is None:
+                raise ValueError("bound_agent_guid is required for LOCAL collections")
 
-        # Remote collections require connector_guid
+        # Remote collections require connector_guid and cannot have bound_agent_guid
         if self.type in [CollectionType.S3, CollectionType.GCS, CollectionType.SMB]:
             if self.connector_guid is None:
                 raise ValueError(f"connector_guid is required for {self.type.value} collections")
+            if self.bound_agent_guid is not None:
+                raise ValueError("bound_agent_guid is only valid for LOCAL collections")
 
         return self
 
@@ -404,7 +477,6 @@ class CollectionCreate(BaseModel):
                 "state": "live",
                 "connector_guid": "con_01hgw2bbg0000000000000001",
                 "pipeline_guid": "pip_01hgw2bbg0000000000000001",
-                "cache_ttl": 7200,
                 "metadata": {"year": 2024, "season": "summer", "location": "Hawaii"}
             }
         }
@@ -422,23 +494,25 @@ class CollectionUpdate(BaseModel):
         location: New location path
         state: New state (LIVE, CLOSED, ARCHIVED)
         pipeline_guid: New pipeline assignment (pip_xxx, set to explicit None to clear)
-        cache_ttl: New cache TTL override
+        bound_agent_guid: Bound agent for LOCAL collections (agt_xxx, set to None to unbind)
         metadata: New metadata
 
     Note:
         - Cannot change collection type or connector_guid after creation
-        - Changing state invalidates cache (new TTL applies)
+        - Changing state invalidates cache (new TTL applies based on team config)
         - Setting pipeline_guid assigns a pipeline and pins the current version
         - Use clear_pipeline endpoint to explicitly remove assignment
+        - bound_agent_guid can only be set for LOCAL collections
+        - Cache TTL is derived from state and team config (Settings > Configuration)
 
     Example:
-        >>> update = CollectionUpdate(state=CollectionState.ARCHIVED, cache_ttl=86400)
+        >>> update = CollectionUpdate(state=CollectionState.ARCHIVED)
     """
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     location: Optional[str] = Field(default=None, min_length=1, max_length=1024)
     state: Optional[CollectionState] = Field(default=None)
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx, NULL = keep current)")
-    cache_ttl: Optional[int] = Field(default=None, ge=0, le=604800)
+    bound_agent_guid: Optional[str] = Field(default=None, description="Bound agent GUID (agt_xxx, for LOCAL collections)")
     metadata: Optional[Dict[str, Any]] = Field(default=None)
 
     model_config = {
@@ -446,8 +520,36 @@ class CollectionUpdate(BaseModel):
             "example": {
                 "state": "archived",
                 "pipeline_guid": "pip_01hgw2bbg0000000000000002",
-                "cache_ttl": 86400,
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
                 "metadata": {"archived_by": "admin", "reason": "project completed"}
+            }
+        }
+    }
+
+
+class BoundAgentSummary(BaseModel):
+    """
+    Summary schema for bound agent in collection responses.
+
+    Fields:
+        guid: Agent GUID (agt_xxx)
+        name: Agent display name
+        status: Current agent status
+
+    Example:
+        >>> summary = BoundAgentSummary(guid="agt_xxx", name="My Agent", status="online")
+    """
+    guid: str = Field(..., description="Agent GUID (agt_xxx)")
+    name: str = Field(..., description="Agent display name")
+    status: str = Field(..., description="Agent status (online, offline, error)")
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "guid": "agt_01hgw2bbg0000000000000001",
+                "name": "Home Mac Agent",
+                "status": "online"
             }
         }
     }
@@ -465,16 +567,18 @@ class CollectionResponse(BaseModel):
         type: Collection type
         location: File path or remote location
         state: Collection state
+        connector_guid: Connector GUID (con_xxx, null for LOCAL collections)
         pipeline_guid: Pipeline GUID (pip_xxx, null = use default)
         pipeline_version: Pinned pipeline version (null if using default)
         pipeline_name: Name of assigned pipeline (null if using default)
+        bound_agent: Bound agent details for LOCAL collections (null for remote)
         cache_ttl: Cache TTL override
-        is_accessible: Accessibility flag
+        is_accessible: Accessibility flag (True=accessible, False=not accessible, None=pending/testing)
         last_error: Last error message
         metadata: User-defined metadata
         created_at: Creation timestamp
         updated_at: Last update timestamp
-        connector: Optional connector details (with guid)
+        connector: Optional connector details (full object)
 
     Example:
         >>> response = CollectionResponse.from_orm(collection_obj)
@@ -484,12 +588,18 @@ class CollectionResponse(BaseModel):
     type: CollectionType
     location: str
     state: CollectionState
+    connector_guid: Optional[str] = Field(default=None, description="Connector GUID (con_xxx)")
     pipeline_guid: Optional[str] = Field(default=None, description="Pipeline GUID (pip_xxx)")
     pipeline_version: Optional[int] = None
     pipeline_name: Optional[str] = None
+    bound_agent: Optional[BoundAgentSummary] = Field(default=None, description="Bound agent for LOCAL collections")
     cache_ttl: Optional[int]
-    is_accessible: bool
-    last_error: Optional[str]
+    is_accessible: Optional[bool] = Field(
+        default=None,
+        description="Accessibility flag: True=accessible, False=not accessible, None=pending/testing"
+    )
+    accessibility_message: Optional[str] = Field(default=None, description="Accessibility error message")
+    last_scanned_at: Optional[datetime] = Field(default=None, description="Last completed scan timestamp")
     metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
@@ -502,22 +612,62 @@ class CollectionResponse(BaseModel):
         if isinstance(data, dict):
             # Already a dict (from JSON API request)
             return data
-        # It's an ORM object
+        # It's an ORM object - convert to dict to avoid modifying the ORM
+        result = {}
+
+        # Copy basic attributes
+        for attr in ['guid', 'name', 'type', 'location', 'state', 'pipeline_version',
+                     'cache_ttl', 'is_accessible', 'created_at', 'updated_at']:
+            if hasattr(data, attr):
+                result[attr] = getattr(data, attr)
+
+        # Map last_error (DB field) to accessibility_message (API field)
+        if hasattr(data, 'last_error'):
+            result['accessibility_message'] = getattr(data, 'last_error')
+
+        # Map last_refresh_at (DB field) to last_scanned_at (API field)
+        if hasattr(data, 'last_refresh_at'):
+            result['last_scanned_at'] = getattr(data, 'last_refresh_at')
+
+        # Deserialize metadata_json
         if hasattr(data, 'metadata_json'):
             import json
             metadata_json = data.metadata_json
             if metadata_json:
                 try:
-                    data.metadata = json.loads(metadata_json)
+                    result['metadata'] = json.loads(metadata_json)
                 except (json.JSONDecodeError, TypeError):
-                    data.metadata = None
+                    result['metadata'] = None
             else:
-                data.metadata = None
+                result['metadata'] = None
+
         # Extract pipeline_guid and pipeline_name from relationship
         if hasattr(data, 'pipeline') and data.pipeline:
-            data.pipeline_guid = data.pipeline.guid
-            data.pipeline_name = data.pipeline.name
-        return data
+            result['pipeline_guid'] = data.pipeline.guid
+            result['pipeline_name'] = data.pipeline.name
+        else:
+            result['pipeline_guid'] = None
+            result['pipeline_name'] = None
+
+        # Extract bound_agent info from relationship
+        if hasattr(data, 'bound_agent') and data.bound_agent:
+            result['bound_agent'] = BoundAgentSummary(
+                guid=data.bound_agent.guid,
+                name=data.bound_agent.name,
+                status=data.bound_agent.status.value if hasattr(data.bound_agent.status, 'value') else str(data.bound_agent.status)
+            )
+        else:
+            result['bound_agent'] = None
+
+        # Extract connector_guid and connector from relationship
+        if hasattr(data, 'connector') and data.connector:
+            result['connector_guid'] = data.connector.guid
+            result['connector'] = data.connector
+        else:
+            result['connector_guid'] = None
+            result['connector'] = None
+
+        return result
 
     model_config = {
         "from_attributes": True,
@@ -528,9 +678,11 @@ class CollectionResponse(BaseModel):
                 "type": "s3",
                 "location": "s3://my-bucket/photos/2024/vacation",
                 "state": "live",
+                "connector_guid": "con_01hgw2bbg0000000000000001",
                 "pipeline_guid": "pip_01hgw2bbg0000000000000001",
                 "pipeline_version": 3,
                 "pipeline_name": "Standard RAW Workflow",
+                "bound_agent": None,
                 "cache_ttl": 7200,
                 "is_accessible": True,
                 "last_error": None,
@@ -556,10 +708,16 @@ class CollectionTestResponse(BaseModel):
     """
     Schema for collection accessibility test response.
 
+    For LOCAL collections bound to agents, the test is performed asynchronously
+    by the agent. The response includes a job_guid that can be used to track
+    the test progress. The collection's is_accessible will be updated when
+    the agent completes the test.
+
     Fields:
-        success: Test result
+        success: Test result (for async tests: False until agent completes)
         message: Descriptive message
         collection: Updated collection with new accessibility status
+        job_guid: Job GUID for async accessibility tests (LOCAL collections)
 
     Example:
         >>> response = CollectionTestResponse(success=True, message="Collection is accessible", collection=...)
@@ -570,6 +728,10 @@ class CollectionTestResponse(BaseModel):
         default=None,
         description="Updated collection with new accessibility status"
     )
+    job_guid: Optional[str] = Field(
+        default=None,
+        description="Job GUID for async accessibility tests (job_xxx, only for LOCAL collections)"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -577,12 +739,13 @@ class CollectionTestResponse(BaseModel):
                 "success": True,
                 "message": "Collection is accessible. Found 1,234 files.",
                 "collection": {
-                    "id": 1,
+                    "guid": "col_01hgw2bbg0000000000000000",
                     "name": "Vacation Photos",
                     "type": "local",
                     "is_accessible": True,
                     "last_error": None
-                }
+                },
+                "job_guid": None
             }
         }
     }

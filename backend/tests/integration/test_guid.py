@@ -15,7 +15,7 @@ from uuid import UUID
 class TestGuidGeneration:
     """Integration tests for GUID generation and format - Issue #42"""
 
-    def test_collection_has_uuid_and_guid(self, test_client):
+    def test_collection_has_uuid_and_guid(self, test_client, create_agent):
         """
         Test that created collections have UUID and guid.
 
@@ -24,32 +24,37 @@ class TestGuidGeneration:
         - GUID format is col_{26-char base32}
         - GUID is unique per collection
         """
-        # Create a collection
-        collection_data = {
-            "name": "UUID Test Collection",
-            "type": "local",
-            "location": "/test/uuid/collection",
-            "state": "live"
-        }
+        import tempfile
+        agent = create_agent(name="GUID Test Agent")
 
-        response = test_client.post("/api/collections", json=collection_data)
-        assert response.status_code == 201
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a collection
+            collection_data = {
+                "name": "UUID Test Collection",
+                "type": "local",
+                "location": temp_dir,
+                "state": "live",
+                "bound_agent_guid": agent.guid,
+            }
 
-        collection = response.json()
+            response = test_client.post("/api/collections", json=collection_data)
+            assert response.status_code == 201
 
-        # Verify guid exists and has correct format
-        assert "guid" in collection
-        guid = collection["guid"]
-        assert guid.startswith("col_")
-        assert len(guid) == 30  # col_ + 26 chars
+            collection = response.json()
 
-        # Verify we can fetch by the GUID
-        fetch_response = test_client.get(f"/api/collections/{guid}")
-        assert fetch_response.status_code == 200
-        assert fetch_response.json()["guid"] == guid
+            # Verify guid exists and has correct format
+            assert "guid" in collection
+            guid = collection["guid"]
+            assert guid.startswith("col_")
+            assert len(guid) == 30  # col_ + 26 chars
 
-        # Clean up
-        test_client.delete(f"/api/collections/{guid}")
+            # Verify we can fetch by the GUID
+            fetch_response = test_client.get(f"/api/collections/{guid}")
+            assert fetch_response.status_code == 200
+            assert fetch_response.json()["guid"] == guid
+
+            # Clean up
+            test_client.delete(f"/api/collections/{guid}")
 
     def test_connector_has_uuid_and_guid(self, test_client):
         """
@@ -127,90 +132,104 @@ class TestGuidGeneration:
         # Clean up
         test_client.delete(f"/api/pipelines/{guid}")
 
-    def test_guids_are_unique(self, test_client):
+    def test_guids_are_unique(self, test_client, create_agent):
         """
         Test that each entity gets a unique GUID.
 
         Creates multiple entities and verifies all GUIDs are distinct.
         """
+        import tempfile
+        agent = create_agent(name="Unique GUID Test Agent")
         guids = set()
 
-        # Create multiple collections
-        for i in range(3):
-            response = test_client.post("/api/collections", json={
-                "name": f"Unique Test Collection {i}",
-                "type": "local",
-                "location": f"/test/unique/{i}",
-                "state": "live"
-            })
-            assert response.status_code == 201
-            guids.add(response.json()["guid"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create multiple collections
+            for i in range(3):
+                response = test_client.post("/api/collections", json={
+                    "name": f"Unique Test Collection {i}",
+                    "type": "local",
+                    "location": f"{temp_dir}/unique/{i}",
+                    "state": "live",
+                    "bound_agent_guid": agent.guid,
+                })
+                assert response.status_code == 201
+                guids.add(response.json()["guid"])
 
-        # All GUIDs should be unique
-        assert len(guids) == 3
+            # All GUIDs should be unique
+            assert len(guids) == 3
 
-        # Clean up
-        for collection in test_client.get("/api/collections").json():
-            if collection["name"].startswith("Unique Test Collection"):
-                test_client.delete(f"/api/collections/{collection['guid']}")
+            # Clean up
+            for collection in test_client.get("/api/collections").json():
+                if collection["name"].startswith("Unique Test Collection"):
+                    test_client.delete(f"/api/collections/{collection['guid']}")
 
-    def test_list_endpoint_includes_guid(self, test_client):
+    def test_list_endpoint_includes_guid(self, test_client, create_agent):
         """
         Test that list endpoints include guid for all items.
         """
-        # Create a test collection
-        test_client.post("/api/collections", json={
-            "name": "List Test Collection",
-            "type": "local",
-            "location": "/test/list",
-            "state": "live"
-        })
+        import tempfile
+        agent = create_agent(name="List GUID Test Agent")
 
-        # Get all collections
-        response = test_client.get("/api/collections")
-        assert response.status_code == 200
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a test collection
+            test_client.post("/api/collections", json={
+                "name": "List Test Collection",
+                "type": "local",
+                "location": temp_dir,
+                "state": "live",
+                "bound_agent_guid": agent.guid,
+            })
 
-        collections = response.json()
-        assert len(collections) > 0
+            # Get all collections
+            response = test_client.get("/api/collections")
+            assert response.status_code == 200
 
-        # Verify all collections have guid
-        for collection in collections:
-            assert "guid" in collection
-            assert collection["guid"].startswith("col_")
+            collections = response.json()
+            assert len(collections) > 0
 
-        # Clean up
-        for collection in collections:
-            if collection["name"] == "List Test Collection":
-                test_client.delete(f"/api/collections/{collection['guid']}")
+            # Verify all collections have guid
+            for collection in collections:
+                assert "guid" in collection
+                assert collection["guid"].startswith("col_")
 
-    def test_guid_case_insensitive_lookup(self, test_client):
+            # Clean up
+            for collection in collections:
+                if collection["name"] == "List Test Collection":
+                    test_client.delete(f"/api/collections/{collection['guid']}")
+
+    def test_guid_case_insensitive_lookup(self, test_client, create_agent):
         """
         Test that GUID lookups are case-insensitive.
 
         Crockford Base32 is case-insensitive, so lookups should work
         regardless of case.
         """
-        # Create a collection
-        response = test_client.post("/api/collections", json={
-            "name": "Case Test Collection",
-            "type": "local",
-            "location": "/test/case",
-            "state": "live"
-        })
-        collection = response.json()
-        guid = collection["guid"]
+        import tempfile
+        agent = create_agent(name="Case Test Agent")
 
-        # Test uppercase lookup
-        upper_response = test_client.get(f"/api/collections/{guid.upper()}")
-        assert upper_response.status_code == 200
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a collection
+            response = test_client.post("/api/collections", json={
+                "name": "Case Test Collection",
+                "type": "local",
+                "location": temp_dir,
+                "state": "live",
+                "bound_agent_guid": agent.guid,
+            })
+            collection = response.json()
+            guid = collection["guid"]
 
-        # Test mixed case lookup
-        mixed_id = guid[:5] + guid[5:].upper()
-        mixed_response = test_client.get(f"/api/collections/{mixed_id}")
-        assert mixed_response.status_code == 200
+            # Test uppercase lookup
+            upper_response = test_client.get(f"/api/collections/{guid.upper()}")
+            assert upper_response.status_code == 200
 
-        # Clean up
-        test_client.delete(f"/api/collections/{guid}")
+            # Test mixed case lookup
+            mixed_id = guid[:5] + guid[5:].upper()
+            mixed_response = test_client.get(f"/api/collections/{mixed_id}")
+            assert mixed_response.status_code == 200
+
+            # Clean up
+            test_client.delete(f"/api/collections/{guid}")
 
 
 class TestGuidErrorHandling:

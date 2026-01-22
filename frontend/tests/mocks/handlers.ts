@@ -257,6 +257,7 @@ let connectors: Connector[] = [
     guid: 'con_01hgw2bbg00000000000000001',
     name: 'Test S3 Connector',
     type: 's3',
+    credential_location: 'server',
     is_active: true,
     last_validated: '2025-01-01T10:00:00Z',
     last_error: null,
@@ -267,6 +268,7 @@ let connectors: Connector[] = [
     guid: 'con_01hgw2bbg00000000000000002',
     name: 'Test GCS Connector',
     type: 'gcs',
+    credential_location: 'server',
     is_active: false,
     last_validated: null,
     last_error: null,
@@ -611,6 +613,11 @@ let configData = {
     'completed': { label: 'Completed', display_order: 2 },
     'cancelled': { label: 'Cancelled', display_order: 3 },
   } as Record<string, { label: string; display_order: number }>,
+  collection_ttl: {
+    'live': { value: 3600, label: 'Live (1 hour)' },
+    'closed': { value: 86400, label: 'Closed (24 hours)' },
+    'archived': { value: 604800, label: 'Archived (7 days)' },
+  } as Record<string, { value: number; label: string }>,
   importSessions: {} as Record<string, ImportSessionResponse>,
   lastImport: null as string | null,
 }
@@ -653,6 +660,7 @@ export const handlers = [
       guid: `con_01hgw2bbg000000000000000${nextConnectorId++}`,
       name: data.name!,
       type: data.type!,
+      credential_location: data.credential_location ?? 'server',
       is_active: data.is_active ?? true,
       last_validated: null,
       last_error: null,
@@ -1023,13 +1031,25 @@ export const handlers = [
 
   http.get(`${BASE_URL}/tools/jobs`, ({ request }) => {
     const url = new URL(request.url)
-    const status = url.searchParams.get('status') as JobStatus | null
+    const statusParams = url.searchParams.getAll('status') as JobStatus[]
+    const limit = parseInt(url.searchParams.get('limit') ?? '50', 10)
+    const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
 
     let filteredJobs = jobs
-    if (status) {
-      filteredJobs = jobs.filter((j) => j.status === status)
+    if (statusParams.length > 0) {
+      filteredJobs = jobs.filter((j) => statusParams.includes(j.status))
     }
-    return HttpResponse.json(filteredJobs)
+
+    // Apply pagination
+    const total = filteredJobs.length
+    const paginatedJobs = filteredJobs.slice(offset, offset + limit)
+
+    return HttpResponse.json({
+      items: paginatedJobs,
+      total: total,
+      limit: limit,
+      offset: offset,
+    })
   }),
 
   http.get(`${BASE_URL}/tools/jobs/:id`, ({ params }) => {
@@ -1045,9 +1065,9 @@ export const handlers = [
     if (!job) {
       return new HttpResponse(null, { status: 404 })
     }
-    if (job.status !== 'queued') {
+    if (job.status !== 'queued' && job.status !== 'scheduled') {
       return HttpResponse.json(
-        { detail: 'Only queued jobs can be cancelled' },
+        { detail: 'Only queued or scheduled jobs can be cancelled' },
         { status: 400 }
       )
     }
@@ -1058,6 +1078,7 @@ export const handlers = [
 
   http.get(`${BASE_URL}/tools/queue/status`, () => {
     const queueStatus: QueueStatusResponse = {
+      scheduled_count: jobs.filter((j) => j.status === 'scheduled').length,
       queued_count: jobs.filter((j) => j.status === 'queued').length,
       running_count: jobs.filter((j) => j.status === 'running').length,
       completed_count: jobs.filter((j) => j.status === 'completed').length,
@@ -1744,6 +1765,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
       cameras: configData.cameras,
       processing_methods: configData.processing_methods,
       event_statuses: configData.event_statuses,
+      collection_ttl: configData.collection_ttl,
     }
     return HttpResponse.json(response)
   }),
@@ -2731,6 +2753,37 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
   }),
 ]
 
+// Helper to add a scheduled job (for testing upcoming jobs)
+export function addScheduledJob(
+  collectionGuid: string,
+  tool: ToolType,
+  scheduledForHoursFromNow: number = 1
+): JobResponse {
+  const scheduledFor = new Date()
+  scheduledFor.setHours(scheduledFor.getHours() + scheduledForHoursFromNow)
+
+  const job: JobResponse = {
+    id: generateJobGuid(),
+    collection_guid: collectionGuid,
+    tool: tool,
+    mode: 'collection',
+    pipeline_guid: null,
+    status: 'scheduled',
+    position: null,
+    created_at: new Date().toISOString(),
+    scheduled_for: scheduledFor.toISOString(),
+    started_at: null,
+    completed_at: null,
+    progress: null,
+    error_message: null,
+    result_guid: null,
+    agent_guid: null,
+    agent_name: null,
+  }
+  jobs.push(job)
+  return job
+}
+
 // Helper to reset mock data (useful for tests)
 export function resetMockData(): void {
   pipelines = [
@@ -2818,6 +2871,7 @@ export function resetMockData(): void {
       guid: 'con_01hgw2bbg00000000000000001',
       name: 'Test S3 Connector',
       type: 's3',
+      credential_location: 'server',
       is_active: true,
       last_validated: '2025-01-01T10:00:00Z',
       last_error: null,
@@ -2828,6 +2882,7 @@ export function resetMockData(): void {
       guid: 'con_01hgw2bbg00000000000000002',
       name: 'Test GCS Connector',
       type: 'gcs',
+      credential_location: 'server',
       is_active: false,
       last_validated: null,
       last_error: null,
@@ -2999,6 +3054,11 @@ export function resetMockData(): void {
       'confirmed': { label: 'Confirmed', display_order: 1 },
       'completed': { label: 'Completed', display_order: 2 },
       'cancelled': { label: 'Cancelled', display_order: 3 },
+    },
+    collection_ttl: {
+      'live': { value: 3600, label: 'Live (1 hour)' },
+      'closed': { value: 86400, label: 'Closed (24 hours)' },
+      'archived': { value: 604800, label: 'Archived (7 days)' },
     },
     importSessions: {},
     lastImport: null,

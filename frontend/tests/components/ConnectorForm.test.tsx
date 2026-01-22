@@ -64,6 +64,7 @@ describe('ConnectorForm', () => {
       guid: 'con_01hgw2bbg00000000000000001',
       name: 'Existing Connector',
       type: 's3',
+      credential_location: 'server',
       is_active: true,
       last_validated: null,
       created_at: '2025-01-01T09:00:00Z',

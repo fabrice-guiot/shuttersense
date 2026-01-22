@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,6 +23,8 @@ import { ConnectorList } from '@/components/connectors/ConnectorList'
 import ConnectorForm from '@/components/connectors/ConnectorForm'
 import { GuidBadge } from '@/components/GuidBadge'
 import type { Connector } from '@/contracts/api/connector-api'
+import * as agentService from '@/services/agents'
+import type { Agent } from '@/contracts/api/agent-api'
 
 export function ConnectorsTab() {
   const {
@@ -37,6 +40,16 @@ export function ConnectorsTab() {
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useConnectorStats()
   const { setStats } = useHeaderStats()
+
+  // Agents state (for showing which agents have credentials for each connector)
+  const [agents, setAgents] = useState<Agent[]>([])
+
+  // Fetch agents on mount
+  useEffect(() => {
+    agentService.listAgents(false).then(setAgents).catch(() => {
+      // Silently ignore agent fetch errors - this is just for display enhancement
+    })
+  }, [])
 
   // Update header stats when data changes
   useEffect(() => {
@@ -92,10 +105,23 @@ export function ConnectorsTab() {
       })
   }
 
-  const handleTest = (connector: Connector) => {
-    testConnector(connector.guid).catch(() => {
-      // Error handled by hook
-    })
+  const handleTest = async (connector: Connector) => {
+    try {
+      const result = await testConnector(connector.guid)
+      if (result.success) {
+        toast.success('Connection successful', {
+          description: result.message
+        })
+      } else {
+        toast.error('Connection failed', {
+          description: result.message
+        })
+      }
+    } catch (err: any) {
+      toast.error('Connection test failed', {
+        description: err.message || 'An unexpected error occurred'
+      })
+    }
   }
 
   return (
@@ -122,12 +148,13 @@ export function ConnectorsTab() {
         onEdit={handleOpen}
         onDelete={handleDelete}
         onTest={handleTest}
+        agents={agents}
       />
 
       {/* Create/Edit Dialog */}
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {editingConnector ? 'Edit Connector' : 'New Connector'}
             </DialogTitle>
@@ -139,7 +166,7 @@ export function ConnectorsTab() {
               </DialogDescription>
             )}
           </DialogHeader>
-          <div className="mt-4">
+          <div className="mt-4 overflow-y-auto flex-1 pr-2">
             {formError && (
               <Alert variant="destructive" className="mb-4">
                 <AlertDescription>{formError}</AlertDescription>

@@ -514,7 +514,8 @@ class TestConfigServiceGetAll:
             "extensions": {},
             "cameras": {},
             "processing_methods": {},
-            "event_statuses": {}
+            "event_statuses": {},
+            "collection_ttl": {}
         }
 
 

@@ -37,7 +37,9 @@ describe('JobProgressCard', () => {
     completed_at: null,
     progress: null,
     result_guid: null,
-    error_message: null
+    error_message: null,
+    agent_guid: null,
+    agent_name: null
   }
 
   afterEach(() => {
@@ -329,5 +331,225 @@ describe('JobProgressCard', () => {
     )
 
     expect(screen.getByText('Completed:')).toBeInTheDocument()
+  })
+
+  // ============================================================================
+  // Phase 10: Agent Display Tests (Issue #90 - T160)
+  // ============================================================================
+
+  it('should display agent name when job has agent assigned', () => {
+    const jobWithAgent: Job = {
+      ...baseJob,
+      status: 'running',
+      started_at: '2025-01-01T10:01:00Z',
+      position: null,
+      agent_guid: 'agt_01hgw2bbg0000000000000001',
+      agent_name: 'Production Agent'
+    }
+
+    render(
+      <JobProgressCard
+        job={jobWithAgent}
+        onCancel={mockOnCancel}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.getByText('Agent:')).toBeInTheDocument()
+    expect(screen.getByText('Production Agent')).toBeInTheDocument()
+  })
+
+  it('should not display agent section when no agent assigned', () => {
+    render(
+      <JobProgressCard
+        job={baseJob}
+        onCancel={mockOnCancel}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.queryByText('Agent:')).not.toBeInTheDocument()
+  })
+
+  it('should display agent icon (Monitor) next to agent name', () => {
+    const jobWithAgent: Job = {
+      ...baseJob,
+      status: 'completed',
+      started_at: '2025-01-01T10:01:00Z',
+      completed_at: '2025-01-01T10:05:00Z',
+      result_guid: 'res_01hgw2bbg0000000000000123',
+      position: null,
+      agent_guid: 'agt_01hgw2bbg0000000000000002',
+      agent_name: 'Local Agent'
+    }
+
+    render(
+      <JobProgressCard
+        job={jobWithAgent}
+        onCancel={mockOnCancel}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    // Agent name should be present
+    const agentNameElement = screen.getByText('Local Agent')
+    expect(agentNameElement).toBeInTheDocument()
+    // Agent label should be present (Monitor icon is SVG, hard to test directly)
+    expect(screen.getByText('Agent:')).toBeInTheDocument()
+  })
+
+  // ============================================================================
+  // Phase 10: Retry Button Tests (Issue #90 - T160)
+  // ============================================================================
+
+  it('should show retry button for failed jobs when onRetry provided', () => {
+    const mockOnRetry = vi.fn()
+    const failedJob: Job = {
+      ...baseJob,
+      status: 'failed',
+      started_at: '2025-01-01T10:01:00Z',
+      completed_at: '2025-01-01T10:01:30Z',
+      error_message: 'Connection timeout',
+      position: null
+    }
+
+    render(
+      <JobProgressCard
+        job={failedJob}
+        onCancel={mockOnCancel}
+        onRetry={mockOnRetry}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument()
+  })
+
+  it('should not show retry button when onRetry not provided', () => {
+    const failedJob: Job = {
+      ...baseJob,
+      status: 'failed',
+      started_at: '2025-01-01T10:01:00Z',
+      completed_at: '2025-01-01T10:01:30Z',
+      error_message: 'Connection timeout',
+      position: null
+    }
+
+    render(
+      <JobProgressCard
+        job={failedJob}
+        onCancel={mockOnCancel}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /Retry/i })).not.toBeInTheDocument()
+  })
+
+  it('should call onRetry with job id when retry button clicked', async () => {
+    const user = userEvent.setup()
+    const mockOnRetry = vi.fn()
+    const failedJob: Job = {
+      ...baseJob,
+      id: 'job_failed_123',
+      status: 'failed',
+      started_at: '2025-01-01T10:01:00Z',
+      completed_at: '2025-01-01T10:01:30Z',
+      error_message: 'Test failure',
+      position: null
+    }
+
+    render(
+      <JobProgressCard
+        job={failedJob}
+        onCancel={mockOnCancel}
+        onRetry={mockOnRetry}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /Retry/i }))
+
+    expect(mockOnRetry).toHaveBeenCalledWith('job_failed_123')
+  })
+
+  it('should not show retry button for completed jobs', () => {
+    const mockOnRetry = vi.fn()
+    const completedJob: Job = {
+      ...baseJob,
+      status: 'completed',
+      started_at: '2025-01-01T10:01:00Z',
+      completed_at: '2025-01-01T10:05:00Z',
+      result_guid: 'res_01hgw2bbg0000000000000123',
+      position: null
+    }
+
+    render(
+      <JobProgressCard
+        job={completedJob}
+        onCancel={mockOnCancel}
+        onRetry={mockOnRetry}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /Retry/i })).not.toBeInTheDocument()
+  })
+
+  it('should not show retry button for running jobs', () => {
+    const mockOnRetry = vi.fn()
+    const runningJob: Job = {
+      ...baseJob,
+      status: 'running',
+      started_at: '2025-01-01T10:01:00Z',
+      position: null
+    }
+
+    render(
+      <JobProgressCard
+        job={runningJob}
+        onCancel={mockOnCancel}
+        onRetry={mockOnRetry}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /Retry/i })).not.toBeInTheDocument()
+  })
+
+  it('should not show retry button for queued jobs', () => {
+    const mockOnRetry = vi.fn()
+
+    render(
+      <JobProgressCard
+        job={baseJob}
+        onCancel={mockOnCancel}
+        onRetry={mockOnRetry}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /Retry/i })).not.toBeInTheDocument()
+  })
+
+  it('should not show retry button for cancelled jobs', () => {
+    const mockOnRetry = vi.fn()
+    const cancelledJob: Job = {
+      ...baseJob,
+      status: 'cancelled',
+      completed_at: '2025-01-01T10:00:30Z',
+      position: null
+    }
+
+    render(
+      <JobProgressCard
+        job={cancelledJob}
+        onCancel={mockOnCancel}
+        onRetry={mockOnRetry}
+        onViewResult={mockOnViewResult}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /Retry/i })).not.toBeInTheDocument()
   })
 })

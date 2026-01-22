@@ -10,6 +10,7 @@ import type {
   ToolRunRequest,
   Job,
   JobListQueryParams,
+  JobListResponse,
   QueueStatusResponse,
   RunAllToolsResponse
 } from '@/contracts/api/tools-api'
@@ -23,10 +24,16 @@ export const runTool = async (request: ToolRunRequest): Promise<Job> => {
 }
 
 /**
- * List all jobs with optional filters
+ * List all jobs with optional filters and pagination
  */
-export const listJobs = async (params: JobListQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get<Job[]>('/tools/jobs', { params })
+export const listJobs = async (params: JobListQueryParams = {}): Promise<JobListResponse> => {
+  // Axios needs special serializer for arrays to use ?status=a&status=b format
+  const response = await api.get<JobListResponse>('/tools/jobs', {
+    params,
+    paramsSerializer: {
+      indexes: null // Use repeated params: status=a&status=b instead of status[]=a
+    }
+  })
   return response.data
 }
 
@@ -47,6 +54,16 @@ export const cancelJob = async (jobId: string): Promise<Job> => {
   // Job IDs use 'job' prefix
   const safeJobId = encodeURIComponent(validateGuid(jobId, 'job'))
   const response = await api.post<Job>(`/tools/jobs/${safeJobId}/cancel`)
+  return response.data
+}
+
+/**
+ * Retry a failed job
+ */
+export const retryJob = async (jobId: string): Promise<Job> => {
+  // Job IDs use 'job' prefix
+  const safeJobId = encodeURIComponent(validateGuid(jobId, 'job'))
+  const response = await api.post<Job>(`/tools/jobs/${safeJobId}/retry`)
   return response.data
 }
 

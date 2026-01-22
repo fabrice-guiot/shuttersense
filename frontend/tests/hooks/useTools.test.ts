@@ -182,8 +182,9 @@ describe('useTools', () => {
 
     // Fetch jobs with status filter
     await act(async () => {
-      const jobs = await result.current.fetchJobs({ status: 'queued' })
-      expect(jobs).toHaveLength(1)
+      const response = await result.current.fetchJobs({ status: 'queued' })
+      // fetchJobs returns a paginated response with items array
+      expect(response.items).toHaveLength(1)
     })
   })
 })

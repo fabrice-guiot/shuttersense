@@ -13,10 +13,22 @@ import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'ax
 // ============================================================================
 
 /**
+ * Pydantic validation error item structure
+ */
+export interface PydanticValidationError {
+  type: string
+  loc: (string | number)[]
+  msg: string
+  input?: unknown
+  ctx?: Record<string, unknown>
+}
+
+/**
  * API Error response structure from FastAPI backend
+ * Note: detail can be a string OR an array of Pydantic validation errors
  */
 export interface ApiErrorResponse {
-  detail?: string
+  detail?: string | PydanticValidationError[]
   message?: string
   error?: {
     message: string
@@ -100,12 +112,28 @@ api.interceptors.response.use(
     }
 
     // Enhanced error message extraction
-    const errorMessage =
-      error.response?.data?.detail ||
-      error.response?.data?.message ||
-      error.response?.data?.error?.message ||
-      error.message ||
-      'An unexpected error occurred'
+    // Handle Pydantic validation errors (array of objects) vs simple string messages
+    const detail = error.response?.data?.detail
+    let errorMessage: string
+
+    if (Array.isArray(detail)) {
+      // Pydantic validation errors - extract msg from each error
+      errorMessage = detail
+        .map((err: PydanticValidationError) => {
+          // Format: "field: message" or just "message" if loc is empty/body-only
+          const location = err.loc.filter(l => l !== 'body').join('.')
+          return location ? `${location}: ${err.msg}` : err.msg
+        })
+        .join('; ')
+    } else {
+      // detail is now string | undefined after array check
+      errorMessage =
+        (detail as string | undefined) ||
+        error.response?.data?.message ||
+        error.response?.data?.error?.message ||
+        error.message ||
+        'An unexpected error occurred'
+    }
 
     console.error('[API Response Error]', {
       url: error.config?.url,

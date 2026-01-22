@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 
 from backend.src.models import Connector, ConnectorType
+from backend.src.models.connector import CredentialLocation
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
 from backend.src.services.remote import S3Adapter, GCSAdapter, SMBAdapter
@@ -61,35 +62,56 @@ class ConnectorService:
         self,
         name: str,
         type: ConnectorType,
-        credentials: Dict[str, Any],
         team_id: int,
-        metadata: Optional[Dict[str, Any]] = None
+        credential_location: CredentialLocation = CredentialLocation.SERVER,
+        credentials: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        is_active: bool = True
     ) -> Connector:
         """
-        Create a new connector with encrypted credentials.
+        Create a new connector with optional encrypted credentials.
 
         Args:
             name: User-friendly connector name (must be unique within team)
             type: Connector type (S3, GCS, SMB)
-            credentials: Decrypted credentials dictionary
             team_id: Team ID for tenant isolation (from TenantContext)
+            credential_location: Where credentials are stored (server/agent/pending)
+            credentials: Decrypted credentials dictionary (required when location=server)
             metadata: Optional user-defined metadata
+            is_active: Whether connector is active (cannot be True when pending)
 
         Returns:
             Created Connector instance
 
         Raises:
-            ValueError: If name already exists or credentials invalid
+            ValueError: If name already exists, credentials invalid, or credentials
+                        missing when location is SERVER, or is_active=True with pending
             Exception: If database operation fails
 
         Example:
-            >>> credentials = {"aws_access_key_id": "...", "aws_secret_access_key": "..."}
-            >>> connector = service.create_connector("My AWS", ConnectorType.S3, credentials, team_id=ctx.team_id)
+            >>> # Server credentials
+            >>> connector = service.create_connector(
+            ...     "My AWS", ConnectorType.S3, team_id=ctx.team_id,
+            ...     credentials={"aws_access_key_id": "...", "aws_secret_access_key": "..."}
+            ... )
+            >>> # Agent-only credentials
+            >>> connector = service.create_connector(
+            ...     "Office NAS", ConnectorType.SMB, team_id=ctx.team_id,
+            ...     credential_location=CredentialLocation.AGENT
+            ... )
         """
         try:
-            # Encrypt credentials
-            credentials_json = json.dumps(credentials)
-            encrypted_credentials = self.encryptor.encrypt(credentials_json)
+            # Cannot activate a connector with pending credentials
+            if credential_location == CredentialLocation.PENDING and is_active:
+                raise ValueError("Cannot activate connector with pending credentials. Configure credentials first.")
+
+            # Encrypt credentials only if provided (SERVER mode)
+            encrypted_credentials = None
+            if credential_location == CredentialLocation.SERVER:
+                if not credentials:
+                    raise ValueError("Credentials required when credential_location is 'server'")
+                credentials_json = json.dumps(credentials)
+                encrypted_credentials = self.encryptor.encrypt(credentials_json)
 
             # Convert metadata to JSON string if provided
             metadata_json = json.dumps(metadata) if metadata else None
@@ -98,10 +120,11 @@ class ConnectorService:
             connector = Connector(
                 name=name,
                 type=type,
+                credential_location=credential_location,
                 credentials=encrypted_credentials,
                 team_id=team_id,
                 metadata_json=metadata_json,
-                is_active=True
+                is_active=is_active
             )
 
             self.db.add(connector)
@@ -110,7 +133,11 @@ class ConnectorService:
 
             logger.info(
                 f"Created connector: {name}",
-                extra={"connector_id": connector.id, "type": type.value}
+                extra={
+                    "connector_id": connector.id,
+                    "type": type.value,
+                    "credential_location": credential_location.value
+                }
             )
 
             return connector
@@ -259,7 +286,9 @@ class ConnectorService:
         self,
         connector_id: int,
         name: Optional[str] = None,
+        credential_location: Optional[CredentialLocation] = None,
         credentials: Optional[Dict[str, Any]] = None,
+        update_credentials: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
         is_active: Optional[bool] = None
     ) -> Connector:
@@ -271,7 +300,9 @@ class ConnectorService:
         Args:
             connector_id: Connector ID to update
             name: New name (must be unique if changed)
-            credentials: New credentials (will be re-encrypted)
+            credential_location: New credential storage location
+            credentials: New credentials (will be re-encrypted, only for server mode)
+            update_credentials: Whether to update credentials (false = keep existing)
             metadata: New metadata
             is_active: New active status
 
@@ -279,8 +310,13 @@ class ConnectorService:
             Updated Connector instance
 
         Raises:
-            ValueError: If connector not found or name conflicts
+            ValueError: If connector not found, name conflicts, or invalid credential update
             Exception: If database operation fails
+
+        Note:
+            Changing credential_location from server to agent clears server credentials.
+            Changing from agent to server requires providing new credentials.
+            When update_credentials=false, credential fields are ignored.
 
         Example:
             >>> new_creds = {"aws_access_key_id": "...", "aws_secret_access_key": "..."}
@@ -296,7 +332,34 @@ class ConnectorService:
             if name is not None:
                 connector.name = name
 
-            if credentials is not None:
+            # Handle credential_location change (independent of update_credentials flag)
+            # This allows agents to report capability changes without touching credential values
+            if credential_location is not None:
+                current_location = connector.credential_location
+                if credential_location != current_location:
+                    # Changing to SERVER requires credentials (only if update_credentials is True)
+                    if credential_location == CredentialLocation.SERVER and update_credentials and not credentials:
+                        raise ValueError(
+                            "Credentials required when changing credential_location to 'server'"
+                        )
+                    # Changing from SERVER to AGENT/PENDING clears server credentials
+                    if current_location == CredentialLocation.SERVER and credential_location != CredentialLocation.SERVER:
+                        connector.credentials = None
+                        logger.info(
+                            f"Cleared server credentials for connector: {connector.name}",
+                            extra={"connector_id": connector_id, "new_location": credential_location.value}
+                        )
+                    connector.credential_location = credential_location
+
+            # Handle credentials update (only if update_credentials is True)
+            if update_credentials and credentials is not None:
+                # Get effective credential location
+                effective_location = credential_location or connector.credential_location
+                if effective_location != CredentialLocation.SERVER:
+                    raise ValueError(
+                        f"Cannot set credentials when credential_location is '{effective_location.value}'. "
+                        "Configure credentials on the agent using CLI."
+                    )
                 # Re-encrypt credentials
                 credentials_json = json.dumps(credentials)
                 connector.credentials = self.encryptor.encrypt(credentials_json)
@@ -305,6 +368,10 @@ class ConnectorService:
                 connector.metadata_json = json.dumps(metadata)
 
             if is_active is not None:
+                # Cannot activate a connector with pending credentials
+                effective_location = credential_location or connector.credential_location
+                if is_active and effective_location == CredentialLocation.PENDING:
+                    raise ValueError("Cannot activate connector with pending credentials. Configure credentials first.")
                 connector.is_active = is_active
 
             self.db.commit()
@@ -407,6 +474,21 @@ class ConnectorService:
 
         if not connector:
             raise ValueError(f"Connector with ID {connector_id} not found")
+
+        # Check credential location - can only test connectors with server credentials
+        if connector.credential_location == CredentialLocation.PENDING:
+            logger.info(
+                f"Skipping test for pending connector: {connector.name}",
+                extra={"connector_id": connector_id, "credential_location": "pending"}
+            )
+            return False, "Cannot test connection: credentials not yet configured. Configure credentials first."
+
+        if connector.credential_location == CredentialLocation.AGENT:
+            logger.info(
+                f"Skipping test for agent-credential connector: {connector.name}",
+                extra={"connector_id": connector_id, "credential_location": "agent"}
+            )
+            return False, "Cannot test connection from server: credentials are stored on the agent. Use agent CLI to test."
 
         try:
             # Create appropriate adapter based on type

@@ -33,6 +33,7 @@ from backend.src.schemas.collection import (
     CollectionStatsResponse,
 )
 from backend.src.services.collection_service import CollectionService
+from backend.src.services.config_service import ConfigService
 from backend.src.services.connector_service import ConnectorService
 from backend.src.services.guid import GuidService
 from backend.src.utils.cache import FileListingCache
@@ -71,16 +72,23 @@ def get_connector_service(
     return ConnectorService(db=db, encryptor=encryptor)
 
 
+def get_config_service(db: Session = Depends(get_db)) -> ConfigService:
+    """Create ConfigService instance with dependencies."""
+    return ConfigService(db=db)
+
+
 def get_collection_service(
     db: Session = Depends(get_db),
     file_cache: FileListingCache = Depends(get_file_cache),
-    connector_service: ConnectorService = Depends(get_connector_service)
+    connector_service: ConnectorService = Depends(get_connector_service),
+    config_service: ConfigService = Depends(get_config_service)
 ) -> CollectionService:
     """Create CollectionService instance with dependencies."""
     return CollectionService(
         db=db,
         file_cache=file_cache,
-        connector_service=connector_service
+        connector_service=connector_service,
+        config_service=config_service
     )
 
 
@@ -275,6 +283,22 @@ async def create_collection(
                 )
             pipeline_id = pipeline.id
 
+        # Resolve bound_agent_guid to internal ID for LOCAL collections
+        bound_agent_id = None
+        if collection.bound_agent_guid:
+            from backend.src.models.agent import Agent
+            bound_agent_uuid = GuidService.parse_identifier(
+                collection.bound_agent_guid, expected_prefix="agt"
+            )
+            agent = db.query(Agent).filter(
+                Agent.uuid == bound_agent_uuid
+            ).first()
+            if not agent:
+                raise ValueError(
+                    f"Agent not found: {collection.bound_agent_guid}"
+                )
+            bound_agent_id = agent.id
+
         created_collection = collection_service.create_collection(
             name=collection.name,
             type=collection.type,
@@ -282,8 +306,8 @@ async def create_collection(
             team_id=ctx.team_id,
             state=collection.state,
             connector_id=connector_id,
+            bound_agent_id=bound_agent_id,
             pipeline_id=pipeline_id,
-            cache_ttl=collection.cache_ttl,
             metadata=collection.metadata
         )
 
@@ -295,6 +319,33 @@ async def create_collection(
                 "location": collection.location
             }
         )
+
+        # For LOCAL collections with bound agent, auto-trigger accessibility test job
+        if collection.type == CollectionType.LOCAL and created_collection.bound_agent_id:
+            from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+            test_job = Job(
+                team_id=ctx.team_id,
+                collection_id=created_collection.id,
+                tool="collection_test",
+                mode="collection",
+                status=PersistentJobStatus.PENDING,
+                bound_agent_id=created_collection.bound_agent_id,
+                required_capabilities=["local_filesystem"],
+            )
+            db.add(test_job)
+            db.commit()
+            db.refresh(test_job)
+            db.refresh(created_collection)
+
+            logger.info(
+                f"Auto-created collection_test job for new LOCAL collection",
+                extra={
+                    "collection_guid": created_collection.guid,
+                    "job_guid": test_job.guid,
+                    "agent_id": created_collection.bound_agent_id
+                }
+            )
 
         return CollectionResponse.model_validate(created_collection)
 
@@ -442,13 +493,33 @@ async def update_collection(
                 )
             pipeline_id = pipeline.id
 
+        # Resolve bound_agent_guid to internal ID if provided (LOCAL collections only)
+        # Use sentinel ... to differentiate None (unbind) from not provided
+        bound_agent_id = ...  # Sentinel default (ellipsis)
+        if collection_update.bound_agent_guid is not None:
+            from backend.src.models.agent import Agent
+            bound_agent_uuid = GuidService.parse_identifier(
+                collection_update.bound_agent_guid, expected_prefix="agt"
+            )
+            agent = db.query(Agent).filter(
+                Agent.uuid == bound_agent_uuid
+            ).first()
+            if not agent:
+                raise ValueError(
+                    f"Agent not found: {collection_update.bound_agent_guid}"
+                )
+            bound_agent_id = agent.id
+        elif hasattr(collection_update, 'bound_agent_guid') and collection_update.model_fields_set and 'bound_agent_guid' in collection_update.model_fields_set:
+            # Explicitly set to null means unbind
+            bound_agent_id = None
+
         updated_collection = collection_service.update_collection(
             collection_id=collection.id,
             name=collection_update.name,
             location=collection_update.location,
             state=collection_update.state,
             pipeline_id=pipeline_id,
-            cache_ttl=collection_update.cache_ttl,
+            bound_agent_id=bound_agent_id,
             metadata=collection_update.metadata
         )
 
@@ -456,6 +527,38 @@ async def update_collection(
             f"Updated collection: {updated_collection.name}",
             extra={"guid": guid}
         )
+
+        # For LOCAL collections, if accessibility is pending (connectivity changed),
+        # auto-trigger a test job
+        if (
+            updated_collection.type == CollectionType.LOCAL and
+            updated_collection.bound_agent_id is not None and
+            updated_collection.is_accessible is None
+        ):
+            from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+            test_job = Job(
+                team_id=ctx.team_id,
+                collection_id=updated_collection.id,
+                tool="collection_test",
+                mode="collection",
+                status=PersistentJobStatus.PENDING,
+                bound_agent_id=updated_collection.bound_agent_id,
+                required_capabilities=["local_filesystem"],
+            )
+            db.add(test_job)
+            db.commit()
+            db.refresh(test_job)
+            db.refresh(updated_collection)
+
+            logger.info(
+                f"Auto-created collection_test job after connectivity change",
+                extra={
+                    "collection_guid": updated_collection.guid,
+                    "job_guid": test_job.guid,
+                    "agent_id": updated_collection.bound_agent_id
+                }
+            )
 
         return CollectionResponse.model_validate(updated_collection)
 
@@ -600,32 +703,57 @@ async def delete_collection(
 async def test_collection(
     guid: str,
     ctx: TenantContext = Depends(require_auth),
+    db: Session = Depends(get_db),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> CollectionTestResponse:
     """
     Test collection accessibility.
 
-    Tests local filesystem or remote storage connectivity and updates
-    collection.is_accessible and collection.last_error fields.
+    For LOCAL collections bound to agents, creates an async job that the agent
+    will execute. The collection's is_accessible field will be updated when
+    the agent completes the job.
+
+    For remote collections with agent-based credentials (credential_location=agent),
+    creates an async job that can be claimed by any agent with credentials for
+    that connector. The job's required_capabilities includes "connector:{guid}".
+
+    For remote collections with server-based credentials (credential_location=server),
+    tests connectivity synchronously via the connector and updates is_accessible immediately.
 
     Path Parameters:
         guid: Collection GUID (col_xxx format)
 
     Returns:
-        CollectionTestResponse with success status, message, and updated collection
+        CollectionTestResponse with:
+        - success: True for sync tests that pass, False for async or failed tests
+        - message: Descriptive message
+        - collection: Updated collection with accessibility status
+        - job_guid: Job GUID for async tests (LOCAL or agent-credential collections)
 
     Raises:
-        400 Bad Request: If GUID format is invalid or prefix mismatch
+        400 Bad Request: If GUID format is invalid, prefix mismatch, or LOCAL collection has no bound agent
         404 Not Found: If collection doesn't exist
 
-    Example:
+    Example (remote collection with server credentials):
         POST /api/collections/col_01hgw2bbg0000000000000000/test
 
         Response:
         {
           "success": true,
           "message": "Collection is accessible. Found 1,234 files.",
-          "collection": { "guid": "col_01hgw2bbg0000000000000000", "is_accessible": true, ... }
+          "collection": { "guid": "col_01hgw2bbg0000000000000000", "is_accessible": true, ... },
+          "job_guid": null
+        }
+
+    Example (LOCAL collection with agent or remote with agent credentials):
+        POST /api/collections/col_01hgw2bbg0000000000000001/test
+
+        Response:
+        {
+          "success": false,
+          "message": "Accessibility test job created. Result will update when agent completes.",
+          "collection": { "guid": "col_01hgw2bbg0000000000000001", ... },
+          "job_guid": "job_01hgw2bbg0000000000000001"
         }
     """
     try:
@@ -639,6 +767,97 @@ async def test_collection(
                 detail=f"Collection not found: {guid}"
             )
 
+        # For LOCAL collections with a bound agent, create an async job
+        if collection.type == CollectionType.LOCAL and collection.bound_agent_id:
+            from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+            # Create a collection_test job for the bound agent
+            # Parameters (collection_path) are derived from the job.collection relationship
+            job = Job(
+                team_id=ctx.team_id,
+                collection_id=collection.id,
+                tool="collection_test",
+                mode="collection",
+                status=PersistentJobStatus.PENDING,
+                bound_agent_id=collection.bound_agent_id,
+                required_capabilities=["local_filesystem"],
+            )
+
+            db.add(job)
+
+            # Set accessibility to pending (NULL) while job is running
+            collection.is_accessible = None
+            collection.last_error = None
+
+            db.commit()
+            db.refresh(job)
+            db.refresh(collection)
+
+            logger.info(
+                f"Created collection_test job for LOCAL collection",
+                extra={
+                    "collection_guid": guid,
+                    "job_guid": job.guid,
+                    "agent_id": collection.bound_agent_id
+                }
+            )
+
+            return CollectionTestResponse(
+                success=False,
+                message="Accessibility test job created. Result will update when agent completes.",
+                collection=CollectionResponse.model_validate(collection),
+                job_guid=job.guid
+            )
+
+        # For remote collections with agent-based credentials, create an async job
+        # that can be claimed by any agent with credentials for that connector
+        from backend.src.models.connector import CredentialLocation
+        if (collection.connector and
+            collection.connector.credential_location == CredentialLocation.AGENT):
+            from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+            connector_guid = collection.connector.guid
+
+            # Create a collection_test job requiring connector credentials
+            # Any agent with "connector:{guid}" capability can claim this job
+            job = Job(
+                team_id=ctx.team_id,
+                collection_id=collection.id,
+                tool="collection_test",
+                mode="collection",
+                status=PersistentJobStatus.PENDING,
+                bound_agent_id=None,  # Not bound - any capable agent can claim
+                required_capabilities=[f"connector:{connector_guid}"],
+            )
+
+            db.add(job)
+
+            # Set accessibility to pending (NULL) while job is running
+            collection.is_accessible = None
+            collection.last_error = None
+
+            db.commit()
+            db.refresh(job)
+            db.refresh(collection)
+
+            logger.info(
+                f"Created collection_test job for agent-credential connector",
+                extra={
+                    "collection_guid": guid,
+                    "job_guid": job.guid,
+                    "connector_guid": connector_guid,
+                    "required_capability": f"connector:{connector_guid}"
+                }
+            )
+
+            return CollectionTestResponse(
+                success=False,
+                message="Accessibility test job created. An agent with connector credentials will execute it.",
+                collection=CollectionResponse.model_validate(collection),
+                job_guid=job.guid
+            )
+
+        # For remote collections with server credentials or LOCAL without agent, test synchronously
         success, message, updated_collection = collection_service.test_collection_accessibility(collection.id)
 
         logger.info(
@@ -649,7 +868,8 @@ async def test_collection(
         return CollectionTestResponse(
             success=success,
             message=message,
-            collection=CollectionResponse.model_validate(updated_collection)
+            collection=CollectionResponse.model_validate(updated_collection),
+            job_guid=None
         )
 
     except ValueError as e:

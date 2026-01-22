@@ -9,11 +9,11 @@
 // Entity Types
 // ============================================================================
 
-export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation'
+export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation' | 'collection_test'
 
 export type ToolMode = 'collection' | 'display_graph'
 
-export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type JobStatus = 'scheduled' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface ProgressData {
   /** Current stage of execution */
@@ -45,6 +45,8 @@ export interface Job {
   position: number | null
   /** When job was created */
   created_at: string // ISO 8601 timestamp
+  /** When job is scheduled to run (null for non-scheduled jobs) */
+  scheduled_for: string | null // ISO 8601 timestamp
   /** When job started executing */
   started_at: string | null // ISO 8601 timestamp
   /** When job completed */
@@ -55,6 +57,10 @@ export interface Job {
   error_message: string | null
   /** Analysis result GUID when completed */
   result_guid: string | null
+  /** GUID of assigned agent (agt_xxx), null for in-memory jobs */
+  agent_guid: string | null
+  /** Name of assigned agent, null for in-memory jobs */
+  agent_name: string | null
 }
 
 // ============================================================================
@@ -77,12 +83,18 @@ export interface ToolRunRequest {
 // ============================================================================
 
 export interface JobListQueryParams {
-  /** Filter by job status */
-  status?: JobStatus
+  /** Filter by job status(es) - can specify multiple */
+  status?: JobStatus | JobStatus[]
   /** Filter by collection GUID (col_xxx format) */
   collection_guid?: string
   /** Filter by tool type */
   tool?: ToolType
+  /** Filter by agent GUID (agt_xxx format) */
+  agent_guid?: string
+  /** Maximum number of jobs to return (default: 50, max: 100) */
+  limit?: number
+  /** Number of jobs to skip for pagination (default: 0) */
+  offset?: number
 }
 
 // ============================================================================
@@ -92,7 +104,14 @@ export interface JobListQueryParams {
 export interface JobResponse extends Job {}
 
 export interface JobListResponse {
-  jobs: Job[]
+  /** List of jobs */
+  items: Job[]
+  /** Total number of jobs matching filters */
+  total: number
+  /** Maximum items per page */
+  limit: number
+  /** Number of items skipped */
+  offset: number
 }
 
 export interface ConflictResponse {
@@ -105,6 +124,8 @@ export interface ConflictResponse {
 }
 
 export interface QueueStatusResponse {
+  /** Number of scheduled jobs (upcoming) */
+  scheduled_count: number
   /** Number of queued jobs */
   queued_count: number
   /** Number of running jobs */

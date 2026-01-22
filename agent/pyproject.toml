@@ -1,0 +1,124 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shuttersense-agent"
+dynamic = ["version"]
+description = "ShutterSense distributed agent for local job execution"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.10"
+authors = [
+    { name = "ShutterSense Team" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    # HTTP client for REST API communication
+    "httpx>=0.24.0",
+    # WebSocket client for real-time progress streaming
+    "websockets>=11.0",
+    # Data validation and settings management
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    # Encryption for local credential storage
+    "cryptography>=41.0",
+    # CLI framework
+    "click>=8.1",
+    # YAML configuration parsing
+    "PyYAML>=6.0",
+    # Platform detection
+    "platformdirs>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "respx>=0.20",  # Mock httpx requests
+    "ruff>=0.1",
+    # Required for local filesystem tests that run photo analysis tools
+    "Jinja2>=3.1.0",
+]
+build = [
+    "pyinstaller>=5.0",
+]
+
+[project.scripts]
+shuttersense-agent = "cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/shuttersense/shuttersense"
+Documentation = "https://docs.shuttersense.ai/agent"
+Repository = "https://github.com/shuttersense/shuttersense"
+Issues = "https://github.com/shuttersense/shuttersense/issues"
+
+[tool.hatch.version]
+source = "vcs"
+# Use parent directory for Git repo, use post-release scheme to match app versioning
+raw-options = { root = "..", version_scheme = "no-guess-dev", local_scheme = "node-and-date" }
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "cli"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "cli/",
+    "tests/",
+    "README.md",
+    "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.coverage.run]
+source = ["src", "cli"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

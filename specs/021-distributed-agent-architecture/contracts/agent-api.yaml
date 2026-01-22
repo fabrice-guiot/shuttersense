@@ -1,0 +1,555 @@
+openapi: 3.1.0
+info:
+  title: ShutterSense Agent API
+  version: 1.0.0
+  description: |
+    REST API for agent-server communication.
+    Base path: /api/agent/v1
+    Authentication: Bearer token (agent API key)
+
+servers:
+  - url: /api/agent/v1
+    description: Agent API v1
+
+security:
+  - AgentApiKey: []
+
+paths:
+  /register:
+    post:
+      operationId: registerAgent
+      summary: Register new agent
+      description: Register agent using one-time registration token
+      security: []  # No auth required - uses registration token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRegistrationRequest'
+      responses:
+        '201':
+          description: Agent registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRegistrationResponse'
+        '400':
+          description: Invalid registration token or request
+        '409':
+          description: Token already used
+
+  /heartbeat:
+    post:
+      operationId: sendHeartbeat
+      summary: Send agent heartbeat
+      description: Update agent status and capabilities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+      responses:
+        '200':
+          description: Heartbeat acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatResponse'
+        '401':
+          description: Invalid API key
+        '403':
+          description: Agent revoked
+
+  /jobs/claim:
+    post:
+      operationId: claimJob
+      summary: Claim next available job
+      description: Poll for and claim a job matching agent capabilities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobClaimRequest'
+      responses:
+        '200':
+          description: Job claimed or no job available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobClaimResponse'
+        '401':
+          description: Invalid API key
+        '403':
+          description: Agent revoked
+
+  /jobs/{jobGuid}/progress:
+    post:
+      operationId: updateJobProgress
+      summary: Update job progress (REST fallback)
+      description: Fallback for WebSocket progress updates
+      parameters:
+        - name: jobGuid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^job_[a-z0-9]{26}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgressUpdate'
+      responses:
+        '200':
+          description: Progress updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressResponse'
+        '401':
+          description: Invalid API key
+        '403':
+          description: Job not assigned to this agent
+        '404':
+          description: Job not found
+
+  /jobs/{jobGuid}/complete:
+    post:
+      operationId: completeJob
+      summary: Report job completion
+      description: Submit job results (inline or initiate chunked upload)
+      parameters:
+        - name: jobGuid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^job_[a-z0-9]{26}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCompletionRequest'
+      responses:
+        '200':
+          description: Job completed (inline results)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCompletionResponse'
+        '202':
+          description: Chunked upload initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChunkedUploadInitiated'
+        '400':
+          description: Invalid results or signature
+        '401':
+          description: Invalid API key
+        '403':
+          description: Job not assigned to this agent
+
+  /uploads/{uploadId}/{chunkIndex}:
+    put:
+      operationId: uploadChunk
+      summary: Upload result chunk
+      description: Upload a chunk of HTML report or large results
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: chunkIndex
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Chunk received
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChunkReceipt'
+        '409':
+          description: Chunk already received
+
+  /uploads/{uploadId}/finalize:
+    post:
+      operationId: finalizeUpload
+      summary: Finalize chunked upload
+      description: Complete upload and store results
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Upload finalized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCompletionResponse'
+        '400':
+          description: Checksum mismatch or missing chunks
+
+  /connectors:
+    get:
+      operationId: listConnectors
+      summary: List connectors for credential configuration
+      description: List connectors awaiting agent credentials
+      parameters:
+        - name: pending_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Connector list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connectors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConnectorMetadata'
+
+  /connectors/{connectorGuid}/metadata:
+    get:
+      operationId: getConnectorMetadata
+      summary: Get connector credential schema
+      description: Get metadata for configuring credentials
+      parameters:
+        - name: connectorGuid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^con_[a-z0-9]{26}$'
+      responses:
+        '200':
+          description: Connector metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorMetadata'
+
+  /connectors/{connectorGuid}/report-capability:
+    post:
+      operationId: reportConnectorCapability
+      summary: Report connector access capability
+      description: Agent reports it has credentials for this connector
+      parameters:
+        - name: connectorGuid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^con_[a-z0-9]{26}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                test_successful:
+                  type: boolean
+                test_message:
+                  type: string
+              required:
+                - test_successful
+      responses:
+        '200':
+          description: Capability reported
+        '400':
+          description: Test failed
+
+components:
+  securitySchemes:
+    AgentApiKey:
+      type: http
+      scheme: bearer
+      description: Agent API key (agt_key_xxxxx)
+
+  schemas:
+    AgentRegistrationRequest:
+      type: object
+      required:
+        - registration_token
+        - name
+        - hostname
+        - version
+        - platform
+        - binary_checksum
+        - capabilities
+      properties:
+        registration_token:
+          type: string
+          description: One-time registration token (art_xxxxx)
+        name:
+          type: string
+          maxLength: 255
+          description: User-friendly agent name
+        hostname:
+          type: string
+          maxLength: 255
+        os_info:
+          type: string
+          maxLength: 255
+        version:
+          type: string
+          description: Agent software version
+        platform:
+          type: string
+          description: Platform identifier (darwin-arm64, linux-amd64, etc.)
+        binary_checksum:
+          type: string
+          description: SHA-256 hash of agent binary
+        capabilities:
+          type: array
+          items:
+            type: string
+        connectors:
+          type: array
+          items:
+            type: string
+          description: Connector GUIDs with local credentials
+
+    AgentRegistrationResponse:
+      type: object
+      properties:
+        agent_guid:
+          type: string
+        api_key:
+          type: string
+          description: API key (shown once, store securely)
+        server_version:
+          type: string
+
+    HeartbeatRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [online, error]
+        current_job_guid:
+          type: string
+          nullable: true
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Updated capabilities
+        metrics:
+          type: object
+          properties:
+            cpu_percent:
+              type: number
+            memory_percent:
+              type: number
+            disk_free_gb:
+              type: number
+
+    HeartbeatResponse:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+        server_time:
+          type: string
+          format: date-time
+
+    JobClaimRequest:
+      type: object
+      required:
+        - capabilities
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: Current agent capabilities
+
+    JobClaimResponse:
+      type: object
+      properties:
+        job:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/JobAssignment'
+
+    JobAssignment:
+      type: object
+      properties:
+        guid:
+          type: string
+        tool:
+          type: string
+          enum: [photostats, photo_pairing, pipeline_validation]
+        collection:
+          $ref: '#/components/schemas/CollectionInfo'
+        pipeline:
+          nullable: true
+          $ref: '#/components/schemas/PipelineInfo'
+        parameters:
+          type: object
+        websocket_url:
+          type: string
+          description: WebSocket URL for progress streaming
+        signing_secret:
+          type: string
+          description: HMAC signing secret for results
+        config_url:
+          type: string
+          description: URL to fetch job configuration
+
+    CollectionInfo:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [LOCAL, S3, GCS, SMB]
+        location:
+          type: string
+          description: Path or bucket/container
+
+    PipelineInfo:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+
+    ProgressUpdate:
+      type: object
+      properties:
+        stage:
+          type: string
+        percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        files_scanned:
+          type: integer
+        total_files:
+          type: integer
+        current_file:
+          type: string
+        message:
+          type: string
+
+    ProgressResponse:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+        cancelled:
+          type: boolean
+          description: True if job should be aborted
+
+    JobCompletionRequest:
+      type: object
+      required:
+        - status
+        - signature
+      properties:
+        status:
+          type: string
+          enum: [completed, failed]
+        results_json:
+          type: object
+          description: Tool output (inline if < 1MB)
+        report_size:
+          type: integer
+          description: HTML report size in bytes (for chunked upload)
+        report_checksum:
+          type: string
+          description: SHA-256 checksum of HTML report
+        error_message:
+          type: string
+          nullable: true
+        signature:
+          type: string
+          description: HMAC signature of results
+        metrics:
+          type: object
+          properties:
+            duration_seconds:
+              type: number
+            files_processed:
+              type: integer
+
+    JobCompletionResponse:
+      type: object
+      properties:
+        result_guid:
+          type: string
+        acknowledged:
+          type: boolean
+
+    ChunkedUploadInitiated:
+      type: object
+      properties:
+        upload_id:
+          type: string
+        chunk_size:
+          type: integer
+          description: Bytes per chunk
+        upload_url:
+          type: string
+          description: Base URL for chunk uploads
+
+    ChunkReceipt:
+      type: object
+      properties:
+        chunk_index:
+          type: integer
+        bytes_received:
+          type: integer
+        complete:
+          type: boolean
+
+    ConnectorMetadata:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [S3, GCS, SMB, LOCAL]
+        credential_location:
+          type: string
+          enum: [server, agent, pending]
+        credential_schema:
+          type: object
+          description: JSON Schema for credentials

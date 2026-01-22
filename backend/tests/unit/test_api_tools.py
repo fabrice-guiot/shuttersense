@@ -122,15 +122,22 @@ class TestListJobsEndpoint:
         response = test_client.get("/api/tools/jobs")
 
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        data = response.json()
+        assert "items" in data
+        assert "total" in data
+        assert "limit" in data
+        assert "offset" in data
+        assert data["items"] == []
+        assert data["total"] == 0
 
     def test_list_jobs_filter_by_status(self, test_client):
         """Test filtering jobs by status."""
         response = test_client.get("/api/tools/jobs", params={"status": "completed"})
 
         assert response.status_code == 200
+        data = response.json()
         # All returned jobs should have the filtered status
-        for job in response.json():
+        for job in data["items"]:
             assert job["status"] == "completed"
 
 

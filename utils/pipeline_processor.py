@@ -1161,9 +1161,13 @@ def validate_specific_image(
             paths_by_termination[term_type].append(path)
 
     # Prepare actual files set
-    # Normalize filenames to lowercase for case-insensitive comparison
+    # Extract just filename (not path) and normalize to lowercase for case-insensitive comparison
     # (filesystems like APFS, NTFS, FAT32 are case-insensitive)
-    actual_files_set = set(f.lower() for f in specific_image.files)
+    # Files may contain paths like "2025/AB3D0001.dng" but expected files are just "AB3D0001.dng"
+    actual_files_set = set(
+        (f.rsplit('/', 1)[-1] if '/' in f else f).lower()
+        for f in specific_image.files
+    )
 
     # Validate against each termination type
     termination_matches = []

@@ -313,7 +313,7 @@ def sample_collection_data():
 @pytest.fixture
 def sample_collection(test_db_session, sample_collection_data, test_team):
     """Factory for creating sample Collection models in the database."""
-    def _create(connector_guid=None, connector_id=None, team_id=None, **kwargs):
+    def _create(connector_guid=None, connector_id=None, team_id=None, bound_agent_id=None, **kwargs):
         import json
         from backend.src.services.guid import GuidService
 
@@ -333,6 +333,7 @@ def sample_collection(test_db_session, sample_collection_data, test_team):
             location=data['location'],
             state=data['state'],
             connector_id=resolved_connector_id,
+            bound_agent_id=bound_agent_id,
             cache_ttl=data['cache_ttl'],
             is_accessible=data['is_accessible'],
             last_error=data['last_error'],
@@ -543,6 +544,7 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     )
     from backend.src.api.tools import get_websocket_manager, get_tool_service
     from backend.src.middleware.auth import require_auth
+    from backend.src.middleware.tenant import get_tenant_context
 
     app.dependency_overrides[get_db] = get_test_db
     app.dependency_overrides[get_file_cache] = get_test_cache
@@ -551,9 +553,201 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     app.dependency_overrides[get_websocket_manager] = get_test_websocket_manager
     app.dependency_overrides[get_tool_service] = get_test_tool_service
     app.dependency_overrides[require_auth] = get_test_auth
+    app.dependency_overrides[get_tenant_context] = get_test_auth
 
     with TestClient(app) as client:
         yield client
 
     # Clear overrides
     app.dependency_overrides.clear()
+
+
+# Alias for test_client to match integration test naming convention
+@pytest.fixture
+def authenticated_client(test_client):
+    """Alias for test_client with authenticated user context."""
+    return test_client
+
+
+@pytest.fixture(scope='function')
+def other_team(test_db_session):
+    """Create a second test team for cross-team isolation testing."""
+    team = Team(
+        name='Other Team',
+        slug='other-team',
+        is_active=True,
+    )
+    test_db_session.add(team)
+    test_db_session.commit()
+    test_db_session.refresh(team)
+    return team
+
+
+@pytest.fixture(scope='function')
+def other_team_user(test_db_session, other_team):
+    """Create a test user for the other team."""
+    user = User(
+        team_id=other_team.id,
+        email='other@example.com',
+        display_name='Other User',
+        status=UserStatus.ACTIVE,
+    )
+    test_db_session.add(user)
+    test_db_session.commit()
+    test_db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def other_team_client(test_db_session, test_session_factory, test_cache, test_job_queue, test_encryptor, test_websocket_manager, other_team, other_team_user):
+    """Create a test client authenticated as a user from a different team.
+
+    Used for testing cross-team data isolation (should return 404 for other team's resources).
+    """
+    from fastapi.testclient import TestClient
+    from backend.src.main import app
+
+    # Create test tenant context for other team
+    other_ctx = TenantContext(
+        team_id=other_team.id,
+        team_guid=other_team.guid,
+        user_id=other_team_user.id,
+        user_guid=other_team_user.guid,
+        user_email=other_team_user.email,
+        is_super_admin=False,
+        is_api_token=False,
+    )
+
+    # Override dependencies
+    def get_test_db():
+        try:
+            yield test_db_session
+        finally:
+            pass
+
+    def get_test_cache():
+        return test_cache
+
+    def get_test_queue():
+        return test_job_queue
+
+    def get_test_encryptor():
+        return test_encryptor
+
+    def get_test_websocket_manager():
+        return test_websocket_manager
+
+    def get_test_auth():
+        """Return mock TenantContext for other team."""
+        return other_ctx
+
+    def get_test_tool_service():
+        """Create ToolService with test session factory for background tasks."""
+        from backend.src.services.tool_service import ToolService
+        return ToolService(
+            db=test_db_session,
+            websocket_manager=test_websocket_manager,
+            job_queue=test_job_queue,
+            session_factory=test_session_factory
+        )
+
+    # Import and override dependencies
+    from backend.src.db.database import get_db
+    from backend.src.api.connectors import get_credential_encryptor as get_connector_encryptor
+    from backend.src.api.collections import (
+        get_file_cache,
+        get_credential_encryptor as get_collection_encryptor
+    )
+    from backend.src.api.tools import get_websocket_manager, get_tool_service
+    from backend.src.middleware.auth import require_auth
+    from backend.src.middleware.tenant import get_tenant_context
+
+    app.dependency_overrides[get_db] = get_test_db
+    app.dependency_overrides[get_file_cache] = get_test_cache
+    app.dependency_overrides[get_connector_encryptor] = get_test_encryptor
+    app.dependency_overrides[get_collection_encryptor] = get_test_encryptor
+    app.dependency_overrides[get_websocket_manager] = get_test_websocket_manager
+    app.dependency_overrides[get_tool_service] = get_test_tool_service
+    app.dependency_overrides[require_auth] = get_test_auth
+    app.dependency_overrides[get_tenant_context] = get_test_auth
+
+    with TestClient(app) as client:
+        yield client
+
+    # Clear overrides
+    app.dependency_overrides.clear()
+
+
+# ============================================================================
+# Agent Fixtures (Phase 6)
+# ============================================================================
+
+@pytest.fixture
+def create_agent(test_db_session, test_team, test_user):
+    """Factory fixture to create test agents for use across tests."""
+    from backend.src.services.agent_service import AgentService
+    from backend.src.models.agent import AgentStatus
+
+    def _create_agent(
+        name="Test Agent",
+        status=AgentStatus.ONLINE,
+        team=None,
+        user=None,
+        authorized_roots=None,
+        capabilities=None,
+    ):
+        """Create an agent with given parameters.
+
+        Args:
+            name: Agent name
+            status: Agent status (default ONLINE)
+            team: Team to use (defaults to test_team)
+            user: User to use (defaults to test_user)
+            authorized_roots: List of authorized filesystem roots (default: common temp paths)
+            capabilities: List of agent capabilities
+
+        Returns:
+            Created Agent instance
+        """
+        import tempfile
+
+        team = team or test_team
+        user = user or test_user
+
+        # Default authorized roots include temp directories for tests
+        if authorized_roots is None:
+            temp_base = tempfile.gettempdir()
+            authorized_roots = [temp_base, "/tmp", "/private/var", "/var"]
+
+        # Default capabilities
+        if capabilities is None:
+            capabilities = ["local_filesystem", "tool:photostats:1.0.0"]
+
+        service = AgentService(test_db_session)
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=team.id,
+            created_by_user_id=user.id,
+        )
+
+        # Register agent (uses RegistrationResult dataclass)
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name=name,
+            version="1.0.0",
+            capabilities=capabilities,
+            authorized_roots=authorized_roots,
+            platform="test-platform",
+        )
+        agent = result.agent
+
+        # Update status if needed
+        if status != AgentStatus.ONLINE:
+            agent.status = status
+            test_db_session.commit()
+            test_db_session.refresh(agent)
+
+        return agent
+
+    return _create_agent

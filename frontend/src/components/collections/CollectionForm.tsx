@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, TestTube } from 'lucide-react'
+import { Loader2, TestTube, Bot, CalendarClock } from 'lucide-react'
+import { formatDateTime } from '@/utils/dateFormat'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -27,8 +28,10 @@ import type { PipelineSummary } from '@/contracts/api/pipelines-api'
 import {
   collectionFormSchema,
   type CollectionFormData,
-  isConnectorRequiredForType
+  isConnectorRequiredForType,
+  supportsAgentBinding
 } from '@/types/schemas/collection'
+import { useOnlineAgents, type OnlineAgent } from '@/hooks/useOnlineAgents'
 
 // ============================================================================
 // Beta Collection Types
@@ -70,26 +73,62 @@ export interface CollectionFormProps {
 // Helper Functions
 // ============================================================================
 
-function getConnectorsForType(connectors: Connector[], type: CollectionType): Connector[] {
+function getConnectorsForType(
+  connectors: Connector[],
+  type: CollectionType,
+  currentConnectorGuid?: string | null
+): Connector[] {
   if (type === 'local') {
     return []
   }
 
   // Map collection type to connector type (they use the same values)
-  return connectors.filter((connector) => connector.type === type && connector.is_active)
+  // Include active connectors of matching type, plus the current connector if assigned
+  // (even if inactive, to allow editing without losing the assignment)
+  return connectors.filter(
+    (connector) =>
+      (connector.type === type && connector.is_active) ||
+      (currentConnectorGuid && connector.guid === currentConnectorGuid)
+  )
 }
 
 function getStateDescription(state: string): string {
   switch (state) {
     case 'live':
-      return '1hr cache (default)'
+      return 'Active work, frequent changes'
     case 'closed':
-      return '24hr cache (default)'
+      return 'Finished work, infrequent changes'
     case 'archived':
-      return '7d cache (default)'
+      return 'Long-term storage'
     default:
       return ''
   }
+}
+
+/**
+ * Calculate the next expected refresh datetime based on last scan and TTL
+ */
+function calculateNextRefresh(
+  lastScannedAt: string | null,
+  cacheTtl: number | null
+): { datetime: string | null; label: string } {
+  if (!lastScannedAt) {
+    return { datetime: null, label: 'Never scanned' }
+  }
+
+  if (!cacheTtl || cacheTtl <= 0) {
+    return { datetime: null, label: 'Auto-refresh disabled' }
+  }
+
+  const lastScan = new Date(lastScannedAt)
+  const nextRefresh = new Date(lastScan.getTime() + cacheTtl * 1000)
+  const now = new Date()
+
+  if (nextRefresh <= now) {
+    return { datetime: nextRefresh.toISOString(), label: 'Refresh pending' }
+  }
+
+  return { datetime: nextRefresh.toISOString(), label: formatDateTime(nextRefresh.toISOString()) }
 }
 
 // ============================================================================
@@ -110,6 +149,9 @@ export default function CollectionForm({
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  // Fetch online agents for LOCAL collection binding
+  const { onlineAgents, loading: agentsLoading } = useOnlineAgents()
+
   const isEdit = !!collection
 
   // Initialize form with react-hook-form and Zod
@@ -121,8 +163,8 @@ export default function CollectionForm({
       state: collection?.state || 'live',
       location: collection?.location || '',
       connector_guid: collection?.connector_guid || null,
-      cache_ttl: collection?.cache_ttl || null,
-      pipeline_guid: collection?.pipeline_guid || null
+      pipeline_guid: collection?.pipeline_guid || null,
+      bound_agent_guid: collection?.bound_agent?.guid || null
     }
   })
 
@@ -131,12 +173,15 @@ export default function CollectionForm({
 
   const selectedType = form.watch('type')
   const requiresConnector = isConnectorRequiredForType(selectedType)
-  const availableConnectors = getConnectorsForType(connectors, selectedType)
+  const showAgentSelector = supportsAgentBinding(selectedType)
+  const availableConnectors = getConnectorsForType(connectors, selectedType, collection?.connector_guid)
 
-  // Reset connector_guid when switching to local type
+  // Reset connector_guid when switching to local type, reset bound_agent_guid when switching to remote
   useEffect(() => {
     if (selectedType === 'local') {
       form.setValue('connector_guid', null)
+    } else {
+      form.setValue('bound_agent_guid', null)
     }
   }, [selectedType, form])
 
@@ -149,15 +194,22 @@ export default function CollectionForm({
         state: collection.state,
         location: collection.location,
         connector_guid: collection.connector_guid,
-        cache_ttl: collection.cache_ttl,
-        pipeline_guid: collection.pipeline_guid
+        pipeline_guid: collection.pipeline_guid,
+        bound_agent_guid: collection.bound_agent?.guid || null
       })
     }
   }, [collection, form])
 
   const handleSubmit = async (data: CollectionFormData) => {
+    console.log('[CollectionForm] handleSubmit called with data:', data)
     setTestResult(null)
     await onSubmit(data)
+  }
+
+  // Debug: Log form errors when they change
+  const formErrors = form.formState.errors
+  if (Object.keys(formErrors).length > 0) {
+    console.log('[CollectionForm] Form validation errors:', formErrors)
   }
 
   const handleTestConnection = async () => {
@@ -310,6 +362,56 @@ export default function CollectionForm({
             )}
           />
 
+          {/* Bound Agent (only for LOCAL collections) */}
+          {showAgentSelector && (
+            <FormField
+              control={form.control}
+              name="bound_agent_guid"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                    <Bot className="h-4 w-4" />
+                    Bound Agent (Optional)
+                  </FormLabel>
+                  <Select
+                    onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
+                    value={field.value || 'none'}
+                    disabled={agentsLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an agent..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">No bound agent (any agent)</SelectItem>
+                      {onlineAgents.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No online agents available
+                        </div>
+                      ) : (
+                        onlineAgents.map((agent) => (
+                          <SelectItem key={agent.guid} value={agent.guid}>
+                            <span className="flex items-center gap-2">
+                              <span className="h-2 w-2 rounded-full bg-green-500" />
+                              {agent.name}
+                              <span className="text-xs text-muted-foreground">({agent.hostname})</span>
+                            </span>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Bind this collection to a specific agent for local filesystem access.
+                    Only online agents are shown.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
           {/* Collection State */}
           <FormField
             control={form.control}
@@ -336,38 +438,33 @@ export default function CollectionForm({
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  Determines default cache TTL and collection lifecycle
+                  Collection lifecycle stage. Cache TTL is configured per-state in Settings.
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          {/* Cache TTL (Optional) */}
-          <FormField
-            control={form.control}
-            name="cache_ttl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Cache TTL (Optional)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    placeholder="3600"
-                    value={field.value || ''}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      field.onChange(value ? parseInt(value) : null)
-                    }}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Custom cache TTL in seconds (overrides state-based default)
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Next Expected Refresh (read-only, only for existing collections) */}
+          {isEdit && collection && (
+            <div className="rounded-md border border-border bg-muted/50 p-3">
+              <div className="flex items-center gap-2 text-sm">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Next Scheduled Refresh:</span>
+                <span className="text-muted-foreground">
+                  {(() => {
+                    const result = calculateNextRefresh(collection.last_scanned_at, collection.cache_ttl)
+                    return result.label
+                  })()}
+                </span>
+              </div>
+              {collection.last_scanned_at && (
+                <div className="mt-1 ml-6 text-xs text-muted-foreground">
+                  Last scanned: {formatDateTime(collection.last_scanned_at)}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Pipeline (Optional) */}
           <FormField

@@ -39,10 +39,15 @@ class ConnectionManager:
 
     Also supports a global "jobs" channel for broadcasting all job updates
     to clients monitoring the jobs list (e.g., Tools page).
+
+    Supports team-scoped agent pool status channels for real-time header updates.
     """
 
     # Special channel ID for global job updates
     GLOBAL_JOBS_CHANNEL = "__global_jobs__"
+
+    # Channel prefix for agent pool status (team-scoped)
+    AGENT_POOL_CHANNEL_PREFIX = "__agent_pool_"
 
     def __init__(self):
         """Initialize the connection manager with empty connection registry."""
@@ -61,13 +66,25 @@ class ConnectionManager:
             Multiple connections per job are supported for multi-tab/multi-client scenarios.
         """
         await websocket.accept()
+        await self.register_accepted(job_id, websocket)
+
+    async def register_accepted(self, channel: str, websocket: WebSocket) -> None:
+        """
+        Register an already-accepted WebSocket connection to a channel.
+
+        Use this when the WebSocket has already been accepted (e.g., after validation).
+
+        Args:
+            channel: Channel identifier (job_id or custom channel)
+            websocket: Already-accepted WebSocket connection to register
+        """
         async with self._lock:
-            if job_id not in self._connections:
-                self._connections[job_id] = set()
-            self._connections[job_id].add(websocket)
+            if channel not in self._connections:
+                self._connections[channel] = set()
+            self._connections[channel].add(websocket)
             logger.debug(
-                f"WebSocket connected for job {job_id}. "
-                f"Total connections for job: {len(self._connections[job_id])}"
+                f"WebSocket registered for channel {channel}. "
+                f"Total connections: {len(self._connections[channel])}"
             )
 
     def disconnect(self, job_id: str, websocket: WebSocket) -> None:
@@ -135,6 +152,65 @@ class ConnectionManager:
         await self.broadcast(self.GLOBAL_JOBS_CHANNEL, {
             "type": "job_update",
             "job": job_data
+        })
+
+    def get_agent_pool_channel(self, team_id: int) -> str:
+        """
+        Get the channel ID for a team's agent pool status.
+
+        Args:
+            team_id: Team ID for the channel
+
+        Returns:
+            Channel ID string
+        """
+        return f"{self.AGENT_POOL_CHANNEL_PREFIX}{team_id}__"
+
+    async def broadcast_agent_pool_status(
+        self, team_id: int, pool_status: Dict[str, Any]
+    ) -> None:
+        """
+        Broadcast agent pool status update to all clients for a team.
+
+        This is used to push real-time pool status updates to the header badge
+        when agent status changes (heartbeat, registration, revocation).
+
+        Args:
+            team_id: Team ID to broadcast to
+            pool_status: Pool status data (online_count, idle_count, etc.)
+        """
+        channel = self.get_agent_pool_channel(team_id)
+        await self.broadcast(channel, {
+            "type": "agent_pool_status",
+            "pool_status": pool_status
+        })
+
+    async def broadcast_job_progress(
+        self, team_id: int, job_guid: str, progress: Dict[str, Any]
+    ) -> None:
+        """
+        Broadcast job progress update to all clients for a team.
+
+        This is used to push real-time job progress updates to clients
+        monitoring jobs (e.g., job detail page, tools page).
+
+        Args:
+            team_id: Team ID to broadcast to
+            job_guid: GUID of the job being updated
+            progress: Progress data (stage, percentage, files_scanned, etc.)
+        """
+        # Broadcast to job-specific channel
+        await self.broadcast(job_guid, {
+            "type": "job_progress",
+            "job_guid": job_guid,
+            "progress": progress
+        })
+
+        # Also broadcast to global jobs channel for tools page
+        await self.broadcast(self.GLOBAL_JOBS_CHANNEL, {
+            "type": "job_progress",
+            "job_guid": job_guid,
+            "progress": progress
         })
 
     async def send_personal(
