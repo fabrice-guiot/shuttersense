@@ -401,7 +401,7 @@ class TestConfigurationErrorHandling:
     ):
         """Test configuration when server is unreachable during capability report."""
         from cli.main import cli
-        from requests.exceptions import ConnectionError
+        import httpx
 
         mock_connector_metadata = {
             "guid": mock_connector_guid,
@@ -426,7 +426,7 @@ class TestConfigurationErrorHandling:
             mock_client.get.return_value = mock_metadata_response
 
             # Report capability fails
-            mock_client.post.side_effect = ConnectionError("Server unreachable")
+            mock_client.post.side_effect = httpx.ConnectError("Server unreachable")
             mock_get_client.return_value = mock_client
 
             # Credential store works

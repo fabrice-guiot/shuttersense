@@ -50,6 +50,8 @@ dev = [
     "pytest-mock>=3.10",
     "respx>=0.20",  # Mock httpx requests
     "ruff>=0.1",
+    # Required for local filesystem tests that run photo analysis tools
+    "Jinja2>=3.1.0",
 ]
 build = [
     "pyinstaller>=5.0",
