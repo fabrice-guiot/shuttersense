@@ -3,7 +3,7 @@
 **Issue**: #93
 **Status**: Draft
 **Created**: 2026-01-22
-**Last Updated**: 2026-01-22 (v1.1)
+**Last Updated**: 2026-01-22 (v1.2)
 **Related Documents**:
 - [021-distributed-agent-architecture.md](./021-distributed-agent-architecture.md) (Agent architecture)
 - [Domain Model](../domain-model.md) (Entity definitions)
@@ -32,7 +32,7 @@ This PRD proposes consolidating all tool execution through the Agent interface, 
 1. **Agent CLI Commands**: New agent subcommands for testing collections and running tools locally
 2. **Collection Creation via Agent**: Agents can create Collections on the server after successful local validation
 3. **Unified Tool Execution**: All analysis runs through the agent, ensuring consistent tracking and results
-4. **CLI Tool Deprecation Path**: Clear migration strategy from standalone CLI tools to agent-based execution
+4. **CLI Tool Removal**: Complete removal of standalone CLI tools and updated project constitution for agent-only architecture
 
 ---
 
@@ -59,7 +59,7 @@ With the distributed agent architecture (PRD-021) now implemented, agents are th
 2. **User Confusion**: Two ways to do the same thing with different capabilities
 3. **Testing Gap**: No way to validate a local path works before creating a Collection
 
-The solution is to enhance the agent CLI to support all workflows previously served by standalone tools, then deprecate the standalone tools.
+The solution is to enhance the agent CLI to support all workflows previously served by standalone tools, then remove the standalone tools entirely before production deployment.
 
 ### Current Architecture
 
@@ -103,7 +103,7 @@ Agent Daemon → Poll Server → Execute Jobs → Report Results
 1. **GUI for Agent**: No desktop application; agent remains CLI-based
 2. **Auto-Discovery**: No automatic detection of photo folders (manual path specification)
 3. **Remote Collection Testing**: Focus on local collections; remote collections tested via existing connector test flow
-4. **CLI Tool Removal**: Deprecation, not deletion; CLI tools remain available but discouraged
+4. **Backward Compatibility**: Pre-release product; no need to maintain CLI tool compatibility
 
 ---
 
@@ -386,44 +386,75 @@ Testing collection: Archive (/mnt/nas/archive)
 
 ---
 
-### User Story 5: Deprecate Standalone CLI Tools (Priority: P2)
+### User Story 5: Remove Standalone CLI Tools and Update Project Constitution (Priority: P2)
 
-**As** a maintainer
-**I want to** deprecate the standalone CLI tools
-**So that** users migrate to the agent-based workflow
+**As** a security-conscious maintainer preparing for production
+**I want to** completely remove the standalone CLI tools from the repository
+**So that** only authenticated, signed agent execution paths exist before production deployment
 
-**Acceptance Criteria:**
-- CLI tools display deprecation warning when invoked
-- Warning includes migration instructions
-- Environment variable to suppress warning: `SHUTTERSENSE_SUPPRESS_DEPRECATION=1`
-- Documentation updated to recommend agent commands
-- CLI tools remain functional (soft deprecation)
-- Deprecation period: 6 months before removal consideration
+**Context:**
+ShutterSense is pre-release; backward compatibility is not a concern. The standalone CLI tools (`photo_stats.py`, `photo_pairing.py`, `pipeline_validation.py`) represent a security risk:
+- No authentication (anyone with file access can run them)
+- No result signing or verification
+- No audit trail or tenant isolation
+- No job tracking or centralized management
 
-**Example Deprecation Message:**
-```bash
-$ python3 photo_stats.py /photos
+These tools must be removed entirely before the web server is provisioned in production and agents are distributed.
 
-╔════════════════════════════════════════════════════════════════════════╗
-║  DEPRECATION WARNING                                                    ║
-║                                                                        ║
-║  Standalone CLI tools are deprecated. Please use the agent CLI:        ║
-║                                                                        ║
-║    shuttersense-agent test /photos --tool photostats                   ║
-║                                                                        ║
-║  Benefits: Result persistence, job tracking, web UI integration        ║
-║                                                                        ║
-║  Suppress this warning: export SHUTTERSENSE_SUPPRESS_DEPRECATION=1     ║
-║  Documentation: https://docs.shuttersense.ai/migration                 ║
-╚════════════════════════════════════════════════════════════════════════╝
+**Acceptance Criteria - File Removal:**
+- Delete `photo_stats.py` from repository root
+- Delete `photo_pairing.py` from repository root
+- Delete `pipeline_validation.py` from repository root
+- Remove any CLI-specific test files (keep analysis module tests)
+- Remove CLI-specific templates if not shared with agent
 
-Continuing with analysis...
+**Acceptance Criteria - Constitution Update:**
+- Update `.specify/memory/constitution.md`:
+  - Remove "I. Independent CLI Tools" core principle
+  - Replace with "I. Agent-Only Tool Execution" principle
+  - Update any references to standalone CLI execution
+- Verify constitution reflects agent-first architecture
+
+**Acceptance Criteria - Documentation Update:**
+- Update `README.md`: Remove CLI tool usage examples, update quick start for agent
+- Update `CLAUDE.md`: Remove CLI tool references, update project structure
+- Update `docs/installation.md`: Focus on agent installation only
+- Update `docs/configuration.md`: Remove CLI-specific config sections
+- Update `docs/photostats.md`, `docs/photo-pairing.md`: Archive or redirect to agent commands
+- **Preserve for historical reference:** `docs/prd/` and `specs/` directories (no changes needed)
+
+**Acceptance Criteria - Code Cleanup:**
+- Remove CLI-specific argument parsing code
+- Remove CLI-specific signal handlers (SIGINT for graceful shutdown)
+- Remove CLI-specific report file naming/saving logic
+- Ensure shared analysis modules (`src/analysis/`) remain intact for agent use
+- Ensure shared utilities (`utils/`) remain intact
+
+**Files to Remove:**
+```
+photo_stats.py                    # DELETE
+photo_pairing.py                  # DELETE
+pipeline_validation.py            # DELETE
+tests/test_photo_stats_cli.py     # DELETE (if exists, keep module tests)
+tests/test_photo_pairing_cli.py   # DELETE (if exists, keep module tests)
+```
+
+**Files to Update:**
+```
+.specify/memory/constitution.md   # Update core principles
+README.md                         # Remove CLI examples
+CLAUDE.md                         # Remove CLI references
+docs/installation.md              # Agent-only installation
+docs/configuration.md             # Remove CLI config
+docs/photostats.md               # Archive notice or redirect
+docs/photo-pairing.md            # Archive notice or redirect
 ```
 
 **Technical Notes:**
-- Warning added to each CLI tool's `main()` function
-- Migration guide created in documentation
-- Agent installer includes symlinks for familiar command names (optional)
+- Analysis logic lives in `src/analysis/` modules - these MUST be preserved
+- Agent job executor already uses these modules directly
+- CLI tools were wrappers around analysis modules; removing wrappers doesn't affect core logic
+- Shared utilities (`utils/config_manager.py`, `utils/filename_parser.py`) remain for agent use
 
 ---
 
@@ -501,13 +532,17 @@ Recommendation:
 - **FR-012**: Add endpoint for uploading offline results: `POST /api/agent/v1/results/upload`
 - **FR-013**: Support Collection creation with inline test results
 
-#### CLI Tool Deprecation
+#### CLI Tool Removal
 
-- **FR-020**: Add deprecation warning to `photo_stats.py`
-- **FR-021**: Add deprecation warning to `photo_pairing.py`
-- **FR-022**: Add deprecation warning to `pipeline_validation.py`
-- **FR-023**: Add `SHUTTERSENSE_SUPPRESS_DEPRECATION` environment variable support
-- **FR-024**: Create migration documentation
+- **FR-020**: Delete `photo_stats.py` from repository root
+- **FR-021**: Delete `photo_pairing.py` from repository root
+- **FR-022**: Delete `pipeline_validation.py` from repository root
+- **FR-023**: Update `.specify/memory/constitution.md` to remove "Independent CLI Tools" principle
+- **FR-024**: Update `README.md` to remove CLI tool references
+- **FR-025**: Update `CLAUDE.md` to remove CLI tool references and update project structure
+- **FR-026**: Update user documentation (`docs/`) to focus on agent-based workflow
+- **FR-027**: Preserve `docs/prd/` and `specs/` for historical reference (no changes)
+- **FR-028**: Ensure shared analysis modules (`src/analysis/`) remain intact for agent use
 
 #### Local Storage and Caching
 
@@ -824,25 +859,32 @@ backend/src/api/agent/
 
 ---
 
-### Phase 5: CLI Tool Deprecation (Priority: P2)
+### Phase 5: CLI Tool Removal and Constitution Update (Priority: P2)
 
-**Estimated Tasks: ~10**
+**Estimated Tasks: ~15**
 
-**CLI Tools (6 tasks):**
-1. Add deprecation warning to `photo_stats.py`
-2. Add deprecation warning to `photo_pairing.py`
-3. Add deprecation warning to `pipeline_validation.py`
-4. Implement `SHUTTERSENSE_SUPPRESS_DEPRECATION` environment variable
-5. Update CLI help text with migration guidance
-6. Tests for deprecation warning display
+**File Removal (4 tasks):**
+1. Delete `photo_stats.py` from repository root
+2. Delete `photo_pairing.py` from repository root
+3. Delete `pipeline_validation.py` from repository root
+4. Remove CLI-specific test files (preserve analysis module tests)
 
-**Documentation (4 tasks):**
-1. Create migration guide from CLI to agent
-2. Update README with agent-first guidance
-3. Update tool-specific documentation
-4. Add FAQ for migration questions
+**Constitution Update (3 tasks):**
+1. Update `.specify/memory/constitution.md`: Remove "I. Independent CLI Tools" principle
+2. Replace with "I. Agent-Only Tool Execution" principle describing agent-first architecture
+3. Review and update any other constitutional references to CLI tools
 
-**Checkpoint:** CLI tools show deprecation warning with clear migration path.
+**Documentation Update (8 tasks):**
+1. Update `README.md`: Remove CLI examples, add agent quick start
+2. Update `CLAUDE.md`: Remove CLI references, update project structure section
+3. Update `docs/installation.md`: Agent-only installation guide
+4. Update `docs/configuration.md`: Remove CLI-specific configuration sections
+5. Archive or redirect `docs/photostats.md` to agent commands
+6. Archive or redirect `docs/photo-pairing.md` to agent commands
+7. Verify `docs/prd/` and `specs/` preserved for historical reference
+8. Update any cross-references in documentation
+
+**Checkpoint:** CLI tools removed, constitution updated to agent-first principles, documentation reflects agent-only workflow.
 
 ---
 
@@ -868,11 +910,11 @@ backend/src/api/agent/
 
 ## Risks and Mitigation
 
-### Risk 1: User Adoption Resistance
+### Risk 1: Analysis Module Regression
 
-- **Impact**: High - Users continue using deprecated CLI tools
-- **Probability**: Medium
-- **Mitigation**: Clear migration documentation; deprecation warnings with specific instructions; agent commands designed to match familiar CLI patterns
+- **Impact**: High - Removing CLI tools accidentally breaks shared analysis modules
+- **Probability**: Low
+- **Mitigation**: CLI tools are thin wrappers; analysis logic in `src/analysis/` is already used by agent; comprehensive tests for analysis modules; verify agent job executor still works after removal
 
 ### Risk 2: Offline Result Conflicts
 
@@ -886,11 +928,11 @@ backend/src/api/agent/
 - **Probability**: Medium
 - **Mitigation**: 24-hour cache expiration; warning if cache is old; re-test option during create
 
-### Risk 4: Breaking Existing Scripts
+### Risk 4: Documentation Gaps
 
-- **Impact**: Medium - Automated workflows using CLI tools break
-- **Probability**: Low (soft deprecation)
-- **Mitigation**: Deprecation warning only (no functional changes); environment variable to suppress; 6-month deprecation window
+- **Impact**: Medium - Users confused about new workflow after CLI removal
+- **Probability**: Medium
+- **Mitigation**: Complete documentation rewrite before CLI removal; clear agent quick-start guide; updated README with agent-first examples
 
 ---
 
@@ -918,28 +960,33 @@ backend/src/api/agent/
 
 - All Collection creations logged with agent ID
 - Offline result uploads logged with source agent
-- Deprecation warning bypass logged for compliance
+- All tool executions traceable via job records
 
 ---
 
 ## Success Metrics
 
+### Security Metrics
+
+- **M1**: Zero unauthenticated tool executions possible after CLI removal
+- **M2**: 100% of tool executions have associated job records
+- **M3**: All results signed and verifiable
+
 ### Adoption Metrics
 
-- **M1**: 50% of new Collections created via agent CLI within 3 months
-- **M2**: 30% reduction in standalone CLI tool usage within 6 months
-- **M3**: 80% of users successfully complete test → create workflow
+- **M4**: 80% of users successfully complete test → create workflow
+- **M5**: Agent installation success rate >95%
 
 ### Quality Metrics
 
-- **M4**: 95% success rate for Collection creation from test
-- **M5**: Zero data loss from offline result sync
-- **M6**: Test command accuracy matches job executor (identical results)
+- **M6**: 95% success rate for Collection creation from test
+- **M7**: Zero data loss from offline result sync
+- **M8**: Test command accuracy matches job executor (identical results)
 
-### User Satisfaction
+### Documentation Metrics
 
-- **M7**: Support tickets related to CLI migration below 5% of total
-- **M8**: Positive feedback on migration experience
+- **M9**: Support tickets related to workflow below 5% of total
+- **M10**: Documentation covers 100% of previous CLI tool functionality
 
 ---
 
@@ -1021,6 +1068,16 @@ shuttersense-agent sync
 
 ## Revision History
 
+- **2026-01-22 (v1.2)**: CLI tool removal (not deprecation)
+  - US5: Rewritten for complete CLI tool removal instead of deprecation
+  - US5: Added constitution update requirement (remove "Independent CLI Tools" principle)
+  - US5: Added documentation update requirements (README, CLAUDE.md, docs/)
+  - US5: Preserve docs/prd/ and specs/ for historical reference only
+  - Updated Non-Goals: Backward compatibility not required (pre-release product)
+  - Updated Risks: Focus on analysis module preservation and documentation gaps
+  - Updated Success Metrics: Added security metrics for authenticated execution
+  - Updated Functional Requirements: FR-020 to FR-028 for removal and doc updates
+
 - **2026-01-22 (v1.1)**: Collection cache for offline execution
   - US3: Changed `run` command to require Collection GUID (not arbitrary paths)
   - US3: Offline mode limited to LOCAL collections only (remote requires network)
@@ -1033,5 +1090,4 @@ shuttersense-agent sync
 - **2026-01-22 (v1.0)**: Initial draft
   - Defined agent CLI commands for testing and Collection creation
   - Specified offline mode and result sync workflow
-  - Created deprecation strategy for standalone CLI tools
   - Outlined phased implementation plan
