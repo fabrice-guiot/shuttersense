@@ -3,7 +3,7 @@
 **Issue**: #93
 **Status**: Draft
 **Created**: 2026-01-22
-**Last Updated**: 2026-01-22
+**Last Updated**: 2026-01-22 (v1.1)
 **Related Documents**:
 - [021-distributed-agent-architecture.md](./021-distributed-agent-architecture.md) (Agent architecture)
 - [Domain Model](../domain-model.md) (Entity definitions)
@@ -229,16 +229,20 @@ Creating Collection...
 
 ---
 
-### User Story 3: Run Tool Locally Without Server (Priority: P1)
+### User Story 3: Run Tool Offline Against Cached Collections (Priority: P1)
 
 **As** a user with intermittent connectivity
 **I want to** run analysis tools locally without server connection
-**So that** I can work offline and optionally sync results later
+**So that** I can work offline and sync results when back online
 
 **Acceptance Criteria:**
-- Agent CLI command: `shuttersense-agent run <path> --tool <tool> [--offline]`
+- Agent CLI command: `shuttersense-agent run <collection-guid> --tool <tool> [--offline]`
+- Offline mode runs against **cached local Collections only** (not arbitrary paths)
+- Collection cache maintained by `collections list` and `collections sync` commands
 - In offline mode:
   - No server connection required
+  - Agent uses cached Collection metadata (GUID, name, path, type)
+  - Only LOCAL Collections can run offline (remote storage unreachable)
   - Results saved to local file (JSON + HTML report)
   - Option to upload results later: `shuttersense-agent sync`
 - In online mode (default):
@@ -246,74 +250,139 @@ Creating Collection...
   - Equivalent to web UI "Run Tool" action
 - Supports all three tools: `photostats`, `photo_pairing`, `pipeline_validation`
 
+**Acceptance Criteria - Collection Cache:**
+- Cache stores Collections bound to this agent (local or via connector credentials)
+- Cache updated when: agent starts, `collections list` runs, `collections sync` called
+- Cache includes: GUID, name, type, location, connector info (for remote), last sync time
+- Cache stored in `~/.shuttersense-agent/collection-cache.json`
+
 **Example Usage:**
 ```bash
-# Run locally, report to server (requires Collection to exist)
+# First, sync collection cache (requires server connection)
+$ shuttersense-agent collections sync
+
+Syncing collections from server...
+  Found 5 collections bound to this agent
+  - 3 local collections
+  - 2 remote collections (S3)
+Cache updated: ~/.shuttersense-agent/collection-cache.json
+
+# Run online (default) - creates job on server
 $ shuttersense-agent run col_01hgw2bbg... --tool photostats
 
-# Run locally, offline mode (no server required)
-$ shuttersense-agent run /photos/2024 --tool photostats --offline
+# Run offline against cached local collection
+$ shuttersense-agent run col_01hgw2bbg... --tool photostats --offline
 
+Running photostats on "Vacation 2024" (/photos/2024)...
 Analysis complete. Results saved to:
-  JSON: ~/.shuttersense-agent/results/2024-01-22_photostats.json
-  HTML: ~/.shuttersense-agent/results/2024-01-22_photostats.html
+  JSON: ~/.shuttersense-agent/results/col_01hgw2bbg_2024-01-22_photostats.json
+  HTML: ~/.shuttersense-agent/results/col_01hgw2bbg_2024-01-22_photostats.html
+
+# Attempt offline on remote collection (rejected)
+$ shuttersense-agent run col_01hgw2ccc... --tool photostats --offline
+
+Error: Cannot run offline on remote collection "S3 Archive"
+  Collection type: S3 (requires network connectivity)
+  Use online mode: shuttersense-agent run col_01hgw2ccc... --tool photostats
 
 # Sync offline results to server later
 $ shuttersense-agent sync
 
 Found 3 pending results:
-  - 2024-01-22_photostats.json (1.2 MB)
-  - 2024-01-21_photo_pairing.json (0.8 MB)
-  - 2024-01-20_photostats.json (1.1 MB)
+  - col_01hgw2bbg_2024-01-22_photostats.json (1.2 MB) → "Vacation 2024"
+  - col_01hgw2bbg_2024-01-21_photo_pairing.json (0.8 MB) → "Vacation 2024"
+  - col_01hgw2aaa_2024-01-20_photostats.json (1.1 MB) → "Wedding 2024"
 
 Uploading... Done.
 ```
 
 **Technical Notes:**
-- Offline results stored with full metadata for later upload
-- Sync command matches results to Collections by path
-- If Collection doesn't exist, offers to create it
-- Results include timestamp, tool version, agent ID for audit
+- Offline execution requires Collection to exist in cache (use US1 `test` for new paths)
+- Results stored with Collection GUID for unambiguous matching during sync
+- Remote Collections (S3, GCS, SMB) cannot run offline - network required
+- Cache expiration: 7 days (warning shown, re-sync recommended)
+- Results include timestamp, tool version, agent ID, Collection GUID for audit
 
 ---
 
-### User Story 4: List and Manage Local Collections (Priority: P1)
+### User Story 4: List and Manage Bound Collections (Priority: P1)
 
 **As** an agent operator
 **I want to** see which Collections are bound to my agent
-**So that** I can manage local storage and troubleshoot issues
+**So that** I can manage local storage, run offline analysis, and troubleshoot issues
 
 **Acceptance Criteria:**
 - Agent CLI command: `shuttersense-agent collections list`
-- Shows all Collections bound to this agent
-- Displays: Collection name, path, last analysis date, status
+- Shows all Collections bound to this agent:
+  - LOCAL Collections bound directly to this agent
+  - REMOTE Collections where agent has connector credentials
+- Displays: Collection GUID, name, type, path/location, status, last analysis date
+- Filter by type: `--type local|remote|all` (default: all)
 - Filter by status: `--status accessible|inaccessible|pending`
-- Option to re-test accessibility: `shuttersense-agent collections test <guid>`
+- Works offline using cached collection data (with `--offline` flag or when server unreachable)
+- `shuttersense-agent collections sync` to refresh cache from server
+
+**Acceptance Criteria - Offline Mode:**
+- When offline or using `--offline` flag, displays cached Collections
+- Shows cache timestamp: "Last synced: 2 hours ago"
+- Warns if cache is stale (>7 days old)
+- Indicates which Collections can run offline (LOCAL only)
 
 **Example Usage:**
 ```bash
+# Online mode (default) - fetches from server and updates cache
 $ shuttersense-agent collections list
 
 Collections bound to this agent (agt_01hgw2bbg...):
 
-  GUID                      NAME                PATH                    STATUS      LAST ANALYSIS
-  col_01hgw2bbg00001        Vacation 2024       /photos/2024           Accessible  2024-01-20
-  col_01hgw2bbg00002        Wedding 2024        /photos/wedding        Accessible  2024-01-15
-  col_01hgw2bbg00003        Archive             /mnt/nas/archive       Inaccessible  Never
+  GUID                  TYPE    NAME                LOCATION                STATUS      LAST ANALYSIS  OFFLINE
+  col_01hgw2bbg00001    LOCAL   Vacation 2024       /photos/2024           Accessible  2024-01-20     Yes
+  col_01hgw2bbg00002    LOCAL   Wedding 2024        /photos/wedding        Accessible  2024-01-15     Yes
+  col_01hgw2bbg00003    LOCAL   Archive             /mnt/nas/archive       Inaccessible  Never        Yes
+  col_01hgw2ccc00001    S3      Cloud Backup        my-bucket/photos       Accessible  2024-01-18     No
+  col_01hgw2ccc00002    GCS     Google Archive      gcs-bucket/archive     Accessible  2024-01-10     No
 
-3 collections total (2 accessible, 1 inaccessible)
+5 collections total (4 accessible, 1 inaccessible)
+3 available for offline execution
 
-# Re-test accessibility
+# Offline mode - uses cache
+$ shuttersense-agent collections list --offline
+
+Collections (from cache, last synced: 2 hours ago):
+
+  GUID                  TYPE    NAME                LOCATION                OFFLINE
+  col_01hgw2bbg00001    LOCAL   Vacation 2024       /photos/2024           Yes
+  col_01hgw2bbg00002    LOCAL   Wedding 2024        /photos/wedding        Yes
+  col_01hgw2bbg00003    LOCAL   Archive             /mnt/nas/archive       Yes
+  col_01hgw2ccc00001    S3      Cloud Backup        my-bucket/photos       No
+  col_01hgw2ccc00002    GCS     Google Archive      gcs-bucket/archive     No
+
+Note: Accessibility status not shown in offline mode
+
+# Filter to local collections only
+$ shuttersense-agent collections list --type local
+
+# Sync cache from server
+$ shuttersense-agent collections sync
+
+Syncing collections from server...
+  Fetched 5 collections bound to this agent
+  Cache updated: ~/.shuttersense-agent/collection-cache.json
+
+# Re-test accessibility (requires server connection)
 $ shuttersense-agent collections test col_01hgw2bbg00003
 
 Testing collection: Archive (/mnt/nas/archive)
   Error: Path not accessible (mount not available)
+  Status updated on server: Inaccessible
 ```
 
 **Technical Notes:**
-- Queries server: `GET /api/collections?bound_agent_id=<self>`
-- Accessibility test updates Collection status on server
-- Shows helpful hints for common issues (mount not available, permissions, etc.)
+- Online: Queries server `GET /api/agent/v1/collections` and updates local cache
+- Offline: Reads from `~/.shuttersense-agent/collection-cache.json`
+- Cache includes connector metadata for remote Collections (for display, not credentials)
+- Accessibility test requires server connection (updates server state)
+- OFFLINE column indicates which Collections support offline execution (LOCAL only)
 
 ---
 
@@ -416,13 +485,14 @@ Recommendation:
 
 - **FR-001**: Implement `shuttersense-agent test <path>` command for local path testing
 - **FR-002**: Implement `shuttersense-agent collection create <path>` command
-- **FR-003**: Implement `shuttersense-agent run <path|guid> --tool <tool>` command
-- **FR-004**: Implement `shuttersense-agent collections list` command
+- **FR-003**: Implement `shuttersense-agent run <collection-guid> --tool <tool>` command (GUID only, not paths)
+- **FR-004**: Implement `shuttersense-agent collections list` command with `--offline` support
 - **FR-005**: Implement `shuttersense-agent collections test <guid>` command
 - **FR-006**: Implement `shuttersense-agent sync` command for offline result upload
 - **FR-007**: Implement `shuttersense-agent self-test` command
-- **FR-008**: Support `--offline` flag for running without server connection
+- **FR-008**: Support `--offline` flag for `run` command - LOCAL collections only (reject remote)
 - **FR-009**: Support `--output <file>` flag for saving HTML reports locally
+- **FR-040**: Implement `shuttersense-agent collections sync` command to refresh cache
 
 #### Server API Extensions
 
@@ -439,12 +509,17 @@ Recommendation:
 - **FR-023**: Add `SHUTTERSENSE_SUPPRESS_DEPRECATION` environment variable support
 - **FR-024**: Create migration documentation
 
-#### Local Storage
+#### Local Storage and Caching
 
 - **FR-030**: Store test results in `~/.shuttersense-agent/test-cache/`
 - **FR-031**: Store offline results in `~/.shuttersense-agent/results/`
 - **FR-032**: Implement cache expiration (24 hours for test cache)
 - **FR-033**: Implement result cleanup after successful sync
+- **FR-034**: Store collection cache in `~/.shuttersense-agent/collection-cache.json`
+- **FR-035**: Collection cache includes all Collections bound to agent (local + remote via connector)
+- **FR-036**: Collection cache expires after 7 days (warn user, still usable)
+- **FR-037**: Auto-refresh collection cache on `collections list` (online mode)
+- **FR-038**: Offline results MUST reference collection_guid (not path)
 
 ### Non-Functional Requirements
 
@@ -490,12 +565,15 @@ shuttersense-agent
 │   │   ├── --skip-test            # Skip validation
 │   │   └── --analyze              # Run initial analysis
 │   ├── list                       # List bound collections (US4)
-│   │   └── --status <status>      # Filter by status
+│   │   ├── --type <type>          # Filter: local|remote|all
+│   │   ├── --status <status>      # Filter by status
+│   │   └── --offline              # Use cached data
+│   ├── sync                       # Refresh collection cache
 │   └── test <guid>                # Re-test accessibility
 │
-├── run <path|guid>                # Run tool (US3)
+├── run <collection-guid>          # Run tool (US3) - GUID only, not paths
 │   ├── --tool <tool>              # Required
-│   ├── --offline                  # No server connection
+│   ├── --offline                  # No server (LOCAL collections only)
 │   └── --output <file>            # Save HTML report
 │
 ├── sync                           # Upload offline results (US3)
@@ -547,6 +625,31 @@ shuttersense-agent
 | `/api/agent/v1/collections/{guid}/test` | POST | Update accessibility status |
 | `/api/agent/v1/results/upload` | POST | Upload offline analysis results |
 
+### Collection Cache Schema
+
+```python
+class CachedCollection(BaseModel):
+    """Collection metadata cached for offline access."""
+    guid: str                           # e.g., "col_01hgw2bbg..."
+    name: str                           # e.g., "Vacation 2024"
+    type: Literal["LOCAL", "S3", "GCS", "SMB"]
+    location: str                       # Path or bucket/prefix
+    bound_agent_id: Optional[str]       # For LOCAL collections
+    connector_guid: Optional[str]       # For REMOTE collections
+    connector_name: Optional[str]       # Display name for connector
+    is_accessible: Optional[bool]       # Last known status
+    last_analysis_at: Optional[datetime]
+    supports_offline: bool              # True only for LOCAL type
+
+
+class CollectionCache(BaseModel):
+    """Local cache of collections bound to this agent."""
+    agent_id: str
+    synced_at: datetime
+    expires_at: datetime                # synced_at + 7 days
+    collections: List[CachedCollection]
+```
+
 ### Test Cache Schema
 
 ```python
@@ -570,15 +673,15 @@ class TestCacheEntry(BaseModel):
 ```python
 class OfflineResult(BaseModel):
     """Analysis result stored for later upload."""
-    result_id: str  # Local UUID
-    path: str
+    result_id: str                      # Local UUID
+    collection_guid: str                # Required - must be from cache
+    collection_name: str                # For display during sync
     tool: str
     executed_at: datetime
     agent_id: str
     agent_version: str
-    analysis_data: Dict[str, Any]  # Full analysis output
-    html_report: Optional[str]  # Base64-encoded HTML
-    collection_guid: Optional[str]  # If run against existing Collection
+    analysis_data: Dict[str, Any]       # Full analysis output
+    html_report: Optional[str]          # Base64-encoded HTML
 ```
 
 ### New Files
@@ -587,11 +690,12 @@ class OfflineResult(BaseModel):
 agent/src/
 ├── commands/
 │   ├── test.py               # Test command implementation
-│   ├── collection.py         # Collection subcommands
+│   ├── collection.py         # Collection subcommands (create, list, sync, test)
 │   ├── run.py                # Run command implementation
-│   ├── sync.py               # Sync command implementation
+│   ├── sync.py               # Sync command (upload offline results)
 │   └── self_test.py          # Self-test command
 ├── cache/
+│   ├── collection_cache.py   # Collection cache management
 │   ├── test_cache.py         # Test result caching
 │   └── result_store.py       # Offline result storage
 └── cli.py                    # Updated CLI entry point
@@ -599,6 +703,11 @@ agent/src/
 backend/src/api/agent/
 ├── collections.py            # Agent collection endpoints
 └── results.py                # Offline result upload endpoint
+
+~/.shuttersense-agent/
+├── collection-cache.json     # Cached collections for offline access
+├── test-cache/               # Cached test results (24h expiry)
+└── results/                  # Pending offline results for sync
 ```
 
 ---
@@ -862,9 +971,10 @@ backend/src/api/agent/
 |---------|---------|-----------------|
 | `shuttersense-agent test <path>` | Test local path accessibility and analysis | No |
 | `shuttersense-agent collection create <path>` | Create Collection from tested path | Yes |
-| `shuttersense-agent collection list` | List bound Collections | Yes |
-| `shuttersense-agent collection test <guid>` | Re-test Collection accessibility | Yes |
-| `shuttersense-agent run <path\|guid> --tool <tool>` | Run analysis tool | Optional |
+| `shuttersense-agent collections list` | List bound Collections | No (uses cache offline) |
+| `shuttersense-agent collections sync` | Refresh collection cache from server | Yes |
+| `shuttersense-agent collections test <guid>` | Re-test Collection accessibility | Yes |
+| `shuttersense-agent run <guid> --tool <tool>` | Run analysis tool (GUID only) | No for LOCAL + `--offline` |
 | `shuttersense-agent sync` | Upload offline results | Yes |
 | `shuttersense-agent self-test` | Verify agent configuration | Yes |
 
@@ -881,11 +991,17 @@ python3 photo_stats.py /photos/2024 output.html
 shuttersense-agent test /photos/2024
 shuttersense-agent collection create /photos/2024 --name "Photos 2024"
 
-# Subsequent runs (results in web UI)
+# Sync collection cache (do this periodically or after creating collections)
+shuttersense-agent collections sync
+
+# Subsequent runs - online (results in web UI)
 shuttersense-agent run col_01hgw2bbg... --tool photostats
 
-# Or offline mode (same as old CLI)
-shuttersense-agent run /photos/2024 --tool photostats --offline --output output.html
+# Or offline mode against cached LOCAL collection
+shuttersense-agent run col_01hgw2bbg... --tool photostats --offline --output output.html
+
+# Sync results when back online
+shuttersense-agent sync
 ```
 
 ### C. Error Messages
@@ -897,10 +1013,22 @@ shuttersense-agent run /photos/2024 --tool photostats --offline --output output.
 | `Test cache expired` | More than 24 hours since test | Re-run `shuttersense-agent test` |
 | `Agent not registered` | Agent API key invalid or revoked | Re-register agent with server |
 | `Collection already exists` | Path already mapped to a Collection | Use existing Collection or choose different path |
+| `Cannot run offline on remote collection` | Attempted `--offline` on S3/GCS/SMB Collection | Use online mode or run against LOCAL collection |
+| `Collection not in cache` | Collection GUID not found in local cache | Run `shuttersense-agent collections sync` to refresh cache |
+| `Collection cache expired` | Cache older than 7 days | Run `shuttersense-agent collections sync` to refresh |
 
 ---
 
 ## Revision History
+
+- **2026-01-22 (v1.1)**: Collection cache for offline execution
+  - US3: Changed `run` command to require Collection GUID (not arbitrary paths)
+  - US3: Offline mode limited to LOCAL collections only (remote requires network)
+  - US3: Added collection cache requirement for offline execution
+  - US4: Added `--offline` flag and `collections sync` command
+  - US4: Collections list works offline using cached data
+  - Added Collection Cache Schema and cache management requirements
+  - Updated command reference and migration examples
 
 - **2026-01-22 (v1.0)**: Initial draft
   - Defined agent CLI commands for testing and Collection creation
