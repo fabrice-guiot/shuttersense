@@ -289,6 +289,7 @@ class TestConfigLoadingIntegration:
                 return MagicMock(
                     success=True,
                     results={"total_files": 0},
+                    report_html=None,
                     files_scanned=0,
                     issues_found=0,
                     error_message=None,
@@ -415,6 +416,7 @@ class TestErrorRecovery:
             mock_tool.return_value = MagicMock(
                 success=True,
                 results={"total_files": 0},
+                report_html=None,
                 files_scanned=0,
                 issues_found=0,
                 error_message=None,
