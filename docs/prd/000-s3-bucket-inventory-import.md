@@ -3,7 +3,7 @@
 **Issue**: #40
 **Status**: Draft
 **Created**: 2026-01-22
-**Last Updated**: 2026-01-22
+**Last Updated**: 2026-01-22 (v1.1)
 **Related Features**:
 - 004-remote-photos-persistence (Connector architecture)
 - 007-remote-photos-completion (Tool execution)
@@ -113,7 +113,8 @@ s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifes
 1. **Inventory Configuration**: Creating/managing S3 Inventory configurations (users set this up in AWS)
 2. **Real-Time Updates**: This is batch-oriented, not real-time
 3. **Cross-Account Inventory**: Single AWS account only
-4. **Gzip Decompression**: Assume uncompressed CSV (or handle in agent)
+
+**Note on Gzip Decompression**: AWS S3 Inventory data files are always gzip-compressed. The agent will handle decompression when executing the Connector tool that refreshes the inventory. This is an implementation detail, not a non-goal.
 
 ---
 
@@ -691,11 +692,11 @@ frontend/src/
 - **Probability**: Medium (daily/weekly inventory has inherent lag)
 - **Mitigation**: Display "last updated" timestamp; provide "Refresh from S3" option; warn on old data
 
-### Risk 4: Compressed Inventory Files
+### Risk 4: Large Compressed Inventory Files
 
-- **Impact**: Medium - Additional processing required
-- **Probability**: High (AWS compresses by default)
-- **Mitigation**: Support gzip decompression in agent; detect from file extension
+- **Impact**: Low - Agent must decompress before parsing
+- **Probability**: Certain (AWS inventory files are always gzip-compressed)
+- **Mitigation**: Agent handles gzip decompression as part of the Connector tool; stream decompression to avoid memory spikes
 
 ### Risk 5: Different Inventory Formats
 
@@ -729,11 +730,10 @@ frontend/src/
 
 ## Open Questions
 
-1. **Gzip Handling**: Should we require uncompressed inventory, or handle gzip in agent?
-2. **Partial Import**: If import fails midway, should we keep partial results?
-3. **Folder Depth Limit**: Should we limit folder tree depth to prevent UI performance issues?
-4. **Multi-Tenant Inventory**: Can multiple teams share inventory from same bucket?
-5. **Cost Display**: Should we show estimated API cost savings from using inventory?
+1. **Partial Import**: If import fails midway, should we keep partial results?
+2. **Folder Depth Limit**: Should we limit folder tree depth to prevent UI performance issues?
+3. **Multi-Tenant Inventory**: Can multiple teams share inventory from same bucket?
+4. **Cost Display**: Should we show estimated API cost savings from using inventory?
 
 ---
 
@@ -830,6 +830,12 @@ Extracted folders:
 ---
 
 ## Revision History
+
+- **2026-01-22 (v1.1)**: Clarified gzip decompression handling
+  - Removed gzip decompression from Non-Goals (AWS inventory is always compressed)
+  - Agent handles decompression as part of Connector tool execution
+  - Updated Risk 4 to reflect certain compression requirement
+  - Removed resolved open question about gzip handling
 
 - **2026-01-22 (v1.0)**: Initial draft
   - Defined S3 Inventory import requirements
