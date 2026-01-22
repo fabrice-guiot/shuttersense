@@ -1,24 +1,27 @@
-# PRD: Import S3 Collections from S3 Bucket Inventory File
+# PRD: Import Collections from Cloud Storage Inventory Reports
 
 **Issue**: #40
 **Status**: Draft
 **Created**: 2026-01-22
-**Last Updated**: 2026-01-22 (v1.3)
+**Last Updated**: 2026-01-22 (v1.4)
 **Related Features**:
 - 004-remote-photos-persistence (Connector architecture)
 - 007-remote-photos-completion (Tool execution)
 - 021-distributed-agent-architecture (Agent-based processing)
 
+**Supported Connectors**: S3, GCS (SMB excluded - no inventory feature)
+
 ---
 
 ## Executive Summary
 
-This PRD proposes a new feature to reduce AWS S3 API consumption for remote collections by leveraging AWS S3's automated inventory reports. Instead of making continuous API calls to list objects in S3 buckets, the system will parse CSV-formatted inventory files that AWS generates automatically and stores in a designated S3 bucket.
+This PRD proposes a new feature to reduce cloud storage API consumption for remote collections by leveraging automated inventory reports from AWS S3 and Google Cloud Storage. Instead of making continuous API calls to list objects, the system will parse inventory files that cloud providers generate automatically.
 
 ### Current State
 
-**Existing S3 Integration:**
-- S3Adapter queries S3 directly via `list_objects_v2()` API calls
+**Existing Cloud Storage Integration:**
+- S3Adapter queries S3 via `list_objects_v2()` API calls
+- GCSAdapter queries GCS via `list_blobs()` API calls
 - Every collection scan triggers paginated API requests
 - Large buckets (millions of objects) result in high API costs and latency
 - No caching of file metadata between scans
@@ -31,11 +34,12 @@ This PRD proposes a new feature to reduce AWS S3 API consumption for remote coll
 
 ### What This PRD Delivers
 
-- **S3 Inventory Integration**: Parse AWS S3 Inventory reports to discover bucket contents
+- **S3 Inventory Integration**: Parse AWS S3 Inventory reports (CSV format)
+- **GCS Inventory Integration**: Parse Google Cloud Storage Insights reports (CSV/Parquet format)
 - **Folder Extraction**: Automatically identify folder structures from inventory data
 - **Collection Mapping**: Allow users to map inventory folders to Collections with intelligent naming
 - **FileInfo Caching**: Store file metadata from inventory to avoid redundant API calls
-- **Scheduled Sync**: Periodic inventory import matching AWS inventory generation frequency
+- **Scheduled Sync**: Periodic inventory import matching inventory generation frequency
 
 ---
 
@@ -43,32 +47,33 @@ This PRD proposes a new feature to reduce AWS S3 API consumption for remote coll
 
 ### Problem Statement
 
-AWS S3 buckets used for photo storage often contain millions of objects organized in folder hierarchies (e.g., `2020/Event-Name/`, `2021/Another-Event/`). Currently, each tool execution requires:
+Cloud storage buckets (AWS S3, Google Cloud Storage) used for photo storage often contain millions of objects organized in folder hierarchies (e.g., `2020/Event-Name/`, `2021/Another-Event/`). Currently, each tool execution requires:
 
-1. Calling `list_objects_v2()` with pagination (1,000 objects per request)
+1. Calling list APIs with pagination (S3: `list_objects_v2`, GCS: `list_blobs`)
 2. Filtering results to identify folders and files
 3. Building file metadata structures for analysis
 
 For a bucket with 1 million objects, this requires 1,000+ API calls, taking several minutes and incurring significant costs.
 
-AWS S3 Inventory provides an alternative approach:
-- Generates CSV/ORC/Parquet reports of all objects automatically
-- Runs daily or weekly on a schedule defined by the user
-- Includes metadata (size, last modified, storage class, ETag, checksums)
-- Stored in a destination bucket at predictable paths
+Both AWS and Google Cloud provide inventory report features as an alternative:
+- **AWS S3 Inventory**: Generates CSV/ORC/Parquet reports automatically
+- **GCS Storage Insights**: Generates CSV/Parquet inventory reports automatically
+
+Both run on configurable schedules (daily/weekly) and include object metadata.
 
 ### Strategic Value
 
-Implementing S3 Inventory import:
+Implementing inventory import for both providers:
 - **Reduces API costs** by 90%+ for large buckets
 - **Improves performance** by eliminating pagination delays
 - **Enables bulk operations** with complete bucket visibility
 - **Supports offline analysis** (inventory can be downloaded once)
-- **Aligns with AWS best practices** for large-scale bucket management
+- **Maintains feature parity** between S3 and GCS connectors
+- **Aligns with cloud provider best practices** for large-scale bucket management
 
 ### Technical Background
 
-**AWS S3 Inventory Concepts:**
+#### AWS S3 Inventory
 
 | Concept | Description |
 |---------|-------------|
@@ -76,17 +81,50 @@ Implementing S3 Inventory import:
 | **Destination Bucket** | Where inventory reports are stored |
 | **Inventory Configuration** | Defines schedule, format, and fields to include |
 | **Manifest File** | JSON file listing all inventory data files |
-| **Data Files** | CSV/ORC/Parquet files containing object listings |
+| **Data Files** | CSV/ORC/Parquet files (gzip compressed) |
 
-**Inventory File Location Pattern:**
+**S3 Inventory Location Pattern:**
 ```
 s3://{destination-bucket}/{source-bucket}/{config-name}/{timestamp}/manifest.json
 ```
 
-**Example:**
+**S3 Example:**
 ```
 s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifest.json
 ```
+
+#### Google Cloud Storage Insights
+
+| Concept | Description |
+|---------|-------------|
+| **Source Bucket** | The bucket being inventoried (contains photos) |
+| **Destination Bucket** | Where inventory reports are stored |
+| **Report Configuration** | Defines schedule, format, and metadata fields |
+| **Manifest File** | JSON file generated after all shards complete |
+| **Shard Files** | CSV/Parquet files (one per ~1M objects) |
+
+**GCS Inventory Manifest Structure:**
+```json
+{
+  "report_config": { ... },
+  "records_processed": 1500000,
+  "snapshot_time": "2026-01-20T00:00:00Z",
+  "shard_count": 2,
+  "report_shards_file_names": ["shard_0.csv", "shard_1.csv"]
+}
+```
+
+**Key Differences:**
+
+| Aspect | AWS S3 | GCS |
+|--------|--------|-----|
+| Feature Name | S3 Inventory | Storage Insights |
+| Formats | CSV, ORC, Parquet | CSV, Parquet |
+| Compression | gzip (default) | Uncompressed |
+| Object Key Field | `Key` | `name` |
+| Modified Time Field | `LastModifiedDate` | `updated` |
+| Size Field | `Size` | `size` |
+| ETag Field | `ETag` | `etag` |
 
 ---
 
@@ -94,7 +132,7 @@ s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifes
 
 ### Primary Goals
 
-1. **Parse S3 Inventory Reports**: Read CSV-format inventory files from S3
+1. **Parse Cloud Inventory Reports**: Read inventory files from S3 (CSV) and GCS (CSV/Parquet)
 2. **Extract Folder Structure**: Identify unique folder paths from object keys
 3. **Store Folder Metadata**: Persist discovered folders on Connector records
 4. **Enable Collection Mapping**: UI workflow for mapping folders to Collections
@@ -110,11 +148,12 @@ s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifes
 
 ### Non-Goals (v1)
 
-1. **Inventory Configuration**: Creating/managing S3 Inventory configurations (users set this up in AWS)
+1. **Inventory Configuration**: Creating/managing inventory configurations in cloud consoles (users set this up in AWS/GCP)
 2. **Real-Time Updates**: This is batch-oriented, not real-time
-3. **Cross-Account Inventory**: Single AWS account only
+3. **Cross-Account Inventory**: Single cloud account per connector only
+4. **SMB Connector Support**: SMB/network shares have no inventory feature; this PRD applies only to S3 and GCS connectors
 
-**Note on Gzip Decompression**: AWS S3 Inventory data files are always gzip-compressed. The agent will handle decompression when executing the Connector tool that refreshes the inventory. This is an implementation detail, not a non-goal.
+**Note on Compression**: AWS S3 Inventory data files are always gzip-compressed; GCS inventory files are uncompressed. The agent handles decompression transparently for S3.
 
 ---
 
@@ -285,23 +324,31 @@ The agent retains the parsed inventory data locally throughout the pipeline. On 
 
 #### Inventory Configuration
 
-- **FR-001**: Add `inventory_config` field to S3 Connector configuration schema
-- **FR-002**: Inventory config includes: destination_bucket, source_bucket, config_name
-- **FR-003**: Validate inventory path accessibility during connector test
-- **FR-004**: Store inventory settings encrypted with other credentials
+- **FR-001**: Add `inventory_config` field to S3 and GCS Connector configuration schemas
+- **FR-002**: S3 inventory config includes: destination_bucket, source_bucket, config_name
+- **FR-003**: GCS inventory config includes: destination_bucket, report_config_name
+- **FR-004**: Validate inventory path accessibility during connector test
+- **FR-005**: Store inventory settings encrypted with other credentials
+- **FR-006**: "Import Inventory" action only visible for S3 and GCS connectors (not SMB)
 
 #### Inventory Import Pipeline (Agent-Executed)
 
-The Import Inventory tool executes three sequential phases in a single job:
+The Import Inventory tool executes three sequential phases in a single job. The agent auto-detects connector type and uses the appropriate parser.
 
 **Phase A: Folder Extraction (US2)**
 - **FR-010**: "Import Inventory" action creates a Job in JobQueue (never executes server-side)
 - **FR-011**: Create `InventoryImportTool` as an agent-executable tool type
-- **FR-012**: Agent fetches and parses `manifest.json` from inventory location
-- **FR-013**: Agent downloads and decompresses (gzip) data files referenced in manifest
-- **FR-014**: Agent parses CSV format with configurable field mapping
+- **FR-012**: Agent fetches and parses manifest file from inventory location
+  - S3: `manifest.json` with `files` array
+  - GCS: `manifest.json` with `report_shards_file_names` array
+- **FR-013**: Agent downloads data files referenced in manifest
+  - S3: Decompresses gzip-compressed CSV files
+  - GCS: Reads CSV or Parquet files directly (uncompressed)
+- **FR-014**: Agent parses inventory format with provider-specific field mapping
+  - S3 fields: `Key`, `Size`, `LastModifiedDate`, `ETag`, `StorageClass`
+  - GCS fields: `name`, `size`, `updated`, `etag`, `storageClass`
 - **FR-015**: Agent retains parsed inventory data in local storage for pipeline duration
-- **FR-016**: Agent extracts unique folder paths from object keys
+- **FR-016**: Agent extracts unique folder paths from object keys/names
 - **FR-017**: Agent reports folder results to server; server stores as `InventoryFolder` records
 
 **Phase B: FileInfo Population (US4)**
@@ -443,12 +490,20 @@ The Import Inventory tool executes three sequential phases in a single job:
 #### InventoryConfig (embedded in Connector credentials)
 
 ```python
-class InventoryConfig(BaseModel):
-    """S3 Inventory configuration for a connector."""
+class S3InventoryConfig(BaseModel):
+    """AWS S3 Inventory configuration."""
     destination_bucket: str = Field(..., description="Bucket where inventory is stored")
     source_bucket: str = Field(..., description="Bucket being inventoried")
     config_name: str = Field(..., description="Inventory configuration name")
     format: Literal["CSV", "ORC", "Parquet"] = Field(default="CSV")
+    schedule: Literal["manual", "daily", "weekly"] = Field(default="manual")
+
+
+class GCSInventoryConfig(BaseModel):
+    """Google Cloud Storage Insights configuration."""
+    destination_bucket: str = Field(..., description="Bucket where inventory is stored")
+    report_config_name: str = Field(..., description="Report configuration name")
+    format: Literal["CSV", "Parquet"] = Field(default="CSV")
     schedule: Literal["manual", "daily", "weekly"] = Field(default="manual")
 ```
 
@@ -456,7 +511,7 @@ class InventoryConfig(BaseModel):
 
 ```python
 class InventoryFolder(Base, ExternalIdMixin):
-    """Folder discovered from S3 inventory."""
+    """Folder discovered from cloud inventory (S3 or GCS)."""
     __tablename__ = "inventory_folders"
 
     # GUID prefix: 'fld_'
@@ -633,55 +688,64 @@ frontend/src/
 
 ### Phase 1: Full Import Pipeline - Agent Implementation (Priority: P1)
 
-**Estimated Tasks: ~45**
+**Estimated Tasks: ~55**
 
-The Import Inventory tool executes three phases (A, B, C) sequentially in a single agent job. This phase implements the complete pipeline.
+The Import Inventory tool executes three phases (A, B, C) sequentially in a single agent job. This phase implements the complete pipeline for both S3 and GCS connectors.
 
-**Backend/Server (18 tasks):**
-1. Create `InventoryConfig` schema for connector settings
-2. Add inventory config to S3 connector credential schema
-3. Create `InventoryFolder` model and migration
-4. Add `file_info`, `file_info_updated_at`, `file_info_source` fields to Collection model
-5. Create `InventoryImportTool` job type registration
-6. Add "Import Inventory" endpoint that creates Job in queue
-7. Add endpoint to receive Phase A results (folders) from agent
-8. Add endpoint to receive Phase B results (FileInfo per Collection) from agent
-9. Add endpoint to receive Phase C results (delta per Collection) from agent
-10. Store discovered folders as `InventoryFolder` records
-11. Store FileInfo on Collection records from agent results
-12. Store delta summary on Collection or ImportSession record
-13. Add API to list Collections bound to a Connector (for agent query)
-14. Add inventory status/folders API endpoints
-15. Unit tests for job creation and result handling
-16. Integration tests with mock agent responses
+**Backend/Server (20 tasks):**
+1. Create `S3InventoryConfig` schema for S3 connector settings
+2. Create `GCSInventoryConfig` schema for GCS connector settings
+3. Add inventory config to S3 and GCS connector credential schemas
+4. Create `InventoryFolder` model and migration
+5. Add `file_info`, `file_info_updated_at`, `file_info_source` fields to Collection model
+6. Create `InventoryImportTool` job type registration
+7. Add "Import Inventory" endpoint that creates Job in queue (S3 and GCS)
+8. Add endpoint to receive Phase A results (folders) from agent
+9. Add endpoint to receive Phase B results (FileInfo per Collection) from agent
+10. Add endpoint to receive Phase C results (delta per Collection) from agent
+11. Store discovered folders as `InventoryFolder` records
+12. Store FileInfo on Collection records from agent results
+13. Store delta summary on Collection or ImportSession record
+14. Add API to list Collections bound to a Connector (for agent query)
+15. Add inventory status/folders API endpoints
+16. Hide "Import Inventory" action for SMB connectors
+17. Unit tests for job creation and result handling
+18. Integration tests with mock agent responses (S3 and GCS)
 
-**Agent (20 tasks):**
+**Agent (25 tasks):**
 1. Implement `InventoryImportTool` in agent tool registry
-2. Implement manifest.json fetching and parsing
-3. Implement gzip decompression for data files
-4. Implement CSV parsing with streaming for large files
-5. Implement local storage of parsed inventory data for pipeline duration
-6. **Phase A**: Implement folder extraction algorithm
-7. **Phase A**: Report folder results to server
-8. **Phase B**: Query server for Collections bound to this Connector
-9. **Phase B**: Filter inventory data by each Collection's folder path
-10. **Phase B**: Extract FileInfo per Collection
-11. **Phase B**: Report FileInfo results to server per Collection
-12. **Phase B**: Skip if no Collections exist
-13. **Phase C**: Compare current inventory against stored FileInfo per Collection
-14. **Phase C**: Detect new, modified, deleted files
-15. **Phase C**: Report delta summary to server per Collection
-16. **Phase C**: Skip if no Collections or no previous FileInfo
-17. Clean up local inventory storage after pipeline completion
-18. Unit tests for parsing and extraction logic
-19. Unit tests for FileInfo population and delta detection
-20. Integration tests with mock S3 data
+2. Implement provider detection from connector type
+3. **S3**: Implement S3 manifest.json fetching and parsing
+4. **S3**: Implement gzip decompression for S3 data files
+5. **S3**: Implement S3 CSV field mapping (Key, Size, LastModifiedDate, ETag)
+6. **GCS**: Implement GCS manifest.json fetching and parsing
+7. **GCS**: Implement GCS CSV/Parquet parsing (uncompressed)
+8. **GCS**: Implement GCS field mapping (name, size, updated, etag)
+9. Implement unified internal format for parsed inventory data
+10. Implement local storage of parsed inventory data for pipeline duration
+11. **Phase A**: Implement folder extraction algorithm (provider-agnostic)
+12. **Phase A**: Report folder results to server
+13. **Phase B**: Query server for Collections bound to this Connector
+14. **Phase B**: Filter inventory data by each Collection's folder path
+15. **Phase B**: Extract FileInfo per Collection
+16. **Phase B**: Report FileInfo results to server per Collection
+17. **Phase B**: Skip if no Collections exist
+18. **Phase C**: Compare current inventory against stored FileInfo per Collection
+19. **Phase C**: Detect new, modified, deleted files
+20. **Phase C**: Report delta summary to server per Collection
+21. **Phase C**: Skip if no Collections or no previous FileInfo
+22. Clean up local inventory storage after pipeline completion
+23. Unit tests for S3 parsing and extraction logic
+24. Unit tests for GCS parsing and extraction logic
+25. Integration tests with mock S3 and GCS data
 
-**Frontend (10 tasks):**
+**Frontend (12 tasks):**
 1. Add inventory configuration section to S3 connector form
-2. Implement "Import Inventory" action button (creates job)
-3. Display job progress via standard job status polling (shows current phase)
-4. Show discovered folder count on connector card
+2. Add inventory configuration section to GCS connector form
+3. Hide inventory configuration for SMB connectors
+4. Implement "Import Inventory" action button (creates job)
+5. Display job progress via standard job status polling (shows current phase)
+6. Show discovered folder count on connector card
 5. Show last import timestamp
 6. Component tests
 
@@ -902,15 +966,44 @@ To enable S3 Inventory for a bucket:
    - ETag (optional but recommended)
    - Storage class (optional)
 
-### B. Example Inventory CSV
+### B. Google Cloud Storage Insights Configuration Guide
 
+To enable Storage Insights inventory reports for a bucket:
+
+1. Open Google Cloud Console
+2. Navigate to Cloud Storage → Settings → Insights
+3. Create inventory report configuration:
+   - Report config name: `shuttersense-inventory` (or similar)
+   - Source bucket: The bucket containing photos
+   - Destination bucket: Where reports will be stored
+   - Frequency: Daily or Weekly
+   - Output format: CSV (recommended) or Parquet
+4. Required metadata fields for ShutterSense:
+   - name (object key)
+   - size
+   - updated (last modified)
+   - etag (optional but recommended)
+   - storageClass (optional)
+
+For more details, see [GCS Inventory Reports documentation](https://docs.cloud.google.com/storage/docs/insights/inventory-reports).
+
+### C. Example Inventory CSV
+
+**AWS S3 Format:**
 ```csv
 "photo-bucket","2020/Milledgeville, GA/IMG_0001.CR3",12345678,"2020-05-15T10:30:00.000Z","abc123","STANDARD"
 "photo-bucket","2020/Milledgeville, GA/IMG_0001.xmp",4567,"2020-05-15T10:30:01.000Z","def456","STANDARD"
 "photo-bucket","2020/Milledgeville, GA/IMG_0002.CR3",13456789,"2020-05-15T10:35:00.000Z","ghi789","STANDARD"
 ```
 
-### C. Folder Extraction Example
+**GCS Format:**
+```csv
+"2020/Milledgeville, GA/IMG_0001.CR3",12345678,"2020-05-15T10:30:00.000Z","abc123","STANDARD"
+"2020/Milledgeville, GA/IMG_0001.xmp",4567,"2020-05-15T10:30:01.000Z","def456","STANDARD"
+"2020/Milledgeville, GA/IMG_0002.CR3",13456789,"2020-05-15T10:35:00.000Z","ghi789","STANDARD"
+```
+
+### D. Folder Extraction Example
 
 Given objects:
 ```
@@ -930,7 +1023,7 @@ Extracted folders:
 2021/Nashville/
 ```
 
-### D. GUID Prefix
+### E. GUID Prefix
 
 | Entity | Prefix |
 |--------|--------|
@@ -939,6 +1032,15 @@ Extracted folders:
 ---
 
 ## Revision History
+
+- **2026-01-22 (v1.4)**: Added GCS (Google Cloud Storage) support
+  - Expanded scope to include both S3 and GCS connectors (SMB excluded)
+  - Added GCS Storage Insights inventory configuration and parsing
+  - Updated Technical Background with GCS concepts and field mapping differences
+  - Updated Functional Requirements with provider-specific handling (FR-003, FR-006, FR-012 to FR-014)
+  - Updated Data Model with separate S3InventoryConfig and GCSInventoryConfig schemas
+  - Updated Implementation Plan Phase 1 with GCS-specific agent tasks (~55 tasks)
+  - Added GCS Inventory Configuration Guide to Appendix
 
 - **2026-01-22 (v1.3)**: Sequential pipeline architecture (US2 → US4 → US6)
   - Import Inventory tool now executes three phases in sequence: A (folder extraction), B (FileInfo population), C (delta detection)
