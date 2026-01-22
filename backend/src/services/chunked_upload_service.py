@@ -170,6 +170,37 @@ class ChunkedUploadService:
         self._uploads_dir = Path(self._temp_base) / "shuttersense_uploads"
         self._uploads_dir.mkdir(parents=True, exist_ok=True)
 
+    def _validate_path_containment(self, path: Path) -> Path:
+        """
+        Validate that a path is contained within the uploads directory.
+
+        Resolves symlinks and relative path components (like ..) to ensure
+        the path cannot escape the uploads directory (path traversal prevention).
+
+        Args:
+            path: Path to validate
+
+        Returns:
+            Resolved absolute path
+
+        Raises:
+            ValidationError: If path would escape uploads directory
+        """
+        resolved_path = path.resolve()
+        uploads_resolved = self._uploads_dir.resolve()
+
+        # Check that the resolved path starts with the uploads directory
+        try:
+            resolved_path.relative_to(uploads_resolved)
+        except ValueError:
+            logger.warning(
+                "Path traversal attempt detected",
+                extra={"attempted_path": str(path), "resolved_to": str(resolved_path)}
+            )
+            raise ValidationError("Invalid path: path traversal detected")
+
+        return resolved_path
+
     # =========================================================================
     # Upload Session Management
     # =========================================================================
@@ -386,7 +417,9 @@ class ChunkedUploadService:
         if not session.temp_dir:
             raise ValidationError("Upload session has no temp directory")
         chunk_path = Path(session.temp_dir) / f"chunk_{chunk_index:06d}"
-        with open(chunk_path, 'wb') as f:
+        # Validate path is within uploads directory (path traversal prevention)
+        validated_path = self._validate_path_containment(chunk_path)
+        with open(validated_path, 'wb') as f:
             f.write(chunk_data)
 
         # Record chunk info
@@ -614,7 +647,9 @@ class ChunkedUploadService:
         chunks = []
         for i in range(session.total_chunks):
             chunk_path = temp_dir / f"chunk_{i:06d}"
-            with open(chunk_path, 'rb') as f:
+            # Validate path is within uploads directory (path traversal prevention)
+            validated_path = self._validate_path_containment(chunk_path)
+            with open(validated_path, 'rb') as f:
                 chunks.append(f.read())
 
         return b''.join(chunks)
