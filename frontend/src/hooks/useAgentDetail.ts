@@ -105,6 +105,11 @@ export const useAgentDetail = (
    * Connect to WebSocket for real-time updates
    */
   const connectWebSocket = useCallback(() => {
+    // Skip WebSocket in environments where it's not available (e.g., Node.js tests)
+    if (typeof WebSocket === 'undefined') {
+      return
+    }
+
     if (!enableRealtime || wsRef.current?.readyState === WebSocket.OPEN) {
       return
     }

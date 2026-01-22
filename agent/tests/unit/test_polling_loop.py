@@ -182,7 +182,8 @@ class TestWaitForNextPoll:
         await loop._wait_for_next_poll()
         elapsed = asyncio.get_event_loop().time() - start
 
-        assert elapsed >= 0.1
+        # Use small tolerance for timer precision (Windows timers can be less precise)
+        assert elapsed >= 0.09
 
     @pytest.mark.asyncio
     async def test_wait_interrupted_by_shutdown(self, mock_api_client):
