@@ -3,7 +3,7 @@
 **Issue**: #40
 **Status**: Draft
 **Created**: 2026-01-22
-**Last Updated**: 2026-01-22 (v1.1)
+**Last Updated**: 2026-01-22 (v1.2)
 **Related Features**:
 - 004-remote-photos-persistence (Connector architecture)
 - 007-remote-photos-completion (Tool execution)
@@ -167,16 +167,20 @@ s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifes
 **I want to** trigger an inventory import
 **So that** I can see all folders in my bucket without API calls
 
+**Architecture Note:** Per project constitution, all complex analysis and tool execution MUST run agent-side to avoid overloading the web server. The "Import Inventory" tool is designed from the start as an agent-executed tool using the JobQueue system.
+
 **Acceptance Criteria:**
 - "Import Inventory" action available on S3 Connector
-- System fetches latest manifest.json from inventory location
-- System downloads and parses CSV data files
-- Unique folder paths extracted (entries ending with "/" or parent paths)
-- Folders stored on Connector record with metadata
-- Progress indicator during import
+- Action creates a Job in the JobQueue (not executed server-side)
+- Agent claims and executes the import job
+- Agent fetches latest manifest.json from inventory location
+- Agent downloads, decompresses (gzip), and parses CSV data files
+- Agent extracts unique folder paths (entries ending with "/" or parent paths)
+- Agent reports results back to server; folders stored on Connector record
+- UI shows job progress via standard job status polling
 - Import completes within 5 minutes for 1 million objects
 
-**Independent Test:** Import inventory for bucket with 100,000 objects, verify all folders discovered
+**Independent Test:** Trigger import, verify Job created in queue, agent executes and reports folders
 
 ---
 
@@ -221,14 +225,19 @@ s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifes
 **I want to** schedule automatic inventory imports
 **So that** Collections stay up-to-date without manual intervention
 
-**Acceptance Criteria:**
-- Connector configuration includes import schedule
-- Schedule options: manual only, daily, weekly, or matching inventory frequency
-- System detects new inventory reports automatically
-- Import runs via agent (distributed execution)
-- Last import timestamp and next scheduled import visible
+**Architecture Note:** Scheduling leverages the agent-executed Import Inventory tool from User Story 2. When a scheduled import job completes, the system automatically creates the next scheduled job based on the configured frequency. This "chain scheduling" approach ensures reliable periodic execution without requiring a separate scheduler service.
 
-**Independent Test:** Configure weekly import, advance time, verify import triggered automatically
+**Acceptance Criteria:**
+- Connector configuration includes import schedule frequency
+- Schedule options: manual only, daily, weekly, or matching inventory frequency
+- When schedule is enabled, system creates first scheduled Job in JobQueue
+- Upon job completion, system automatically creates next scheduled Job based on frequency
+- Next job's scheduled_at timestamp calculated from completion time + frequency interval
+- Last import timestamp and next scheduled import visible in UI
+- Manual "Import Now" action available regardless of schedule (creates immediate job)
+- Disabling schedule cancels any pending scheduled jobs
+
+**Independent Test:** Configure weekly import, complete first job, verify next job auto-created with correct scheduled_at timestamp
 
 ---
 
@@ -260,15 +269,17 @@ s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifes
 - **FR-003**: Validate inventory path accessibility during connector test
 - **FR-004**: Store inventory settings encrypted with other credentials
 
-#### Inventory Import
+#### Inventory Import (Agent-Executed)
 
-- **FR-010**: Create `InventoryImportService` to orchestrate import process
-- **FR-011**: Fetch and parse `manifest.json` from inventory location
-- **FR-012**: Download data files referenced in manifest
-- **FR-013**: Parse CSV format with configurable field mapping
-- **FR-014**: Extract unique folder paths from object keys
-- **FR-015**: Store folders as `InventoryFolder` records linked to Connector
-- **FR-016**: Support paginated processing for large inventories
+- **FR-010**: "Import Inventory" action creates a Job in JobQueue (never executes server-side)
+- **FR-011**: Create `InventoryImportTool` as an agent-executable tool type
+- **FR-012**: Agent fetches and parses `manifest.json` from inventory location
+- **FR-013**: Agent downloads and decompresses (gzip) data files referenced in manifest
+- **FR-014**: Agent parses CSV format with configurable field mapping
+- **FR-015**: Agent extracts unique folder paths from object keys
+- **FR-016**: Agent reports results to server via job completion endpoint
+- **FR-017**: Server stores folders as `InventoryFolder` records linked to Connector
+- **FR-018**: Support streaming/chunked processing for large inventories
 
 #### Folder-to-Collection Mapping
 
@@ -286,13 +297,16 @@ s3://my-inventory-bucket/photo-bucket/weekly-inventory/2026-01-20T00-00Z/manifes
 - **FR-033**: Provide "Refresh from S3" action to update FileInfo via API
 - **FR-034**: Track `file_info_updated_at` timestamp on Collection
 
-#### Scheduling
+#### Scheduling (Chain-Based)
 
 - **FR-040**: Add `inventory_schedule` field to Connector configuration
-- **FR-041**: Schedule options: manual, daily, weekly, custom cron
-- **FR-042**: Create scheduled job for inventory import
-- **FR-043**: Agent claims and executes inventory import jobs
-- **FR-044**: Prevent concurrent imports for same Connector
+- **FR-041**: Schedule options: manual only, daily, weekly (no cron - simple intervals)
+- **FR-042**: When schedule enabled, create first scheduled Job with future `scheduled_at`
+- **FR-043**: Upon job completion, automatically create next scheduled Job
+- **FR-044**: Next job's `scheduled_at` = completion time + configured interval
+- **FR-045**: Prevent concurrent imports for same Connector
+- **FR-046**: Disabling schedule cancels pending scheduled jobs
+- **FR-047**: "Import Now" creates immediate job independent of schedule
 
 ### Non-Functional Requirements
 
@@ -560,30 +574,38 @@ frontend/src/
 
 ### Phase 1: Inventory Configuration and Import (Priority: P1)
 
-**Estimated Tasks: ~30**
+**Estimated Tasks: ~35**
 
-**Backend (20 tasks):**
+**Backend/Server (15 tasks):**
 1. Create `InventoryConfig` schema for connector settings
 2. Add inventory config to S3 connector credential schema
 3. Create `InventoryFolder` model and migration
-4. Implement manifest.json fetching and parsing
-5. Implement CSV parsing with streaming for large files
-6. Implement folder extraction algorithm
-7. Create `InventoryImportService` orchestration
-8. Store discovered folders to database
-9. Create import job type for agent execution
-10. Add inventory API endpoints
-11. Unit tests for parsing logic
-12. Integration tests with mock S3 data
+4. Create `InventoryImportTool` job type registration
+5. Add "Import Inventory" endpoint that creates Job in queue
+6. Add endpoint to receive import results from agent
+7. Store discovered folders to database from agent results
+8. Add inventory status/folders API endpoints
+9. Unit tests for job creation and result handling
+10. Integration tests with mock agent responses
+
+**Agent (10 tasks):**
+1. Implement `InventoryImportTool` in agent tool registry
+2. Implement manifest.json fetching and parsing
+3. Implement gzip decompression for data files
+4. Implement CSV parsing with streaming for large files
+5. Implement folder extraction algorithm
+6. Report results back to server via job completion
+7. Unit tests for parsing logic
+8. Integration tests with mock S3 data
 
 **Frontend (10 tasks):**
 1. Add inventory configuration section to S3 connector form
-2. Implement "Import Inventory" action button
-3. Display import progress indicator
+2. Implement "Import Inventory" action button (creates job)
+3. Display job progress via standard job status polling
 4. Show discovered folder count on connector card
 5. Component tests
 
-**Checkpoint:** User can configure inventory source and trigger import, seeing folder count.
+**Checkpoint:** User triggers import, Job created in queue, agent executes and reports folders.
 
 ---
 
@@ -634,21 +656,25 @@ frontend/src/
 
 **Estimated Tasks: ~15**
 
-**Backend (10 tasks):**
-1. Add `inventory_schedule` to Connector configuration
-2. Create scheduled job for periodic import
-3. Detect new inventory availability
-4. Prevent concurrent imports
-5. Agent execution of scheduled imports
-6. Tests for scheduling logic
+**Backend (12 tasks):**
+1. Add `inventory_schedule` field to Connector configuration schema
+2. Add schedule options: manual, daily, weekly
+3. Create first scheduled Job when schedule is enabled
+4. Implement chain scheduling: create next Job on completion
+5. Calculate next `scheduled_at` from completion time + interval
+6. Cancel pending scheduled jobs when schedule disabled
+7. Prevent concurrent imports for same Connector
+8. Ensure "Import Now" works independently of schedule
+9. Store last import timestamp on Connector
+10. Tests for chain scheduling logic
 
 **Frontend (5 tasks):**
-1. Schedule selector in inventory configuration
-2. Display next scheduled import time
+1. Schedule frequency selector in inventory configuration
+2. Display next scheduled import time (from pending Job)
 3. Display last import timestamp
-4. Manual trigger option
+4. "Import Now" button available regardless of schedule
 
-**Checkpoint:** Inventory imports run automatically on configured schedule.
+**Checkpoint:** Complete import, verify next scheduled job auto-created with correct timestamp.
 
 ---
 
@@ -830,6 +856,14 @@ Extracted folders:
 ---
 
 ## Revision History
+
+- **2026-01-22 (v1.2)**: Agent-first architecture and chain scheduling
+  - User Story 2: Emphasized Import Inventory is agent-executed via JobQueue from day one
+  - User Story 5: Defined chain scheduling (next job created on completion)
+  - Updated Functional Requirements for agent-executed import (FR-010 to FR-018)
+  - Updated Scheduling requirements for chain-based approach (FR-040 to FR-047)
+  - Revised Phase 1 to split Backend/Agent tasks clearly
+  - Revised Phase 4 for chain scheduling implementation
 
 - **2026-01-22 (v1.1)**: Clarified gzip decompression handling
   - Removed gzip decompression from Non-Goals (AWS inventory is always compressed)
