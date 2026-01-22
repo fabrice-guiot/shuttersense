@@ -617,9 +617,13 @@ class CollectionResponse(BaseModel):
 
         # Copy basic attributes
         for attr in ['guid', 'name', 'type', 'location', 'state', 'pipeline_version',
-                     'cache_ttl', 'is_accessible', 'accessibility_message', 'created_at', 'updated_at']:
+                     'cache_ttl', 'is_accessible', 'created_at', 'updated_at']:
             if hasattr(data, attr):
                 result[attr] = getattr(data, attr)
+
+        # Map last_error (DB field) to accessibility_message (API field)
+        if hasattr(data, 'last_error'):
+            result['accessibility_message'] = getattr(data, 'last_error')
 
         # Map last_refresh_at (DB field) to last_scanned_at (API field)
         if hasattr(data, 'last_refresh_at'):

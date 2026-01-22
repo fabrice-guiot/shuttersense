@@ -128,23 +128,25 @@ class TestConnectorModel:
 
         assert connector.type == ConnectorType.SMB
 
-    def test_connector_name_uniqueness(self, test_db_session, test_encryptor):
-        """Test connector names must be unique."""
+    def test_connector_name_uniqueness(self, test_db_session, test_encryptor, test_team):
+        """Test connector names must be unique within a team (team-scoped uniqueness)."""
         encrypted_creds = test_encryptor.encrypt('{"test": "creds"}')
 
         connector1 = Connector(
             name="Duplicate Name",
             type=ConnectorType.S3,
-            credentials=encrypted_creds
+            credentials=encrypted_creds,
+            team_id=test_team.id,  # Same team
         )
         test_db_session.add(connector1)
         test_db_session.commit()
 
-        # Try to create another connector with same name
+        # Try to create another connector with same name in same team
         connector2 = Connector(
             name="Duplicate Name",
             type=ConnectorType.GCS,
-            credentials=encrypted_creds
+            credentials=encrypted_creds,
+            team_id=test_team.id,  # Same team - should fail
         )
         test_db_session.add(connector2)
 

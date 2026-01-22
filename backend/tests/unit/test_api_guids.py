@@ -251,14 +251,17 @@ class TestGuidInListResponses:
 class TestGuidInCreateResponses:
     """Tests for guid field in create responses (no numeric id) - T038"""
 
-    def test_create_collection_returns_guid_only(self, test_client, sample_collection_data):
+    def test_create_collection_returns_guid_only(self, test_client, sample_collection_data, create_agent):
         """Should return guid (not numeric id) when creating collection"""
+        agent = create_agent(name="GUID Test Agent")
+
         with tempfile.TemporaryDirectory() as temp_dir:
             data = sample_collection_data(
                 name="New Collection With GUID",
                 type="local",
                 location=temp_dir
             )
+            data["bound_agent_guid"] = agent.guid
 
             response = test_client.post("/api/collections", json=data)
 

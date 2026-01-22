@@ -160,23 +160,26 @@ class TestConnectorCollectionFlow:
         delete_final = test_client.delete(f"/api/connectors/{connector_guid}")
         assert delete_final.status_code == 204
 
-    def test_local_collection_no_connector_required(self, test_client):
+    def test_local_collection_no_connector_required(self, test_client, create_agent):
         """
-        Test that local collections don't require connectors
+        Test that local collections don't require connectors (but DO require bound agent)
 
         Flow:
-        1. Create local collection (no connector)
+        1. Create local collection with bound agent (no connector)
         2. Verify creation succeeds
         3. Delete collection
         4. Verify deletion succeeds
         """
+        agent = create_agent(name="Local Collection Agent")
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Step 1: Create local collection
+            # Step 1: Create local collection with bound agent
             collection_data = {
                 "name": "Local Collection",
                 "type": "local",
                 "location": temp_dir,
-                "state": "live"
+                "state": "live",
+                "bound_agent_guid": agent.guid,
             }
 
             response = test_client.post("/api/collections", json=collection_data)
@@ -187,7 +190,8 @@ class TestConnectorCollectionFlow:
             # Step 2: Verify creation
             assert collection["connector"] is None
             assert collection["type"] == "local"
-            assert collection["is_accessible"] is True
+            # LOCAL with bound agent: accessibility is deferred to agent
+            assert collection["bound_agent"]["guid"] == agent.guid
 
             # Step 3: Delete collection
             delete_response = test_client.delete(f"/api/collections/{collection_guid}")
@@ -209,7 +213,7 @@ class TestRemoteCollectionAccessibility:
         1. Create S3 connector with invalid credentials
         2. Create collection (should succeed but mark as inaccessible)
         3. Verify is_accessible=false
-        4. Verify last_error is populated with meaningful message
+        4. Verify accessibility_message is populated with meaningful message
         5. Test collection accessibility (should return failure)
         """
         # Step 1: Create S3 connector with invalid credentials
@@ -251,10 +255,10 @@ class TestRemoteCollectionAccessibility:
         # Step 3: Verify is_accessible=false
         assert collection["is_accessible"] is False
 
-        # Step 4: Verify last_error is populated
-        assert collection["last_error"] is not None
-        assert len(collection["last_error"]) > 0
-        assert "Authentication failed" in collection["last_error"] or "does not exist" in collection["last_error"]
+        # Step 4: Verify accessibility_message is populated
+        assert collection["accessibility_message"] is not None
+        assert len(collection["accessibility_message"]) > 0
+        assert "Authentication failed" in collection["accessibility_message"] or "does not exist" in collection["accessibility_message"]
 
         # Step 5: Test collection accessibility -> should return failure
         test_response = test_client.post(f"/api/collections/{collection_guid}/test")
@@ -270,7 +274,7 @@ class TestRemoteCollectionAccessibility:
         Flow:
         1. Create GCS connector with invalid service account
         2. Create collection
-        3. Verify is_accessible=false and last_error populated
+        3. Verify is_accessible=false and accessibility_message populated
         """
         # Step 1: Create GCS connector with invalid credentials
         import json as json_lib
@@ -319,8 +323,8 @@ class TestRemoteCollectionAccessibility:
 
         # Step 3: Verify accessibility status
         assert collection["is_accessible"] is False
-        assert collection["last_error"] is not None
-        assert "authentication failed" in collection["last_error"].lower() or "invalid" in collection["last_error"].lower()
+        assert collection["accessibility_message"] is not None
+        assert "authentication failed" in collection["accessibility_message"].lower() or "invalid" in collection["accessibility_message"].lower()
 
     def test_invalid_smb_credentials_accessibility(self, test_client, mocker):
         """
@@ -329,7 +333,7 @@ class TestRemoteCollectionAccessibility:
         Flow:
         1. Create SMB connector with invalid credentials
         2. Create collection
-        3. Verify is_accessible=false and last_error populated
+        3. Verify is_accessible=false and accessibility_message populated
         """
         # Step 1: Create SMB connector with invalid credentials
         connector_data = {
@@ -369,8 +373,8 @@ class TestRemoteCollectionAccessibility:
 
         # Step 3: Verify accessibility status
         assert collection["is_accessible"] is False
-        assert collection["last_error"] is not None
-        assert "failed" in collection["last_error"].lower() or "authentication" in collection["last_error"].lower()
+        assert collection["accessibility_message"] is not None
+        assert "failed" in collection["accessibility_message"].lower() or "authentication" in collection["accessibility_message"].lower()
 
     def test_accessible_to_inaccessible_transition(self, test_client, mocker):
         """
@@ -381,7 +385,7 @@ class TestRemoteCollectionAccessibility:
         2. Create collection (should be accessible)
         3. Change connector credentials to invalid
         4. Test collection -> should fail and update is_accessible
-        5. Verify is_accessible=false and last_error updated
+        5. Verify is_accessible=false and accessibility_message updated
         """
         # Step 1: Create connector (mock as valid initially)
         connector_data = {
@@ -417,7 +421,7 @@ class TestRemoteCollectionAccessibility:
         collection_guid = collection["guid"]
 
         assert collection["is_accessible"] is True
-        assert collection["last_error"] is None
+        assert collection["accessibility_message"] is None
 
         # Step 3: Change connector credentials (simulate credentials becoming invalid)
         # Mock connection failure
@@ -436,5 +440,5 @@ class TestRemoteCollectionAccessibility:
         get_response = test_client.get(f"/api/collections/{collection_guid}")
         updated_collection = get_response.json()
         assert updated_collection["is_accessible"] is False
-        assert updated_collection["last_error"] is not None
-        assert "Credentials expired" in updated_collection["last_error"] or "revoked" in updated_collection["last_error"]
+        assert updated_collection["accessibility_message"] is not None
+        assert "Credentials expired" in updated_collection["accessibility_message"] or "revoked" in updated_collection["accessibility_message"]

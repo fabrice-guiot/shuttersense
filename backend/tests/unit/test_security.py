@@ -187,9 +187,10 @@ class TestXSSPrevention:
         # Response should have JSON content type (prevents browser execution)
         assert "application/json" in response.headers.get("content-type", "")
 
-    def test_collection_name_xss_prevention(self, test_client):
+    def test_collection_name_xss_prevention(self, test_client, create_agent):
         """Test that collection names with XSS payloads are handled safely."""
         xss_name = "<img src=x onerror='alert(1)'>"
+        agent = create_agent(name="XSS Test Agent")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             response = test_client.post(
@@ -198,7 +199,8 @@ class TestXSSPrevention:
                     "name": xss_name,
                     "type": "local",
                     "location": temp_dir,
-                    "state": "live"
+                    "state": "live",
+                    "bound_agent_guid": agent.guid,
                 }
             )
 
