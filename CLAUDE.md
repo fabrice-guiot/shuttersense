@@ -1,6 +1,6 @@
 # ShutterSense.ai Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-01-09
+Auto-generated from all feature plans. Last updated: 2026-01-21
 
 ## Project Overview
 
@@ -321,6 +321,9 @@ Example: `col_01hgw2bbg0000000000000001`
 | Team | `tea_` | `tea_01hgw2bbg...` |
 | User | `usr_` | `usr_01hgw2bbg...` |
 | ApiToken | `tok_` | `tok_01hgw2bbg...` |
+| Agent | `agt_` | `agt_01hgw2bbg...` |
+| AgentRegistrationToken | `art_` | `art_01hgw2bbg...` |
+| ReleaseManifest | `rel_` | `rel_01hgw2bbg...` |
 
 **Key Files:**
 - `backend/src/services/guid.py` - GuidService for generation/validation
@@ -410,6 +413,42 @@ const { user, isAuthenticated } = useAuth()
 | Team | `tea_` |
 | User | `usr_` |
 | ApiToken | `tok_` |
+
+### 7. Agent-Only Execution (Distributed Processing) - Issue #90
+
+All asynchronous job processing MUST be executed by agents. The server acts as a coordinator only and MUST NOT execute any jobs directly.
+
+**Architecture:**
+- Server creates jobs, assigns them to agents, and stores results
+- Agents (lightweight binaries) claim and execute jobs on user machines
+- Jobs without available agents remain queued indefinitely
+- Collections can be bound to specific agents (local filesystem MUST be bound)
+
+**Job Processing Flow:**
+1. User creates job via web UI
+2. Server queues job for execution
+3. Agent polls `/api/jobs/claim` and claims job
+4. Agent executes tool locally against collection
+5. Agent reports results via `/api/jobs/{guid}/complete`
+6. Server stores results and updates job status
+
+**UI Requirements:**
+- Application MUST indicate when no agents are available
+- Job creation MUST warn users if no agents can process their request
+- Agent status visible in application header (Agent Pool Status indicator)
+
+**Key Files:**
+- `backend/src/services/agent_service.py` - Agent registration and management
+- `backend/src/services/job_service.py` - Job creation and assignment
+- `backend/src/api/agent/` - Agent-facing API endpoints
+- `agent/` - Agent binary source code
+
+**Entity Prefixes:**
+| Entity | Prefix |
+|--------|--------|
+| Agent | `agt_` |
+| AgentRegistrationToken | `art_` |
+| ReleaseManifest | `rel_` |
 
 ## Configuration
 

@@ -1,4 +1,36 @@
 <!--
+SYNC IMPACT REPORT (Constitution v1.6.0 - Agent-Only Execution)
+
+Version change: 1.5.0 → 1.6.0 (MINOR)
+Modified sections:
+  - Added new Core Principle: VI. Agent-Only Execution (Distributed Processing)
+
+Added requirements:
+  - All asynchronous job processing MUST be executed by agents
+  - Server MUST NOT execute any jobs directly (coordinator only)
+  - Jobs without available agents remain queued indefinitely
+  - At least one agent MUST be running for jobs to be processed
+  - Collections can be bound to specific agents (local filesystem MUST be bound)
+  - UI MUST indicate when no agents are available
+  - Job creation MUST warn users if no agents can process requests
+
+Rationale:
+  - Issue #90 / Feature 021-distributed-agent-architecture established agent architecture
+  - Enables distributed processing where tools run close to the data
+  - Supports local filesystem access (impossible for cloud server)
+  - Provides horizontal scaling via multiple agents
+
+Impact:
+  - All new job processing MUST go through agent execution
+  - UI MUST check agent availability before job creation
+  - Documentation MUST explain agent requirement to users
+
+Templates requiring updates:
+  ✅ No template changes needed - this is an architecture standard
+
+Previous Amendment (v1.5.0 - Multi-Tenancy and Authentication):
+  - Added new Core Principle: V. Multi-Tenancy and Authentication (Web Application)
+
 SYNC IMPACT REPORT (Constitution v1.5.0 - Multi-Tenancy and Authentication)
 
 Version change: 1.4.0 → 1.5.0 (MINOR)
@@ -236,6 +268,51 @@ const { user, isAuthenticated, logout } = useAuth()
 
 **Rationale**: Multi-tenancy enables the application to serve multiple organizations while ensuring complete data isolation. Authentication prevents unauthorized access. The consistent pattern of TenantContext injection ensures tenant isolation cannot be accidentally bypassed. Returning 404 for cross-team access prevents attackers from discovering which GUIDs exist in other tenants.
 
+### VI. Agent-Only Execution (Distributed Processing)
+
+All asynchronous job processing MUST be executed by agents. The server MUST NOT execute any jobs directly. This is a foundational architectural constraint, not a backward compatibility consideration.
+
+**Architecture Constraints**:
+- The server acts as a coordinator only: it creates jobs, assigns them to agents, and stores results
+- Agents (lightweight binaries running on user machines) claim and execute jobs
+- All tool execution (PhotoStats, Photo Pairing, Pipeline Validation) happens exclusively on agents
+- Jobs without an available agent will remain queued indefinitely
+
+**Job Processing Flow**:
+1. User creates a job via the web UI
+2. Server creates a job record and queues it for execution
+3. Agent polls server for available jobs via `/api/jobs/claim`
+4. Agent executes the tool locally against the collection
+5. Agent reports results back to server via `/api/jobs/{guid}/complete`
+6. Server stores results and updates job status
+
+**Agent Requirements**:
+- At least one agent MUST be running for any jobs to be processed
+- Collections can be bound to specific agents (local filesystem collections MUST be bound)
+- Agents authenticate via registration tokens and maintain trust via binary attestation
+- Agents can access local filesystems and remote storage (S3, GCS, SMB) via connectors
+
+**UI Requirements**:
+- The application MUST clearly indicate when no agents are available
+- Job creation MUST warn users if no agents can process their request
+- Agent status MUST be visible in the application header
+
+**Entity Prefixes for Agent Entities**:
+
+| Entity | Prefix | Description |
+|--------|--------|-------------|
+| Agent | `agt_` | Registered agent instance |
+| AgentRegistrationToken | `art_` | One-time registration token |
+| ReleaseManifest | `rel_` | Binary attestation manifest |
+
+**Key Files**:
+- `backend/src/services/agent_service.py` - Agent registration and management
+- `backend/src/services/job_service.py` - Job creation and assignment
+- `backend/src/api/agent/` - Agent-facing API endpoints
+- `agent/` - Agent binary source code
+
+**Rationale**: Agent-only execution enables distributed processing where tools run close to the data. This architecture supports local filesystem access (impossible for a cloud server), reduces server load, and provides horizontal scaling. Users control where their data is processed by deploying agents in their environment.
+
 ## Shared Infrastructure Standards
 
 - **Configuration Management**: All tools MUST use `PhotoAdminConfig` from `config_manager.py` for loading and managing YAML configuration
@@ -347,4 +424,4 @@ All action rows MUST stack vertically on mobile using the responsive pattern:
 - Repeated exceptions to a principle suggest it needs revision
 - Project direction or scope changes significantly
 
-**Version**: 1.5.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-16
+**Version**: 1.6.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-21

@@ -26,6 +26,9 @@ ShutterSense provides two main components:
 A full-stack application for managing remote photo collections:
 - **Backend** (FastAPI) - RESTful API with PostgreSQL storage, encrypted credentials, job queuing
 - **Frontend** (React/TypeScript) - Modern, accessible UI with real-time progress updates
+- **Agent** (Python binary) - Distributed job executor running on user machines
+
+> **Important**: The web application requires at least one agent to process photo analysis jobs. Without an agent, jobs will remain queued but never execute. See [Agent Setup](#agent-setup) below.
 
 ## Quick Start
 
@@ -68,6 +71,33 @@ npm run dev
 
 See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md) for detailed setup instructions.
 
+### Agent Setup
+
+The agent executes photo analysis jobs on your machine. Without an agent, jobs cannot be processed.
+
+```bash
+# 1. Download or build the agent binary
+cd agent
+pip install -e ".[build]"
+./packaging/build_macos.sh  # or build_linux.sh, build_windows.sh
+
+# 2. Get a registration token from the web UI
+# Navigate to Settings > Agents > Generate Token
+
+# 3. Register the agent
+./dist/macos/shuttersense-agent register \
+  --server http://localhost:8000 \
+  --token art_xxxxx... \
+  --name "My Agent"
+
+# 4. Start the agent
+./dist/macos/shuttersense-agent start
+```
+
+The agent will poll the server for jobs and execute them locally. Leave it running while you want to process jobs.
+
+See [Agent Installation Guide](docs/agent-installation.md) for detailed setup instructions.
+
 ## Documentation
 
 ### User Guides
@@ -77,6 +107,7 @@ See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/REA
 - [PhotoStats Tool](docs/photostats.md) - Complete guide to using PhotoStats
 - [Photo Pairing Tool](docs/photo-pairing.md) - Complete guide to Photo Pairing
 - [Pipeline Validation Tool](docs/pipeline-validation.md) - Complete guide to Pipeline Validation
+- [Agent Installation](docs/agent-installation.md) - How to install and run the agent
 
 ### Product Requirements
 
@@ -86,6 +117,8 @@ Product requirement documents are stored in [docs/prd/](docs/prd/) for feature p
 
 - **[Backend README](backend/README.md)** - API setup, database migrations, testing, and development guide
 - **[Frontend README](frontend/README.md)** - React app setup, component structure, and build configuration
+- **[Agent README](agent/README.md)** - Agent setup, commands, and configuration
+- **[Agent Build Guide](docs/agent-build.md)** - For developers building agent binaries
 
 ## Project Structure
 
@@ -99,6 +132,11 @@ shuttersense/
 ├── config/                     # Configuration files
 ├── backend/                    # FastAPI backend application
 ├── frontend/                   # React frontend application
+├── agent/                      # Distributed agent for job execution
+│   ├── cli/                    # CLI entry points
+│   ├── src/                    # Agent source code
+│   ├── packaging/              # Build scripts for standalone binaries
+│   └── tests/                  # Agent tests
 ├── docs/                       # Documentation
 │   ├── prd/                    # Product requirement documents
 │   └── ...                     # Tool documentation
@@ -111,6 +149,7 @@ For detailed project structure:
 - CLI tools and utilities: See this README
 - Backend structure: See [backend/README.md](backend/README.md)
 - Frontend structure: See [frontend/README.md](frontend/README.md)
+- Agent structure: See [agent/README.md](agent/README.md)
 
 ## Development
 
@@ -125,6 +164,9 @@ cd backend && python -m pytest tests/ -v
 
 # Frontend tests
 cd frontend && npm test
+
+# Agent tests
+cd agent && python -m pytest tests/ -v
 ```
 
 ### Test Coverage

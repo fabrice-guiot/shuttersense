@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -8,11 +9,12 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useCollections, useCollectionStats } from '../hooks/useCollections'
 import { useConnectors } from '../hooks/useConnectors'
 import { usePipelines } from '../hooks/usePipelines'
 import { useTools } from '../hooks/useTools'
+import { useAgentPoolStatus } from '../hooks/useAgentPoolStatus'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { CollectionList } from '../components/collections/CollectionList'
 import { FiltersSection } from '../components/collections/FiltersSection'
@@ -59,6 +61,10 @@ export default function CollectionsPage() {
     useWebSocket: true,
     onJobComplete: handleJobComplete
   })
+
+  // Agent pool status for warning banner
+  const { poolStatus } = useAgentPoolStatus()
+  const noAgentsAvailable = poolStatus?.online_count === 0
 
   // Filter UI state (for select components)
   const [selectedState, setSelectedState] = useState<CollectionState | 'ALL' | ''>('ALL')
@@ -151,6 +157,20 @@ export default function CollectionsPage() {
           New Collection
         </Button>
       </div>
+
+      {/* No Agents Warning (Issue #90 - T215) */}
+      {noAgentsAvailable && (
+        <Alert variant="warning">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>No agents available</AlertTitle>
+          <AlertDescription>
+            Analysis jobs require at least one agent to process. Jobs will remain queued until an agent becomes available.{' '}
+            <Link to="/agents" className="underline hover:no-underline">
+              Manage agents
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Error Alert */}
       {error && (

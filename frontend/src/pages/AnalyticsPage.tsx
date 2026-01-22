@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import {
   Play,
   RefreshCw,
@@ -18,12 +18,14 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  CalendarClock
+  CalendarClock,
+  AlertTriangle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useTools, useQueueStatus } from '@/hooks/useTools'
+import { useAgentPoolStatus } from '@/hooks/useAgentPoolStatus'
 import { useResults, useResult, useResultStats, useReportDownload } from '@/hooks/useResults'
 import {
   usePhotoStatsTrends,
@@ -96,6 +98,10 @@ export default function AnalyticsPage() {
 
   // Queue status for stats (defined first so callbacks can use refetch)
   const { queueStatus, refetch: refetchQueueStatus } = useQueueStatus()
+
+  // Agent pool status for warning banner
+  const { poolStatus } = useAgentPoolStatus()
+  const noAgentsAvailable = poolStatus?.online_count === 0
 
   // Result stats (defined first so callbacks can use refetch)
   const { stats: resultStats, refetch: refetchResultStats } = useResultStats()
@@ -476,6 +482,20 @@ export default function AnalyticsPage() {
       {currentError && (
         <Alert variant="destructive">
           <AlertDescription>{currentError}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* No Agents Warning (Issue #90 - T215) */}
+      {noAgentsAvailable && (
+        <Alert variant="warning">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>No agents available</AlertTitle>
+          <AlertDescription>
+            Analysis jobs require at least one agent to process. Jobs will remain queued until an agent becomes available.{' '}
+            <Link to="/agents" className="underline hover:no-underline">
+              Manage agents
+            </Link>
+          </AlertDescription>
         </Alert>
       )}
 
