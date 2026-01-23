@@ -17,14 +17,14 @@
 
 **Purpose**: Database migration and model changes that enable all user stories
 
-- [ ] T001 Add NO_CHANGE to ResultStatus enum in backend/src/models/__init__.py
-- [ ] T001b Add StorageMetrics model in backend/src/models/storage_metrics.py (team_id FK, cumulative counters for reports generated, purged counts, bytes)
-- [ ] T002 Add storage optimization fields to AnalysisResult model in backend/src/models/analysis_result.py (input_state_hash, input_state_json, no_change_copy, download_report_from)
-- [ ] T003 Create Alembic migration for analysis_results table changes in backend/alembic/versions/
-- [ ] T003b Create Alembic migration for storage_metrics table in backend/alembic/versions/
-- [ ] T004 [P] Create retention Pydantic schemas in backend/src/schemas/retention.py (RetentionSettingsResponse, RetentionSettingsUpdate)
-- [ ] T005 [P] Create frontend retention API types in frontend/src/contracts/api/retention-api.ts
-- [ ] T006 Run migration and verify schema changes apply correctly
+- [X] T001 Add NO_CHANGE to ResultStatus enum in backend/src/models/__init__.py
+- [X] T001b Add StorageMetrics model in backend/src/models/storage_metrics.py (team_id FK, cumulative counters for reports generated, purged counts, bytes)
+- [X] T002 Add storage optimization fields to AnalysisResult model in backend/src/models/analysis_result.py (input_state_hash, input_state_json, no_change_copy, download_report_from)
+- [X] T003 Create Alembic migration for analysis_results table changes in backend/alembic/versions/
+- [X] T003b Create Alembic migration for storage_metrics table in backend/alembic/versions/
+- [X] T004 [P] Create retention Pydantic schemas in backend/src/schemas/retention.py (RetentionSettingsResponse, RetentionSettingsUpdate)
+- [X] T005 [P] Create frontend retention API types in frontend/src/contracts/api/retention-api.ts
+- [X] T006 Run migration and verify schema changes apply correctly
 
 ---
 
