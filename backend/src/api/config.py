@@ -126,7 +126,7 @@ def get_retention_settings(
     Returns:
         Current retention settings with defaults applied
     """
-    return service.get_settings(team_id=ctx.team_id)
+    return service.get_settings(ctx)
 
 
 @router.put(
@@ -159,7 +159,7 @@ def update_retention_settings(
         400: If any value is not in the allowed options
     """
     try:
-        return service.update_settings(team_id=ctx.team_id, update=update)
+        return service.update_settings(ctx, update=update)
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -74,6 +74,28 @@ class InputStateService:
         # Compute SHA-256
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
+    # Configuration keys relevant for analysis hash computation
+    # Must match agent/src/input_state.py _extract_relevant_config
+    RELEVANT_CONFIG_KEYS = [
+        "photo_extensions",
+        "metadata_extensions",
+        "require_sidecar",
+        "cameras",
+        "processing_methods",
+        "pipeline",  # Pipeline rules affect validation
+    ]
+
+    def _extract_relevant_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract only analysis-relevant configuration keys.
+
+        This ensures the hash only changes when analysis-affecting config changes,
+        not when unrelated settings are modified.
+
+        Must stay in sync with agent/src/input_state.py _extract_relevant_config.
+        """
+        return {k: config[k] for k in self.RELEVANT_CONFIG_KEYS if k in config}
+
     def compute_configuration_hash(
         self,
         configuration: Dict[str, Any]
@@ -82,6 +104,8 @@ class InputStateService:
         Compute SHA-256 hash of tool configuration.
 
         Configuration is serialized as sorted JSON to ensure deterministic output.
+        Only relevant configuration keys are included to prevent hash changes from
+        irrelevant config changes.
 
         Args:
             configuration: Tool configuration dictionary
@@ -96,8 +120,12 @@ class InputStateService:
             ... }
             >>> hash = service.compute_configuration_hash(config)
         """
+        # Extract only analysis-relevant configuration
+        # This prevents hash changes from irrelevant config changes
+        relevant_config = self._extract_relevant_config(configuration)
+
         # Serialize with sorted keys for determinism
-        content = json.dumps(configuration, sort_keys=True, separators=(",", ":"))
+        content = json.dumps(relevant_config, sort_keys=True, separators=(",", ":"))
 
         # Compute SHA-256
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -159,6 +187,9 @@ class InputStateService:
         # Sort files for deterministic ordering
         sorted_files = sorted(files, key=lambda f: f[0])
 
+        # Extract only relevant config (same as hash computation)
+        relevant_config = self._extract_relevant_config(configuration)
+
         state = {
             "tool": tool,
             "file_count": len(sorted_files),
@@ -166,7 +197,7 @@ class InputStateService:
                 {"path": p, "size": s, "mtime": int(m)}
                 for p, s, m in sorted_files
             ],
-            "configuration": configuration,
+            "configuration": relevant_config,
         }
 
         return json.dumps(state, sort_keys=True, indent=2)

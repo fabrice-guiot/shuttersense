@@ -60,7 +60,7 @@ describe('useRetention', () => {
     test('handles fetch error', async () => {
       // Override handler to return error
       server.use(
-        http.get('*/api/config/retention', () => {
+        http.get('/api/config/retention', () => {
           return HttpResponse.json(
             { detail: 'Database connection failed' },
             { status: 500 }
@@ -145,7 +145,7 @@ describe('useRetention', () => {
     test('handles update error', async () => {
       // Override handler BEFORE rendering
       server.use(
-        http.put('*/api/config/retention', () => {
+        http.put('/api/config/retention', () => {
           return HttpResponse.json(
             { detail: 'Validation failed' },
             { status: 400 }

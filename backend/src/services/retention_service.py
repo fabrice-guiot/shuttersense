@@ -9,13 +9,14 @@ Design:
 - Uses existing Configuration model for storage
 - Returns defaults when settings don't exist
 - Validates values against allowed options
-- Tenant-scoped via team_id
+- Tenant-scoped via TenantContext
 """
 
 from typing import Dict, Any
 
 from sqlalchemy.orm import Session
 
+from backend.src.middleware.tenant import TenantContext
 from backend.src.models import Configuration, ConfigSource
 from backend.src.schemas.retention import (
     RetentionSettingsResponse,
@@ -52,8 +53,8 @@ class RetentionService:
 
     Usage:
         >>> service = RetentionService(db_session)
-        >>> settings = service.get_settings(team_id=1)
-        >>> service.update_settings(team_id=1, job_completed_days=7)
+        >>> settings = service.get_settings(ctx)
+        >>> service.update_settings(ctx, update)
     """
 
     def __init__(self, db: Session):
@@ -65,11 +66,100 @@ class RetentionService:
         """
         self.db = db
 
-    def get_settings(self, team_id: int) -> RetentionSettingsResponse:
+    def get_settings(self, ctx: TenantContext) -> RetentionSettingsResponse:
         """
         Get retention settings for a team.
 
         Returns default values if settings have not been configured.
+
+        Args:
+            ctx: Tenant context for team isolation
+
+        Returns:
+            Current retention settings with defaults applied
+        """
+        team_id = ctx.team_id
+
+        # Query all retention settings for this team
+        configs = (
+            self.db.query(Configuration)
+            .filter(
+                Configuration.team_id == team_id,
+                Configuration.category == RETENTION_CATEGORY
+            )
+            .all()
+        )
+
+        # Build a lookup dict
+        config_map: Dict[str, Any] = {c.key: c.value_json for c in configs}
+
+        # Return settings with defaults for missing values
+        return RetentionSettingsResponse(
+            job_completed_days=config_map.get(
+                KEY_JOB_COMPLETED_DAYS, DEFAULT_JOB_COMPLETED_DAYS
+            ),
+            job_failed_days=config_map.get(
+                KEY_JOB_FAILED_DAYS, DEFAULT_JOB_FAILED_DAYS
+            ),
+            result_completed_days=config_map.get(
+                KEY_RESULT_COMPLETED_DAYS, DEFAULT_RESULT_COMPLETED_DAYS
+            ),
+            preserve_per_collection=config_map.get(
+                KEY_PRESERVE_PER_COLLECTION, DEFAULT_PRESERVE_PER_COLLECTION
+            ),
+        )
+
+    def update_settings(
+        self,
+        ctx: TenantContext,
+        update: RetentionSettingsUpdate,
+    ) -> RetentionSettingsResponse:
+        """
+        Update retention settings for a team.
+
+        Only provided fields are updated; others remain unchanged.
+
+        Args:
+            ctx: Tenant context for team isolation
+            update: Update request with optional fields
+
+        Returns:
+            Updated retention settings
+
+        Raises:
+            ValidationError: If any value is not in the allowed options
+        """
+        team_id = ctx.team_id
+        updates = update.model_dump(exclude_none=True)
+
+        if not updates:
+            # No changes requested, return current settings
+            return self.get_settings(ctx)
+
+        # Validate all provided values
+        for key, value in updates.items():
+            self._validate_setting(key, value)
+
+        # Update each provided setting
+        for key, value in updates.items():
+            self._upsert_setting(team_id, key, value)
+
+        self.db.commit()
+
+        logger.info(
+            f"Updated retention settings for team {team_id}: {updates}",
+            extra={"team_id": team_id, "updates": updates}
+        )
+
+        return self.get_settings(ctx)
+
+    def get_settings_by_team_id(self, team_id: int) -> RetentionSettingsResponse:
+        """
+        Get retention settings for a team by raw team_id.
+
+        This is an internal method for service-to-service calls where
+        TenantContext is not available (e.g., cleanup service, metrics service).
+        For API endpoints, use get_settings(ctx) instead.
 
         Args:
             team_id: Team ID for tenant isolation
@@ -105,49 +195,6 @@ class RetentionService:
                 KEY_PRESERVE_PER_COLLECTION, DEFAULT_PRESERVE_PER_COLLECTION
             ),
         )
-
-    def update_settings(
-        self,
-        team_id: int,
-        update: RetentionSettingsUpdate,
-    ) -> RetentionSettingsResponse:
-        """
-        Update retention settings for a team.
-
-        Only provided fields are updated; others remain unchanged.
-
-        Args:
-            team_id: Team ID for tenant isolation
-            update: Update request with optional fields
-
-        Returns:
-            Updated retention settings
-
-        Raises:
-            ValidationError: If any value is not in the allowed options
-        """
-        updates = update.model_dump(exclude_none=True)
-
-        if not updates:
-            # No changes requested, return current settings
-            return self.get_settings(team_id)
-
-        # Validate all provided values
-        for key, value in updates.items():
-            self._validate_setting(key, value)
-
-        # Update each provided setting
-        for key, value in updates.items():
-            self._upsert_setting(team_id, key, value)
-
-        self.db.commit()
-
-        logger.info(
-            f"Updated retention settings for team {team_id}: {updates}",
-            extra={"team_id": team_id, "updates": updates}
-        )
-
-        return self.get_settings(team_id)
 
     def seed_defaults(self, team_id: int) -> None:
         """

@@ -16,7 +16,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, Text, Enum, ForeignKey, Index, JSON, Boolean
+    Column, Integer, String, Float, DateTime, Text, Enum, ForeignKey, Index, JSON, Boolean,
+    CheckConstraint
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import expression
@@ -151,7 +152,7 @@ class AnalysisResult(Base, GuidMixin):
     collection = relationship("Collection", back_populates="analysis_results")
     pipeline = relationship("Pipeline", back_populates="analysis_results")
 
-    # Indexes
+    # Indexes and Constraints
     __table_args__ = (
         Index("idx_results_collection", "collection_id"),
         Index("idx_results_tool", "tool"),
@@ -159,6 +160,17 @@ class AnalysisResult(Base, GuidMixin):
         Index("idx_results_collection_tool_date", "collection_id", "tool", "created_at"),
         # Storage Optimization Indexes (Issue #92)
         Index("idx_results_cleanup", "team_id", "status", "created_at"),
+        # Storage Optimization Constraints (Issue #92)
+        # When no_change_copy=True, download_report_from must be set
+        CheckConstraint(
+            "no_change_copy = false OR download_report_from IS NOT NULL",
+            name="ck_analysis_result_no_change_download_not_null"
+        ),
+        # When no_change_copy=True, report_html must be NULL (no storage duplication)
+        CheckConstraint(
+            "no_change_copy = false OR report_html IS NULL",
+            name="ck_analysis_result_no_change_report_html_null"
+        ),
     )
 
     def __repr__(self) -> str:

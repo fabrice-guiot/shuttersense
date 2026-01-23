@@ -387,8 +387,8 @@ class JobExecutor:
                 )
             elif connector:
                 # Remote collection - list files from storage adapter
-                adapter = await self._get_storage_adapter(connector)
-                file_infos = await adapter.list_files()
+                adapter = self._get_storage_adapter(connector)
+                file_infos = adapter.list_files_with_metadata(collection_path)
                 file_hash, file_count = computer.compute_file_list_hash_from_file_info(file_infos)
             else:
                 # Local collection

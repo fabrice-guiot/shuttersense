@@ -187,24 +187,28 @@ class InputStateComputer:
         self,
         file_list_hash: str,
         configuration_hash: str,
-        tool: str
+        tool: Optional[str] = None
     ) -> str:
         """
         Compute combined Input State hash.
 
-        Combines file list hash, configuration hash, and tool name into
-        a single Input State hash.
+        Combines file list hash, configuration hash, and optionally tool name
+        into a single Input State hash.
 
         Args:
             file_list_hash: Hash from compute_file_list_hash_*
             configuration_hash: Hash from compute_configuration_hash()
-            tool: Tool name (photostats, photo_pairing, pipeline_validation)
+            tool: Optional tool name (photostats, photo_pairing, pipeline_validation).
+                  If provided, included in hash for tool-specific differentiation.
 
         Returns:
             64-character hex SHA-256 hash
         """
-        # Combine hashes with separator, including tool for specificity
-        content = f"{tool}|{file_list_hash}|{configuration_hash}"
+        # Combine hashes with separator, optionally including tool
+        if tool:
+            content = f"{tool}|{file_list_hash}|{configuration_hash}"
+        else:
+            content = f"{file_list_hash}|{configuration_hash}"
 
         # Compute SHA-256
         return hashlib.sha256(content.encode("utf-8")).hexdigest()

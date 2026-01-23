@@ -517,6 +517,7 @@ class JobCoordinatorService:
                 return None
 
             previous = self.db.query(AnalysisResult).filter(
+                AnalysisResult.team_id == job.team_id,
                 AnalysisResult.pipeline_id == job.pipeline_id,
                 AnalysisResult.collection_id.is_(None),  # Explicitly match NULL
                 AnalysisResult.tool == job.tool,
@@ -530,6 +531,7 @@ class JobCoordinatorService:
                 return None
 
             previous = self.db.query(AnalysisResult).filter(
+                AnalysisResult.team_id == job.team_id,
                 AnalysisResult.collection_id == job.collection_id,
                 AnalysisResult.tool == job.tool,
                 AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE])

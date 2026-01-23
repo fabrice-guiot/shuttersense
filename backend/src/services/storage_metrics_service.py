@@ -10,6 +10,7 @@ Issue #92 - Storage Optimization for Analysis Results (Phase 9)
 Task: T056
 """
 
+import json
 from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
@@ -243,7 +244,7 @@ class StorageMetricsService:
         """
         # Get retention settings
         retention_service = RetentionService(self.db)
-        settings = retention_service.get_settings(team_id)
+        settings = retention_service.get_settings_by_team_id(team_id)
         preserve_count = settings.preserve_per_collection
 
         if preserve_count <= 0:
@@ -301,9 +302,8 @@ class StorageMetricsService:
         for result in results:
             if result.results_json:
                 # Estimate JSON size
-                import json as json_module
                 try:
-                    json_str = json_module.dumps(result.results_json)
+                    json_str = json.dumps(result.results_json)
                     json_bytes += len(json_str.encode('utf-8'))
                 except (TypeError, ValueError):
                     pass

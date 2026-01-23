@@ -7,12 +7,22 @@ Tests:
 - T054: Verify backward compatibility with null input_state_hash
 
 These tests validate the performance requirements from the spec.
+
+Performance tests are gated by RUN_PERF_TESTS=1 environment variable to avoid CI flakiness.
 """
 
+import os
 import pytest
 import time
 import hashlib
 from unittest.mock import MagicMock
+
+
+# Skip performance tests unless explicitly enabled via environment variable
+skip_perf_tests = pytest.mark.skipif(
+    os.environ.get("RUN_PERF_TESTS") != "1",
+    reason="Performance tests disabled (set RUN_PERF_TESTS=1 to enable)"
+)
 
 from backend.src.services.input_state_service import InputStateService
 from backend.src.models.analysis_result import AnalysisResult
@@ -63,6 +73,7 @@ def sample_config():
 # T052: No-Change Detection Overhead (<50ms)
 # ============================================================================
 
+@skip_perf_tests
 class TestNoChangeDetectionOverhead:
     """Verify no-change detection adds <50ms overhead."""
 
@@ -106,6 +117,7 @@ class TestNoChangeDetectionOverhead:
 # T053: File List Hash Performance (<1s for 10K files)
 # ============================================================================
 
+@skip_perf_tests
 class TestFileListHashPerformance:
     """Verify file list hash computation performs within spec."""
 

@@ -188,6 +188,58 @@ class TestComputeConfigurationHash:
 
         assert len(hash_value) == 64
 
+    def test_irrelevant_keys_ignored(self, service, sample_config):
+        """Should ignore irrelevant config keys (Issue #92).
+
+        This ensures hash consistency between agent and backend.
+        """
+        # Add irrelevant keys that should be ignored
+        config_with_extra = dict(sample_config)
+        config_with_extra["some_other_setting"] = "value"
+        config_with_extra["unrelated_config"] = {"nested": "data"}
+        config_with_extra["retention_days"] = 30
+
+        hash1 = service.compute_configuration_hash(sample_config)
+        hash2 = service.compute_configuration_hash(config_with_extra)
+
+        # Hashes should be identical - extra keys ignored
+        assert hash1 == hash2
+
+    def test_only_relevant_keys_affect_hash(self, service):
+        """Should only hash relevant keys defined in RELEVANT_CONFIG_KEYS."""
+        # Config with only relevant keys
+        config_relevant = {
+            "photo_extensions": [".dng"],
+            "metadata_extensions": [".xmp"],
+        }
+
+        # Same config with extra irrelevant keys
+        config_extra = {
+            "photo_extensions": [".dng"],
+            "metadata_extensions": [".xmp"],
+            "unrelated_setting": "ignored",
+            "another_setting": 123,
+        }
+
+        hash1 = service.compute_configuration_hash(config_relevant)
+        hash2 = service.compute_configuration_hash(config_extra)
+
+        assert hash1 == hash2
+
+    def test_relevant_keys_list_matches_agent(self, service):
+        """RELEVANT_CONFIG_KEYS should match agent's _extract_relevant_config."""
+        # These are the keys that should be included (from agent/src/input_state.py)
+        expected_keys = {
+            "photo_extensions",
+            "metadata_extensions",
+            "require_sidecar",
+            "cameras",
+            "processing_methods",
+            "pipeline",
+        }
+
+        assert set(service.RELEVANT_CONFIG_KEYS) == expected_keys
+
 
 # ============================================================================
 # Test: compute_input_state_hash
@@ -284,3 +336,77 @@ class TestModuleSingleton:
         service = get_input_state_service()
 
         assert isinstance(service, InputStateService)
+
+
+# ============================================================================
+# Test: Cross-verification with agent
+# ============================================================================
+
+class TestAgentBackendConsistency:
+    """Tests ensuring agent and backend produce identical hashes."""
+
+    def test_config_hash_matches_agent_implementation(self, service):
+        """Backend config hash should match agent's implementation.
+
+        This is critical for NO_CHANGE detection to work properly.
+        The agent computes hash during job execution, and the backend
+        must produce the same hash for comparison.
+        """
+        # Test config with all relevant keys
+        config = {
+            "photo_extensions": [".dng", ".cr3"],
+            "metadata_extensions": [".xmp"],
+            "require_sidecar": [".cr3"],
+            "cameras": {"AB3D": [{"name": "Canon R5"}]},
+            "processing_methods": {"HDR": "High Dynamic Range"},
+            "pipeline": {"stages": ["import", "edit"]},
+        }
+
+        hash1 = service.compute_configuration_hash(config)
+
+        # Manually compute what the agent would produce
+        # (sorted JSON of filtered keys)
+        import json
+        relevant = {k: config[k] for k in service.RELEVANT_CONFIG_KEYS if k in config}
+        expected = json.dumps(relevant, sort_keys=True, separators=(",", ":"))
+        import hashlib
+        expected_hash = hashlib.sha256(expected.encode("utf-8")).hexdigest()
+
+        assert hash1 == expected_hash
+
+    def test_file_list_hash_matches_agent_implementation(self, service):
+        """Backend file list hash should match agent's implementation.
+
+        The agent computes this from filesystem scan, backend verifies
+        the hash on NO_CHANGE detection.
+        """
+        files = [
+            ("photos/IMG_001.dng", 25000000, 1704067200),
+            ("photos/IMG_001.xmp", 4096, 1704067201),
+        ]
+
+        hash1 = service.compute_file_list_hash(files)
+
+        # Manually compute what the agent would produce
+        sorted_files = sorted(files, key=lambda f: f[0])
+        lines = [f"{p}|{s}|{int(m)}" for p, s, m in sorted_files]
+        content = "\n".join(lines)
+        import hashlib
+        expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+        assert hash1 == expected_hash
+
+    def test_input_state_hash_matches_agent_implementation(self, service):
+        """Backend input state hash should match agent's implementation."""
+        file_hash = "a" * 64
+        config_hash = "b" * 64
+        tool = "photostats"
+
+        hash1 = service.compute_input_state_hash(file_hash, config_hash, tool)
+
+        # Manually compute what the agent would produce
+        content = f"{tool}|{file_hash}|{config_hash}"
+        import hashlib
+        expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+        assert hash1 == expected_hash

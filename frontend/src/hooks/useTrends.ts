@@ -417,7 +417,7 @@ export const useTrendSummary = (options: UseTrendSummaryOptions = {}): UseTrendS
 // ============================================================================
 
 interface UseTrendsOptions {
-  collectionIds?: number[]
+  collectionGuids?: string[]
   fromDate?: string
   toDate?: string
   limit?: number
@@ -436,20 +436,20 @@ interface UseTrendsReturn {
 }
 
 export const useTrends = (options: UseTrendsOptions = {}): UseTrendsReturn => {
-  const { collectionIds, fromDate, toDate, limit, pipelineId, autoFetch = false } = options
+  const { collectionGuids, fromDate, toDate, limit, pipelineId, autoFetch = false } = options
 
   const photoStats = usePhotoStatsTrends({ autoFetch: false })
   const photoPairing = usePhotoPairingTrends({ autoFetch: false })
   const pipelineValidation = usePipelineValidationTrends({ autoFetch: false })
   const summary = useTrendSummary({
-    collectionId: collectionIds?.[0],
+    collectionGuid: collectionGuids?.[0],
     autoFetch: false
   })
 
   const buildBaseFilters = useCallback((): TrendQueryParams => {
     const filters: TrendQueryParams = {}
-    if (collectionIds && collectionIds.length > 0) {
-      filters.collection_ids = collectionIds.join(',')
+    if (collectionGuids && collectionGuids.length > 0) {
+      filters.collection_ids = collectionGuids.join(',')
     }
     if (fromDate) {
       filters.from_date = fromDate
@@ -461,7 +461,7 @@ export const useTrends = (options: UseTrendsOptions = {}): UseTrendsReturn => {
       filters.limit = limit
     }
     return filters
-  }, [collectionIds, fromDate, toDate, limit])
+  }, [collectionGuids, fromDate, toDate, limit])
 
   const fetchAll = useCallback(async () => {
     const baseFilters = buildBaseFilters()
@@ -490,7 +490,7 @@ export const useTrends = (options: UseTrendsOptions = {}): UseTrendsReturn => {
       })
       summary.refetch()
     }
-  }, [collectionIds, fromDate, toDate, limit, pipelineId, autoFetch, buildBaseFilters])
+  }, [collectionGuids, fromDate, toDate, limit, pipelineId, autoFetch, buildBaseFilters])
 
   const isLoading =
     photoStats.loading || photoPairing.loading || pipelineValidation.loading || summary.loading

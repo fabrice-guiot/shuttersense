@@ -129,7 +129,7 @@ class CleanupService:
         stats = CleanupStats()
 
         # Get retention settings
-        settings = self._retention_service.get_settings(team_id)
+        settings = self._retention_service.get_settings_by_team_id(team_id)
 
         logger.info(
             "Starting retention cleanup",

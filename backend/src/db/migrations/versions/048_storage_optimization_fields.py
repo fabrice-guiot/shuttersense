@@ -101,9 +101,34 @@ def upgrade() -> None:
         ['team_id', 'status', 'created_at']
     )
 
+    # Check constraints for NO_CHANGE invariants (Issue #92)
+    # When no_change_copy=True, download_report_from must be set
+    op.create_check_constraint(
+        'ck_analysis_result_no_change_download_not_null',
+        'analysis_results',
+        'no_change_copy = false OR download_report_from IS NOT NULL'
+    )
+    # When no_change_copy=True, report_html must be NULL (no storage duplication)
+    op.create_check_constraint(
+        'ck_analysis_result_no_change_report_html_null',
+        'analysis_results',
+        'no_change_copy = false OR report_html IS NULL'
+    )
+
 
 def downgrade() -> None:
-    """Remove storage optimization columns and indexes."""
+    """Remove storage optimization columns, indexes, and constraints."""
+    # Drop check constraints first (before dropping columns they reference)
+    op.drop_constraint(
+        'ck_analysis_result_no_change_report_html_null',
+        'analysis_results',
+        type_='check'
+    )
+    op.drop_constraint(
+        'ck_analysis_result_no_change_download_not_null',
+        'analysis_results',
+        type_='check'
+    )
     op.drop_index('idx_results_cleanup', table_name='analysis_results')
     op.drop_index('idx_results_no_change_source', table_name='analysis_results')
     op.drop_index('idx_results_input_state', table_name='analysis_results')

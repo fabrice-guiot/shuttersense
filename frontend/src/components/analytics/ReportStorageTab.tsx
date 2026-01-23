@@ -7,6 +7,7 @@
  * Part of Issue #92: Storage Optimization for Analysis Results.
  */
 
+import type { ComponentType } from 'react'
 import { useEffect, useImperativeHandle, forwardRef } from 'react'
 import { Database, Archive, Trash2, TrendingDown, FileText, HardDrive } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -30,7 +31,7 @@ interface KPICardProps {
   title: string
   value: string | number
   description?: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: ComponentType<{ className?: string }>
   trend?: 'positive' | 'negative' | 'neutral'
 }
 
@@ -80,7 +81,7 @@ export const ReportStorageTab = forwardRef<ReportStorageTabRef>(function ReportS
       setStats([
         { label: 'Reports', value: stats.total_results_retained },
         { label: 'Storage', value: formatBytes(getTotalStorageUsed(stats)) },
-        { label: 'Dedup', value: `${stats.deduplication_ratio}%` }
+        { label: 'Dedup', value: formatPercentage(stats.deduplication_ratio) }
       ])
     }
     return () => setStats([])

@@ -217,6 +217,7 @@ class ToolService:
     def run_tool(
         self,
         tool: ToolType,
+        team_id: int,
         collection_id: Optional[int] = None,
         pipeline_id: Optional[int] = None,
         mode: Optional[ToolMode] = None
@@ -230,6 +231,7 @@ class ToolService:
 
         Args:
             tool: Tool to run
+            team_id: Team ID for tenant isolation (required)
             collection_id: ID of the collection to analyze (required for collection mode)
             pipeline_id: Pipeline ID (required for display_graph mode)
             mode: Execution mode for pipeline_validation (defaults to collection)
@@ -245,15 +247,16 @@ class ToolService:
 
         # Handle display_graph mode (pipeline-only validation)
         if tool == ToolType.PIPELINE_VALIDATION and mode == ToolMode.DISPLAY_GRAPH:
-            return self._run_display_graph_tool(pipeline_id)
+            return self._run_display_graph_tool(pipeline_id, team_id)
 
         # All other cases require collection_id
         if collection_id is None:
             raise ValueError("collection_id is required for this tool/mode")
 
-        # Validate collection exists
+        # Validate collection exists and belongs to the team
         collection = self.db.query(Collection).filter(
-            Collection.id == collection_id
+            Collection.id == collection_id,
+            Collection.team_id == team_id
         ).first()
         if not collection:
             raise ValueError(f"Collection {collection_id} not found")
@@ -281,7 +284,10 @@ class ToolService:
         # Get pipeline GUID if we have a pipeline
         pipeline_guid = None
         if resolved_pipeline_id:
-            pipeline = self.db.query(Pipeline).filter(Pipeline.id == resolved_pipeline_id).first()
+            pipeline = self.db.query(Pipeline).filter(
+                Pipeline.id == resolved_pipeline_id,
+                Pipeline.team_id == team_id
+            ).first()
             if pipeline:
                 pipeline_guid = pipeline.guid
 
@@ -327,7 +333,7 @@ class ToolService:
         logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_guid} (in-memory server execution)")
         return JobAdapter.to_response(job, position)
 
-    def _run_display_graph_tool(self, pipeline_id: Optional[int]) -> JobResponse:
+    def _run_display_graph_tool(self, pipeline_id: Optional[int], team_id: int) -> JobResponse:
         """
         Queue a display-graph mode pipeline validation job for agent execution.
 
@@ -338,6 +344,7 @@ class ToolService:
 
         Args:
             pipeline_id: Pipeline ID to validate
+            team_id: Team ID for tenant isolation
 
         Returns:
             Created job response
@@ -352,9 +359,10 @@ class ToolService:
         if not pipeline_id:
             raise ValueError("pipeline_id is required for display_graph mode")
 
-        # Validate pipeline exists and is valid
+        # Validate pipeline exists, is valid, and belongs to the team
         pipeline = self.db.query(Pipeline).filter(
-            Pipeline.id == pipeline_id
+            Pipeline.id == pipeline_id,
+            Pipeline.team_id == team_id
         ).first()
         if not pipeline:
             raise ValueError(f"Pipeline {pipeline_id} not found")
@@ -385,15 +393,21 @@ class ToolService:
 
         # Trigger retention cleanup before creating new job (Issue #92)
         # Failures don't block job creation
-        cleanup_stats = trigger_cleanup_on_job_creation(self.db, pipeline.team_id)
-        if cleanup_stats and (cleanup_stats.total_jobs_deleted > 0 or cleanup_stats.total_results_deleted > 0):
-            logger.info(
-                f"Pre-job cleanup (display_graph): deleted {cleanup_stats.total_jobs_deleted} jobs, "
-                f"{cleanup_stats.total_results_deleted} results",
-                extra={
-                    "team_id": pipeline.team_id,
-                    "bytes_freed": cleanup_stats.estimated_bytes_freed
-                }
+        try:
+            cleanup_stats = trigger_cleanup_on_job_creation(self.db, pipeline.team_id)
+            if cleanup_stats and (cleanup_stats.total_jobs_deleted > 0 or cleanup_stats.total_results_deleted > 0):
+                logger.info(
+                    f"Pre-job cleanup (display_graph): deleted {cleanup_stats.total_jobs_deleted} jobs, "
+                    f"{cleanup_stats.total_results_deleted} results",
+                    extra={
+                        "team_id": pipeline.team_id,
+                        "bytes_freed": cleanup_stats.estimated_bytes_freed
+                    }
+                )
+        except Exception as e:
+            logger.error(
+                f"Pre-job cleanup failed (display_graph), continuing with job creation: {e}",
+                extra={"team_id": pipeline.team_id, "error": str(e)}
             )
 
         # Get pipeline GUID from model property
@@ -480,15 +494,21 @@ class ToolService:
 
         # Trigger retention cleanup before creating new job (Issue #92)
         # Failures don't block job creation
-        cleanup_stats = trigger_cleanup_on_job_creation(self.db, collection.team_id)
-        if cleanup_stats and (cleanup_stats.total_jobs_deleted > 0 or cleanup_stats.total_results_deleted > 0):
-            logger.info(
-                f"Pre-job cleanup: deleted {cleanup_stats.total_jobs_deleted} jobs, "
-                f"{cleanup_stats.total_results_deleted} results",
-                extra={
-                    "team_id": collection.team_id,
-                    "bytes_freed": cleanup_stats.estimated_bytes_freed
-                }
+        try:
+            cleanup_stats = trigger_cleanup_on_job_creation(self.db, collection.team_id)
+            if cleanup_stats and (cleanup_stats.total_jobs_deleted > 0 or cleanup_stats.total_results_deleted > 0):
+                logger.info(
+                    f"Pre-job cleanup: deleted {cleanup_stats.total_jobs_deleted} jobs, "
+                    f"{cleanup_stats.total_results_deleted} results",
+                    extra={
+                        "team_id": collection.team_id,
+                        "bytes_freed": cleanup_stats.estimated_bytes_freed
+                    }
+                )
+        except Exception as e:
+            logger.error(
+                f"Pre-job cleanup failed, continuing with job creation: {e}",
+                extra={"team_id": collection.team_id, "error": str(e)}
             )
 
         # Check for existing active job in persistent queue (excluding SCHEDULED)
