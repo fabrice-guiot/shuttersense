@@ -3,7 +3,7 @@
 **Feature Branch**: `022-storage-optimization`
 **Created**: 2026-01-22
 **Status**: Draft
-**Input**: User description: "Github issue #92, taking into account all the functional requirements documented in docs/prd/022-storage-optimization-analysis-results.md"
+**Input**: User description: "GitHub issue `#92`, taking into account all the functional requirements documented in docs/prd/022-storage-optimization-analysis-results.md"
 
 ## User Scenarios & Testing *(mandatory)*
 
