@@ -262,9 +262,14 @@ class TestNoChangeReportDownload:
 
         assert response.status_code == 404
 
+    @pytest.mark.skip(reason="CHECK constraint ck_analysis_result_no_change_download_not_null now prevents no_change_copy=True without download_report_from")
     def test_download_report_no_change_without_reference(self, test_client, sample_result):
         """
         Test 404 for NO_CHANGE result without download_report_from reference.
+
+        NOTE: This scenario is now prevented by the database CHECK constraint
+        ck_analysis_result_no_change_download_not_null which requires
+        download_report_from to be set when no_change_copy=True.
 
         Legacy NO_CHANGE results might not have the reference set.
         """

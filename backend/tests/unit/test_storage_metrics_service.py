@@ -35,7 +35,10 @@ def mock_retention_service():
     """Create a mock retention service."""
     with patch('backend.src.services.storage_metrics_service.RetentionService') as mock:
         service = MagicMock()
-        service.get_settings.return_value = MagicMock(preserve_per_collection=3)
+        settings = MagicMock()
+        settings.preserve_per_collection = 3  # Set as attribute directly, not as MagicMock
+        service.get_settings.return_value = settings
+        service.get_settings_by_team_id.return_value = settings  # Also mock get_settings_by_team_id
         mock.return_value = service
         yield mock
 

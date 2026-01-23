@@ -18,6 +18,7 @@ def sample_result_with_report(test_db_session, sample_collection, test_team):
         status=ResultStatus.COMPLETED,
         report_html="<html><body>Test Report</body></html>",
         no_change_copy=False,
+        download_report_from=None,
         results_json=None,
         **kwargs
     ):
@@ -27,6 +28,31 @@ def sample_result_with_report(test_db_session, sample_collection, test_team):
             location="/tmp/test"
         )
 
+        # If no_change_copy=True and no download_report_from is provided,
+        # we need to create a source result first (due to CHECK constraint)
+        effective_download_report_from = download_report_from
+        effective_report_html = report_html
+        if no_change_copy and not download_report_from:
+            # Create a source result to reference
+            source = AnalysisResult(
+                collection_id=collection.id,
+                tool=tool,
+                status=ResultStatus.COMPLETED,
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+                duration_seconds=10.5,
+                results_json=results_json or {"total_files": 100, "issues": []},
+                report_html="<html><body>Source Report</body></html>",
+                files_scanned=100,
+                issues_found=5,
+                team_id=test_team.id,
+                no_change_copy=False,
+            )
+            test_db_session.add(source)
+            test_db_session.flush()
+            effective_download_report_from = source.guid
+            effective_report_html = None  # NO_CHANGE results must have NULL report_html
+
         result = AnalysisResult(
             collection_id=collection.id,
             tool=tool,
@@ -35,11 +61,12 @@ def sample_result_with_report(test_db_session, sample_collection, test_team):
             completed_at=datetime.now(timezone.utc),
             duration_seconds=10.5,
             results_json=results_json or {"total_files": 100, "issues": []},
-            report_html=report_html,
+            report_html=effective_report_html if no_change_copy else report_html,
             files_scanned=100,
             issues_found=5,
             team_id=test_team.id,
             no_change_copy=no_change_copy,
+            download_report_from=effective_download_report_from,
             **kwargs
         )
         test_db_session.add(result)
@@ -121,12 +148,14 @@ class TestGetStorageMetrics:
 
     def test_get_storage_metrics_with_results(self, test_client, sample_result_with_report):
         """Test that real-time metrics are computed from current results."""
-        # Create 2 original results and 1 copy
+        # Create 2 original results
+        original1 = sample_result_with_report(no_change_copy=False)
         sample_result_with_report(no_change_copy=False)
-        sample_result_with_report(no_change_copy=False)
-        copy = sample_result_with_report(
+        # Create 1 copy referencing the first original (avoids auto-creating a source)
+        sample_result_with_report(
             status=ResultStatus.NO_CHANGE,
             no_change_copy=True,
+            download_report_from=original1.guid,
             report_html=None
         )
 

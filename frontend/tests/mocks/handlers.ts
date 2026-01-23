@@ -1816,10 +1816,14 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
 
   http.get(`${BASE_URL}/trends/summary`, ({ request }) => {
     const url = new URL(request.url)
-    const collectionId = url.searchParams.get('collection_id')
+    const collectionGuid = url.searchParams.get('collection_guid')
+
+    // Simulate the API behavior: return collection_id when a valid collection_guid is provided
+    // In tests, we map any GUID to ID 1 for simplicity
+    const collectionId = collectionGuid ? 1 : null
 
     const response: TrendSummaryResponse = {
-      collection_id: collectionId ? Number(collectionId) : null,
+      collection_id: collectionId,
       orphaned_trend: 'improving',
       consistency_trend: 'stable',
       last_photostats: '2025-01-03T10:00:00Z',

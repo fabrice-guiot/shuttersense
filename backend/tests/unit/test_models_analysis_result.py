@@ -34,7 +34,7 @@ class TestResultStatus:
 
     def test_result_status_members(self):
         """Test all ResultStatus enum members exist."""
-        expected_statuses = {"COMPLETED", "FAILED", "CANCELLED"}
+        expected_statuses = {"COMPLETED", "FAILED", "CANCELLED", "NO_CHANGE"}
         actual_statuses = {rs.name for rs in ResultStatus}
         assert actual_statuses == expected_statuses
 

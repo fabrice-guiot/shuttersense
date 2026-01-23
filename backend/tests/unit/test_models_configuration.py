@@ -99,11 +99,12 @@ class TestConfigurationModel:
 
         assert config.source == ConfigSource.YAML_IMPORT
 
-    def test_unique_category_key_constraint(self, test_db_session):
-        """Test that (category, key) must be unique."""
+    def test_unique_category_key_constraint(self, test_db_session, test_team):
+        """Test that (team_id, category, key) must be unique."""
         from sqlalchemy.exc import IntegrityError
 
         config1 = Configuration(
+            team_id=test_team.id,
             category="cameras",
             key="AB3D",
             value_json={"name": "Camera 1"}
@@ -112,8 +113,9 @@ class TestConfigurationModel:
         test_db_session.commit()
 
         config2 = Configuration(
+            team_id=test_team.id,
             category="cameras",
-            key="AB3D",  # Same category and key
+            key="AB3D",  # Same team, category and key
             value_json={"name": "Camera 2"}
         )
         test_db_session.add(config2)

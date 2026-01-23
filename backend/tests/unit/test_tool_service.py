@@ -89,7 +89,8 @@ class TestToolServiceJobManagement:
         service = ToolService(db=mock_db, job_queue=job_queue)
         job = service.run_tool(
             collection_id=1,
-            tool=ToolType.PHOTOSTATS
+            tool=ToolType.PHOTOSTATS,
+            team_id=1
         )
 
         assert job.id is not None
@@ -104,7 +105,7 @@ class TestToolServiceJobManagement:
 
         service = ToolService(db=mock_db, job_queue=job_queue)
         with pytest.raises(ValueError, match="Collection 999 not found"):
-            service.run_tool(collection_id=999, tool=ToolType.PHOTOSTATS)
+            service.run_tool(collection_id=999, tool=ToolType.PHOTOSTATS, team_id=1)
 
     def test_run_tool_validates_default_pipeline_for_validation(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
         """Test that a default pipeline is required for pipeline_validation when no pipeline_id is provided."""
@@ -126,7 +127,8 @@ class TestToolServiceJobManagement:
         with pytest.raises(ValueError, match="No pipeline available"):
             service.run_tool(
                 collection_id=1,
-                tool=ToolType.PIPELINE_VALIDATION
+                tool=ToolType.PIPELINE_VALIDATION,
+                team_id=1
             )
 
     def test_run_tool_prevents_duplicate(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
@@ -147,12 +149,12 @@ class TestToolServiceJobManagement:
         service = ToolService(db=mock_db, job_queue=job_queue)
 
         # First job succeeds
-        job1 = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        job1 = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
         assert job1.status == JobStatus.QUEUED
 
         # Second job for same collection/tool should fail
         with pytest.raises(ConflictError):
-            service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+            service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
     def test_get_job_returns_job(self, mock_db, mock_collection, job_queue, mock_settings_inmemory):
         """Test getting job by ID from in-memory queue."""
@@ -169,7 +171,7 @@ class TestToolServiceJobManagement:
         mock_db.query.side_effect = side_effect
 
         service = ToolService(db=mock_db, job_queue=job_queue)
-        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
         retrieved = service.get_job(job.id)
         assert retrieved.id == job.id
@@ -213,7 +215,7 @@ class TestToolServiceJobManagement:
         mock_db.query.side_effect = side_effect
 
         service = ToolService(db=mock_db, job_queue=job_queue)
-        service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
         jobs, total = service.list_jobs()
         assert len(jobs) == 1
@@ -247,7 +249,7 @@ class TestToolServiceJobManagement:
         mock_db.query.side_effect = side_effect
 
         service = ToolService(db=mock_db, job_queue=job_queue)
-        service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
         queued, queued_total = service.list_jobs(statuses=[JobStatus.QUEUED])
         running, running_total = service.list_jobs(statuses=[JobStatus.RUNNING])
@@ -272,7 +274,7 @@ class TestToolServiceJobManagement:
         mock_db.query.side_effect = side_effect
 
         service = ToolService(db=mock_db, job_queue=job_queue)
-        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
         cancelled = service.cancel_job(job.id)
         assert cancelled.status == JobStatus.CANCELLED
@@ -344,7 +346,7 @@ class TestToolServiceQueueStatus:
         mock_db.query.side_effect = side_effect
 
         service = ToolService(db=mock_db, job_queue=job_queue)
-        service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
         status = service.get_queue_status()
 
@@ -470,7 +472,7 @@ class TestInMemoryJobExecution:
         service = ToolService(db=mock_db, job_queue=job_queue)
 
         # Create a job
-        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
         assert job.status == JobStatus.QUEUED
 
         # Mock _execute_job to simulate successful execution
@@ -515,7 +517,7 @@ class TestInMemoryJobExecution:
         service = ToolService(db=mock_db, job_queue=job_queue)
 
         # Create a job
-        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
         # Mock _execute_job to simulate failure
         async def mock_execute_job_fail(job_to_execute):
@@ -583,8 +585,8 @@ class TestInMemoryJobExecution:
         service = ToolService(db=mock_db, job_queue=job_queue)
 
         # Create two jobs for different collections
-        job1 = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
-        job2 = service.run_tool(collection_id=2, tool=ToolType.PHOTOSTATS)
+        job1 = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
+        job2 = service.run_tool(collection_id=2, tool=ToolType.PHOTOSTATS, team_id=1)
 
         # Verify both jobs are in queue
         all_jobs, total = service.list_jobs()
@@ -622,7 +624,7 @@ class TestInMemoryJobExecution:
         service = ToolService(db=mock_db, job_queue=job_queue)
 
         # Create a job
-        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS)
+        job = service.run_tool(collection_id=1, tool=ToolType.PHOTOSTATS, team_id=1)
 
         # Get the queue job and simulate progress updates
         queue_job = job_queue.get_job(job.id)

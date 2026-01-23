@@ -46,6 +46,10 @@ class TestResultServiceList:
         result.error_message = None
         result.created_at = datetime.utcnow()
         result.has_report = True
+        # Storage optimization fields (Issue #92)
+        result.input_state_hash = None
+        result.no_change_copy = False
+        result.download_report_from = None
         return result
 
     @pytest.fixture
@@ -138,6 +142,10 @@ class TestResultServiceGet:
         result.error_message = None
         result.created_at = datetime.utcnow()
         result.has_report = True
+        # Storage optimization fields (Issue #92)
+        result.input_state_hash = None
+        result.no_change_copy = False
+        result.download_report_from = None
         return result
 
     def test_get_result_returns_details(self, mock_db, sample_result):
@@ -223,6 +231,7 @@ class TestResultServiceReport:
         """Test 404 for missing report."""
         result = Mock()
         result.report_html = None
+        result.download_report_from = None  # Required for NO_CHANGE lookup logic
         mock_db.query.return_value.filter.return_value.first.return_value = result
 
         service = ResultService(db=mock_db)

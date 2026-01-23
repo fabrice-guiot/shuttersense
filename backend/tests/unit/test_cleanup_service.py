@@ -113,11 +113,36 @@ def sample_result_factory(test_db_session, test_team, sample_collection, sample_
         pipeline_id=None,
         team_id=None,
         no_change_copy=False,
+        download_report_from=None,
         results_json=None,
         report_html=None,
     ):
         if completed_at is None:
             completed_at = datetime.utcnow()
+
+        # If no_change_copy=True and no download_report_from is provided,
+        # we need to create a source result first (due to CHECK constraint)
+        effective_download_report_from = download_report_from
+        effective_report_html = report_html
+        if no_change_copy and not download_report_from:
+            # Create a source result to reference
+            source = AnalysisResult(
+                team_id=team_id if team_id is not None else test_team.id,
+                collection_id=collection_id if collection_id is not None else sample_collection.id,
+                pipeline_id=pipeline_id if pipeline_id is not None else sample_pipeline.id,
+                tool=tool,
+                status=ResultStatus.COMPLETED,
+                completed_at=completed_at - timedelta(seconds=60),
+                started_at=completed_at - timedelta(seconds=70),
+                duration_seconds=10,
+                results_json=results_json or {'issues': []},
+                report_html='<html>Source Report</html>',
+                no_change_copy=False,
+            )
+            test_db_session.add(source)
+            test_db_session.flush()
+            effective_download_report_from = source.guid
+            effective_report_html = None  # NO_CHANGE results must have NULL report_html
 
         result = AnalysisResult(
             team_id=team_id if team_id is not None else test_team.id,
@@ -129,8 +154,9 @@ def sample_result_factory(test_db_session, test_team, sample_collection, sample_
             started_at=completed_at - timedelta(seconds=10),
             duration_seconds=10,
             results_json=results_json or {'issues': []},
-            report_html=report_html or '<html>Test Report</html>',
+            report_html=effective_report_html if no_change_copy else (report_html or '<html>Test Report</html>'),
             no_change_copy=no_change_copy,
+            download_report_from=effective_download_report_from,
         )
         test_db_session.add(result)
         test_db_session.commit()
@@ -501,9 +527,14 @@ class TestCleanupOldResults:
         """Should separately count original vs copy result deletions."""
         old_date = datetime.utcnow() - timedelta(days=100)
 
-        # Create original and copy results
-        sample_result_factory(completed_at=old_date, no_change_copy=False)
-        sample_result_factory(completed_at=old_date, no_change_copy=True)
+        # Create original result first
+        original = sample_result_factory(completed_at=old_date, no_change_copy=False)
+        # Create copy result referencing the original (avoids auto-creating a source)
+        sample_result_factory(
+            completed_at=old_date,
+            no_change_copy=True,
+            download_report_from=original.guid
+        )
 
         stats = cleanup_service.cleanup_old_results(
             test_team.id, retention_days=90, preserve_per_collection=0
