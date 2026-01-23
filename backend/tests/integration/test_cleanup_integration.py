@@ -415,7 +415,7 @@ class TestCleanupIntegration:
             team_id=other_team.id,
             name='Other Pipeline',
             nodes_json=[{'id': 'start', 'type': 'capture'}],
-        edges_json=[],
+            edges_json=[],
             is_active=True,
             is_valid=True,
         )
