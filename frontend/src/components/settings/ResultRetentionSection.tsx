@@ -164,8 +164,9 @@ export function ResultRetentionSection({
       }
       await onUpdate(update)
       setEditDialogOpen(false)
-    } catch (err: any) {
-      setFormError(err.message || 'Update failed')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Update failed'
+      setFormError(message)
     } finally {
       setIsSubmitting(false)
     }
