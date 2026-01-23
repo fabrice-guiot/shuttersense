@@ -31,7 +31,7 @@
 
 ## Notes
 
-- Specification derived from comprehensive PRD (docs/prd/000-storage-optimization-analysis-results.md)
+- Specification derived from comprehensive PRD (docs/prd/022-storage-optimization-analysis-results.md)
 - All requirements mapped from PRD User Stories and Functional Requirements sections
 - Edge cases identified from PRD Risk section
 - Success criteria aligned with PRD non-functional requirements (NFR-100, NFR-200)

@@ -192,7 +192,7 @@ As a team administrator, I want to view storage metrics and deduplication effect
 - **FR-021**: System MUST set `download_report_from` to reference the source result's GUID (or the source's `download_report_from` if it exists).
 - **FR-022**: System MUST NOT store HTML report for NO_CHANGE results (only reference).
 - **FR-023**: System MUST copy results_json and metrics (files_scanned, issues_found) from the referenced result.
-- **FR-024**: System MUST delete the previously referenced result IF it has `no_change_copy=true` (cleanup of intermediate copies).
+- **FR-024**: When creating a new NO_CHANGE result (with `no_change_copy=true`), the system MAY delete the previously referenced result IF that result also has `no_change_copy=true` (cleanup of intermediate copies). The system MUST NOT delete referenced results when creating a COMPLETED result; NO_CHANGE→COMPLETED transitions preserve all referenced copies for trend visibility.
 
 #### Report Retrieval
 
