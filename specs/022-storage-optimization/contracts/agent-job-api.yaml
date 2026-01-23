@@ -1,0 +1,267 @@
+# OpenAPI 3.1.0 Specification: Agent Job API Extensions
+# Feature: 022-storage-optimization
+# Date: 2026-01-22
+
+openapi: 3.1.0
+info:
+  title: Agent Job API - Storage Optimization Extensions
+  version: 1.0.0
+  description: |
+    Extensions to the existing Agent Job API for storage optimization.
+    These additions support Input State tracking and NO_CHANGE detection.
+
+paths:
+  /api/agent/v1/jobs/claim:
+    post:
+      summary: Claim next available job (extended response)
+      description: |
+        Claim the next available job for this agent. The response now includes
+        `previous_result` with the Input State hash from the most recent successful
+        result for the same (collection, tool) combination.
+
+        The agent should compare its computed Input State hash with the previous
+        result's hash to determine if re-execution is necessary.
+      operationId: claimJob
+      tags:
+        - Agent Jobs
+      security:
+        - agentAuth: []
+      responses:
+        '200':
+          description: Job claimed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobClaimResponse'
+        '204':
+          description: No jobs available
+        '401':
+          description: Agent not authenticated
+
+  /api/agent/v1/jobs/{job_guid}/complete:
+    post:
+      summary: Complete job execution (extended for NO_CHANGE)
+      description: |
+        Report job completion. For NO_CHANGE status, provide the previous result's
+        GUID instead of new results. The server will create a reference result.
+      operationId: completeJob
+      tags:
+        - Agent Jobs
+      security:
+        - agentAuth: []
+      parameters:
+        - name: job_guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^job_[a-z0-9]{26}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCompleteRequest'
+      responses:
+        '200':
+          description: Job completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+        '400':
+          description: Invalid request
+        '401':
+          description: Agent not authenticated
+        '404':
+          description: Job not found
+
+components:
+  securitySchemes:
+    agentAuth:
+      type: http
+      scheme: bearer
+      description: Agent registration token
+
+  schemas:
+    PreviousResultInfo:
+      type: object
+      required:
+        - guid
+        - input_state_hash
+      properties:
+        guid:
+          type: string
+          pattern: '^res_[a-z0-9]{26}$'
+          description: GUID of the previous successful result
+          example: 'res_01hgw2bbg0000000000000003'
+        input_state_hash:
+          type: string
+          minLength: 64
+          maxLength: 64
+          description: SHA-256 hash of the Input State (hex-encoded)
+          example: 'a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd'
+        files_scanned:
+          type: integer
+          nullable: true
+          description: Number of files scanned in previous result
+        issues_found:
+          type: integer
+          nullable: true
+          description: Number of issues found in previous result
+
+    JobClaimResponse:
+      type: object
+      required:
+        - guid
+        - tool
+        - signing_secret
+        - priority
+        - retry_count
+        - max_retries
+      properties:
+        guid:
+          type: string
+          pattern: '^job_[a-z0-9]{26}$'
+          description: Job GUID
+          example: 'job_01hgw2bbg0000000000000001'
+        tool:
+          type: string
+          description: Tool name
+          example: 'photostats'
+        mode:
+          type: string
+          nullable: true
+          description: Execution mode
+          example: 'collection'
+        collection_guid:
+          type: string
+          nullable: true
+          pattern: '^col_[a-z0-9]{26}$'
+          description: Collection GUID if applicable
+        collection_path:
+          type: string
+          nullable: true
+          description: Collection root path
+        pipeline_guid:
+          type: string
+          nullable: true
+          pattern: '^pip_[a-z0-9]{26}$'
+          description: Pipeline GUID if applicable
+        pipeline_version:
+          type: integer
+          nullable: true
+          description: Pipeline version for Pipeline Validation
+        parameters:
+          type: object
+          nullable: true
+          description: Additional job parameters
+        signing_secret:
+          type: string
+          description: Base64-encoded signing secret for result verification
+        priority:
+          type: integer
+          description: Job priority
+        retry_count:
+          type: integer
+          description: Current retry count
+        max_retries:
+          type: integer
+          description: Maximum retries allowed
+        previous_result:
+          $ref: '#/components/schemas/PreviousResultInfo'
+          nullable: true
+          description: |
+            Previous successful result for same (collection, tool) combination.
+            Null if no prior result exists. Agent should compare computed
+            Input State hash with this to determine if re-execution is needed.
+
+    JobCompleteRequest:
+      type: object
+      required:
+        - status
+        - signature
+      properties:
+        status:
+          type: string
+          enum: ['COMPLETED', 'NO_CHANGE', 'FAILED']
+          description: |
+            Job completion status:
+            - COMPLETED: Full execution, new results
+            - NO_CHANGE: Input State unchanged, references previous result
+            - FAILED: Execution failed
+        signature:
+          type: string
+          description: HMAC-SHA256 signature of results (hex-encoded)
+
+        # For COMPLETED status
+        results_upload_id:
+          type: string
+          nullable: true
+          description: Upload ID for chunked results JSON
+        report_upload_id:
+          type: string
+          nullable: true
+          description: Upload ID for chunked HTML report
+        results:
+          type: object
+          nullable: true
+          description: Inline results (mutually exclusive with upload_id)
+        report_html:
+          type: string
+          nullable: true
+          description: Inline HTML report (small reports only)
+        files_scanned:
+          type: integer
+          nullable: true
+          description: Number of files processed
+        issues_found:
+          type: integer
+          nullable: true
+          description: Number of issues detected
+
+        # For NO_CHANGE status
+        previous_result_guid:
+          type: string
+          nullable: true
+          pattern: '^res_[a-z0-9]{26}$'
+          description: |
+            GUID of the previous result being referenced (required for NO_CHANGE).
+            Must match the guid from previous_result in job claim response.
+        input_state_hash:
+          type: string
+          nullable: true
+          minLength: 64
+          maxLength: 64
+          description: |
+            Computed Input State hash (optional, for validation).
+            If provided, server verifies it matches the previous result's hash.
+        input_state_json:
+          type: object
+          nullable: true
+          description: |
+            Full Input State JSON for debugging (optional).
+            Only stored if server DEBUG mode is enabled.
+
+        # For FAILED status
+        error_message:
+          type: string
+          nullable: true
+          description: Error details
+
+    JobStatusResponse:
+      type: object
+      required:
+        - guid
+        - status
+      properties:
+        guid:
+          type: string
+          description: Job GUID
+        status:
+          type: string
+          description: Current job status
+        result_guid:
+          type: string
+          nullable: true
+          description: Result GUID if job completed successfully

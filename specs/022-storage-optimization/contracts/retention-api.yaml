@@ -1,0 +1,133 @@
+# OpenAPI 3.1.0 Specification: Retention Configuration API
+# Feature: 022-storage-optimization
+# Date: 2026-01-22
+
+openapi: 3.1.0
+info:
+  title: Retention Configuration API
+  version: 1.0.0
+  description: |
+    API endpoints for managing team-level retention settings for jobs and results.
+    These endpoints use the existing Configuration model with category `result_retention`.
+
+paths:
+  /api/config/retention:
+    get:
+      summary: Get retention settings
+      description: |
+        Retrieve the current retention settings for the authenticated user's team.
+        Returns default values if settings have not been configured.
+      operationId: getRetentionSettings
+      tags:
+        - Retention
+      security:
+        - session: []
+        - apiToken: []
+      responses:
+        '200':
+          description: Current retention settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionSettingsResponse'
+        '401':
+          description: Unauthorized
+
+    put:
+      summary: Update retention settings
+      description: |
+        Update retention settings for the authenticated user's team.
+        All fields are optional; only provided fields are updated.
+      operationId: updateRetentionSettings
+      tags:
+        - Retention
+      security:
+        - session: []
+        - apiToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetentionSettingsUpdate'
+      responses:
+        '200':
+          description: Updated retention settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionSettingsResponse'
+        '400':
+          description: Invalid retention value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: session
+    apiToken:
+      type: http
+      scheme: bearer
+
+  schemas:
+    RetentionSettingsResponse:
+      type: object
+      required:
+        - job_completed_days
+        - job_failed_days
+        - result_completed_days
+        - preserve_per_collection
+      properties:
+        job_completed_days:
+          type: integer
+          description: Days to retain completed jobs (0 = unlimited)
+          example: 2
+        job_failed_days:
+          type: integer
+          description: Days to retain failed jobs (0 = unlimited)
+          example: 7
+        result_completed_days:
+          type: integer
+          description: Days to retain completed results (0 = unlimited)
+          example: 0
+        preserve_per_collection:
+          type: integer
+          description: Minimum results to keep per (collection, tool) combination
+          example: 1
+
+    RetentionSettingsUpdate:
+      type: object
+      properties:
+        job_completed_days:
+          type: integer
+          description: Days to retain completed jobs (0 = unlimited)
+          enum: [0, 1, 2, 5, 7, 14, 30, 90, 180, 365]
+        job_failed_days:
+          type: integer
+          description: Days to retain failed jobs (0 = unlimited)
+          enum: [0, 1, 2, 5, 7, 14, 30, 90, 180, 365]
+        result_completed_days:
+          type: integer
+          description: Days to retain completed results (0 = unlimited)
+          enum: [0, 1, 2, 5, 7, 14, 30, 90, 180, 365]
+        preserve_per_collection:
+          type: integer
+          description: Minimum results to keep per (collection, tool) combination
+          enum: [1, 2, 3, 5, 10]
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Error message
+          example: "Invalid value for job_completed_days: must be one of [0, 1, 2, 5, 7, 14, 30, 90, 180, 365]"
