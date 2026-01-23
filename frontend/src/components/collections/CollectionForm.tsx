@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2, TestTube, Bot, CalendarClock } from 'lucide-react'
-import { formatDateTime } from '@/utils/dateFormat'
+import { formatDateTime, parseDate } from '@/utils/dateFormat'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -120,7 +120,11 @@ function calculateNextRefresh(
     return { datetime: null, label: 'Auto-refresh disabled' }
   }
 
-  const lastScan = new Date(lastScannedAt)
+  // Use parseDate to correctly interpret UTC timestamps from backend
+  const lastScan = parseDate(lastScannedAt)
+  if (!lastScan) {
+    return { datetime: null, label: 'Invalid scan date' }
+  }
   const nextRefresh = new Date(lastScan.getTime() + cacheTtl * 1000)
   const now = new Date()
 

@@ -145,6 +145,7 @@ class ResultService:
         collection_guid: Optional[str] = None,
         tool: Optional[str] = None,
         status: Optional[ResultStatus] = None,
+        no_change_copy: Optional[bool] = None,
         from_date: Optional[date] = None,
         to_date: Optional[date] = None,
         limit: int = 50,
@@ -160,6 +161,7 @@ class ResultService:
             collection_guid: Filter by collection GUID (col_xxx)
             tool: Filter by tool type
             status: Filter by result status
+            no_change_copy: Filter by no_change_copy flag (True=copies, False=originals)
             from_date: Filter from date (inclusive)
             to_date: Filter to date (inclusive)
             limit: Maximum results to return (1-100)
@@ -189,6 +191,15 @@ class ResultService:
             query = query.filter(AnalysisResult.tool == tool)
         if status:
             query = query.filter(AnalysisResult.status == status)
+        if no_change_copy is not None:
+            if no_change_copy:
+                query = query.filter(AnalysisResult.no_change_copy == True)
+            else:
+                # Include both False and NULL as "original" results
+                query = query.filter(
+                    (AnalysisResult.no_change_copy == False) |
+                    (AnalysisResult.no_change_copy.is_(None))
+                )
         if from_date:
             query = query.filter(AnalysisResult.created_at >= datetime.combine(from_date, datetime.min.time()))
         if to_date:
@@ -241,6 +252,9 @@ class ResultService:
                 files_scanned=result.files_scanned,
                 issues_found=result.issues_found,
                 has_report=result.has_report,
+                # Storage Optimization Fields (Issue #92)
+                input_state_hash=result.input_state_hash,
+                no_change_copy=result.no_change_copy,
             ))
 
         return summaries, total
@@ -306,6 +320,30 @@ class ResultService:
         processed_results = truncate_results(result.results_json or {})
         processed_results = sanitize_results(processed_results)
 
+        # For NO_CHANGE results, check if source result exists (Issue #92)
+        source_result_exists = None
+        has_report = result.has_report  # Default from model property
+
+        if result.no_change_copy and result.download_report_from:
+            try:
+                source_uuid = AnalysisResult.parse_guid(result.download_report_from)
+                source_query = self.db.query(AnalysisResult).filter(
+                    AnalysisResult.uuid == source_uuid
+                )
+                if team_id is not None:
+                    source_query = source_query.filter(AnalysisResult.team_id == team_id)
+                source_result = source_query.first()
+
+                source_result_exists = source_result is not None
+                # Update has_report: only true if source exists and has report
+                has_report = source_result is not None and (
+                    source_result.report_html is not None or
+                    (source_result.no_change_copy and source_result.download_report_from)
+                )
+            except ValueError:
+                source_result_exists = False
+                has_report = False
+
         return AnalysisResultResponse(
             guid=result.guid,
             collection_guid=collection.guid if collection else None,
@@ -321,9 +359,14 @@ class ResultService:
             files_scanned=result.files_scanned,
             issues_found=result.issues_found,
             error_message=result.error_message,
-            has_report=result.has_report,
+            has_report=has_report,
             results=processed_results,
             created_at=result.created_at,
+            # Storage Optimization Fields (Issue #92)
+            input_state_hash=result.input_state_hash,
+            no_change_copy=result.no_change_copy,
+            download_report_from=result.download_report_from,
+            source_result_exists=source_result_exists,
         )
 
     def delete_result(self, result_id: int, team_id: Optional[int] = None) -> str:
@@ -359,6 +402,9 @@ class ResultService:
         """
         Get HTML report for a result.
 
+        For NO_CHANGE results (Issue #92), follows the download_report_from
+        reference to get the report from the source result.
+
         Args:
             result_id: Result ID
             team_id: Optional team ID for tenant isolation
@@ -367,7 +413,7 @@ class ResultService:
             HTML report content if available
 
         Raises:
-            NotFoundError: If result doesn't exist or has no report
+            NotFoundError: If result doesn't exist, has no report, or source result deleted
         """
         query = self.db.query(AnalysisResult).filter(AnalysisResult.id == result_id)
         if team_id is not None:
@@ -377,10 +423,35 @@ class ResultService:
         if not result:
             raise NotFoundError("Result", result_id)
 
-        if not result.report_html:
-            raise NotFoundError("Report for result", result_id)
+        # Direct report available
+        if result.report_html:
+            return result.report_html
 
-        return result.report_html
+        # For NO_CHANGE results, follow the download_report_from reference (Issue #92)
+        if result.download_report_from:
+            try:
+                source_uuid = AnalysisResult.parse_guid(result.download_report_from)
+                source_query = self.db.query(AnalysisResult).filter(
+                    AnalysisResult.uuid == source_uuid
+                )
+                if team_id is not None:
+                    source_query = source_query.filter(AnalysisResult.team_id == team_id)
+                source_result = source_query.first()
+
+                if source_result and source_result.report_html:
+                    return source_result.report_html
+
+                # Source result was deleted or has no report
+                raise NotFoundError(
+                    "Source report (referenced result has been deleted)",
+                    result.download_report_from
+                )
+            except ValueError:
+                # Invalid GUID format
+                raise NotFoundError("Report for result", result_id)
+
+        # No report and no reference
+        raise NotFoundError("Report for result", result_id)
 
     def get_report_with_metadata(self, result_id: int, team_id: Optional[int] = None) -> Dict[str, Any]:
         """

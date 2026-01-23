@@ -592,7 +592,7 @@ async def get_version() -> Dict[str, str]:
 
 
 # API routers
-from backend.src.api import collections, connectors, tools, results, pipelines, trends, config, categories, events, locations, organizers, performers
+from backend.src.api import collections, connectors, tools, results, pipelines, trends, config, categories, events, locations, organizers, performers, analytics
 from backend.src.api import auth as auth_router
 from backend.src.api import users as users_router
 from backend.src.api import tokens as tokens_router
@@ -611,6 +611,7 @@ app.include_router(events.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(organizers.router, prefix="/api")
 app.include_router(performers.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 
 # Authentication router
 app.include_router(auth_router.router, prefix="/api")

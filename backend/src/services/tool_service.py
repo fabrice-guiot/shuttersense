@@ -334,6 +334,8 @@ class ToolService:
         This mode validates the pipeline definition without a collection.
         Jobs are routed to the persistent queue for agents to claim.
 
+        Also triggers retention-based cleanup before creating the job (Issue #92).
+
         Args:
             pipeline_id: Pipeline ID to validate
 
@@ -345,6 +347,7 @@ class ToolService:
             ConflictError: If job already exists for this pipeline
         """
         from backend.src.services.exceptions import ConflictError
+        from backend.src.services.cleanup_service import trigger_cleanup_on_job_creation
 
         if not pipeline_id:
             raise ValueError("pipeline_id is required for display_graph mode")
@@ -378,6 +381,19 @@ class ToolService:
                 message=f"Pipeline validation (display_graph) is already running for pipeline {pipeline_id}",
                 existing_job_id=existing.guid,
                 position=None
+            )
+
+        # Trigger retention cleanup before creating new job (Issue #92)
+        # Failures don't block job creation
+        cleanup_stats = trigger_cleanup_on_job_creation(self.db, pipeline.team_id)
+        if cleanup_stats and (cleanup_stats.total_jobs_deleted > 0 or cleanup_stats.total_results_deleted > 0):
+            logger.info(
+                f"Pre-job cleanup (display_graph): deleted {cleanup_stats.total_jobs_deleted} jobs, "
+                f"{cleanup_stats.total_results_deleted} results",
+                extra={
+                    "team_id": pipeline.team_id,
+                    "bytes_freed": cleanup_stats.estimated_bytes_freed
+                }
             )
 
         # Get pipeline GUID from model property
@@ -442,6 +458,8 @@ class ToolService:
         persistent job queue (Job model) and claimed by available agents.
         For LOCAL collections with bound agents, the job is bound to that agent.
 
+        Also triggers retention-based cleanup before creating the job (Issue #92).
+
         Args:
             collection: The collection to analyze
             tool: Tool to run
@@ -458,6 +476,20 @@ class ToolService:
         """
         from backend.src.services.exceptions import ConflictError
         from backend.src.services.job_coordinator_service import JobCoordinatorService
+        from backend.src.services.cleanup_service import trigger_cleanup_on_job_creation
+
+        # Trigger retention cleanup before creating new job (Issue #92)
+        # Failures don't block job creation
+        cleanup_stats = trigger_cleanup_on_job_creation(self.db, collection.team_id)
+        if cleanup_stats and (cleanup_stats.total_jobs_deleted > 0 or cleanup_stats.total_results_deleted > 0):
+            logger.info(
+                f"Pre-job cleanup: deleted {cleanup_stats.total_jobs_deleted} jobs, "
+                f"{cleanup_stats.total_results_deleted} results",
+                extra={
+                    "team_id": collection.team_id,
+                    "bytes_freed": cleanup_stats.estimated_bytes_freed
+                }
+            )
 
         # Check for existing active job in persistent queue (excluding SCHEDULED)
         # SCHEDULED jobs will be cancelled, not considered conflicts

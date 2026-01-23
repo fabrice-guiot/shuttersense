@@ -29,6 +29,8 @@ export interface PhotoStatsTrendPoint {
   total_files: number
   /** Total size in bytes at this point */
   total_size: number
+  /** Whether this is a NO_CHANGE copy result (Issue #92: Storage Optimization) */
+  no_change_copy: boolean
 }
 
 export interface PhotoStatsCollectionTrend {
@@ -46,6 +48,10 @@ export interface PhotoStatsAggregatedPoint {
   orphaned_metadata: number | null
   /** Number of collections with data for this date */
   collections_included: number
+  /** Count of NO_CHANGE results included for this date (Issue #92: Storage Optimization) */
+  no_change_count: number
+  /** Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period) */
+  has_transition: boolean
 }
 
 /**
@@ -77,6 +83,8 @@ export interface PhotoPairingTrendPoint {
   image_count: number
   /** Map of camera_id to image count */
   camera_usage: Record<string, number>
+  /** Whether this is a NO_CHANGE copy result (Issue #92: Storage Optimization) */
+  no_change_copy: boolean
 }
 
 export interface PhotoPairingCollectionTrend {
@@ -96,6 +104,10 @@ export interface PhotoPairingAggregatedPoint {
   image_count: number | null
   /** Number of collections with data for this date */
   collections_included: number
+  /** Count of NO_CHANGE results included for this date (Issue #92: Storage Optimization) */
+  no_change_count: number
+  /** Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period) */
+  has_transition: boolean
 }
 
 /**
@@ -137,6 +149,8 @@ export interface PipelineValidationTrendPoint {
   partial_ratio: number
   /** Percentage of INCONSISTENT status (0-100) */
   inconsistent_ratio: number
+  /** Whether this is a NO_CHANGE copy result (Issue #92: Storage Optimization) */
+  no_change_copy: boolean
 }
 
 export interface PipelineValidationCollectionTrend {
@@ -174,6 +188,10 @@ export interface PipelineValidationAggregatedPoint {
   inconsistent_count: number | null
   /** Number of collections with data for this date */
   collections_included: number
+  /** Count of NO_CHANGE results included for this date (Issue #92: Storage Optimization) */
+  no_change_count: number
+  /** Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period) */
+  has_transition: boolean
 }
 
 /**
@@ -226,6 +244,22 @@ export interface DisplayGraphTrendResponse {
 // Trend Summary Types
 // ============================================================================
 
+/** Information about stable periods (consecutive NO_CHANGE results) */
+export interface StablePeriodInfo {
+  /** Whether latest PhotoStats result is NO_CHANGE */
+  photostats_stable: boolean
+  /** Days in current stable period for PhotoStats */
+  photostats_stable_days: number
+  /** Whether latest Photo Pairing result is NO_CHANGE */
+  photo_pairing_stable: boolean
+  /** Days in current stable period for Photo Pairing */
+  photo_pairing_stable_days: number
+  /** Whether latest Pipeline Validation result is NO_CHANGE */
+  pipeline_validation_stable: boolean
+  /** Days in current stable period for Pipeline Validation */
+  pipeline_validation_stable_days: number
+}
+
 export interface TrendSummaryResponse {
   /** Collection ID (null for all collections) */
   collection_id: number | null
@@ -245,6 +279,8 @@ export interface TrendSummaryResponse {
     photo_pairing: number
     pipeline_validation: number
   }
+  /** Information about stable periods (consecutive NO_CHANGE results) */
+  stable_periods: StablePeriodInfo
 }
 
 // ============================================================================

@@ -12,7 +12,8 @@ import {
   FileText,
   Search,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Copy
 } from 'lucide-react'
 import {
   Table,
@@ -253,9 +254,23 @@ export function ResultsTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_CONFIG[result.status].variant}>
-                      {STATUS_CONFIG[result.status].label}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={STATUS_CONFIG[result.status].variant}>
+                        {STATUS_CONFIG[result.status].label}
+                      </Badge>
+                      {result.no_change_copy && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              References a previous result (storage optimized)
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>{result.files_scanned ?? '-'}</TableCell>
                   <TableCell>{result.issues_found ?? '-'}</TableCell>

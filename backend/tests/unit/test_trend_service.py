@@ -538,8 +538,8 @@ class TestTrendSummary:
         # Results in collection2
         sample_result(tool="photostats", collection_id=collection2.id)
 
-        # Filter to collection1
-        summary = trend_service.get_trend_summary(team_id=test_team.id, collection_id=collection1.id)
+        # Filter to collection1 using GUID
+        summary = trend_service.get_trend_summary(team_id=test_team.id, collection_guid=collection1.guid)
 
         assert summary.collection_id == collection1.id
         assert summary.data_points_available.photostats == 3
@@ -565,7 +565,7 @@ class TestTrendSummary:
                 completed_at=base_time + timedelta(days=i)
             )
 
-        summary = trend_service.get_trend_summary(team_id=test_team.id, collection_id=collection.id)
+        summary = trend_service.get_trend_summary(team_id=test_team.id, collection_guid=collection.guid)
 
         # Should have a calculated trend (not insufficient_data)
         assert summary.orphaned_trend in [

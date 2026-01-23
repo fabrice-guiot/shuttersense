@@ -144,6 +144,69 @@ interface BaseLineChartProps {
   xAxisFormatter?: (value: string) => string
   yAxisFormatter?: (value: number) => string
   tooltipFormatter?: (value: number, name: string) => [string, string]
+  /** Field name indicating if the point is a transition point (renders as diamond) */
+  transitionFieldKey?: string
+  /** Field name indicating if the point is a NO_CHANGE copy (renders as hollow circle) */
+  noChangeFieldKey?: string
+}
+
+/**
+ * Custom dot component that renders different shapes based on data point type:
+ * - Transition points (has_transition=true): Diamond shape
+ * - NO_CHANGE results (no_change_copy=true): Hollow circle
+ * - Normal results: Filled circle
+ *
+ * This implements FR-040: Trend charts MUST visually distinguish Input State
+ * transition points using different symbols (not colors).
+ */
+interface TransitionDotProps {
+  cx: number
+  cy: number
+  stroke: string
+  payload: Record<string, unknown>
+  transitionFieldKey?: string
+  noChangeFieldKey?: string
+}
+
+function TransitionDot({
+  cx,
+  cy,
+  stroke,
+  payload,
+  transitionFieldKey,
+  noChangeFieldKey
+}: TransitionDotProps) {
+  const isTransition = transitionFieldKey && payload[transitionFieldKey] === true
+  const isNoChange = noChangeFieldKey && payload[noChangeFieldKey] === true
+
+  if (isTransition) {
+    // Diamond shape for transition points
+    return (
+      <polygon
+        points={`${cx},${cy - 5} ${cx + 5},${cy} ${cx},${cy + 5} ${cx - 5},${cy}`}
+        fill={stroke}
+        stroke={stroke}
+        strokeWidth={1}
+      />
+    )
+  }
+
+  if (isNoChange) {
+    // Hollow circle for NO_CHANGE results (stable period)
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={3}
+        fill="hsl(var(--background))"
+        stroke={stroke}
+        strokeWidth={2}
+      />
+    )
+  }
+
+  // Default filled circle for normal results
+  return <circle cx={cx} cy={cy} r={3} fill={stroke} stroke={stroke} strokeWidth={1} />
 }
 
 export function BaseLineChart({
@@ -152,8 +215,25 @@ export function BaseLineChart({
   lines,
   xAxisFormatter = formatChartDate,
   yAxisFormatter,
-  tooltipFormatter
+  tooltipFormatter,
+  transitionFieldKey,
+  noChangeFieldKey
 }: BaseLineChartProps) {
+  // Create a custom dot component that has access to the field keys
+  const createCustomDot = (color: string) => {
+    if (!transitionFieldKey && !noChangeFieldKey) {
+      return { r: 3 }
+    }
+    return (props: { cx: number; cy: number; payload: Record<string, unknown> }) => (
+      <TransitionDot
+        {...props}
+        stroke={color}
+        transitionFieldKey={transitionFieldKey}
+        noChangeFieldKey={noChangeFieldKey}
+      />
+    )
+  }
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -179,7 +259,7 @@ export function BaseLineChart({
           }}
         />
         <Legend />
-        {lines.map((line, index) => (
+        {lines.map((line) => (
           <Line
             key={line.dataKey}
             type={line.type || 'monotone'}
@@ -187,7 +267,7 @@ export function BaseLineChart({
             name={line.name}
             stroke={line.color}
             strokeWidth={2}
-            dot={{ r: 3 }}
+            dot={createCustomDot(line.color)}
             activeDot={{ r: 5 }}
             connectNulls={true}
           />

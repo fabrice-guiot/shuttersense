@@ -165,6 +165,10 @@ let results: AnalysisResult[] = [
     issues_found: 5,
     error_message: null,
     has_report: true,
+    input_state_hash: 'abc123def456',
+    no_change_copy: false,
+    download_report_from: null,
+    source_result_exists: null,
     results: {
       total_files: 1000,
       total_size: 5000000000,
@@ -191,6 +195,10 @@ let results: AnalysisResult[] = [
     issues_found: 2,
     error_message: null,
     has_report: true,
+    input_state_hash: 'xyz789abc012',
+    no_change_copy: false,
+    download_report_from: null,
+    source_result_exists: null,
     results: {
       group_count: 400,
       image_count: 800,
@@ -218,6 +226,10 @@ let results: AnalysisResult[] = [
     issues_found: 0,
     error_message: 'Connection timeout to S3 bucket',
     has_report: false,
+    input_state_hash: null,
+    no_change_copy: false,
+    download_report_from: null,
+    source_result_exists: null,
     results: {
       total_size: 0,
       total_files: 0,
@@ -244,6 +256,10 @@ let results: AnalysisResult[] = [
     issues_found: 3,
     error_message: null,
     has_report: true,
+    input_state_hash: 'pip123val456',
+    no_change_copy: false,
+    download_report_from: null,
+    source_result_exists: null,
     results: {
       consistency_counts: { CONSISTENT: 400, PARTIAL: 50, INCONSISTENT: 50 },
     },
@@ -292,6 +308,7 @@ let collections: Collection[] = [
     is_accessible: true,
     accessibility_message: null,
     last_scanned_at: null,
+    bound_agent: null,
     created_at: '2025-01-01T09:00:00Z',
     updated_at: '2025-01-01T09:00:00Z',
   },
@@ -307,6 +324,7 @@ let collections: Collection[] = [
     pipeline_name: 'Standard RAW Workflow',
     cache_ttl: 86400,
     is_accessible: true,
+    bound_agent: null,
     accessibility_message: null,
     last_scanned_at: null,
     created_at: '2025-01-01T09:00:00Z',
@@ -471,6 +489,8 @@ let locations: Location[] = [
     travel_required_default: true,
     notes: 'Annual EAA AirVenture event location',
     is_known: true,
+    instagram_handle: 'eaa_airventure',
+    instagram_url: 'https://instagram.com/eaa_airventure',
     created_at: '2026-01-01T09:00:00Z',
     updated_at: '2026-01-01T09:00:00Z',
   },
@@ -496,6 +516,8 @@ let locations: Location[] = [
     travel_required_default: true,
     notes: 'Great for wildlife photography',
     is_known: true,
+    instagram_handle: null,
+    instagram_url: null,
     created_at: '2026-01-01T09:00:00Z',
     updated_at: '2026-01-01T09:00:00Z',
   },
@@ -561,6 +583,8 @@ let organizers: Organizer[] = [
     guid: 'org_01hgw2bbg00000000000000001',
     name: 'USAF Demonstration Teams',
     website: 'https://usaf.com/demo',
+    instagram_handle: 'usaf_demo',
+    instagram_url: 'https://instagram.com/usaf_demo',
     category: {
       guid: 'cat_01hgw2bbg00000000000000001',
       name: 'Airshow',
@@ -577,6 +601,8 @@ let organizers: Organizer[] = [
     guid: 'org_01hgw2bbg00000000000000002',
     name: 'National Wildlife Federation',
     website: 'https://nwf.org',
+    instagram_handle: null,
+    instagram_url: null,
     category: {
       guid: 'cat_01hgw2bbg00000000000000002',
       name: 'Wildlife',
@@ -591,6 +617,32 @@ let organizers: Organizer[] = [
   },
 ]
 let nextOrganizerNum = 3
+
+// Retention settings mock data (Issue #92)
+let retentionSettings = {
+  job_completed_days: 2,
+  job_failed_days: 7,
+  result_completed_days: 0,  // Unlimited by default
+  preserve_per_collection: 1,
+}
+
+// Storage metrics mock data (Issue #92)
+const storageMetrics = {
+  total_reports_generated: 150,
+  completed_jobs_purged: 25,
+  failed_jobs_purged: 10,
+  completed_results_purged_original: 20,
+  completed_results_purged_copy: 30,
+  estimated_bytes_purged: 5242880,
+  total_results_retained: 100,
+  original_results_retained: 60,
+  copy_results_retained: 40,
+  preserved_results_count: 15,
+  reports_retained_json_bytes: 1048576,
+  reports_retained_html_bytes: 4194304,
+  deduplication_ratio: 40.0,
+  storage_savings_bytes: 2097152,
+}
 
 // Config mock data
 let configData = {
@@ -768,6 +820,7 @@ export const handlers = [
       is_accessible: true,
       accessibility_message: null,
       last_scanned_at: null,
+      bound_agent: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -1131,6 +1184,8 @@ export const handlers = [
         files_scanned: r.files_scanned,
         issues_found: r.issues_found,
         has_report: r.has_report,
+        input_state_hash: r.input_state_hash,
+        no_change_copy: r.no_change_copy,
       }))
 
     return HttpResponse.json({ items, total, limit, offset })
@@ -1506,6 +1561,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
                 orphaned_xmp_count: 3,
                 total_files: 1000,
                 total_size: 5000000000,
+                no_change_copy: false,
               },
               {
                 date: '2025-01-02T10:00:00Z',
@@ -1514,6 +1570,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
                 orphaned_xmp_count: 2,
                 total_files: 1050,
                 total_size: 5250000000,
+                no_change_copy: false,
               },
             ],
           }
@@ -1531,18 +1588,24 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           orphaned_images: 10,
           orphaned_metadata: 5,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
         {
           date: '2025-01-02T00:00:00Z',
           orphaned_images: 8,
           orphaned_metadata: 4,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
         {
           date: '2025-01-03T00:00:00Z',
           orphaned_images: 6,
           orphaned_metadata: 3,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
       ],
       collections: [],
@@ -1575,6 +1638,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
                 group_count: 400,
                 image_count: 800,
                 camera_usage: { ABC1: 500, XYZ2: 300 },
+                no_change_copy: false,
               },
               {
                 date: '2025-01-02T11:00:00Z',
@@ -1582,6 +1646,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
                 group_count: 420,
                 image_count: 840,
                 camera_usage: { ABC1: 520, XYZ2: 320 },
+                no_change_copy: false,
               },
             ],
           }
@@ -1599,18 +1664,24 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           group_count: 800,
           image_count: 1600,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
         {
           date: '2025-01-02T00:00:00Z',
           group_count: 840,
           image_count: 1680,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
         {
           date: '2025-01-03T00:00:00Z',
           group_count: 880,
           image_count: 1760,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
       ],
       collections: [],
@@ -1647,6 +1718,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
                 consistent_ratio: 80,
                 partial_ratio: 10,
                 inconsistent_ratio: 10,
+                no_change_copy: false,
               },
               {
                 date: '2025-01-02T13:00:00Z',
@@ -1659,6 +1731,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
                 consistent_ratio: 84,
                 partial_ratio: 9,
                 inconsistent_ratio: 7,
+                no_change_copy: false,
               },
             ],
           }
@@ -1681,6 +1754,8 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           consistent_count: 800,
           inconsistent_count: 100,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
         {
           date: '2025-01-02T00:00:00Z',
@@ -1692,6 +1767,8 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           consistent_count: 861,
           inconsistent_count: 84,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
         {
           date: '2025-01-03T00:00:00Z',
@@ -1703,6 +1780,8 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           consistent_count: 935,
           inconsistent_count: 66,
           collections_included: 2,
+          no_change_count: 0,
+          has_transition: false,
         },
       ],
       collections: [],
@@ -1820,6 +1899,48 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
         'Content-Disposition': 'attachment; filename="shuttersense-config.yaml"',
       },
     })
+  }),
+
+  // Retention settings (Issue #92) - must be before /:category handler
+  http.get(`${BASE_URL}/config/retention`, () => {
+    return HttpResponse.json(retentionSettings)
+  }),
+
+  http.put(`${BASE_URL}/config/retention`, async ({ request }) => {
+    const data = await request.json() as Partial<typeof retentionSettings>
+
+    // Validate retention days values
+    const validDays = [0, 1, 2, 5, 7, 14, 30, 90, 180, 365]
+    const validPreserve = [1, 2, 3, 5, 10]
+
+    if (data.job_completed_days !== undefined && !validDays.includes(data.job_completed_days)) {
+      return HttpResponse.json({ detail: 'Invalid job_completed_days value' }, { status: 422 })
+    }
+    if (data.job_failed_days !== undefined && !validDays.includes(data.job_failed_days)) {
+      return HttpResponse.json({ detail: 'Invalid job_failed_days value' }, { status: 422 })
+    }
+    if (data.result_completed_days !== undefined && !validDays.includes(data.result_completed_days)) {
+      return HttpResponse.json({ detail: 'Invalid result_completed_days value' }, { status: 422 })
+    }
+    if (data.preserve_per_collection !== undefined && !validPreserve.includes(data.preserve_per_collection)) {
+      return HttpResponse.json({ detail: 'Invalid preserve_per_collection value' }, { status: 422 })
+    }
+
+    // Update only provided fields
+    if (data.job_completed_days !== undefined) {
+      retentionSettings.job_completed_days = data.job_completed_days
+    }
+    if (data.job_failed_days !== undefined) {
+      retentionSettings.job_failed_days = data.job_failed_days
+    }
+    if (data.result_completed_days !== undefined) {
+      retentionSettings.result_completed_days = data.result_completed_days
+    }
+    if (data.preserve_per_collection !== undefined) {
+      retentionSettings.preserve_per_collection = data.preserve_per_collection
+    }
+
+    return HttpResponse.json(retentionSettings)
   }),
 
   http.get(`${BASE_URL}/config/:category`, ({ params }) => {
@@ -2751,6 +2872,11 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
     const matches = organizer.category.guid === params.eventCategoryGuid
     return HttpResponse.json({ matches })
   }),
+
+  // Storage Metrics Handler (Issue #92)
+  http.get(`${BASE_URL}/analytics/storage`, () => {
+    return HttpResponse.json(storageMetrics)
+  }),
 ]
 
 // Helper to add a scheduled job (for testing upcoming jobs)
@@ -2905,6 +3031,7 @@ export function resetMockData(): void {
       is_accessible: true,
       accessibility_message: null,
       last_scanned_at: null,
+      bound_agent: null,
       created_at: '2025-01-01T09:00:00Z',
       updated_at: '2025-01-01T09:00:00Z',
     },
@@ -2922,6 +3049,7 @@ export function resetMockData(): void {
       is_accessible: true,
       accessibility_message: null,
       last_scanned_at: null,
+      bound_agent: null,
       created_at: '2025-01-01T09:00:00Z',
       updated_at: '2025-01-01T09:00:00Z',
     },
@@ -2945,6 +3073,10 @@ export function resetMockData(): void {
       issues_found: 5,
       error_message: null,
       has_report: true,
+      input_state_hash: 'abc123def456',
+      no_change_copy: false,
+      download_report_from: null,
+      source_result_exists: null,
       results: {
         total_files: 1000,
         total_size: 5000000000,
@@ -2971,6 +3103,10 @@ export function resetMockData(): void {
       issues_found: 2,
       error_message: null,
       has_report: true,
+      input_state_hash: 'xyz789abc012',
+      no_change_copy: false,
+      download_report_from: null,
+      source_result_exists: null,
       results: {
         group_count: 400,
         image_count: 800,
@@ -2998,6 +3134,10 @@ export function resetMockData(): void {
       issues_found: 0,
       error_message: 'Connection timeout to S3 bucket',
       has_report: false,
+      input_state_hash: null,
+      no_change_copy: false,
+      download_report_from: null,
+      source_result_exists: null,
       results: {
         total_size: 0,
         total_files: 0,
@@ -3024,6 +3164,10 @@ export function resetMockData(): void {
       issues_found: 3,
       error_message: null,
       has_report: true,
+      input_state_hash: 'pip123val456',
+      no_change_copy: false,
+      download_report_from: null,
+      source_result_exists: null,
       results: {
         consistency_counts: { CONSISTENT: 400, PARTIAL: 50, INCONSISTENT: 50 },
       },

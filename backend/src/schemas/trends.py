@@ -57,6 +57,7 @@ class PhotoStatsTrendPoint(BaseModel):
     orphaned_xmp_count: int = Field(0, description="Count of orphaned XMP files")
     total_files: int = Field(0, description="Total files scanned")
     total_size: int = Field(0, description="Total storage size in bytes")
+    no_change_copy: bool = Field(False, description="Whether this is a NO_CHANGE copy result (Issue #92)")
 
     model_config = {
         "json_schema_extra": {
@@ -66,7 +67,8 @@ class PhotoStatsTrendPoint(BaseModel):
                 "orphaned_images_count": 5,
                 "orphaned_xmp_count": 3,
                 "total_files": 1250,
-                "total_size": 52428800000
+                "total_size": 52428800000,
+                "no_change_copy": False
             }
         }
     }
@@ -95,6 +97,8 @@ class PhotoStatsAggregatedPoint(BaseModel):
     orphaned_images: Optional[int] = Field(None, description="Total orphaned images across all collections (None if no data)")
     orphaned_metadata: Optional[int] = Field(None, description="Total orphaned metadata files (XMP) across all collections (None if no data)")
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
+    no_change_count: int = Field(0, ge=0, description="Count of NO_CHANGE results included for this date (Issue #92)")
+    has_transition: bool = Field(False, description="Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period)")
 
 
 class PhotoStatsTrendResponse(BaseModel):
@@ -132,6 +136,7 @@ class PhotoPairingTrendPoint(BaseModel):
         default_factory=dict,
         description="Map of camera_id to image count"
     )
+    no_change_copy: bool = Field(False, description="Whether this is a NO_CHANGE copy result (Issue #92)")
 
     model_config = {
         "json_schema_extra": {
@@ -144,7 +149,8 @@ class PhotoPairingTrendPoint(BaseModel):
                     "AB3D": 500,
                     "XY7Z": 400,
                     "PQ9R": 300
-                }
+                },
+                "no_change_copy": False
             }
         }
     }
@@ -178,6 +184,8 @@ class PhotoPairingAggregatedPoint(BaseModel):
     group_count: Optional[int] = Field(None, description="Total image groups across all collections (None if no data)")
     image_count: Optional[int] = Field(None, description="Total images across all collections (None if no data)")
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
+    no_change_count: int = Field(0, ge=0, description="Count of NO_CHANGE results included for this date (Issue #92)")
+    has_transition: bool = Field(False, description="Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period)")
 
 
 class PhotoPairingTrendResponse(BaseModel):
@@ -217,6 +225,7 @@ class PipelineValidationTrendPoint(BaseModel):
     consistent_ratio: float = Field(0.0, description="Percentage CONSISTENT (0-100)")
     partial_ratio: float = Field(0.0, description="Percentage PARTIAL (0-100)")
     inconsistent_ratio: float = Field(0.0, description="Percentage INCONSISTENT (0-100)")
+    no_change_copy: bool = Field(False, description="Whether this is a NO_CHANGE copy result (Issue #92)")
 
     model_config = {
         "json_schema_extra": {
@@ -230,7 +239,8 @@ class PipelineValidationTrendPoint(BaseModel):
                 "inconsistent_count": 25,
                 "consistent_ratio": 92.0,
                 "partial_ratio": 6.0,
-                "inconsistent_ratio": 2.0
+                "inconsistent_ratio": 2.0,
+                "no_change_copy": False
             }
         }
     }
@@ -273,6 +283,8 @@ class PipelineValidationAggregatedPoint(BaseModel):
     consistent_count: Optional[int] = Field(None, description="Total CONSISTENT count (None if no data)")
     inconsistent_count: Optional[int] = Field(None, description="Total INCONSISTENT count (None if no data)")
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
+    no_change_count: int = Field(0, ge=0, description="Count of NO_CHANGE results included for this date (Issue #92)")
+    has_transition: bool = Field(False, description="Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period)")
 
 
 class PipelineValidationTrendResponse(BaseModel):
@@ -356,6 +368,16 @@ class DataPointCounts(BaseModel):
     pipeline_validation: int = Field(0, ge=0)
 
 
+class StablePeriodInfo(BaseModel):
+    """Information about stable periods (consecutive NO_CHANGE results)."""
+    photostats_stable: bool = Field(False, description="Whether latest PhotoStats result is NO_CHANGE")
+    photostats_stable_days: int = Field(0, ge=0, description="Days in current stable period for PhotoStats")
+    photo_pairing_stable: bool = Field(False, description="Whether latest Photo Pairing result is NO_CHANGE")
+    photo_pairing_stable_days: int = Field(0, ge=0, description="Days in current stable period for Photo Pairing")
+    pipeline_validation_stable: bool = Field(False, description="Whether latest Pipeline Validation result is NO_CHANGE")
+    pipeline_validation_stable_days: int = Field(0, ge=0, description="Days in current stable period for Pipeline Validation")
+
+
 class TrendSummaryResponse(BaseModel):
     """
     Trend summary for dashboard overview.
@@ -386,6 +408,10 @@ class TrendSummaryResponse(BaseModel):
     data_points_available: DataPointCounts = Field(
         default_factory=DataPointCounts,
         description="Count of data points per tool"
+    )
+    stable_periods: StablePeriodInfo = Field(
+        default_factory=StablePeriodInfo,
+        description="Information about stable periods (consecutive NO_CHANGE results)"
     )
 
     model_config = {

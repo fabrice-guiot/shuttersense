@@ -51,7 +51,10 @@ export function PhotoPairingTrend({
         date: point.date,
         group_count: point.group_count,
         image_count: point.image_count,
-        collections_included: point.collections_included
+        collections_included: point.collections_included,
+        // Include transition/no_change info for custom dot rendering
+        has_transition: point.has_transition,
+        no_change_count: point.no_change_count
       }))
     } else {
       // COMPARISON MODE: Build multi-collection data
@@ -60,10 +63,11 @@ export function PhotoPairingTrend({
       // For single collection with camera breakdown
       if (data.collections.length === 1 && showCameraBreakdown) {
         return data.collections[0].data_points.map((point) => {
-          const row: Record<string, string | number> = {
+          const row: Record<string, string | number | boolean> = {
             date: point.date,
             group_count: point.group_count,
-            image_count: point.image_count
+            image_count: point.image_count,
+            no_change_copy: point.no_change_copy
           }
 
           // Add camera usage fields
@@ -86,15 +90,26 @@ export function PhotoPairingTrend({
       const sortedDates = Array.from(dateSet).sort()
 
       return sortedDates.map((date) => {
-        const row: Record<string, string | number> = { date }
+        const row: Record<string, string | number | boolean> = { date }
+
+        // Track if any point at this date is a NO_CHANGE result
+        let hasAnyNoChange = false
+        let hasAnyCompleted = false
 
         data.collections.forEach((collection) => {
           const point = collection.data_points.find((p) => p.date === date)
           if (point) {
             row[`groups_${collection.collection_id}`] = point.group_count
             row[`images_${collection.collection_id}`] = point.image_count
+            if (point.no_change_copy) {
+              hasAnyNoChange = true
+            } else {
+              hasAnyCompleted = true
+            }
           }
         })
+
+        row.no_change_copy = hasAnyNoChange && !hasAnyCompleted
 
         return row
       })
@@ -175,6 +190,10 @@ export function PhotoPairingTrend({
         ? 'Camera usage breakdown over time'
         : 'Compare image counts between selected collections'
 
+  // Determine which fields to use for transition visualization
+  const transitionFieldKey = data?.mode === 'aggregated' ? 'has_transition' : undefined
+  const noChangeFieldKey = data?.mode === 'aggregated' ? undefined : 'no_change_copy'
+
   return (
     <TrendChart
       title="Photo Pairing Trend"
@@ -191,6 +210,8 @@ export function PhotoPairingTrend({
         xAxisFormatter={formatChartDate}
         yAxisFormatter={formatChartNumber}
         tooltipFormatter={(value, name) => [formatChartNumber(value), name]}
+        transitionFieldKey={transitionFieldKey}
+        noChangeFieldKey={noChangeFieldKey}
       />
     </TrendChart>
   )

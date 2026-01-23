@@ -857,6 +857,9 @@ class JobCoordinatorService:
         # Create scheduled follow-up job if TTL is configured
         scheduled_job = self._maybe_create_scheduled_job(job)
 
+        # Increment storage metrics counter (Issue #92: T057)
+        self._increment_storage_metrics_on_completion(team_id)
+
         self.db.commit()
 
         logger.info(
@@ -1021,6 +1024,9 @@ class JobCoordinatorService:
         # Create scheduled follow-up job if TTL is configured
         scheduled_job = self._maybe_create_scheduled_job(job)
 
+        # Increment storage metrics counter (Issue #92: T057)
+        self._increment_storage_metrics_on_completion(team_id)
+
         self.db.commit()
 
         logger.info(
@@ -1037,6 +1043,27 @@ class JobCoordinatorService:
         )
 
         return job
+
+    def _increment_storage_metrics_on_completion(self, team_id: int) -> None:
+        """
+        Increment storage metrics counter when a job completes.
+
+        Issue #92: T057 - Track total reports generated.
+
+        Args:
+            team_id: Team ID for the completed job
+        """
+        from backend.src.services.storage_metrics_service import StorageMetricsService
+
+        try:
+            metrics_service = StorageMetricsService(self.db)
+            metrics_service.increment_on_completion(team_id)
+        except Exception as e:
+            # Non-blocking - log error but don't fail job completion
+            logger.warning(
+                "Failed to increment storage metrics",
+                extra={"team_id": team_id, "error": str(e)}
+            )
 
     def _cleanup_intermediate_copies(
         self,
@@ -1056,6 +1083,8 @@ class JobCoordinatorService:
         For display_graph jobs (no collection): matches by pipeline_id + tool
         For collection-based jobs: matches by collection_id + tool
 
+        Also updates StorageMetrics to track purged copy counts (Issue #92 T044b).
+
         Args:
             collection_id: Collection ID (None for display_graph)
             pipeline_id: Pipeline ID (used for display_graph matching)
@@ -1067,6 +1096,8 @@ class JobCoordinatorService:
         Returns:
             Number of intermediate copies deleted
         """
+        from backend.src.models.storage_metrics import StorageMetrics
+
         # Find intermediate copies to delete:
         # - Same context (collection or pipeline for display_graph) + tool
         # - no_change_copy=True
@@ -1100,17 +1131,53 @@ class JobCoordinatorService:
 
         deleted_count = 0
         for copy in intermediate_copies:
-            logger.debug(
+            logger.info(
                 "Deleting intermediate NO_CHANGE copy",
                 extra={
                     "deleted_guid": copy.guid,
-                    "source_result_guid": source_result_guid
+                    "source_result_guid": source_result_guid,
+                    "collection_id": collection_id,
+                    "pipeline_id": pipeline_id,
+                    "tool": tool
                 }
             )
             self.db.delete(copy)
             deleted_count += 1
 
+        # Update StorageMetrics if any copies were deleted (Issue #92 T044b)
+        if deleted_count > 0:
+            self._update_storage_metrics_for_copy_cleanup(team_id, deleted_count)
+
         return deleted_count
+
+    def _update_storage_metrics_for_copy_cleanup(
+        self,
+        team_id: int,
+        deleted_count: int
+    ) -> None:
+        """
+        Update StorageMetrics to track intermediate copy cleanup.
+
+        Increments completed_results_purged_copy counter.
+
+        Args:
+            team_id: Team ID
+            deleted_count: Number of copies deleted
+        """
+        from backend.src.services.storage_metrics_service import StorageMetricsService
+
+        try:
+            metrics_service = StorageMetricsService(self.db)
+            metrics_service.increment_on_cleanup(
+                team_id=team_id,
+                copy_results_deleted=deleted_count
+            )
+        except Exception as e:
+            # Non-blocking - log error but don't fail job completion
+            logger.warning(
+                "Failed to update storage metrics for copy cleanup",
+                extra={"team_id": team_id, "error": str(e)}
+            )
 
     def _resolve_upload_ids(
         self,
@@ -1554,6 +1621,9 @@ class JobCoordinatorService:
         job.fail(error_message)
         job.result_id = result.id
         job.progress = None  # Clear progress
+
+        # Increment storage metrics counter (Issue #92: T057)
+        self._increment_storage_metrics_on_completion(team_id)
 
         self.db.commit()
 

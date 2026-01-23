@@ -124,6 +124,11 @@ export interface AnalysisResultSummary {
   files_scanned: number | null
   issues_found: number | null
   has_report: boolean
+  // Storage Optimization Fields (Issue #92)
+  /** SHA-256 hash of Input State (null for legacy results) */
+  input_state_hash: string | null
+  /** True if this result references a previous result */
+  no_change_copy: boolean
 }
 
 export interface AnalysisResult {
@@ -148,6 +153,15 @@ export interface AnalysisResult {
   has_report: boolean
   results: ToolResults
   created_at: string // ISO 8601 timestamp
+  // Storage Optimization Fields (Issue #92)
+  /** SHA-256 hash of Input State (null for legacy results) */
+  input_state_hash: string | null
+  /** True if this result references a previous result */
+  no_change_copy: boolean
+  /** GUID of source result for report download (res_xxx) */
+  download_report_from: string | null
+  /** Whether source result still exists (for NO_CHANGE results) */
+  source_result_exists: boolean | null
 }
 
 export interface ResultListResponse {
@@ -190,6 +204,8 @@ export interface ResultListQueryParams {
   tool?: ToolType
   /** Filter by status */
   status?: ResultStatus
+  /** Filter by no_change_copy flag (true=copies only, false=originals only) */
+  no_change_copy?: boolean
   /** Filter by date range (from) */
   from_date?: string // YYYY-MM-DD
   /** Filter by date range (to) */

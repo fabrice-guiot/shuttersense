@@ -50,7 +50,10 @@ export function PhotoStatsTrend({
         date: point.date,
         orphaned_images: point.orphaned_images,
         orphaned_metadata: point.orphaned_metadata,
-        collections_included: point.collections_included
+        collections_included: point.collections_included,
+        // Include transition/no_change info for custom dot rendering
+        has_transition: point.has_transition,
+        no_change_count: point.no_change_count
       }))
     } else {
       // COMPARISON MODE: Build multi-collection data
@@ -66,15 +69,27 @@ export function PhotoStatsTrend({
       const sortedDates = Array.from(dateSet).sort()
 
       return sortedDates.map((date) => {
-        const row: Record<string, string | number> = { date }
+        const row: Record<string, string | number | boolean> = { date }
+
+        // Track if any point at this date is a transition or no_change
+        let hasAnyNoChange = false
+        let hasAnyCompleted = false
 
         data.collections.forEach((collection) => {
           const point = collection.data_points.find((p) => p.date === date)
           if (point) {
             row[`orphaned_images_${collection.collection_id}`] = point.orphaned_images_count
             row[`orphaned_xmp_${collection.collection_id}`] = point.orphaned_xmp_count
+            if (point.no_change_copy) {
+              hasAnyNoChange = true
+            } else {
+              hasAnyCompleted = true
+            }
           }
         })
+
+        // In comparison mode, mark as no_change if all results are no_change
+        row.no_change_copy = hasAnyNoChange && !hasAnyCompleted
 
         return row
       })
@@ -143,6 +158,10 @@ export function PhotoStatsTrend({
       ? 'Aggregated orphaned files across all collections'
       : 'Compare orphaned files between selected collections'
 
+  // Determine which fields to use for transition visualization
+  const transitionFieldKey = data?.mode === 'aggregated' ? 'has_transition' : undefined
+  const noChangeFieldKey = data?.mode === 'aggregated' ? undefined : 'no_change_copy'
+
   return (
     <TrendChart
       title="Orphaned Files Trend"
@@ -159,6 +178,8 @@ export function PhotoStatsTrend({
         xAxisFormatter={formatChartDate}
         yAxisFormatter={formatChartNumber}
         tooltipFormatter={(value, name) => [formatChartNumber(value), name]}
+        transitionFieldKey={transitionFieldKey}
+        noChangeFieldKey={noChangeFieldKey}
       />
     </TrendChart>
   )

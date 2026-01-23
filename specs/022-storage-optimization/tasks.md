@@ -112,14 +112,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T028 [US3] Update get_report method in backend/src/services/result_service.py to follow download_report_from reference
-- [ ] T029 [US3] Update report download endpoint in backend/src/api/results.py to handle reference following
-- [ ] T030 [US3] Return appropriate 404 error when source result has been deleted
-- [ ] T031 [US3] Update has_report computation for NO_CHANGE results (true if source exists and has report)
-- [ ] T032 [US3] Add source_result_exists field to result detail response
-- [ ] T032b [US3] Add Input State transition indicator to result detail view in frontend/src/components/results/ResultDetail.tsx (show badge/icon when no_change_copy=true with link to source)
+- [X] T028 [US3] Update get_report method in backend/src/services/result_service.py to follow download_report_from reference
+- [X] T029 [US3] Update report download endpoint in backend/src/api/results.py to handle reference following
+- [X] T030 [US3] Return appropriate 404 error when source result has been deleted
+- [X] T031 [US3] Update has_report computation for NO_CHANGE results (true if source exists and has report)
+- [X] T032 [US3] Add source_result_exists field to result detail response
+- [X] T032b [US3] Add Input State transition indicator to result detail view in frontend/src/components/results/ResultDetailPanel.tsx (show badge/icon when no_change_copy=true with link to source)
 
-**Checkpoint**: User Story 3 complete - reports downloadable for all result types
+**Checkpoint**: User Story 3 complete - reports downloadable for all result types ✅
 
 ---
 
@@ -131,24 +131,24 @@
 
 ### Implementation for User Story 4
 
-- [ ] T033 [US4] Create CleanupService in backend/src/services/cleanup_service.py with batch deletion methods
-- [ ] T034 [US4] Implement cleanup_old_jobs method (delete completed jobs older than retention, exclude results)
-- [ ] T035 [US4] Implement cleanup_old_results method (delete completed results older than retention)
-- [ ] T036 [US4] Implement cleanup_failed_jobs method (delete failed jobs with cascade to results)
-- [ ] T037 [US4] Implement preserve_per_collection logic (keep minimum results per collection+tool)
-- [ ] T038 [US4] Integrate cleanup trigger into job creation flow in backend/src/services/job_service.py
-- [ ] T039 [US4] Add structured logging for cleanup operations (items deleted, items preserved, errors)
-- [ ] T039b [US4] Update CleanupService to return cleanup stats (records deleted by type, bytes freed estimates)
-- [ ] T039c [US4] Update CleanupService to persist cleanup stats to StorageMetrics table after each cleanup run
-- [ ] T039d [US4] Compute bytes freed estimate from deleted records (sum of JSONB column sizes + HTML sizes)
-- [ ] T040 [US4] Ensure cleanup failures don't block job creation (catch and log)
+- [X] T033 [US4] Create CleanupService in backend/src/services/cleanup_service.py with batch deletion methods
+- [X] T034 [US4] Implement cleanup_old_jobs method (delete completed jobs older than retention, exclude results)
+- [X] T035 [US4] Implement cleanup_old_results method (delete completed results older than retention)
+- [X] T036 [US4] Implement cleanup_failed_jobs method (delete failed jobs with cascade to results)
+- [X] T037 [US4] Implement preserve_per_collection logic (keep minimum results per collection+tool)
+- [X] T038 [US4] Integrate cleanup trigger into job creation flow in backend/src/services/tool_service.py
+- [X] T039 [US4] Add structured logging for cleanup operations (items deleted, items preserved, errors)
+- [X] T039b [US4] Update CleanupService to return cleanup stats (records deleted by type, bytes freed estimates)
+- [X] T039c [US4] Update CleanupService to persist cleanup stats to StorageMetrics table after each cleanup run
+- [X] T039d [US4] Compute bytes freed estimate from deleted records (sum of JSONB column sizes + HTML sizes)
+- [X] T040 [US4] Ensure cleanup failures don't block job creation (catch and log)
 
 ### Tests for User Story 4
 
-- [ ] T040b [P] [US4] Create unit tests for CleanupService in backend/tests/unit/test_cleanup_service.py (retention logic, preserve_per_collection, batch deletion)
-- [ ] T040c [US4] Create integration test for retention cleanup in backend/tests/integration/test_retention_cleanup.py (end-to-end cleanup trigger)
+- [X] T040b [P] [US4] Create unit tests for CleanupService in backend/tests/unit/test_cleanup_service.py (retention logic, preserve_per_collection, batch deletion)
+- [X] T040c [US4] Create integration test for retention cleanup in backend/tests/integration/test_cleanup_integration.py (end-to-end cleanup trigger)
 
-**Checkpoint**: User Story 4 complete - old data is automatically cleaned up
+**Checkpoint**: User Story 4 complete - old data is automatically cleaned up ✅
 
 ---
 
@@ -160,13 +160,13 @@
 
 ### Implementation for User Story 5
 
-- [ ] T041 [US5] Implement cleanup_intermediate_copies in backend/src/services/job_coordinator_service.py
-- [ ] T042 [US5] Integrate intermediate cleanup into NO_CHANGE completion flow
-- [ ] T043 [US5] Preserve copies when new COMPLETED result is created (don't delete for trend visibility)
-- [ ] T044 [US5] Add logging for intermediate copy cleanup operations
-- [ ] T044b [US5] Update intermediate copy cleanup to increment completed_results_purged_copy in StorageMetrics
+- [X] T041 [US5] Implement cleanup_intermediate_copies in backend/src/services/job_coordinator_service.py
+- [X] T042 [US5] Integrate intermediate cleanup into NO_CHANGE completion flow
+- [X] T043 [US5] Preserve copies when new COMPLETED result is created (don't delete for trend visibility)
+- [X] T044 [US5] Add logging for intermediate copy cleanup operations
+- [X] T044b [US5] Update intermediate copy cleanup to increment completed_results_purged_copy in StorageMetrics
 
-**Checkpoint**: User Story 5 complete - redundant copies are automatically removed
+**Checkpoint**: User Story 5 complete - redundant copies are automatically removed ✅
 
 ---
 
@@ -178,12 +178,12 @@
 
 ### Implementation for User Story 6
 
-- [ ] T045 [US6] Update trend data response to include no_change_copy flag in backend/src/schemas/trends.py
-- [ ] T046 [US6] Update frontend trend chart to render different symbols for transition points in frontend/src/components/trends/
-- [ ] T047 [US6] Add stable period indicator for consecutive NO_CHANGE results
-- [ ] T048 [US6] Update trend summary to account for NO_CHANGE results
+- [X] T045 [US6] Update trend data response to include no_change_copy flag in backend/src/schemas/trends.py
+- [X] T046 [US6] Update frontend trend chart to render different symbols for transition points in frontend/src/components/trends/
+- [X] T047 [US6] Add stable period indicator for consecutive NO_CHANGE results
+- [X] T048 [US6] Update trend summary to account for NO_CHANGE results
 
-**Checkpoint**: User Story 6 complete - trends visually distinguish state transitions
+**Checkpoint**: User Story 6 complete - trends visually distinguish state transitions ✅
 
 ---
 
@@ -195,17 +195,17 @@
 
 ### Implementation for User Story 7
 
-- [ ] T056 [US7] Create StorageMetricsService in backend/src/services/storage_metrics_service.py (get_metrics, increment_on_cleanup, increment_on_completion)
-- [ ] T057 [US7] Increment total_reports_generated on job completion in backend/src/services/job_coordinator_service.py
-- [ ] T058 [US7] Create storage stats API endpoint GET /api/analytics/storage in backend/src/api/analytics.py
-- [ ] T059 [US7] Implement preserved_results_count real-time query (count of most recent N per collection+tool based on preserve_per_collection)
-- [ ] T060 [US7] Implement reports_retained_json_bytes and reports_retained_html_bytes real-time queries
-- [ ] T061 [US7] Create ReportStorageTab component in frontend/src/components/analytics/ReportStorageTab.tsx
-- [ ] T062 [US7] Add "Report Storage" tab to Analytics page after "Runs" tab in frontend/src/pages/AnalyticsPage.tsx
-- [ ] T063 [US7] Create KPI cards for all storage metrics (total generated, retained counts, retained bytes, purged counts, preserved count)
-- [ ] T064 [P] [US7] Create unit tests for StorageMetricsService in backend/tests/unit/test_storage_metrics_service.py
+- [X] T056 [US7] Create StorageMetricsService in backend/src/services/storage_metrics_service.py (get_metrics, increment_on_cleanup, increment_on_completion)
+- [X] T057 [US7] Increment total_reports_generated on job completion in backend/src/services/job_coordinator_service.py
+- [X] T058 [US7] Create storage stats API endpoint GET /api/analytics/storage in backend/src/api/analytics.py
+- [X] T059 [US7] Implement preserved_results_count real-time query (count of most recent N per collection+tool based on preserve_per_collection)
+- [X] T060 [US7] Implement reports_retained_json_bytes and reports_retained_html_bytes real-time queries
+- [X] T061 [US7] Create ReportStorageTab component in frontend/src/components/analytics/ReportStorageTab.tsx
+- [X] T062 [US7] Add "Report Storage" tab to Analytics page after "Runs" tab in frontend/src/pages/AnalyticsPage.tsx
+- [X] T063 [US7] Create KPI cards for all storage metrics (total generated, retained counts, retained bytes, purged counts, preserved count)
+- [X] T064 [P] [US7] Create unit tests for StorageMetricsService in backend/tests/unit/test_storage_metrics_service.py
 
-**Checkpoint**: User Story 7 complete - storage metrics visible in Analytics
+**Checkpoint**: User Story 7 complete - storage metrics visible in Analytics ✅
 
 ---
 
@@ -213,13 +213,15 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T049 [P] Update Results list API to support no_change_copy filter parameter in backend/src/api/results.py
-- [ ] T050 [P] Add NO_CHANGE status badge styling in frontend/src/components/results/
-- [ ] T051 [P] Update result list UI to show NO_CHANGE indicator
-- [ ] T052 Performance validation: verify <50ms overhead for no-change detection
-- [ ] T053 Performance validation: verify <1s file list hash for 10K files
-- [ ] T054 Verify backward compatibility with null input_state_hash (legacy results)
-- [ ] T055 Run quickstart.md validation scenarios
+- [X] T049 [P] Update Results list API to support no_change_copy filter parameter in backend/src/api/results.py
+- [X] T050 [P] Add NO_CHANGE status badge styling in frontend/src/components/results/
+- [X] T051 [P] Update result list UI to show NO_CHANGE indicator (Copy icon with tooltip)
+- [X] T052 Performance validation: verify <50ms overhead for no-change detection
+- [X] T053 Performance validation: verify <1s file list hash for 10K files
+- [X] T054 Verify backward compatibility with null input_state_hash (legacy results)
+- [X] T055 Run quickstart.md validation scenarios (automated tests created in test_storage_optimization_performance.py)
+
+**Checkpoint**: Phase 10 complete - storage optimization polish applied ✅
 
 ---
 

@@ -4,7 +4,7 @@
  * Displays trend summary with direction indicators
  */
 
-import { TrendingUp, TrendingDown, Minus, AlertCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, AlertCircle, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { TrendSummaryResponse, TrendDirection } from '@/contracts/api/trends-api'
 import { cn } from '@/lib/utils'
@@ -145,6 +145,46 @@ export function TrendSummaryCard({ summary, loading = false, error = null }: Tre
             <div className="text-xs text-muted-foreground">Pipeline Val.</div>
           </div>
         </div>
+
+        {/* Stable Period Indicator - shows when collections are unchanged */}
+        {summary.stable_periods && (
+          summary.stable_periods.photostats_stable ||
+          summary.stable_periods.photo_pairing_stable ||
+          summary.stable_periods.pipeline_validation_stable
+        ) && (
+          <div className="pt-2 border-t">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+              <Clock className="h-4 w-4" />
+              <span className="font-medium">Stable Periods</span>
+            </div>
+            <div className="space-y-1 text-xs">
+              {summary.stable_periods.photostats_stable && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>
+                    PhotoStats: unchanged for {summary.stable_periods.photostats_stable_days} day{summary.stable_periods.photostats_stable_days !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
+              {summary.stable_periods.photo_pairing_stable && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>
+                    Photo Pairing: unchanged for {summary.stable_periods.photo_pairing_stable_days} day{summary.stable_periods.photo_pairing_stable_days !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
+              {summary.stable_periods.pipeline_validation_stable && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>
+                    Pipeline Val.: unchanged for {summary.stable_periods.pipeline_validation_stable_days} day{summary.stable_periods.pipeline_validation_stable_days !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {(summary.last_photostats || summary.last_photo_pairing || summary.last_pipeline_validation) && (
           <div className="text-xs text-muted-foreground pt-2 border-t">

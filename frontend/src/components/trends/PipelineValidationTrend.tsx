@@ -44,6 +44,37 @@ const CONSISTENCY_COLORS = {
   inconsistent: 'hsl(0, 84%, 60%)' // Red
 }
 
+/**
+ * Custom dot component for transition point visualization.
+ * - Transition points: Diamond shape
+ * - Normal points: Filled circle
+ */
+interface TransitionDotProps {
+  cx: number
+  cy: number
+  stroke: string
+  payload: Record<string, unknown>
+}
+
+function TransitionDot({ cx, cy, stroke, payload }: TransitionDotProps) {
+  const isTransition = payload.has_transition === true
+
+  if (isTransition) {
+    // Diamond shape for transition points
+    return (
+      <polygon
+        points={`${cx},${cy - 5} ${cx + 5},${cy} ${cx},${cy + 5} ${cx - 5},${cy}`}
+        fill={stroke}
+        stroke={stroke}
+        strokeWidth={1}
+      />
+    )
+  }
+
+  // Default filled circle
+  return <circle cx={cx} cy={cy} r={3} fill={stroke} stroke={stroke} strokeWidth={1} />
+}
+
 interface PipelineValidationTrendProps {
   data: PipelineValidationTrendResponse | null
   loading?: boolean
@@ -72,7 +103,10 @@ export function PipelineValidationTrend({
         browsable_consistency: point.browsable_consistency_pct,
         overall_inconsistent: point.overall_inconsistent_pct,
         total_images: point.total_images,
-        collections_included: point.collections_included
+        collections_included: point.collections_included,
+        // Include transition/no_change info for custom dot rendering
+        has_transition: point.has_transition,
+        no_change_count: point.no_change_count
       }))
     } else {
       // COMPARISON MODE
@@ -165,7 +199,7 @@ export function PipelineValidationTrend({
               name="Overall Consistency"
               stroke={SERIES_COLORS.overall_consistency}
               strokeWidth={2}
-              dot={{ r: 3 }}
+              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.overall_consistency} />}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />
@@ -175,7 +209,7 @@ export function PipelineValidationTrend({
               name="Black Box Archive"
               stroke={SERIES_COLORS.black_box_consistency}
               strokeWidth={2}
-              dot={{ r: 3 }}
+              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.black_box_consistency} />}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />
@@ -185,7 +219,7 @@ export function PipelineValidationTrend({
               name="Browsable Archive"
               stroke={SERIES_COLORS.browsable_consistency}
               strokeWidth={2}
-              dot={{ r: 3 }}
+              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.browsable_consistency} />}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />
@@ -195,7 +229,7 @@ export function PipelineValidationTrend({
               name="Inconsistent"
               stroke={SERIES_COLORS.overall_inconsistent}
               strokeWidth={2}
-              dot={{ r: 3 }}
+              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.overall_inconsistent} />}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />

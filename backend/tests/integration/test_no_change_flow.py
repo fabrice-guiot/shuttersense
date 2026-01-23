@@ -273,6 +273,281 @@ class TestNoChangeFlow:
         assert job.status == JobStatus.COMPLETED
 
 
+class TestIntermediateCopyCleanup:
+    """Tests for intermediate NO_CHANGE copy cleanup (Issue #92 Phase 7)."""
+
+    def test_intermediate_copy_deleted_when_new_no_change_created(
+        self,
+        agent_client,
+        test_db_session,
+        test_team,
+        test_agent,
+        create_running_job,
+        create_completed_result,
+    ):
+        """When third NO_CHANGE is created, middle copy is deleted.
+
+        Scenario: Original A -> Copy B -> Copy C
+        After creating C, B should be deleted (A and C remain).
+        """
+        # Create original COMPLETED result (A)
+        original_result = create_completed_result(
+            test_team, tool="photostats", input_state_hash="a" * 64
+        )
+
+        # Create first NO_CHANGE copy (B) referencing A
+        first_copy = AnalysisResult(
+            team_id=test_team.id,
+            tool="photostats",
+            status=ResultStatus.NO_CHANGE,
+            started_at=datetime.utcnow(),
+            completed_at=datetime.utcnow(),
+            duration_seconds=0.1,
+            files_scanned=original_result.files_scanned,
+            issues_found=original_result.issues_found,
+            results_json=original_result.results_json,
+            input_state_hash="a" * 64,
+            no_change_copy=True,
+            download_report_from=original_result.guid,
+        )
+        test_db_session.add(first_copy)
+        test_db_session.commit()
+        test_db_session.refresh(first_copy)
+        first_copy_id = first_copy.id
+
+        # Create running job for second NO_CHANGE
+        job, signing_secret = create_running_job(test_team, test_agent, tool="photostats")
+
+        input_state_hash = "a" * 64
+        signature = compute_no_change_signature(signing_secret, input_state_hash)
+
+        # Complete job with NO_CHANGE referencing original (creates C)
+        response = agent_client.post(
+            f"/api/agent/v1/jobs/{job.guid}/no-change",
+            json={
+                "input_state_hash": input_state_hash,
+                "source_result_guid": original_result.guid,
+                "signature": signature,
+            }
+        )
+
+        assert response.status_code == 200
+
+        # Verify: original (A) should still exist
+        assert test_db_session.query(AnalysisResult).filter(
+            AnalysisResult.id == original_result.id
+        ).first() is not None
+
+        # Verify: first copy (B) should be DELETED
+        assert test_db_session.query(AnalysisResult).filter(
+            AnalysisResult.id == first_copy_id
+        ).first() is None
+
+        # Verify: new result (C) was created
+        test_db_session.refresh(job)
+        new_result = test_db_session.query(AnalysisResult).filter(
+            AnalysisResult.id == job.result_id
+        ).first()
+        assert new_result is not None
+        assert new_result.no_change_copy is True
+        assert new_result.download_report_from == original_result.guid
+
+    def test_multiple_intermediate_copies_all_deleted(
+        self,
+        agent_client,
+        test_db_session,
+        test_team,
+        test_agent,
+        create_running_job,
+        create_completed_result,
+    ):
+        """When new NO_CHANGE is created, ALL intermediate copies are deleted.
+
+        Scenario: Original A -> Copies B, C, D -> New Copy E
+        After creating E, B, C, D should all be deleted.
+        """
+        # Create original COMPLETED result
+        original_result = create_completed_result(
+            test_team, tool="photostats", input_state_hash="a" * 64
+        )
+
+        # Create multiple NO_CHANGE copies
+        copy_ids = []
+        for i in range(3):
+            copy = AnalysisResult(
+                team_id=test_team.id,
+                tool="photostats",
+                status=ResultStatus.NO_CHANGE,
+                started_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                duration_seconds=0.1,
+                files_scanned=original_result.files_scanned,
+                issues_found=original_result.issues_found,
+                results_json=original_result.results_json,
+                input_state_hash="a" * 64,
+                no_change_copy=True,
+                download_report_from=original_result.guid,
+            )
+            test_db_session.add(copy)
+            test_db_session.commit()
+            test_db_session.refresh(copy)
+            copy_ids.append(copy.id)
+
+        # Create running job
+        job, signing_secret = create_running_job(test_team, test_agent, tool="photostats")
+
+        input_state_hash = "a" * 64
+        signature = compute_no_change_signature(signing_secret, input_state_hash)
+
+        # Complete with NO_CHANGE
+        response = agent_client.post(
+            f"/api/agent/v1/jobs/{job.guid}/no-change",
+            json={
+                "input_state_hash": input_state_hash,
+                "source_result_guid": original_result.guid,
+                "signature": signature,
+            }
+        )
+
+        assert response.status_code == 200
+
+        # All intermediate copies should be deleted
+        for copy_id in copy_ids:
+            assert test_db_session.query(AnalysisResult).filter(
+                AnalysisResult.id == copy_id
+            ).first() is None
+
+        # Original should still exist
+        assert test_db_session.query(AnalysisResult).filter(
+            AnalysisResult.id == original_result.id
+        ).first() is not None
+
+    def test_copies_pointing_to_different_source_not_deleted(
+        self,
+        agent_client,
+        test_db_session,
+        test_team,
+        test_agent,
+        create_running_job,
+        create_completed_result,
+    ):
+        """Copies pointing to different source result are NOT deleted."""
+        # Create two original COMPLETED results
+        original_a = create_completed_result(
+            test_team, tool="photostats", input_state_hash="a" * 64
+        )
+        original_b = create_completed_result(
+            test_team, tool="photostats", input_state_hash="b" * 64
+        )
+
+        # Create copy pointing to original_b
+        copy_of_b = AnalysisResult(
+            team_id=test_team.id,
+            tool="photostats",
+            status=ResultStatus.NO_CHANGE,
+            started_at=datetime.utcnow(),
+            completed_at=datetime.utcnow(),
+            duration_seconds=0.1,
+            files_scanned=original_b.files_scanned,
+            issues_found=original_b.issues_found,
+            results_json=original_b.results_json,
+            input_state_hash="b" * 64,
+            no_change_copy=True,
+            download_report_from=original_b.guid,
+        )
+        test_db_session.add(copy_of_b)
+        test_db_session.commit()
+        copy_of_b_id = copy_of_b.id
+
+        # Create running job and complete with NO_CHANGE referencing original_a
+        job, signing_secret = create_running_job(test_team, test_agent, tool="photostats")
+
+        signature = compute_no_change_signature(signing_secret, "a" * 64)
+
+        response = agent_client.post(
+            f"/api/agent/v1/jobs/{job.guid}/no-change",
+            json={
+                "input_state_hash": "a" * 64,
+                "source_result_guid": original_a.guid,
+                "signature": signature,
+            }
+        )
+
+        assert response.status_code == 200
+
+        # Copy of B should NOT be deleted (different source)
+        assert test_db_session.query(AnalysisResult).filter(
+            AnalysisResult.id == copy_of_b_id
+        ).first() is not None
+
+    def test_storage_metrics_updated_on_copy_cleanup(
+        self,
+        agent_client,
+        test_db_session,
+        test_team,
+        test_agent,
+        create_running_job,
+        create_completed_result,
+    ):
+        """StorageMetrics.completed_results_purged_copy is incremented."""
+        from backend.src.models.storage_metrics import StorageMetrics
+
+        # Create original COMPLETED result
+        original_result = create_completed_result(
+            test_team, tool="photostats", input_state_hash="a" * 64
+        )
+
+        # Create intermediate copies
+        for _ in range(2):
+            copy = AnalysisResult(
+                team_id=test_team.id,
+                tool="photostats",
+                status=ResultStatus.NO_CHANGE,
+                started_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                duration_seconds=0.1,
+                files_scanned=original_result.files_scanned,
+                issues_found=original_result.issues_found,
+                results_json=original_result.results_json,
+                input_state_hash="a" * 64,
+                no_change_copy=True,
+                download_report_from=original_result.guid,
+            )
+            test_db_session.add(copy)
+        test_db_session.commit()
+
+        # Get initial metrics (may not exist)
+        initial_metrics = test_db_session.query(StorageMetrics).filter(
+            StorageMetrics.team_id == test_team.id
+        ).first()
+        initial_purged = initial_metrics.completed_results_purged_copy if initial_metrics else 0
+
+        # Create running job and complete with NO_CHANGE
+        job, signing_secret = create_running_job(test_team, test_agent, tool="photostats")
+
+        signature = compute_no_change_signature(signing_secret, "a" * 64)
+
+        response = agent_client.post(
+            f"/api/agent/v1/jobs/{job.guid}/no-change",
+            json={
+                "input_state_hash": "a" * 64,
+                "source_result_guid": original_result.guid,
+                "signature": signature,
+            }
+        )
+
+        assert response.status_code == 200
+
+        # Check metrics were updated
+        test_db_session.expire_all()
+        metrics = test_db_session.query(StorageMetrics).filter(
+            StorageMetrics.team_id == test_team.id
+        ).first()
+
+        assert metrics is not None
+        assert metrics.completed_results_purged_copy == initial_purged + 2
+
+
 class TestNoChangeSourceResultValidation:
     """Tests for source result validation in NO_CHANGE flow."""
 
