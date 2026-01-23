@@ -81,7 +81,8 @@ const STATUS_CONFIG: Record<
 > = {
   COMPLETED: { label: 'Completed', variant: 'success' },
   FAILED: { label: 'Failed', variant: 'destructive' },
-  CANCELLED: { label: 'Cancelled', variant: 'secondary' }
+  CANCELLED: { label: 'Cancelled', variant: 'secondary' },
+  NO_CHANGE: { label: 'No Change', variant: 'default' }
 }
 
 // Tool display names

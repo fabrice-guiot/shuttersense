@@ -390,6 +390,9 @@ class ResultService:
         a consistent filename following CLI tool conventions:
         {tool}_report_{collection_name}_{collection_id}_{timestamp}.html
 
+        For NO_CHANGE results (Issue #92), follows the download_report_from
+        reference to get the report from the source result.
+
         Args:
             result_id: Result ID
             team_id: Optional team ID for tenant isolation
@@ -409,7 +412,25 @@ class ResultService:
         if not result:
             raise NotFoundError("Result", result_id)
 
-        if not result.report_html:
+        # For NO_CHANGE results, follow the download_report_from reference (Issue #92)
+        report_html = result.report_html
+        if not report_html and result.download_report_from:
+            # Look up the source result by GUID
+            try:
+                source_uuid = AnalysisResult.parse_guid(result.download_report_from)
+                source_query = self.db.query(AnalysisResult).filter(
+                    AnalysisResult.uuid == source_uuid
+                )
+                if team_id is not None:
+                    source_query = source_query.filter(AnalysisResult.team_id == team_id)
+                source_result = source_query.first()
+
+                if source_result and source_result.report_html:
+                    report_html = source_result.report_html
+            except ValueError:
+                pass  # Invalid GUID format, fall through to NotFoundError
+
+        if not report_html:
             raise NotFoundError("Report for result", result_id)
 
         # Get collection for name
@@ -429,7 +450,7 @@ class ResultService:
         timestamp_str = timestamp.strftime("%Y-%m-%d_%H-%M-%S") if timestamp else "unknown"
 
         return {
-            "html": result.report_html,
+            "html": report_html,
             "tool": result.tool,
             "collection_name": safe_collection_name,
             "collection_id": result.collection_id,

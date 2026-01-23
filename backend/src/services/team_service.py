@@ -22,6 +22,7 @@ from backend.src.models import Team, User, UserStatus
 from backend.src.utils.logging_config import get_logger
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
 from backend.src.services.guid import GuidService
+from backend.src.services.retention_service import RetentionService
 
 
 logger = get_logger("services")
@@ -120,6 +121,10 @@ class TeamService:
             self.db.add(team)
             self.db.commit()
             self.db.refresh(team)
+
+            # Seed default retention settings for new team (Issue #92)
+            retention_service = RetentionService(self.db)
+            retention_service.seed_defaults(team.id)
 
             logger.info(f"Created team: {team.name} ({team.guid})")
             return team

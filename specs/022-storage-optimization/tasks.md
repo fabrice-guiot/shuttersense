@@ -34,15 +34,15 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T007 Create RetentionService in backend/src/services/retention_service.py (get_settings, update_settings with defaults)
-- [ ] T008 [P] Add retention API routes in backend/src/api/config.py (GET/PUT /api/config/retention)
-- [ ] T009 Seed default retention settings for existing teams in migration or service initialization
-- [ ] T009b Update team creation to seed default retention settings in backend/src/services/team_service.py (or admin_service.py)
-- [ ] T010 Update AnalysisResultSummary schema in backend/src/schemas/results.py (add input_state_hash, no_change_copy fields)
-- [ ] T011 Update AnalysisResultResponse schema in backend/src/schemas/results.py (add download_report_from, source_result_exists)
-- [ ] T011b [P] Create unit tests for RetentionService in backend/tests/unit/test_retention_service.py
+- [X] T007 Create RetentionService in backend/src/services/retention_service.py (get_settings, update_settings with defaults)
+- [X] T008 [P] Add retention API routes in backend/src/api/config.py (GET/PUT /api/config/retention)
+- [X] T009 Seed default retention settings for existing teams in migration or service initialization
+- [X] T009b Update team creation to seed default retention settings in backend/src/services/team_service.py (or admin_service.py)
+- [X] T010 Update AnalysisResultSummary schema in backend/src/schemas/results.py (add input_state_hash, no_change_copy fields)
+- [X] T011 Update AnalysisResultResponse schema in backend/src/schemas/results.py (add download_report_from, source_result_exists)
+- [X] T011b [P] Create unit tests for RetentionService in backend/tests/unit/test_retention_service.py
 
-**Checkpoint**: Foundation ready - user story implementation can now begin
+**Checkpoint**: Foundation ready - user story implementation can now begin ✅
 
 ---
 
@@ -54,13 +54,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Create useRetention hook in frontend/src/hooks/useRetention.ts (fetch and update retention settings)
-- [ ] T013 [US1] Create ResultRetentionSection component in frontend/src/components/settings/ResultRetentionSection.tsx
-- [ ] T014 [US1] Add ResultRetentionSection to ConfigTab in frontend/src/components/settings/ConfigTab.tsx
-- [ ] T015 [US1] Add validation for retention values (allowed options only) in backend/src/services/retention_service.py
-- [ ] T016 [US1] Add structured logging for retention configuration changes
+- [X] T012 [US1] Create useRetention hook in frontend/src/hooks/useRetention.ts (fetch and update retention settings)
+- [X] T013 [US1] Create ResultRetentionSection component in frontend/src/components/settings/ResultRetentionSection.tsx
+- [X] T014 [US1] Add ResultRetentionSection to ConfigTab in frontend/src/components/settings/ConfigTab.tsx
+- [X] T015 [US1] Add validation for retention values (allowed options only) in backend/src/services/retention_service.py
+- [X] T016 [US1] Add structured logging for retention configuration changes
 
-**Checkpoint**: User Story 1 complete - administrators can configure retention policy
+**Checkpoint**: User Story 1 complete - administrators can configure retention policy ✅
 
 ---
 
@@ -72,12 +72,12 @@
 
 ### Backend Implementation for User Story 2
 
-- [ ] T017 [US2] Create InputStateService in backend/src/services/input_state_service.py (compute_input_state_hash, compute_configuration_hash)
-- [ ] T018 [US2] Add PreviousResultInfo schema in backend/src/schemas/jobs.py
-- [ ] T019 [US2] Update JobClaimResponse schema to include previous_result in backend/src/schemas/jobs.py
-- [ ] T020 [US2] Implement get_previous_result lookup in backend/src/services/job_service.py (find most recent COMPLETED result for collection+tool)
-- [ ] T021 [US2] Update job claim endpoint to include previous_result in backend/src/api/agent/routes.py
-- [ ] T022 [US2] Add NO_CHANGE completion handling in backend/src/services/job_coordinator_service.py:
+- [X] T017 [US2] Create InputStateService in backend/src/services/input_state_service.py (compute_input_state_hash, compute_configuration_hash)
+- [X] T018 [US2] Add PreviousResultInfo schema in backend/src/api/agent/schemas.py (PreviousResultData)
+- [X] T019 [US2] Update JobClaimResponse schema to include previous_result in backend/src/api/agent/schemas.py
+- [X] T020 [US2] Implement get_previous_result lookup in backend/src/services/job_coordinator_service.py (_find_previous_result method)
+- [X] T021 [US2] Update job claim endpoint to include previous_result in backend/src/api/agent/routes.py
+- [X] T022 [US2] Add NO_CHANGE completion handling in backend/src/services/job_coordinator_service.py (complete_job_no_change method):
   - Create AnalysisResult with status=NO_CHANGE and no_change_copy=true
   - Set download_report_from to source result's GUID (or source's download_report_from if it exists)
   - Copy results_json from referenced result
@@ -89,18 +89,18 @@
 
 ### Agent Implementation for User Story 2
 
-- [ ] T024 [US2] Create input_state module in agent/src/input_state.py (compute_file_list_hash, compute_configuration_hash, compute_input_state_hash)
-- [ ] T025 [US2] Update job executor to check previous_result hash before execution in agent/src/job_executor.py
-- [ ] T026 [US2] Implement NO_CHANGE completion in agent/src/job_executor.py (submit NO_CHANGE status with previous_result_guid)
-- [ ] T027 [US2] Add structured logging for no-change detection decisions
+- [X] T024 [US2] Create input_state module in agent/src/input_state.py (compute_file_list_hash, compute_configuration_hash, compute_input_state_hash)
+- [X] T025 [US2] Update job executor to check previous_result hash before execution in agent/src/job_executor.py
+- [X] T026 [US2] Implement NO_CHANGE completion in agent/src/job_executor.py (submit NO_CHANGE status with previous_result_guid)
+- [X] T027 [US2] Add structured logging for no-change detection decisions
 
 ### Tests for User Story 2
 
-- [ ] T027b [P] [US2] Create unit tests for InputStateService in backend/tests/unit/test_input_state_service.py (hash determinism, configuration hash)
-- [ ] T027c [P] [US2] Create unit tests for agent input_state module in agent/tests/unit/test_input_state.py (file list hash, configuration hash)
-- [ ] T027d [US2] Create integration test for NO_CHANGE flow in backend/tests/integration/test_no_change_flow.py (job claim with previous_result, NO_CHANGE completion, result creation)
+- [X] T027b [P] [US2] Create unit tests for InputStateService in backend/tests/unit/test_input_state_service.py (hash determinism, configuration hash)
+- [X] T027c [P] [US2] Create unit tests for agent input_state module in agent/tests/unit/test_input_state.py (file list hash, configuration hash)
+- [X] T027d [US2] Create integration test for NO_CHANGE flow in backend/tests/integration/test_no_change_flow.py (job claim with previous_result, NO_CHANGE completion, result creation)
 
-**Checkpoint**: User Story 2 complete - unchanged collections skip full analysis
+**Checkpoint**: User Story 2 complete - unchanged collections skip full analysis ✅
 
 ---
 

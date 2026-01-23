@@ -13,7 +13,8 @@ Design:
 - Tool-specific metrics extraction from JSONB
 """
 
-from datetime import datetime, date
+from datetime import datetime
+from datetime import date as DateType
 from enum import Enum
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
@@ -33,8 +34,8 @@ class TrendsQueryParams(BaseModel):
         None,
         description="Comma-separated collection IDs"
     )
-    from_date: Optional[date] = Field(None, description="Filter from date")
-    to_date: Optional[date] = Field(None, description="Filter to date")
+    from_date: Optional[DateType] = Field(None, description="Filter from date")
+    to_date: Optional[DateType] = Field(None, description="Filter to date")
     limit: int = Field(50, ge=1, le=500, description="Maximum data points per collection")
 
 
@@ -87,10 +88,12 @@ class PhotoStatsAggregatedPoint(BaseModel):
 
     Data is aggregated (summed) across all collections for each date.
     Two series: Orphaned Images and Orphaned Metadata (XMP).
+
+    Values can be None for dates without data points (to show gaps in timeline).
     """
-    date: datetime = Field(..., description="Date (aggregated)")
-    orphaned_images: int = Field(0, ge=0, description="Total orphaned images across all collections")
-    orphaned_metadata: int = Field(0, ge=0, description="Total orphaned metadata files (XMP) across all collections")
+    date: DateType = Field(..., description="Date (aggregated, YYYY-MM-DD)")
+    orphaned_images: Optional[int] = Field(None, description="Total orphaned images across all collections (None if no data)")
+    orphaned_metadata: Optional[int] = Field(None, description="Total orphaned metadata files (XMP) across all collections (None if no data)")
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
 
 
@@ -168,10 +171,12 @@ class PhotoPairingAggregatedPoint(BaseModel):
     Data is aggregated (summed) across all collections for each date.
     Two series: Image Groups and Total Images.
     Camera usage is NOT aggregated (differs per collection).
+
+    Values can be None for dates without data points (to show gaps in timeline).
     """
-    date: datetime = Field(..., description="Date (aggregated)")
-    group_count: int = Field(0, ge=0, description="Total image groups across all collections")
-    image_count: int = Field(0, ge=0, description="Total images across all collections")
+    date: DateType = Field(..., description="Date (aggregated, YYYY-MM-DD)")
+    group_count: Optional[int] = Field(None, description="Total image groups across all collections (None if no data)")
+    image_count: Optional[int] = Field(None, description="Total images across all collections (None if no data)")
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
 
 
@@ -253,18 +258,20 @@ class PipelineValidationAggregatedPoint(BaseModel):
     - black_box_consistency_pct: CONSISTENT in Black Box Archive / Total Black Box
     - browsable_consistency_pct: CONSISTENT in Browsable Archive / Total Browsable
     - overall_inconsistent_pct: Total INCONSISTENT / Total images
+
+    Values can be None for dates without data points (to show gaps in timeline).
     """
-    date: datetime = Field(..., description="Date (aggregated)")
+    date: DateType = Field(..., description="Date (aggregated, YYYY-MM-DD)")
     # Overall percentages (recalculated from summed counts)
-    overall_consistency_pct: float = Field(0.0, ge=0, le=100, description="Overall consistency % across all collections")
-    overall_inconsistent_pct: float = Field(0.0, ge=0, le=100, description="Overall inconsistent % across all collections")
+    overall_consistency_pct: Optional[float] = Field(None, description="Overall consistency % across all collections (None if no data)")
+    overall_inconsistent_pct: Optional[float] = Field(None, description="Overall inconsistent % across all collections (None if no data)")
     # Per-termination type percentages
-    black_box_consistency_pct: float = Field(0.0, ge=0, le=100, description="Consistency % for Black Box Archive termination")
-    browsable_consistency_pct: float = Field(0.0, ge=0, le=100, description="Consistency % for Browsable Archive termination")
+    black_box_consistency_pct: Optional[float] = Field(None, description="Consistency % for Black Box Archive termination (None if no data)")
+    browsable_consistency_pct: Optional[float] = Field(None, description="Consistency % for Browsable Archive termination (None if no data)")
     # Underlying counts (for debugging/tooltips)
-    total_images: int = Field(0, ge=0, description="Total images validated")
-    consistent_count: int = Field(0, ge=0, description="Total CONSISTENT count")
-    inconsistent_count: int = Field(0, ge=0, description="Total INCONSISTENT count")
+    total_images: Optional[int] = Field(None, description="Total images validated (None if no data)")
+    consistent_count: Optional[int] = Field(None, description="Total CONSISTENT count (None if no data)")
+    inconsistent_count: Optional[int] = Field(None, description="Total INCONSISTENT count (None if no data)")
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
 
 
@@ -302,12 +309,13 @@ class DisplayGraphTrendPoint(BaseModel):
     Aggregated data point for display-graph trend.
 
     Data is aggregated across all pipelines for each date.
+    Values can be None for dates without data points (to show gaps in timeline).
     """
-    date: datetime = Field(..., description="Date (aggregated)")
-    total_paths: int = Field(0, ge=0, description="Total paths enumerated")
-    valid_paths: int = Field(0, ge=0, description="Valid paths (non-truncated)")
-    black_box_archive_paths: int = Field(0, ge=0, description="Paths to Black Box Archive")
-    browsable_archive_paths: int = Field(0, ge=0, description="Paths to Browsable Archive")
+    date: DateType = Field(..., description="Date (aggregated, YYYY-MM-DD)")
+    total_paths: Optional[int] = Field(None, description="Total paths enumerated (None if no data)")
+    valid_paths: Optional[int] = Field(None, description="Valid paths (non-truncated) (None if no data)")
+    black_box_archive_paths: Optional[int] = Field(None, description="Paths to Black Box Archive (None if no data)")
+    browsable_archive_paths: Optional[int] = Field(None, description="Paths to Browsable Archive (None if no data)")
 
 
 class PipelineIncluded(BaseModel):

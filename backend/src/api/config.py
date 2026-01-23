@@ -31,7 +31,11 @@ from backend.src.schemas.config import (
     ConfigStatsResponse, DeleteResponse, ConfigConflict,
     EventStatusItem, EventStatusesResponse
 )
+from backend.src.schemas.retention import (
+    RetentionSettingsResponse, RetentionSettingsUpdate
+)
 from backend.src.services.config_service import ConfigService
+from backend.src.services.retention_service import RetentionService
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
 from backend.src.utils.logging_config import get_logger
 from backend.src.middleware.auth import require_auth, TenantContext
@@ -55,6 +59,11 @@ from backend.src.main import limiter
 def get_config_service(db: Session = Depends(get_db)) -> ConfigService:
     """Create ConfigService instance with dependencies."""
     return ConfigService(db=db)
+
+
+def get_retention_service(db: Session = Depends(get_db)) -> RetentionService:
+    """Create RetentionService instance with dependencies."""
+    return RetentionService(db=db)
 
 
 # ============================================================================
@@ -87,6 +96,76 @@ def get_stats(
 # ============================================================================
 # Event Statuses Endpoint (must be before /{category})
 # ============================================================================
+
+# ============================================================================
+# Retention Settings Endpoints (must be before /{category})
+# Issue #92: Storage Optimization for Analysis Results
+# ============================================================================
+
+@router.get(
+    "/retention",
+    response_model=RetentionSettingsResponse,
+    summary="Get retention settings"
+)
+def get_retention_settings(
+    ctx: TenantContext = Depends(require_auth),
+    service: RetentionService = Depends(get_retention_service)
+) -> RetentionSettingsResponse:
+    """
+    Get retention settings for the authenticated user's team.
+
+    Returns default values if settings have not been configured:
+    - job_completed_days: 2 (days to retain completed jobs)
+    - job_failed_days: 7 (days to retain failed jobs)
+    - result_completed_days: 0 (unlimited, days to retain completed results)
+    - preserve_per_collection: 1 (minimum results to keep per collection+tool)
+
+    Args:
+        ctx: Tenant context with team_id
+
+    Returns:
+        Current retention settings with defaults applied
+    """
+    return service.get_settings(team_id=ctx.team_id)
+
+
+@router.put(
+    "/retention",
+    response_model=RetentionSettingsResponse,
+    summary="Update retention settings"
+)
+def update_retention_settings(
+    update: RetentionSettingsUpdate,
+    ctx: TenantContext = Depends(require_auth),
+    service: RetentionService = Depends(get_retention_service)
+) -> RetentionSettingsResponse:
+    """
+    Update retention settings for the authenticated user's team.
+
+    All fields are optional; only provided fields are updated.
+    Valid values:
+    - job_completed_days, job_failed_days, result_completed_days:
+      0 (unlimited), 1, 2, 5, 7, 14, 30, 90, 180, 365
+    - preserve_per_collection: 1, 2, 3, 5, 10
+
+    Args:
+        update: Update request with optional fields
+        ctx: Tenant context with team_id
+
+    Returns:
+        Updated retention settings
+
+    Raises:
+        400: If any value is not in the allowed options
+    """
+    try:
+        return service.update_settings(team_id=ctx.team_id, update=update)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
 
 @router.get(
     "/event_statuses",

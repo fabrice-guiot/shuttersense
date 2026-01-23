@@ -79,6 +79,9 @@ class AnalysisResultSummary(BaseModel):
     files_scanned: Optional[int] = Field(None, description="Files processed")
     issues_found: Optional[int] = Field(None, description="Issues detected")
     has_report: bool = Field(..., description="Whether HTML report is available")
+    # Storage Optimization Fields (Issue #92)
+    input_state_hash: Optional[str] = Field(None, description="SHA-256 hash of Input State (null for legacy results)")
+    no_change_copy: bool = Field(False, description="True if this result references a previous result")
 
     model_config = {
         "from_attributes": True,
@@ -98,7 +101,9 @@ class AnalysisResultSummary(BaseModel):
                     "duration_seconds": 135.5,
                     "files_scanned": 1250,
                     "issues_found": 15,
-                    "has_report": True
+                    "has_report": True,
+                    "input_state_hash": "abc123def456...",
+                    "no_change_copy": False
                 },
                 {
                     "guid": "res_01hgw2bbg0000000000000004",
@@ -108,13 +113,15 @@ class AnalysisResultSummary(BaseModel):
                     "pipeline_guid": "pip_01hgw2bbg0000000000000002",
                     "pipeline_version": 3,
                     "pipeline_name": "Standard RAW Workflow",
-                    "status": "COMPLETED",
+                    "status": "NO_CHANGE",
                     "started_at": "2024-01-15T11:00:00Z",
                     "completed_at": "2024-01-15T11:00:05Z",
                     "duration_seconds": 5.2,
                     "files_scanned": None,
                     "issues_found": 0,
-                    "has_report": True
+                    "has_report": True,
+                    "input_state_hash": "abc123def456...",
+                    "no_change_copy": True
                 }
             ]
         }
@@ -190,6 +197,11 @@ class AnalysisResultResponse(BaseModel):
     has_report: bool = Field(..., description="Whether HTML report is available")
     results: Dict[str, Any] = Field(..., description="Tool-specific results")
     created_at: datetime = Field(..., description="Record creation time")
+    # Storage Optimization Fields (Issue #92)
+    input_state_hash: Optional[str] = Field(None, description="SHA-256 hash of Input State (null for legacy results)")
+    no_change_copy: bool = Field(False, description="True if this result references a previous result")
+    download_report_from: Optional[str] = Field(None, description="GUID of source result for report download (res_xxx)")
+    source_result_exists: Optional[bool] = Field(None, description="Whether source result still exists (for NO_CHANGE results)")
 
     model_config = {
         "from_attributes": True,
@@ -212,7 +224,11 @@ class AnalysisResultResponse(BaseModel):
                 "results": {
                     "consistency_counts": {"CONSISTENT": 1200, "PARTIAL": 35, "INCONSISTENT": 15}
                 },
-                "created_at": "2024-01-15T10:32:15Z"
+                "created_at": "2024-01-15T10:32:15Z",
+                "input_state_hash": "abc123def456...",
+                "no_change_copy": False,
+                "download_report_from": None,
+                "source_result_exists": None
             }
         }
     }

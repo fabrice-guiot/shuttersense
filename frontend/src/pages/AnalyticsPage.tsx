@@ -168,7 +168,10 @@ export default function AnalyticsPage() {
     error: summaryError,
     refetch: refetchSummary
   } = useTrendSummary({
-    collectionId: selectedCollectionIds.length === 1 ? selectedCollectionIds[0] : undefined
+    // selectedCollectionIds actually contains GUIDs (strings) cast as numbers
+    collectionGuid: selectedCollectionIds.length === 1
+      ? (selectedCollectionIds[0] as unknown as string)
+      : undefined
   })
 
   // Header stats context

@@ -58,19 +58,62 @@ export function hasRelativeTimeSupport(): boolean {
 }
 
 /**
+ * Parses a date-only string (YYYY-MM-DD) into a Date object at local midnight.
+ *
+ * This is important because JavaScript's `new Date('2026-01-07')` parses date-only
+ * strings as UTC midnight, which can shift to the previous day when displayed in
+ * local timezone (e.g., UTC midnight Jan 7 = Jan 6 7pm in EST).
+ *
+ * @param dateString - Date string in YYYY-MM-DD format
+ * @returns Date object at local midnight, or null if invalid
+ *
+ * @example
+ * parseLocalDate('2026-01-07') // Date at local midnight Jan 7, 2026
+ */
+export function parseLocalDate(dateString: string): Date | null {
+  // Match YYYY-MM-DD format (date-only, no time component)
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) {
+    return null
+  }
+
+  const year = parseInt(match[1], 10)
+  const month = parseInt(match[2], 10) - 1 // JavaScript months are 0-indexed
+  const day = parseInt(match[3], 10)
+
+  // Create date at local midnight (not UTC)
+  const date = new Date(year, month, day)
+
+  // Validate the parsed components match (catches invalid dates like Feb 30)
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month ||
+    date.getDate() !== day
+  ) {
+    return null
+  }
+
+  return date
+}
+
+/**
  * Parses a date string into a Date object.
  *
  * Handles null, undefined, empty strings, and invalid date strings gracefully.
  * Returns null for any input that cannot be parsed into a valid date.
  *
- * IMPORTANT: Date strings without timezone indicators (e.g., "2026-01-07T15:45:00")
- * are treated as UTC. This matches the backend behavior where datetime.utcnow()
- * creates naive datetimes that represent UTC time but are serialized without "Z".
+ * IMPORTANT:
+ * - Date-only strings (YYYY-MM-DD) are parsed as LOCAL midnight to avoid
+ *   timezone shifting issues when displaying dates.
+ * - DateTime strings without timezone (e.g., "2026-01-07T15:45:00") are
+ *   treated as UTC. This matches the backend behavior where datetime.utcnow()
+ *   creates naive datetimes that represent UTC time but are serialized without "Z".
  *
  * @param dateString - ISO 8601 date string, null, or undefined
  * @returns Date object if valid, null otherwise
  *
  * @example
+ * parseDate('2026-01-07') // Date object at LOCAL midnight (no timezone shift)
  * parseDate('2026-01-07T15:45:00') // Date object (treated as UTC)
  * parseDate('2026-01-07T15:45:00Z') // Date object (explicit UTC)
  * parseDate('2026-01-07T15:45:00+02:00') // Date object (with offset)
@@ -81,6 +124,12 @@ export function parseDate(dateString: string | null | undefined): Date | null {
   // Handle null, undefined, and empty strings
   if (!dateString) {
     return null
+  }
+
+  // Check if this is a date-only string (YYYY-MM-DD, no time component)
+  // Parse these as local dates to avoid timezone shifting issues
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return parseLocalDate(dateString)
   }
 
   // Normalize the date string to ensure UTC interpretation

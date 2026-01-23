@@ -77,6 +77,58 @@ def _deduplicate_results_by_day(
     return deduplicated
 
 
+def _generate_complete_date_range(
+    data_dates: List[str],
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None
+) -> List[str]:
+    """
+    Generate a complete list of dates for the timeline.
+
+    The date range is determined by:
+    - If from_date is specified: start from from_date (even if no data exists)
+    - If from_date is None ("all time"): start from the earliest data date
+    - If to_date is specified: end at to_date
+    - If to_date is None: end at today
+
+    This ensures the timeline shows all days in the selected range,
+    even those without data points.
+
+    Args:
+        data_dates: List of date strings (YYYY-MM-DD format) that have data
+        from_date: Optional start date filter (if None, uses earliest data date)
+        to_date: Optional end date filter (if None, uses today)
+
+    Returns:
+        List of date strings for complete date range
+    """
+    today = date.today()
+
+    # Determine start date
+    if from_date:
+        # Explicit filter: always use it
+        start_date = from_date
+    elif data_dates:
+        # "All time" mode: use earliest data date
+        parsed_dates = [datetime.strptime(d, '%Y-%m-%d').date() for d in data_dates]
+        start_date = min(parsed_dates)
+    else:
+        # No data and no filter: return empty
+        return []
+
+    # Determine end date
+    end_date = to_date if to_date else today
+
+    # Generate all dates in range
+    all_dates = []
+    current = start_date
+    while current <= end_date:
+        all_dates.append(current.strftime('%Y-%m-%d'))
+        current += timedelta(days=1)
+
+    return all_dates
+
+
 class TrendService:
     """
     Service for analyzing historical analysis results.
@@ -148,7 +200,8 @@ class TrendService:
         """
         query = self.db.query(AnalysisResult).filter(
             AnalysisResult.tool == tool,
-            AnalysisResult.status == ResultStatus.COMPLETED,
+            # Include both COMPLETED and NO_CHANGE results (Issue #92: Storage Optimization)
+            AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
             AnalysisResult.collection_id.isnot(None),  # Exclude display-graph results
             AnalysisResult.team_id == team_id
         )
@@ -300,18 +353,37 @@ class TrendService:
                 agg['orphaned_metadata'] += orphaned_xmp_count
                 agg['collections_included'] += 1
 
-            # Build data points (sorted by date, limited)
-            sorted_dates = sorted(aggregated_by_date.keys())[-limit:]
+            # Build complete date range (including days without data)
+            all_dates = _generate_complete_date_range(
+                list(aggregated_by_date.keys()),
+                from_date=from_date,
+                to_date=to_date
+            )
+            # Only apply limit when no date range is specified ("all time" mode)
+            # When a date range is specified, show the full range
+            if from_date is None and to_date is None:
+                sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
+            else:
+                sorted_dates = all_dates
             data_points = []
 
             for date_key in sorted_dates:
-                agg = aggregated_by_date[date_key]
-                data_points.append(PhotoStatsAggregatedPoint(
-                    date=datetime.strptime(date_key, '%Y-%m-%d'),
-                    orphaned_images=agg['orphaned_images'],
-                    orphaned_metadata=agg['orphaned_metadata'],
-                    collections_included=agg['collections_included']
-                ))
+                if date_key in aggregated_by_date:
+                    agg = aggregated_by_date[date_key]
+                    data_points.append(PhotoStatsAggregatedPoint(
+                        date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                        orphaned_images=agg['orphaned_images'],
+                        orphaned_metadata=agg['orphaned_metadata'],
+                        collections_included=agg['collections_included']
+                    ))
+                else:
+                    # No data for this date - append with None values
+                    data_points.append(PhotoStatsAggregatedPoint(
+                        date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                        orphaned_images=None,
+                        orphaned_metadata=None,
+                        collections_included=0
+                    ))
 
             return PhotoStatsTrendResponse(mode="aggregated", data_points=data_points)
 
@@ -446,18 +518,37 @@ class TrendService:
                 agg['image_count'] += results_json.get("image_count", 0)
                 agg['collections_included'] += 1
 
-            # Build data points (sorted by date, limited)
-            sorted_dates = sorted(aggregated_by_date.keys())[-limit:]
+            # Build complete date range (including days without data)
+            all_dates = _generate_complete_date_range(
+                list(aggregated_by_date.keys()),
+                from_date=from_date,
+                to_date=to_date
+            )
+            # Only apply limit when no date range is specified ("all time" mode)
+            # When a date range is specified, show the full range
+            if from_date is None and to_date is None:
+                sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
+            else:
+                sorted_dates = all_dates
             data_points = []
 
             for date_key in sorted_dates:
-                agg = aggregated_by_date[date_key]
-                data_points.append(PhotoPairingAggregatedPoint(
-                    date=datetime.strptime(date_key, '%Y-%m-%d'),
-                    group_count=agg['group_count'],
-                    image_count=agg['image_count'],
-                    collections_included=agg['collections_included']
-                ))
+                if date_key in aggregated_by_date:
+                    agg = aggregated_by_date[date_key]
+                    data_points.append(PhotoPairingAggregatedPoint(
+                        date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                        group_count=agg['group_count'],
+                        image_count=agg['image_count'],
+                        collections_included=agg['collections_included']
+                    ))
+                else:
+                    # No data for this date - append with None values
+                    data_points.append(PhotoPairingAggregatedPoint(
+                        date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                        group_count=None,
+                        image_count=None,
+                        collections_included=0
+                    ))
 
             return PhotoPairingTrendResponse(mode="aggregated", data_points=data_points)
 
@@ -648,38 +739,61 @@ class TrendService:
 
                 agg['collections_included'] += 1
 
-            # Build data points with recalculated percentages
-            sorted_dates = sorted(aggregated_by_date.keys())[-limit:]
+            # Build complete date range (including days without data)
+            all_dates = _generate_complete_date_range(
+                list(aggregated_by_date.keys()),
+                from_date=from_date,
+                to_date=to_date
+            )
+            # Only apply limit when no date range is specified ("all time" mode)
+            if from_date is None and to_date is None:
+                sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
+            else:
+                sorted_dates = all_dates
             data_points = []
 
             for date_key in sorted_dates:
-                agg = aggregated_by_date[date_key]
+                if date_key in aggregated_by_date:
+                    agg = aggregated_by_date[date_key]
 
-                total_images = agg['consistent'] + agg['partial'] + agg['inconsistent']
+                    total_images = agg['consistent'] + agg['partial'] + agg['inconsistent']
 
-                # Calculate percentages from summed counts
-                overall_consistency_pct = (agg['consistent'] / total_images * 100) if total_images > 0 else 0.0
-                overall_inconsistent_pct = (agg['inconsistent'] / total_images * 100) if total_images > 0 else 0.0
+                    # Calculate percentages from summed counts
+                    overall_consistency_pct = (agg['consistent'] / total_images * 100) if total_images > 0 else 0.0
+                    overall_inconsistent_pct = (agg['inconsistent'] / total_images * 100) if total_images > 0 else 0.0
 
-                black_box_consistency_pct = (
-                    agg['black_box_consistent'] / agg['black_box_total'] * 100
-                ) if agg['black_box_total'] > 0 else 0.0
+                    black_box_consistency_pct = (
+                        agg['black_box_consistent'] / agg['black_box_total'] * 100
+                    ) if agg['black_box_total'] > 0 else 0.0
 
-                browsable_consistency_pct = (
-                    agg['browsable_consistent'] / agg['browsable_total'] * 100
-                ) if agg['browsable_total'] > 0 else 0.0
+                    browsable_consistency_pct = (
+                        agg['browsable_consistent'] / agg['browsable_total'] * 100
+                    ) if agg['browsable_total'] > 0 else 0.0
 
-                data_points.append(PipelineValidationAggregatedPoint(
-                    date=datetime.strptime(date_key, '%Y-%m-%d'),
-                    overall_consistency_pct=round(overall_consistency_pct, 1),
-                    overall_inconsistent_pct=round(overall_inconsistent_pct, 1),
-                    black_box_consistency_pct=round(black_box_consistency_pct, 1),
-                    browsable_consistency_pct=round(browsable_consistency_pct, 1),
-                    total_images=total_images,
-                    consistent_count=agg['consistent'],
-                    inconsistent_count=agg['inconsistent'],
-                    collections_included=agg['collections_included']
-                ))
+                    data_points.append(PipelineValidationAggregatedPoint(
+                        date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                        overall_consistency_pct=round(overall_consistency_pct, 1),
+                        overall_inconsistent_pct=round(overall_inconsistent_pct, 1),
+                        black_box_consistency_pct=round(black_box_consistency_pct, 1),
+                        browsable_consistency_pct=round(browsable_consistency_pct, 1),
+                        total_images=total_images,
+                        consistent_count=agg['consistent'],
+                        inconsistent_count=agg['inconsistent'],
+                        collections_included=agg['collections_included']
+                    ))
+                else:
+                    # No data for this date - append with None values
+                    data_points.append(PipelineValidationAggregatedPoint(
+                        date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                        overall_consistency_pct=None,
+                        overall_inconsistent_pct=None,
+                        black_box_consistency_pct=None,
+                        browsable_consistency_pct=None,
+                        total_images=None,
+                        consistent_count=None,
+                        inconsistent_count=None,
+                        collections_included=0
+                    ))
 
             return PipelineValidationTrendResponse(mode="aggregated", data_points=data_points)
 
@@ -792,19 +906,38 @@ class TrendService:
             ).all()
             pipeline_names = {p.id: p.name for p in pipelines}
 
-        # Build data points (sorted by date, limited)
-        sorted_dates = sorted(aggregated_by_date.keys())[-limit:]
+        # Build complete date range (including days without data)
+        all_dates = _generate_complete_date_range(
+            list(aggregated_by_date.keys()),
+            from_date=from_date,
+            to_date=to_date
+        )
+        # Only apply limit when no date range is specified ("all time" mode)
+        if from_date is None and to_date is None:
+            sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
+        else:
+            sorted_dates = all_dates
         data_points = []
 
         for date_key in sorted_dates:
-            agg = aggregated_by_date[date_key]
-            data_points.append(DisplayGraphTrendPoint(
-                date=datetime.strptime(date_key, '%Y-%m-%d'),
-                total_paths=agg['total_paths'],
-                valid_paths=agg['valid_paths'],
-                black_box_archive_paths=agg['black_box_archive_paths'],
-                browsable_archive_paths=agg['browsable_archive_paths']
-            ))
+            if date_key in aggregated_by_date:
+                agg = aggregated_by_date[date_key]
+                data_points.append(DisplayGraphTrendPoint(
+                    date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                    total_paths=agg['total_paths'],
+                    valid_paths=agg['valid_paths'],
+                    black_box_archive_paths=agg['black_box_archive_paths'],
+                    browsable_archive_paths=agg['browsable_archive_paths']
+                ))
+            else:
+                # No data for this date - append with None values
+                data_points.append(DisplayGraphTrendPoint(
+                    date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                    total_paths=None,
+                    valid_paths=None,
+                    black_box_archive_paths=None,
+                    browsable_archive_paths=None
+                ))
 
         # Build pipelines included list
         pipelines_included = [
@@ -872,7 +1005,7 @@ class TrendService:
     def get_trend_summary(
         self,
         team_id: int,
-        collection_id: Optional[int] = None
+        collection_guid: Optional[str] = None
     ) -> TrendSummaryResponse:
         """
         Get trend summary for dashboard overview.
@@ -882,14 +1015,28 @@ class TrendService:
 
         Args:
             team_id: Team ID for tenant isolation
-            collection_id: Optional collection ID filter
+            collection_guid: Optional collection GUID filter (col_xxx format)
 
         Returns:
             Trend summary with direction indicators and latest timestamps
         """
+        # Resolve collection GUID to internal ID if provided
+        collection_id: Optional[int] = None
+        if collection_guid:
+            try:
+                collection_uuid = Collection.parse_guid(collection_guid)
+                collection = self.db.query(Collection).filter(
+                    Collection.uuid == collection_uuid,
+                    Collection.team_id == team_id
+                ).first()
+                if collection:
+                    collection_id = collection.id
+            except ValueError:
+                pass  # Invalid GUID format, treat as no filter
+
         # Base query filter
         base_filter = [
-            AnalysisResult.status == ResultStatus.COMPLETED,
+            AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
             AnalysisResult.team_id == team_id
         ]
         if collection_id:

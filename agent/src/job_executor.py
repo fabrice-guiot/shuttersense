@@ -9,6 +9,7 @@ Tasks: T092, T098
 """
 
 import asyncio
+import hashlib
 import logging
 from typing import Dict, Any, Optional, Callable
 from dataclasses import dataclass
@@ -20,6 +21,11 @@ from src.config_loader import ApiConfigLoader
 from src.chunked_upload import (
     ChunkedUploadClient,
     should_use_chunked_upload,
+)
+from src.input_state import (
+    InputStateComputer,
+    check_no_change,
+    get_input_state_computer,
 )
 
 # Shared analysis modules for unified local/remote processing
@@ -151,6 +157,15 @@ class JobExecutor:
                 message=f"Starting {tool} analysis",
             )
 
+            # Check for NO_CHANGE optimization and compute Input State hash (Issue #92)
+            previous_result = job.get("previous_result")
+            no_change_completed, input_state_hash = await self._check_no_change(job, config, previous_result)
+
+            if no_change_completed:
+                # Collection unchanged - complete with NO_CHANGE status
+                logger.info(f"Job {job_guid} completing with NO_CHANGE status")
+                return  # Already completed in _check_no_change
+
             # Execute the appropriate tool
             result = await self._execute_tool(job, config)
 
@@ -191,7 +206,10 @@ class JobExecutor:
                             raise RuntimeError(f"Chunked HTML upload failed: {upload_result.error}")
                         report_upload_id = upload_result.upload_id
 
-                # Submit job completion
+                # Submit job completion with Input State hash (Issue #92)
+                hash_preview = input_state_hash[:16] + "..." if input_state_hash else "None"
+                logger.info(f"Submitting job completion for {job_guid}: input_state_hash={hash_preview}")
+
                 await self._api_client.complete_job(
                     job_guid=job_guid,
                     results=None if results_chunked else result.results,
@@ -201,6 +219,7 @@ class JobExecutor:
                     files_scanned=result.files_scanned,
                     issues_found=result.issues_found,
                     signature=signature,
+                    input_state_hash=input_state_hash,  # Issue #92: Store for future NO_CHANGE detection
                 )
 
                 logger.info(f"Job {job_guid} completed and results submitted")
@@ -293,6 +312,164 @@ class JobExecutor:
                 results={},
                 error_message=f"Unknown tool: {tool}"
             )
+
+    async def _check_no_change(
+        self,
+        job: Dict[str, Any],
+        config: Dict[str, Any],
+        previous_result: Optional[Dict[str, Any]]
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Check if collection is unchanged and complete with NO_CHANGE if so.
+
+        Issue #92: Storage Optimization for Analysis Results
+
+        Computes the current Input State hash and compares it to the previous
+        result's hash. If they match, completes the job with NO_CHANGE status
+        instead of running the full analysis.
+
+        Args:
+            job: Job data from claim response
+            config: Configuration data
+            previous_result: Previous result data (may be None)
+
+        Returns:
+            Tuple of (no_change_completed, current_hash):
+            - (True, hash) if NO_CHANGE completion was done
+            - (False, hash) if analysis needed (hash computed for later use)
+            - (False, None) if hash computation failed or was skipped
+        """
+        job_guid = job["guid"]
+        tool = job["tool"]
+        collection_path = job.get("collection_path")
+        connector = config.get("connector")
+
+        # Skip NO_CHANGE detection for collection_test (always run)
+        if tool == "collection_test":
+            logger.debug("collection_test always runs full analysis")
+            return False, None
+
+        try:
+            # Compute current Input State hash
+            logger.debug(
+                f"Computing Input State hash for job {job_guid}",
+                extra={
+                    "tool": tool,
+                    "collection_path": collection_path,
+                    "has_connector": connector is not None,
+                }
+            )
+            computer = get_input_state_computer()
+
+            # Check if this is display_graph mode (pipeline_validation without collection)
+            is_display_graph = tool == "pipeline_validation" and not collection_path and not connector
+
+            if is_display_graph:
+                # Display graph mode - input state is based solely on pipeline definition
+                # The pipeline guid + version uniquely identifies the pipeline state
+                pipeline = config.get("pipeline", {})
+                pipeline_guid = pipeline.get("guid", "")
+                pipeline_version = pipeline.get("version", 0)
+
+                # Create a deterministic hash from pipeline identity
+                # No file list needed since display_graph doesn't analyze files
+                file_hash = hashlib.sha256(
+                    f"display_graph|{pipeline_guid}|{pipeline_version}".encode("utf-8")
+                ).hexdigest()
+                file_count = 0
+
+                logger.debug(
+                    f"Display graph mode - using pipeline identity for hash",
+                    extra={
+                        "pipeline_guid": pipeline_guid,
+                        "pipeline_version": pipeline_version,
+                    }
+                )
+            elif connector:
+                # Remote collection - list files from storage adapter
+                adapter = await self._get_storage_adapter(connector)
+                file_infos = await adapter.list_files()
+                file_hash, file_count = computer.compute_file_list_hash_from_file_info(file_infos)
+            else:
+                # Local collection
+                if not collection_path:
+                    logger.warning("No collection path for local collection")
+                    return False, None
+                file_hash, file_count = computer.compute_file_list_hash_from_path(collection_path)
+
+            # Compute configuration hash
+            config_hash = computer.compute_configuration_hash(config)
+
+            # Compute combined Input State hash
+            current_hash = computer.compute_input_state_hash(file_hash, config_hash, tool)
+
+            logger.info(
+                f"Input State hash computed for job {job_guid}",
+                extra={
+                    "file_count": file_count,
+                    "input_state_hash": current_hash[:16] + "...",
+                }
+            )
+
+            # Skip NO_CHANGE check if no previous result or no hash to compare
+            if not previous_result or not previous_result.get("input_state_hash"):
+                logger.debug("No previous result hash - full analysis required (hash computed for storage)")
+                return False, current_hash
+
+            # Compare with previous result
+            if not check_no_change(previous_result, current_hash):
+                logger.info(
+                    f"Input State changed for job {job_guid} - full analysis required",
+                    extra={
+                        "file_count": file_count,
+                        "current_hash": current_hash[:16] + "...",
+                        "previous_hash": previous_result.get("input_state_hash", "")[:16] + "...",
+                    }
+                )
+                return False, current_hash
+
+            # Collection unchanged - complete with NO_CHANGE
+            logger.info(
+                f"Collection unchanged for job {job_guid} - completing with NO_CHANGE",
+                extra={
+                    "file_count": file_count,
+                    "input_state_hash": current_hash[:16] + "...",
+                    "source_result_guid": previous_result.get("guid"),
+                }
+            )
+
+            # Report progress
+            await self._progress_reporter.report(
+                stage="no_change",
+                message="Collection unchanged since last analysis",
+            )
+
+            # Sign the request
+            signature = self._result_signer.sign({"hash": current_hash})
+
+            # Submit NO_CHANGE completion
+            await self._api_client.complete_job_no_change(
+                job_guid=job_guid,
+                input_state_hash=current_hash,
+                source_result_guid=previous_result["guid"],
+                signature=signature,
+            )
+
+            return True, current_hash
+
+        except Exception as e:
+            # If NO_CHANGE detection fails, fall back to full analysis
+            # Log with traceback to help diagnose issues
+            import traceback
+            logger.warning(
+                f"NO_CHANGE detection failed for job {job_guid}: {e} - running full analysis",
+                extra={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "traceback": traceback.format_exc(),
+                }
+            )
+            return False, None
 
     async def _run_photostats(
         self,

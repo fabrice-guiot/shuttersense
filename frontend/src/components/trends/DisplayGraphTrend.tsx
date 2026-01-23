@@ -93,49 +93,12 @@ export function DisplayGraphTrend({
     browsable_archive_paths: point.browsable_archive_paths
   }))
 
-  // Calculate summary stats from the latest data point
-  const latestPoint = data.data_points[data.data_points.length - 1]
-  const summaryStats = {
-    totalPaths: latestPoint?.total_paths ?? 0,
-    validPaths: latestPoint?.valid_paths ?? 0,
-    blackBoxArchive: latestPoint?.black_box_archive_paths ?? 0,
-    browsableArchive: latestPoint?.browsable_archive_paths ?? 0
-  }
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Pipeline Graph Analysis</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Summary stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-muted rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-1">Total Paths</div>
-            <div className="text-2xl font-bold" style={{ color: SERIES_COLORS.total_paths }}>
-              {summaryStats.totalPaths}
-            </div>
-          </div>
-          <div className="bg-muted rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-1">Valid Paths</div>
-            <div className="text-2xl font-bold" style={{ color: SERIES_COLORS.valid_paths }}>
-              {summaryStats.validPaths}
-            </div>
-          </div>
-          <div className="bg-muted rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-1">Black Box Archive</div>
-            <div className="text-2xl font-bold" style={{ color: SERIES_COLORS.black_box_archive_paths }}>
-              {summaryStats.blackBoxArchive}
-            </div>
-          </div>
-          <div className="bg-muted rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-1">Browsable Archive</div>
-            <div className="text-2xl font-bold" style={{ color: SERIES_COLORS.browsable_archive_paths }}>
-              {summaryStats.browsableArchive}
-            </div>
-          </div>
-        </div>
-
         {/* Pipelines included */}
         {data.pipelines_included.length > 0 && (
           <div className="text-xs text-muted-foreground">

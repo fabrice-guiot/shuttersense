@@ -362,7 +362,7 @@ export const useDisplayGraphTrends = (
 // ============================================================================
 
 interface UseTrendSummaryOptions {
-  collectionId?: number
+  collectionGuid?: string
   autoFetch?: boolean
 }
 
@@ -374,7 +374,7 @@ interface UseTrendSummaryReturn {
 }
 
 export const useTrendSummary = (options: UseTrendSummaryOptions = {}): UseTrendSummaryReturn => {
-  const { collectionId, autoFetch = true } = options
+  const { collectionGuid, autoFetch = true } = options
 
   const [summary, setSummary] = useState<TrendSummaryResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -385,8 +385,8 @@ export const useTrendSummary = (options: UseTrendSummaryOptions = {}): UseTrendS
     setError(null)
     try {
       const params: TrendSummaryQueryParams = {}
-      if (collectionId !== undefined) {
-        params.collection_id = collectionId
+      if (collectionGuid !== undefined) {
+        params.collection_guid = collectionGuid
       }
       const response = await trendsService.getTrendSummary(params)
       setSummary(response)
@@ -396,7 +396,7 @@ export const useTrendSummary = (options: UseTrendSummaryOptions = {}): UseTrendS
     } finally {
       setLoading(false)
     }
-  }, [collectionId])
+  }, [collectionGuid])
 
   useEffect(() => {
     if (autoFetch) {

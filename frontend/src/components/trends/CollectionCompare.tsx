@@ -1,21 +1,27 @@
 /**
  * CollectionCompare Component
  *
- * Multi-select for choosing collections to compare in trend views
+ * Search-based multi-select for choosing collections to compare in trend views.
+ * Designed to handle 1000+ collections efficiently with search filtering.
  */
 
 import { useState, useMemo } from 'react'
-import { Check, ChevronsUpDown, X } from 'lucide-react'
+import { Check, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from '@/components/ui/command'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
@@ -39,13 +45,28 @@ export function CollectionCompare({
   maxSelections = 5,
   className = ''
 }: CollectionCompareProps) {
+  const [open, setOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
   // Get selected collection objects
   const selectedCollections = useMemo(() => {
     return collections.filter((c) => selectedIds.includes(c.id))
   }, [collections, selectedIds])
 
-  // Handle checkbox toggle
-  const handleToggle = (collectionId: number) => {
+  // Filter collections based on search query (case-insensitive)
+  const filteredCollections = useMemo(() => {
+    if (!searchQuery.trim()) {
+      // Show first 50 when no search query (for initial display)
+      return collections.slice(0, 50)
+    }
+    const query = searchQuery.toLowerCase()
+    return collections
+      .filter((c) => c.name.toLowerCase().includes(query))
+      .slice(0, 50) // Limit results to prevent performance issues
+  }, [collections, searchQuery])
+
+  // Handle selecting a collection
+  const handleSelect = (collectionId: number) => {
     const isSelected = selectedIds.includes(collectionId)
 
     if (isSelected) {
@@ -64,45 +85,104 @@ export function CollectionCompare({
     onSelectionChange(selectedIds.filter((id) => id !== collectionId))
   }
 
-  // Handle select all
-  const handleSelectAll = () => {
-    const idsToSelect = collections.slice(0, maxSelections).map((c) => c.id)
-    onSelectionChange(idsToSelect)
-  }
-
   // Handle clear all
   const handleClearAll = () => {
     onSelectionChange([])
   }
 
+  const isAtLimit = selectedIds.length >= maxSelections
+
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div className={`space-y-2 ${className}`}>
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium">Compare Collections</Label>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={handleSelectAll} disabled={collections.length === 0}>
-            Select All
-          </Button>
+        {selectedIds.length > 0 && (
           <Button
             variant="ghost"
             size="sm"
             onClick={handleClearAll}
-            disabled={selectedIds.length === 0}
+            className="h-auto py-1 px-2 text-xs"
           >
-            Clear
+            Clear all
           </Button>
-        </div>
+        )}
       </div>
+
+      {/* Search trigger */}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between font-normal"
+            disabled={isAtLimit}
+          >
+            <span className="text-muted-foreground">
+              {isAtLimit
+                ? `Maximum ${maxSelections} selected`
+                : 'Search collections...'}
+            </span>
+            <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Type to search collections..."
+              value={searchQuery}
+              onValueChange={setSearchQuery}
+            />
+            <CommandList>
+              <CommandEmpty>
+                {searchQuery
+                  ? 'No collections found.'
+                  : 'Start typing to search...'}
+              </CommandEmpty>
+              <CommandGroup>
+                {filteredCollections.map((collection) => {
+                  const isSelected = selectedIds.includes(collection.id)
+                  const isDisabled = !isSelected && isAtLimit
+
+                  return (
+                    <CommandItem
+                      key={collection.id}
+                      value={collection.id.toString()}
+                      onSelect={() => handleSelect(collection.id)}
+                      disabled={isDisabled}
+                      className={cn(isDisabled && 'opacity-50')}
+                    >
+                      <Check
+                        className={cn(
+                          'mr-2 h-4 w-4',
+                          isSelected ? 'opacity-100' : 'opacity-0'
+                        )}
+                      />
+                      <span className="truncate">{collection.name}</span>
+                    </CommandItem>
+                  )
+                })}
+              </CommandGroup>
+              {filteredCollections.length >= 50 && (
+                <div className="px-2 py-2 text-xs text-muted-foreground text-center border-t">
+                  Showing first 50 results. Type to refine search.
+                </div>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
 
       {/* Selected collections as badges */}
       {selectedCollections.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {selectedCollections.map((collection) => (
-            <Badge key={collection.id} variant="secondary" className="pr-1">
-              {collection.name}
+            <Badge key={collection.id} variant="secondary" className="pr-1 text-xs">
+              <span className="truncate max-w-[150px]">{collection.name}</span>
               <button
                 onClick={() => handleRemove(collection.id)}
                 className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                aria-label={`Remove ${collection.name}`}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -111,41 +191,10 @@ export function CollectionCompare({
         </div>
       )}
 
-      {/* Collection list with checkboxes */}
-      <div className="border rounded-md max-h-48 overflow-y-auto">
-        {collections.length === 0 ? (
-          <div className="p-4 text-center text-muted-foreground">No collections available</div>
-        ) : (
-          <div className="p-2 space-y-1">
-            {collections.map((collection) => {
-              const isSelected = selectedIds.includes(collection.id)
-              const isDisabled = !isSelected && selectedIds.length >= maxSelections
-
-              return (
-                <label
-                  key={collection.id}
-                  className={cn(
-                    'flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-muted',
-                    isSelected && 'bg-muted',
-                    isDisabled && 'opacity-50 cursor-not-allowed'
-                  )}
-                >
-                  <Checkbox
-                    checked={isSelected}
-                    disabled={isDisabled}
-                    onCheckedChange={() => handleToggle(collection.id)}
-                  />
-                  <span className="text-sm">{collection.name}</span>
-                </label>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {selectedIds.length >= maxSelections && (
+      {/* Helper text */}
+      {selectedIds.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          Maximum {maxSelections} collections can be compared
+          All collections included. Select up to {maxSelections} to compare specific ones.
         </p>
       )}
     </div>

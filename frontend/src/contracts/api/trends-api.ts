@@ -40,10 +40,10 @@ export interface PhotoStatsCollectionTrend {
 /** Aggregated data point for PhotoStats (summed across all collections) */
 export interface PhotoStatsAggregatedPoint {
   date: string // ISO 8601 timestamp
-  /** Total orphaned images across all collections */
-  orphaned_images: number
-  /** Total orphaned metadata files (XMP) across all collections */
-  orphaned_metadata: number
+  /** Total orphaned images across all collections (null if no data for this date) */
+  orphaned_images: number | null
+  /** Total orphaned metadata files (XMP) across all collections (null if no data for this date) */
+  orphaned_metadata: number | null
   /** Number of collections with data for this date */
   collections_included: number
 }
@@ -90,10 +90,10 @@ export interface PhotoPairingCollectionTrend {
 /** Aggregated data point for Photo Pairing (summed across all collections) */
 export interface PhotoPairingAggregatedPoint {
   date: string // ISO 8601 timestamp
-  /** Total image groups across all collections */
-  group_count: number
-  /** Total images across all collections */
-  image_count: number
+  /** Total image groups across all collections (null if no data for this date) */
+  group_count: number | null
+  /** Total images across all collections (null if no data for this date) */
+  image_count: number | null
   /** Number of collections with data for this date */
   collections_included: number
 }
@@ -153,23 +153,25 @@ export interface PipelineValidationCollectionTrend {
  * - black_box_consistency_pct: CONSISTENT in Black Box Archive / Total Black Box
  * - browsable_consistency_pct: CONSISTENT in Browsable Archive / Total Browsable
  * - overall_inconsistent_pct: Total INCONSISTENT / Total images
+ *
+ * Values can be null for dates without data points (to show gaps in timeline).
  */
 export interface PipelineValidationAggregatedPoint {
   date: string // ISO 8601 timestamp
-  /** Overall consistency % across all collections */
-  overall_consistency_pct: number
-  /** Overall inconsistent % across all collections */
-  overall_inconsistent_pct: number
-  /** Consistency % for Black Box Archive termination */
-  black_box_consistency_pct: number
-  /** Consistency % for Browsable Archive termination */
-  browsable_consistency_pct: number
-  /** Total images validated */
-  total_images: number
-  /** Total CONSISTENT count */
-  consistent_count: number
-  /** Total INCONSISTENT count */
-  inconsistent_count: number
+  /** Overall consistency % across all collections (null if no data for this date) */
+  overall_consistency_pct: number | null
+  /** Overall inconsistent % across all collections (null if no data for this date) */
+  overall_inconsistent_pct: number | null
+  /** Consistency % for Black Box Archive termination (null if no data for this date) */
+  black_box_consistency_pct: number | null
+  /** Consistency % for Browsable Archive termination (null if no data for this date) */
+  browsable_consistency_pct: number | null
+  /** Total images validated (null if no data for this date) */
+  total_images: number | null
+  /** Total CONSISTENT count (null if no data for this date) */
+  consistent_count: number | null
+  /** Total INCONSISTENT count (null if no data for this date) */
+  inconsistent_count: number | null
   /** Number of collections with data for this date */
   collections_included: number
 }
@@ -194,18 +196,19 @@ export interface PipelineValidationTrendResponse {
 /**
  * Aggregated display graph trend data point.
  * Data is aggregated across all pipelines for each date.
+ * Values can be null for dates without data points (to show gaps in timeline).
  */
 export interface DisplayGraphTrendPoint {
   /** Timestamp (aggregated by date) */
   date: string // ISO 8601 timestamp
-  /** Total paths enumerated across all pipelines */
-  total_paths: number
-  /** Valid paths (completed on real termination nodes, not truncated) */
-  valid_paths: number
-  /** Paths ending in Black Box Archive termination */
-  black_box_archive_paths: number
-  /** Paths ending in Browsable Archive termination */
-  browsable_archive_paths: number
+  /** Total paths enumerated across all pipelines (null if no data for this date) */
+  total_paths: number | null
+  /** Valid paths (completed on real termination nodes, not truncated) (null if no data for this date) */
+  valid_paths: number | null
+  /** Paths ending in Black Box Archive termination (null if no data for this date) */
+  black_box_archive_paths: number | null
+  /** Paths ending in Browsable Archive termination (null if no data for this date) */
+  browsable_archive_paths: number | null
 }
 
 export interface DisplayGraphTrendResponse {
@@ -267,8 +270,8 @@ export interface PipelineValidationTrendQueryParams extends TrendQueryParams {
 }
 
 export interface TrendSummaryQueryParams {
-  /** Collection ID (optional, for single collection) */
-  collection_id?: number
+  /** Collection GUID (optional, for single collection) */
+  collection_guid?: string
 }
 
 // ============================================================================
@@ -297,7 +300,7 @@ export interface TrendFilters {
 /**
  * Date range presets for trend filtering
  */
-export type DateRangePreset = 'last_7_days' | 'last_30_days' | 'last_90_days' | 'last_year' | 'all_time'
+export type DateRangePreset = 'last_7_days' | 'last_30_days' | 'last_90_days' | 'last_year'
 
 /**
  * Get date range from preset
@@ -320,9 +323,6 @@ export function getDateRangeFromPreset(preset: DateRangePreset): { from_date: st
     case 'last_year':
       from_date = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       break
-    case 'all_time':
-    default:
-      from_date = ''
   }
 
   return { from_date, to_date }

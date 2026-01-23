@@ -9,7 +9,7 @@
 // Entity Types
 // ============================================================================
 
-export type ResultStatus = 'COMPLETED' | 'FAILED' | 'CANCELLED'
+export type ResultStatus = 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'NO_CHANGE'
 
 export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation'
 

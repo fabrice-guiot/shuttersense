@@ -49,6 +49,21 @@ SIGNING_SECRET_LENGTH = 32  # 256-bit secret
 
 
 @dataclass
+class PreviousResultInfo:
+    """
+    Information about a previous result for Input State comparison (Issue #92).
+
+    Attributes:
+        guid: Result GUID (res_xxx)
+        input_state_hash: SHA-256 hash of previous Input State (may be None for legacy)
+        completed_at: When the previous result was created
+    """
+    guid: str
+    input_state_hash: Optional[str]
+    completed_at: datetime
+
+
+@dataclass
 class JobClaimResult:
     """
     Result of job claiming.
@@ -56,9 +71,11 @@ class JobClaimResult:
     Attributes:
         job: The claimed job
         signing_secret: Base64-encoded plaintext signing secret (only returned once)
+        previous_result: Previous result info for Input State comparison (Issue #92)
     """
     job: Job
     signing_secret: str
+    previous_result: Optional[PreviousResultInfo] = None
 
 
 @dataclass
@@ -78,6 +95,8 @@ class JobCompletionData:
         files_scanned: Number of files processed
         issues_found: Number of issues detected
         signature: HMAC-SHA256 signature of results
+        input_state_hash: SHA-256 hash of Input State (Issue #92)
+        input_state_json: Full Input State JSON for debugging (Issue #92)
     """
     results: Optional[Dict[str, Any]] = None
     report_html: Optional[str] = None
@@ -86,6 +105,8 @@ class JobCompletionData:
     files_scanned: Optional[int] = None
     issues_found: Optional[int] = None
     signature: str = ""
+    input_state_hash: Optional[str] = None
+    input_state_json: Optional[str] = None
 
 
 class JobCoordinatorService:
@@ -451,19 +472,78 @@ class JobCoordinatorService:
 
         self.db.commit()
 
+        # Look up previous result for Input State comparison (Issue #92)
+        previous_result = self._find_previous_result(job)
+
         logger.info(
             "Job claimed by agent",
             extra={
                 "job_guid": job.guid,
                 "agent_id": agent_id,
                 "tool": job.tool,
-                "priority": job.priority
+                "priority": job.priority,
+                "has_previous_result": previous_result is not None
             }
         )
 
         return JobClaimResult(
             job=job,
-            signing_secret=signing_secret
+            signing_secret=signing_secret,
+            previous_result=previous_result
+        )
+
+    def _find_previous_result(self, job: Job) -> Optional[PreviousResultInfo]:
+        """
+        Find the most recent successful result for the same context+tool.
+
+        Used for Input State comparison in storage optimization (Issue #92).
+
+        For collection-based jobs: looks up by collection_id + tool
+        For display_graph jobs (no collection): looks up by pipeline_id + tool
+
+        Args:
+            job: The job being claimed
+
+        Returns:
+            PreviousResultInfo if a previous result exists, None otherwise
+        """
+        # Build the appropriate query based on job type
+        # Display graph jobs have no collection but have a pipeline
+        is_display_graph = job.tool == "pipeline_validation" and not job.collection_id
+
+        if is_display_graph:
+            # For display_graph: match by pipeline_id + tool (no collection)
+            if not job.pipeline_id:
+                return None
+
+            previous = self.db.query(AnalysisResult).filter(
+                AnalysisResult.pipeline_id == job.pipeline_id,
+                AnalysisResult.collection_id.is_(None),  # Explicitly match NULL
+                AnalysisResult.tool == job.tool,
+                AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE])
+            ).order_by(
+                AnalysisResult.completed_at.desc()
+            ).first()
+        else:
+            # For collection-based jobs: match by collection_id + tool
+            if not job.collection_id:
+                return None
+
+            previous = self.db.query(AnalysisResult).filter(
+                AnalysisResult.collection_id == job.collection_id,
+                AnalysisResult.tool == job.tool,
+                AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE])
+            ).order_by(
+                AnalysisResult.completed_at.desc()
+            ).first()
+
+        if not previous:
+            return None
+
+        return PreviousResultInfo(
+            guid=previous.guid,
+            input_state_hash=previous.input_state_hash,
+            completed_at=previous.completed_at
         )
 
     # =========================================================================
@@ -792,6 +872,246 @@ class JobCoordinatorService:
 
         return job
 
+    def complete_job_no_change(
+        self,
+        job_guid: str,
+        agent_id: int,
+        team_id: int,
+        input_state_hash: str,
+        source_result_guid: str,
+        signature: str,
+        input_state_json: Optional[str] = None
+    ) -> Job:
+        """
+        Complete a job with NO_CHANGE status (Issue #92: Storage Optimization).
+
+        Called when the agent detects the Input State hash matches a previous
+        result, indicating no changes to the collection since the last analysis.
+
+        Creates a NO_CHANGE AnalysisResult that:
+        - Copies results_json, files_scanned, issues_found from source result
+        - Sets download_report_from to reference source result's report
+        - Does NOT store report_html (saves storage)
+        - Triggers intermediate copy cleanup
+
+        Args:
+            job_guid: Job GUID
+            agent_id: Agent ID (must match job's assigned agent)
+            team_id: Team ID
+            input_state_hash: SHA-256 hash of Input State
+            source_result_guid: GUID of the previous result to reference
+            signature: HMAC-SHA256 signature
+            input_state_json: Optional Input State JSON (DEBUG mode only)
+
+        Returns:
+            Completed job
+
+        Raises:
+            NotFoundError: If job or source result not found
+            ValidationError: If agent doesn't own the job, signature invalid,
+                           or source result doesn't match criteria
+        """
+        job = self._get_job_for_agent(job_guid, agent_id, team_id)
+
+        if job.status not in (JobStatus.ASSIGNED, JobStatus.RUNNING):
+            raise ValidationError(
+                f"Job must be in ASSIGNED or RUNNING state to complete, got {job.status.value}"
+            )
+
+        # Verify signature (basic validation)
+        if not self.verify_signature(job, {"hash": input_state_hash}, signature):
+            raise ValidationError("Invalid result signature")
+
+        # Look up source result
+        try:
+            source_uuid = AnalysisResult.parse_guid(source_result_guid)
+        except ValueError:
+            raise NotFoundError(f"Invalid source result GUID: {source_result_guid}")
+
+        source_result = self.db.query(AnalysisResult).filter(
+            AnalysisResult.uuid == source_uuid,
+            AnalysisResult.team_id == team_id
+        ).first()
+
+        if not source_result:
+            raise NotFoundError(f"Source result not found: {source_result_guid}")
+
+        # Validate source result is for same context and tool
+        is_display_graph = job.tool == "pipeline_validation" and job.collection_id is None
+
+        if is_display_graph:
+            # For display_graph: validate pipeline matches
+            if source_result.pipeline_id != job.pipeline_id:
+                raise ValidationError(
+                    "Source result is for a different pipeline"
+                )
+            if source_result.collection_id is not None:
+                raise ValidationError(
+                    "Source result has a collection (expected display_graph result)"
+                )
+        else:
+            # For collection-based jobs: validate collection matches
+            if source_result.collection_id != job.collection_id:
+                raise ValidationError(
+                    "Source result is for a different collection"
+                )
+
+        if source_result.tool != job.tool:
+            raise ValidationError(
+                f"Source result is for different tool: {source_result.tool}"
+            )
+
+        # Validate source result has the expected hash
+        if source_result.input_state_hash and source_result.input_state_hash != input_state_hash:
+            raise ValidationError(
+                "Input state hash mismatch with source result"
+            )
+
+        # Create NO_CHANGE result
+        now = datetime.utcnow()
+        started_at = job.started_at or job.assigned_at or job.created_at
+        duration = (now - started_at).total_seconds() if started_at else 0
+
+        # Determine which result has the actual report
+        # If source is also NO_CHANGE, follow its reference (single-level only)
+        download_from_guid = source_result_guid
+        if source_result.download_report_from:
+            download_from_guid = source_result.download_report_from
+
+        result = AnalysisResult(
+            team_id=job.team_id,
+            collection_id=job.collection_id,
+            pipeline_id=job.pipeline_id,
+            pipeline_version=job.pipeline_version,
+            tool=job.tool,
+            status=ResultStatus.NO_CHANGE,
+            started_at=started_at,
+            completed_at=now,
+            duration_seconds=duration,
+            # Copy from source result
+            results_json=source_result.results_json,
+            files_scanned=source_result.files_scanned,
+            issues_found=source_result.issues_found,
+            # NO report_html - reference source's report
+            report_html=None,
+            # Storage optimization fields
+            input_state_hash=input_state_hash,
+            input_state_json=input_state_json,  # Only stored in DEBUG mode
+            no_change_copy=True,
+            download_report_from=download_from_guid,
+        )
+
+        self.db.add(result)
+        self.db.flush()
+
+        # Complete the job
+        job.complete(result_id=result.id)
+        job.progress = None
+
+        # Cleanup intermediate copies (Issue #92)
+        cleanup_count = self._cleanup_intermediate_copies(
+            collection_id=job.collection_id,
+            pipeline_id=job.pipeline_id,
+            tool=job.tool,
+            new_result_id=result.id,
+            source_result_guid=download_from_guid,
+            team_id=team_id
+        )
+
+        # Create scheduled follow-up job if TTL is configured
+        scheduled_job = self._maybe_create_scheduled_job(job)
+
+        self.db.commit()
+
+        logger.info(
+            "Job completed with NO_CHANGE",
+            extra={
+                "job_guid": job.guid,
+                "result_guid": result.guid,
+                "source_result_guid": source_result_guid,
+                "download_report_from": download_from_guid,
+                "input_state_hash": input_state_hash[:16] + "...",
+                "intermediate_copies_cleaned": cleanup_count,
+                "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
+            }
+        )
+
+        return job
+
+    def _cleanup_intermediate_copies(
+        self,
+        collection_id: Optional[int],
+        pipeline_id: Optional[int],
+        tool: str,
+        new_result_id: int,
+        source_result_guid: str,
+        team_id: int
+    ) -> int:
+        """
+        Delete intermediate NO_CHANGE copies after a new NO_CHANGE result is created.
+
+        When a new NO_CHANGE result is created pointing to result A, we can delete
+        any existing NO_CHANGE copies that also point to A (except the newest one).
+
+        For display_graph jobs (no collection): matches by pipeline_id + tool
+        For collection-based jobs: matches by collection_id + tool
+
+        Args:
+            collection_id: Collection ID (None for display_graph)
+            pipeline_id: Pipeline ID (used for display_graph matching)
+            tool: Tool name
+            new_result_id: ID of the newly created result (exclude from deletion)
+            source_result_guid: GUID of the source result (delete copies pointing to this)
+            team_id: Team ID
+
+        Returns:
+            Number of intermediate copies deleted
+        """
+        # Find intermediate copies to delete:
+        # - Same context (collection or pipeline for display_graph) + tool
+        # - no_change_copy=True
+        # - download_report_from = source_result_guid
+        # - Not the new result we just created
+        # - Exclude the original source result
+
+        is_display_graph = tool == "pipeline_validation" and collection_id is None
+
+        if is_display_graph:
+            # For display_graph: match by pipeline_id (no collection)
+            intermediate_copies = self.db.query(AnalysisResult).filter(
+                AnalysisResult.team_id == team_id,
+                AnalysisResult.pipeline_id == pipeline_id,
+                AnalysisResult.collection_id.is_(None),
+                AnalysisResult.tool == tool,
+                AnalysisResult.no_change_copy == True,  # noqa: E712
+                AnalysisResult.download_report_from == source_result_guid,
+                AnalysisResult.id != new_result_id
+            ).all()
+        else:
+            # For collection-based jobs: match by collection_id
+            intermediate_copies = self.db.query(AnalysisResult).filter(
+                AnalysisResult.team_id == team_id,
+                AnalysisResult.collection_id == collection_id,
+                AnalysisResult.tool == tool,
+                AnalysisResult.no_change_copy == True,  # noqa: E712
+                AnalysisResult.download_report_from == source_result_guid,
+                AnalysisResult.id != new_result_id
+            ).all()
+
+        deleted_count = 0
+        for copy in intermediate_copies:
+            logger.debug(
+                "Deleting intermediate NO_CHANGE copy",
+                extra={
+                    "deleted_guid": copy.guid,
+                    "source_result_guid": source_result_guid
+                }
+            )
+            self.db.delete(copy)
+            deleted_count += 1
+
+        return deleted_count
+
     def _resolve_upload_ids(
         self,
         completion_data: JobCompletionData,
@@ -864,6 +1184,9 @@ class JobCoordinatorService:
             files_scanned=completion_data.files_scanned,
             issues_found=completion_data.issues_found,
             signature=completion_data.signature,
+            # Storage optimization fields (Issue #92) - must preserve these
+            input_state_hash=completion_data.input_state_hash,
+            input_state_json=completion_data.input_state_json,
         )
 
     def _handle_collection_test_completion(
@@ -940,6 +1263,12 @@ class JobCoordinatorService:
         started_at = job.started_at or job.assigned_at or job.created_at
         duration = (now - started_at).total_seconds() if started_at else 0
 
+        # Debug logging for storage optimization (Issue #92)
+        hash_preview = completion_data.input_state_hash[:16] + "..." if completion_data.input_state_hash else "None"
+        logger.info(
+            f"Creating AnalysisResult for job {job.guid}: input_state_hash={hash_preview}"
+        )
+
         result = AnalysisResult(
             team_id=job.team_id,
             collection_id=job.collection_id,
@@ -954,10 +1283,19 @@ class JobCoordinatorService:
             report_html=completion_data.report_html,
             files_scanned=completion_data.files_scanned,
             issues_found=completion_data.issues_found,
+            # Storage optimization fields (Issue #92)
+            input_state_hash=completion_data.input_state_hash,
+            input_state_json=completion_data.input_state_json,
         )
 
         self.db.add(result)
         self.db.flush()
+
+        # Verify the hash was saved
+        saved_hash_preview = result.input_state_hash[:16] + "..." if result.input_state_hash else "None"
+        logger.info(
+            f"AnalysisResult created: guid={result.guid}, saved_input_state_hash={saved_hash_preview}"
+        )
 
         return result
 

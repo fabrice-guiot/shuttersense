@@ -13,7 +13,8 @@ import {
   FileText,
   Camera,
   FolderOpen,
-  AlertTriangle
+  AlertTriangle,
+  Equal
 } from 'lucide-react'
 import {
   Dialog,
@@ -68,6 +69,12 @@ const STATUS_CONFIG: Record<
     color: 'text-gray-500',
     label: 'Cancelled',
     variant: 'secondary'
+  },
+  NO_CHANGE: {
+    icon: Equal,
+    color: 'text-blue-500',
+    label: 'No Change',
+    variant: 'default'
   }
 }
 
@@ -669,7 +676,7 @@ export function ResultDetailPanel({
           )}
 
           {/* Tool-specific results */}
-          {result.status === 'COMPLETED' && renderToolResults()}
+          {(result.status === 'COMPLETED' || result.status === 'NO_CHANGE') && renderToolResults()}
 
           {/* Download report button */}
           {result.has_report && onDownloadReport && (
