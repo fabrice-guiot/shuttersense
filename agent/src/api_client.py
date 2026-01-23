@@ -8,11 +8,14 @@ Issue #90 - Distributed Agent Architecture (Phase 3)
 Task: T040
 """
 
+import logging
 from typing import Any, Optional
 
 import httpx
 
 from src import __version__
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -468,6 +471,8 @@ class AgentApiClient:
         report_upload_id: Optional[str] = None,
         files_scanned: Optional[int] = None,
         issues_found: Optional[int] = None,
+        input_state_hash: Optional[str] = None,
+        input_state_json: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Complete a job with results.
@@ -485,6 +490,8 @@ class AgentApiClient:
             report_upload_id: Upload ID for chunked HTML report
             files_scanned: Total files scanned
             issues_found: Issues detected
+            input_state_hash: SHA-256 hash of Input State (Issue #92)
+            input_state_json: Full Input State JSON for debugging (Issue #92)
 
         Returns:
             Job status response
@@ -514,6 +521,16 @@ class AgentApiClient:
         if issues_found is not None:
             payload["issues_found"] = issues_found
 
+        # Storage optimization fields (Issue #92)
+        if input_state_hash is not None:
+            payload["input_state_hash"] = input_state_hash
+        if input_state_json is not None:
+            payload["input_state_json"] = input_state_json
+
+        # Debug logging for storage optimization
+        hash_preview = input_state_hash[:16] + "..." if input_state_hash else "None"
+        logger.info(f"Completing job {job_guid}: input_state_hash={hash_preview}")
+
         try:
             response = await self._client.post(
                 f"{API_BASE_PATH}/jobs/{job_guid}/complete",
@@ -536,6 +553,69 @@ class AgentApiClient:
         else:
             raise ApiError(
                 f"Job completion failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def complete_job_no_change(
+        self,
+        job_guid: str,
+        input_state_hash: str,
+        source_result_guid: str,
+        signature: str,
+        input_state_json: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Complete a job with NO_CHANGE status (Issue #92: Storage Optimization).
+
+        Called when the agent detects the Input State hash matches a previous
+        result, indicating no changes to the collection since the last analysis.
+
+        Args:
+            job_guid: GUID of the job
+            input_state_hash: SHA-256 hash of current Input State (64 char hex)
+            source_result_guid: GUID of the previous result being referenced
+            signature: HMAC-SHA256 signature of request
+            input_state_json: Optional full Input State JSON (for DEBUG mode)
+
+        Returns:
+            Job status response
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+            ApiError: If request fails
+        """
+        payload: dict[str, Any] = {
+            "input_state_hash": input_state_hash,
+            "source_result_guid": source_result_guid,
+            "signature": signature,
+        }
+
+        if input_state_json is not None:
+            payload["input_state_json"] = input_state_json
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/no-change",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job or source result not found", status_code=404)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"NO_CHANGE completion failed with status {response.status_code}",
                 status_code=response.status_code,
             )
 

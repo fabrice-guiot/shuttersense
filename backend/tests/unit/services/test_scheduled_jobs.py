@@ -494,6 +494,7 @@ class TestScheduledJobCancellation:
         service = ToolService(test_db_session)
         new_job = service.run_tool(
             tool=ToolType.PHOTOSTATS,
+            team_id=test_team.id,
             collection_id=collection.id,
         )
 
@@ -529,6 +530,7 @@ class TestScheduledJobCancellation:
         service = ToolService(test_db_session)
         service.run_tool(
             tool=ToolType.PHOTOSTATS,
+            team_id=test_team.id,
             collection_id=collection.id,
         )
 

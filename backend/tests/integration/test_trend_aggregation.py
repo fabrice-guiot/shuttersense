@@ -237,7 +237,7 @@ class TestTrendAggregationIntegration:
 
         response = test_client.get(
             "/api/trends/summary",
-            params={"collection_id": collection.id}
+            params={"collection_guid": collection.guid}  # Use GUID, not internal ID
         )
 
         assert response.status_code == 200

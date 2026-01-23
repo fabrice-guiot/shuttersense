@@ -617,9 +617,15 @@ class CollectionResponse(BaseModel):
 
         # Copy basic attributes
         for attr in ['guid', 'name', 'type', 'location', 'state', 'pipeline_version',
-                     'cache_ttl', 'is_accessible', 'created_at', 'updated_at']:
+                     'is_accessible', 'created_at', 'updated_at']:
             if hasattr(data, attr):
                 result[attr] = getattr(data, attr)
+
+        # Get effective cache TTL (uses state-based defaults if no override)
+        if hasattr(data, 'get_effective_cache_ttl'):
+            result['cache_ttl'] = data.get_effective_cache_ttl()
+        elif hasattr(data, 'cache_ttl'):
+            result['cache_ttl'] = getattr(data, 'cache_ttl')
 
         # Map last_error (DB field) to accessibility_message (API field)
         if hasattr(data, 'last_error'):

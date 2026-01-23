@@ -64,6 +64,7 @@ def list_results(
     collection_guid: Optional[str] = Query(None, description="Filter by collection GUID (col_xxx)"),
     tool: Optional[str] = Query(None, description="Filter by tool type"),
     status: Optional[ResultStatus] = Query(None, description="Filter by status"),
+    no_change_copy: Optional[bool] = Query(None, description="Filter by no_change_copy flag (true=copies only, false=originals only)"),
     from_date: Optional[date] = Query(None, description="Filter from date"),
     to_date: Optional[date] = Query(None, description="Filter to date"),
     limit: int = Query(50, ge=1, le=100, description="Results per page"),
@@ -81,7 +82,8 @@ def list_results(
     Args:
         collection_guid: Filter by collection GUID (col_xxx format)
         tool: Filter by tool type (photostats, photo_pairing, pipeline_validation)
-        status: Filter by result status (COMPLETED, FAILED, CANCELLED)
+        status: Filter by result status (COMPLETED, FAILED, CANCELLED, NO_CHANGE)
+        no_change_copy: Filter by no_change_copy flag (true=copies only, false=originals only)
         from_date: Filter from date (inclusive)
         to_date: Filter to date (inclusive)
         limit: Maximum results to return (default 50, max 100)
@@ -98,6 +100,7 @@ def list_results(
             collection_guid=collection_guid,
             tool=tool,
             status=status,
+            no_change_copy=no_change_copy,
             from_date=from_date,
             to_date=to_date,
             limit=limit,

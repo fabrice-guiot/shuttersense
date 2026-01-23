@@ -23,6 +23,7 @@ class ResultStatus(enum.Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    NO_CHANGE = "NO_CHANGE"  # Result references previous, no new data (storage optimization)
 
 
 class ToolType(enum.Enum):
@@ -79,6 +80,9 @@ from backend.src.models.api_token import ApiToken
 # Agent Attestation (Issue #90 - Phase 14)
 from backend.src.models.release_manifest import ReleaseManifest
 
+# Storage Optimization (Issue #92)
+from backend.src.models.storage_metrics import StorageMetrics
+
 # Export Base and all models
 __all__ = [
     "Base",
@@ -129,4 +133,6 @@ __all__ = [
     "ApiToken",
     # Agent Attestation (Issue #90 - Phase 14)
     "ReleaseManifest",
+    # Storage Optimization (Issue #92)
+    "StorageMetrics",
 ]

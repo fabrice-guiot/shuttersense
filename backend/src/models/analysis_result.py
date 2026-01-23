@@ -16,9 +16,11 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, Text, Enum, ForeignKey, Index, JSON
+    Column, Integer, String, Float, DateTime, Text, Enum, ForeignKey, Index, JSON, Boolean,
+    CheckConstraint
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql import expression
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base, ResultStatus
@@ -61,6 +63,8 @@ class AnalysisResult(Base, GuidMixin):
         - completed_at must be >= started_at
         - duration_seconds must be >= 0
         - results_json must be valid JSON
+        - If no_change_copy=True, then download_report_from must not be NULL
+        - If no_change_copy=True, then report_html must be NULL
 
     Indexes:
         - uuid (unique, for GUID lookups)
@@ -117,6 +121,30 @@ class AnalysisResult(Base, GuidMixin):
     files_scanned = Column(Integer, nullable=True)
     issues_found = Column(Integer, nullable=True)
 
+    # Storage Optimization Fields (Issue #92)
+    input_state_hash = Column(
+        String(64),
+        nullable=True,
+        comment="SHA-256 hash of Input State components"
+    )
+    input_state_json = Column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+        comment="Full Input State for debugging (DEBUG mode only)"
+    )
+    no_change_copy = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=expression.false(),
+        comment="True if this result references another (storage optimization)"
+    )
+    download_report_from = Column(
+        String(50),
+        nullable=True,
+        comment="GUID of source result for report download (res_xxx)"
+    )
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -124,12 +152,25 @@ class AnalysisResult(Base, GuidMixin):
     collection = relationship("Collection", back_populates="analysis_results")
     pipeline = relationship("Pipeline", back_populates="analysis_results")
 
-    # Indexes
+    # Indexes and Constraints
     __table_args__ = (
         Index("idx_results_collection", "collection_id"),
         Index("idx_results_tool", "tool"),
         Index("idx_results_created", "created_at"),
         Index("idx_results_collection_tool_date", "collection_id", "tool", "created_at"),
+        # Storage Optimization Indexes (Issue #92)
+        Index("idx_results_cleanup", "team_id", "status", "created_at"),
+        # Storage Optimization Constraints (Issue #92)
+        # When no_change_copy=True, download_report_from must be set
+        CheckConstraint(
+            "no_change_copy = false OR download_report_from IS NOT NULL",
+            name="ck_analysis_result_no_change_download_not_null"
+        ),
+        # When no_change_copy=True, report_html must be NULL (no storage duplication)
+        CheckConstraint(
+            "no_change_copy = false OR report_html IS NULL",
+            name="ck_analysis_result_no_change_report_html_null"
+        ),
     )
 
     def __repr__(self) -> str:
@@ -149,7 +190,15 @@ class AnalysisResult(Base, GuidMixin):
 
     @property
     def has_report(self) -> bool:
-        """Check if HTML report is available."""
+        """
+        Check if HTML report is available.
+
+        For NO_CHANGE results (no_change_copy=True), this returns True if
+        download_report_from is set, indicating the report can be fetched
+        from the referenced source result.
+        """
+        if self.no_change_copy and self.download_report_from:
+            return True
         return self.report_html is not None and len(self.report_html) > 0
 
     def get_result_summary(self) -> Dict[str, Any]:

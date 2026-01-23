@@ -66,13 +66,13 @@ class Configuration(Base):
             - PANO: "Panorama"
 
     Constraints:
-        - (category, key) must be unique
-        - category must be one of: extensions, cameras, processing_methods
+        - (team_id, category, key) must be unique (team-scoped uniqueness)
+        - category must be one of: extensions, cameras, processing_methods, result_retention
         - value_json must be valid JSON
 
     Indexes:
         - idx_config_category: category
-        - idx_config_category_key: (category, key) unique
+        - uq_config_team_category_key: (team_id, category, key) unique
         - idx_config_source: source
     """
 
@@ -111,7 +111,8 @@ class Configuration(Base):
     # Indexes and constraints
     __table_args__ = (
         Index("idx_config_category", "category"),
-        Index("idx_config_category_key", "category", "key", unique=True),
+        # Team-scoped unique constraint: each team can have its own config keys
+        Index("uq_config_team_category_key", "team_id", "category", "key", unique=True),
         Index("idx_config_source", "source"),
     )
 

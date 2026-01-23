@@ -556,6 +556,32 @@ class RegistrationTokenListResponse(BaseModel):
 # Job Schemas (Phase 5)
 # ============================================================================
 
+class PreviousResultData(BaseModel):
+    """
+    Previous result data for Input State comparison (Issue #92).
+
+    Provided in job claim response when a previous result exists
+    for the same collection+tool combination.
+    """
+
+    guid: str = Field(..., description="Result GUID (res_xxx)")
+    input_state_hash: Optional[str] = Field(
+        None,
+        description="SHA-256 hash of Input State (null for legacy results without hash)"
+    )
+    completed_at: datetime = Field(..., description="When the previous result was created")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "res_01hgw2bbg...",
+                "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb924...",
+                "completed_at": "2026-01-20T10:00:00.000Z"
+            }
+        }
+    }
+
+
 class JobClaimResponse(BaseModel):
     """Response schema for job claim."""
 
@@ -571,6 +597,12 @@ class JobClaimResponse(BaseModel):
     retry_count: int = Field(..., description="Current retry attempt")
     max_retries: int = Field(..., description="Maximum retry attempts")
 
+    # Storage Optimization Fields (Issue #92)
+    previous_result: Optional[PreviousResultData] = Field(
+        None,
+        description="Previous result for comparison (null if no previous result exists)"
+    )
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -583,7 +615,12 @@ class JobClaimResponse(BaseModel):
                 "signing_secret": "base64-encoded-secret",
                 "priority": 0,
                 "retry_count": 0,
-                "max_retries": 3
+                "max_retries": 3,
+                "previous_result": {
+                    "guid": "res_01hgw2bbg...",
+                    "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb924...",
+                    "completed_at": "2026-01-20T10:00:00.000Z"
+                }
             }
         }
     }
@@ -626,6 +663,18 @@ class JobCompleteRequest(BaseModel):
     issues_found: Optional[int] = Field(None, description="Issues detected")
     signature: str = Field(..., description="HMAC-SHA256 signature of results (hex-encoded)")
 
+    # Storage Optimization Fields (Issue #92)
+    input_state_hash: Optional[str] = Field(
+        None,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hash of Input State (64 char hex string)"
+    )
+    input_state_json: Optional[str] = Field(
+        None,
+        description="Full Input State JSON (only sent in DEBUG mode for troubleshooting)"
+    )
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -636,6 +685,43 @@ class JobCompleteRequest(BaseModel):
                 },
                 "files_scanned": 5000,
                 "issues_found": 17,
+                "signature": "abc123def456...",
+                "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+        }
+    }
+
+
+class JobNoChangeRequest(BaseModel):
+    """
+    Request schema for NO_CHANGE job completion (Issue #92).
+
+    Used when the agent detects the Input State hash matches
+    a previous result, indicating no changes to the collection.
+    """
+
+    input_state_hash: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hash of Input State (must match previous_result)"
+    )
+    source_result_guid: str = Field(
+        ...,
+        pattern=r"^res_[0-9a-hjkmnp-tv-z]{26}$",
+        description="GUID of the previous result being referenced (res_xxx)"
+    )
+    signature: str = Field(..., description="HMAC-SHA256 signature of request (hex-encoded)")
+    input_state_json: Optional[str] = Field(
+        None,
+        description="Full Input State JSON (only in DEBUG mode)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "source_result_guid": "res_01hgw2bbg0000000000000001",
                 "signature": "abc123def456..."
             }
         }
@@ -1152,6 +1238,18 @@ class JobCompleteWithUploadRequest(BaseModel):
     files_scanned: Optional[int] = Field(None, description="Total files scanned")
     issues_found: Optional[int] = Field(None, description="Issues detected")
     signature: str = Field(..., description="HMAC-SHA256 signature of results (hex-encoded)")
+
+    # Storage Optimization Fields (Issue #92)
+    input_state_hash: Optional[str] = Field(
+        None,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hash of Input State (64 char hex string)"
+    )
+    input_state_json: Optional[str] = Field(
+        None,
+        description="Full Input State JSON (only sent in DEBUG mode)"
+    )
 
     @model_validator(mode='after')
     def validate_results_source(self) -> 'JobCompleteWithUploadRequest':

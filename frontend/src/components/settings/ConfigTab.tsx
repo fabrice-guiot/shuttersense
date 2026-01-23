@@ -40,6 +40,8 @@ import { useConfig, useConfigStats } from '@/hooks/useConfig'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventStatusesSection } from '@/components/settings/EventStatusesSection'
 import { CollectionTTLSection } from '@/components/settings/CollectionTTLSection'
+import { ResultRetentionSection } from '@/components/settings/ResultRetentionSection'
+import { useRetention } from '@/hooks/useRetention'
 import type {
   ConfigCategory,
   ImportSessionResponse,
@@ -217,6 +219,13 @@ export function ConfigTab() {
     cancelImport,
     exportConfiguration
   } = useConfig()
+
+  // Retention settings (Issue #92: Storage Optimization)
+  const {
+    settings: retentionSettings,
+    loading: retentionLoading,
+    updateSettings: updateRetention
+  } = useRetention()
 
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useConfigStats()
@@ -685,6 +694,11 @@ export function ConfigTab() {
             await updateConfigValue('collection_ttl', key, { value })
             refetchStats()
           }}
+        />
+        <ResultRetentionSection
+          settings={retentionSettings}
+          loading={retentionLoading}
+          onUpdate={updateRetention}
         />
       </div>
 

@@ -12,8 +12,11 @@ Base path: /api/agent/v1
 """
 
 import asyncio
+import logging
 from datetime import datetime
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
@@ -54,6 +57,8 @@ from backend.src.api.agent.schemas import (
     JobProgressRequest,
     JobCompleteWithUploadRequest,
     JobFailRequest,
+    JobNoChangeRequest,  # Storage Optimization (Issue #92)
+    PreviousResultData,   # Storage Optimization (Issue #92)
     JobStatusResponse,
     JobConfigData,
     JobConfigResponse,
@@ -395,6 +400,15 @@ async def claim_job(
         manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
     )
 
+    # Get previous result for Input State comparison (Issue #92)
+    previous_result = None
+    if result.previous_result:
+        previous_result = PreviousResultData(
+            guid=result.previous_result.guid,
+            input_state_hash=result.previous_result.input_state_hash,
+            completed_at=result.previous_result.completed_at,
+        )
+
     return JobClaimResponse(
         guid=job.guid,
         tool=job.tool,
@@ -407,6 +421,7 @@ async def claim_job(
         priority=job.priority,
         retry_count=job.retry_count,
         max_retries=job.max_retries,
+        previous_result=previous_result,
     )
 
 
@@ -488,6 +503,85 @@ async def update_job_progress(
 
 
 @router.post(
+    "/jobs/{job_guid}/no-change",
+    response_model=JobStatusResponse,
+    summary="Complete job with NO_CHANGE status",
+    description="Mark a job as NO_CHANGE when Input State hash matches previous result. "
+                "Issue #92: Storage Optimization for Analysis Results."
+)
+async def complete_job_no_change(
+    job_guid: str,
+    data: JobNoChangeRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Complete a job with NO_CHANGE status.
+
+    Called when the agent detects the Input State hash matches a previous
+    result, indicating no changes to the collection since the last analysis.
+
+    Creates a NO_CHANGE AnalysisResult that:
+    - Copies results_json, files_scanned, issues_found from source result
+    - Sets download_report_from to reference source result's report
+    - Does NOT store report_html (saves storage)
+    - Triggers intermediate copy cleanup
+    """
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+
+    coordinator = JobCoordinatorService(db)
+
+    try:
+        job = coordinator.complete_job_no_change(
+            job_guid=job_guid,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            input_state_hash=data.input_state_hash,
+            source_result_guid=data.source_result_guid,
+            signature=data.signature,
+            input_state_json=data.input_state_json,
+        )
+
+        # Refresh job to get result relationship
+        db.refresh(job)
+
+        # Broadcast updates
+        manager = get_connection_manager()
+
+        # Broadcast pool status update (job completed)
+        pool_status = service.get_pool_status(ctx.team_id)
+        asyncio.create_task(
+            manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+        )
+
+        # Broadcast full job update so frontend updates the card
+        job_response = _db_job_to_response(job)
+        asyncio.create_task(
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+        )
+
+        return JobStatusResponse(
+            guid=job.guid,
+            status=job.status.value,
+            tool=job.tool,
+            progress=None,
+            error_message=None,
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ServiceValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
     "/jobs/{job_guid}/complete",
     response_model=JobStatusResponse,
     summary="Complete job with results",
@@ -518,6 +612,13 @@ async def complete_job(
 
     coordinator = JobCoordinatorService(db)
 
+    # Debug logging for storage optimization (Issue #92)
+    hash_preview = data.input_state_hash[:16] + "..." if data.input_state_hash else "None"
+    logger.info(
+        f"Job completion request for {job_guid}: input_state_hash={hash_preview}, "
+        f"results_upload_id={data.results_upload_id}, report_upload_id={data.report_upload_id}"
+    )
+
     try:
         completion_data = JobCompletionData(
             results=data.results,
@@ -527,6 +628,9 @@ async def complete_job(
             files_scanned=data.files_scanned,
             issues_found=data.issues_found,
             signature=data.signature,
+            # Storage optimization fields (Issue #92)
+            input_state_hash=data.input_state_hash,
+            input_state_json=data.input_state_json,
         )
 
         job = coordinator.complete_job(

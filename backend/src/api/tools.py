@@ -121,6 +121,7 @@ def get_tool_service(
 async def run_tool(
     request: Request,  # Required for rate limiter - must be named 'request'
     tool_request: ToolRunRequest = ...,  # Body parameter renamed to avoid conflict
+    ctx: TenantContext = Depends(get_tenant_context),
     service: ToolService = Depends(get_tool_service),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> JobResponse:
@@ -190,6 +191,7 @@ async def run_tool(
 
         job = service.run_tool(
             tool=tool_request.tool,
+            team_id=ctx.team_id,
             collection_id=collection_id,
             pipeline_id=pipeline_id,
             mode=tool_request.mode
@@ -254,6 +256,7 @@ async def run_tool(
 async def run_all_tools(
     request: Request,  # Required for rate limiter
     collection_guid: str,
+    ctx: TenantContext = Depends(get_tenant_context),
     service: ToolService = Depends(get_tool_service),
     collection_service: CollectionService = Depends(get_collection_service)
 ) -> RunAllToolsResponse:
@@ -302,6 +305,7 @@ async def run_all_tools(
         try:
             job = service.run_tool(
                 tool=tool,
+                team_id=ctx.team_id,
                 collection_id=collection_id
             )
             created_jobs.append(job)

@@ -392,3 +392,151 @@ class TestConfigStats:
         data = response.json()
         assert data["total_items"] > 0
         assert "source_breakdown" in data
+
+
+# ============================================================================
+# GET /api/config/retention Tests (Issue #92)
+# ============================================================================
+
+class TestGetRetentionSettings:
+    """Tests for GET /api/config/retention endpoint."""
+
+    def test_get_retention_settings_returns_defaults(self, test_client):
+        """Test getting retention settings returns defaults when not configured."""
+        response = test_client.get("/api/config/retention")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check all fields are present
+        assert "job_completed_days" in data
+        assert "job_failed_days" in data
+        assert "result_completed_days" in data
+        assert "preserve_per_collection" in data
+
+        # Check default values
+        assert data["job_completed_days"] == 2
+        assert data["job_failed_days"] == 7
+        assert data["result_completed_days"] == 0  # Unlimited
+        assert data["preserve_per_collection"] == 1
+
+    def test_get_retention_settings_after_update(self, test_client):
+        """Test getting retention settings after they've been updated."""
+        # First update some settings
+        update_response = test_client.put(
+            "/api/config/retention",
+            json={"job_completed_days": 30, "preserve_per_collection": 5}
+        )
+        assert update_response.status_code == 200
+
+        # Then verify GET returns updated values
+        response = test_client.get("/api/config/retention")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["job_completed_days"] == 30
+        assert data["preserve_per_collection"] == 5
+        # Others should still be defaults
+        assert data["job_failed_days"] == 7
+        assert data["result_completed_days"] == 0
+
+
+# ============================================================================
+# PUT /api/config/retention Tests (Issue #92)
+# ============================================================================
+
+class TestUpdateRetentionSettings:
+    """Tests for PUT /api/config/retention endpoint."""
+
+    def test_update_single_setting(self, test_client):
+        """Test updating a single retention setting."""
+        response = test_client.put(
+            "/api/config/retention",
+            json={"job_completed_days": 14}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["job_completed_days"] == 14
+        # Other values should be defaults
+        assert data["job_failed_days"] == 7
+
+    def test_update_multiple_settings(self, test_client):
+        """Test updating multiple retention settings at once."""
+        response = test_client.put(
+            "/api/config/retention",
+            json={
+                "job_completed_days": 90,
+                "job_failed_days": 14,
+                "result_completed_days": 365,
+                "preserve_per_collection": 3
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["job_completed_days"] == 90
+        assert data["job_failed_days"] == 14
+        assert data["result_completed_days"] == 365
+        assert data["preserve_per_collection"] == 3
+
+    def test_update_with_unlimited_retention(self, test_client):
+        """Test setting unlimited retention (0 days)."""
+        response = test_client.put(
+            "/api/config/retention",
+            json={"job_completed_days": 0}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["job_completed_days"] == 0
+
+    def test_update_with_invalid_days_value(self, test_client):
+        """Test updating with invalid days value (not in allowed list)."""
+        response = test_client.put(
+            "/api/config/retention",
+            json={"job_completed_days": 15}  # 15 is not a valid option
+        )
+
+        assert response.status_code == 422  # Pydantic validation error
+
+    def test_update_with_invalid_preserve_count(self, test_client):
+        """Test updating with invalid preserve_per_collection value."""
+        response = test_client.put(
+            "/api/config/retention",
+            json={"preserve_per_collection": 4}  # 4 is not a valid option
+        )
+
+        assert response.status_code == 422  # Pydantic validation error
+
+    def test_update_with_empty_body(self, test_client):
+        """Test updating with empty body (no changes)."""
+        response = test_client.put(
+            "/api/config/retention",
+            json={}
+        )
+
+        # Should succeed and return current settings
+        assert response.status_code == 200
+        data = response.json()
+        assert "job_completed_days" in data
+
+    def test_update_preserves_existing_settings(self, test_client):
+        """Test that updating one setting preserves others."""
+        # First update job_completed_days
+        test_client.put(
+            "/api/config/retention",
+            json={"job_completed_days": 30}
+        )
+
+        # Then update job_failed_days only
+        response = test_client.put(
+            "/api/config/retention",
+            json={"job_failed_days": 30}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # job_completed_days should still be 30
+        assert data["job_completed_days"] == 30
+        assert data["job_failed_days"] == 30

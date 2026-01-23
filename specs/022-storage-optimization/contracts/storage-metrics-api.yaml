@@ -1,0 +1,110 @@
+# Storage Metrics API Contract
+# Feature: 022-storage-optimization
+# Date: 2026-01-23
+#
+# API endpoint for storage metrics dashboard (User Story 7)
+
+openapi: 3.0.3
+info:
+  title: Storage Metrics API
+  version: 1.0.0
+  description: API for retrieving storage optimization metrics
+
+paths:
+  /api/analytics/storage:
+    get:
+      summary: Get storage metrics for team
+      description: |
+        Returns cumulative storage metrics and current retention statistics.
+        Includes both persisted cumulative counters and real-time computed values.
+      operationId: getStorageMetrics
+      tags:
+        - Analytics
+      security:
+        - BearerAuth: []
+        - SessionAuth: []
+      responses:
+        '200':
+          description: Storage metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageMetricsResponse'
+        '401':
+          description: Unauthorized - authentication required
+        '403':
+          description: Forbidden - insufficient permissions
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+    SessionAuth:
+      type: apiKey
+      in: cookie
+      name: session
+
+  schemas:
+    StorageMetricsResponse:
+      type: object
+      required:
+        - total_reports_generated
+        - reports_retained_count
+        - reports_retained_json_bytes
+        - reports_retained_html_bytes
+        - completed_jobs_purged
+        - failed_jobs_purged
+        - completed_results_purged_original
+        - completed_results_purged_copy
+        - estimated_bytes_purged
+        - preserved_results_count
+      properties:
+        total_reports_generated:
+          type: integer
+          format: int64
+          description: Cumulative count of all job completions (COMPLETED, NO_CHANGE, FAILED)
+          example: 15420
+        reports_retained_count:
+          type: integer
+          description: Current count of retained result records
+          example: 1250
+        reports_retained_json_bytes:
+          type: integer
+          format: int64
+          description: Current total size of results_json across all retained results (bytes)
+          example: 52428800
+        reports_retained_html_bytes:
+          type: integer
+          format: int64
+          description: Current total size of report_html across all retained results (bytes)
+          example: 125829120
+        completed_jobs_purged:
+          type: integer
+          format: int64
+          description: Cumulative count of completed job records deleted by cleanup
+          example: 8500
+        failed_jobs_purged:
+          type: integer
+          format: int64
+          description: Cumulative count of failed job records deleted by cleanup
+          example: 320
+        completed_results_purged_original:
+          type: integer
+          format: int64
+          description: Cumulative count of original results purged (no_change_copy=false)
+          example: 2100
+        completed_results_purged_copy:
+          type: integer
+          format: int64
+          description: Cumulative count of copy results purged (no_change_copy=true)
+          example: 11500
+        estimated_bytes_purged:
+          type: integer
+          format: int64
+          description: Cumulative estimated bytes freed from database (JSON + HTML sizes)
+          example: 536870912
+        preserved_results_count:
+          type: integer
+          description: Count of results protected by preserve_per_collection setting
+          example: 45

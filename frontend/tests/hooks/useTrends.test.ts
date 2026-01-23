@@ -254,12 +254,13 @@ describe('useTrendSummary', () => {
   })
 
   it('should include collection_id when provided', async () => {
-    const { result } = renderHook(() => useTrendSummary({ autoFetch: true, collectionId: 1 }))
+    const { result } = renderHook(() => useTrendSummary({ autoFetch: true, collectionGuid: 'col_01hgw2bbg00000000000000001' }))
 
     await waitFor(() => {
       expect(result.current.summary).not.toBe(null)
     }, { timeout: 2000 })
 
+    // The API returns collection_id (internal ID) when a collection_guid is provided
     expect(result.current.summary?.collection_id).toBe(1)
   })
 

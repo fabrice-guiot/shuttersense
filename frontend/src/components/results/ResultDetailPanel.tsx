@@ -13,7 +13,8 @@ import {
   FileText,
   Camera,
   FolderOpen,
-  AlertTriangle
+  AlertTriangle,
+  Equal
 } from 'lucide-react'
 import {
   Dialog,
@@ -68,6 +69,12 @@ const STATUS_CONFIG: Record<
     color: 'text-gray-500',
     label: 'Cancelled',
     variant: 'secondary'
+  },
+  NO_CHANGE: {
+    icon: Equal,
+    color: 'text-blue-500',
+    label: 'No Change',
+    variant: 'default'
   }
 }
 
@@ -638,6 +645,27 @@ export function ResultDetailPanel({
             )}
           </div>
 
+          {/* NO_CHANGE indicator - show when result references a previous result (Issue #92) */}
+          {result.no_change_copy && (
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-3 rounded text-sm">
+              <div className="flex items-center gap-2 font-medium mb-1 text-blue-700 dark:text-blue-400">
+                <Equal className="h-4 w-4" />
+                Collection Unchanged
+              </div>
+              <div className="text-blue-600 dark:text-blue-300">
+                This result references a previous analysis because the collection has not changed.
+                {result.download_report_from && (
+                  <span className="block mt-1 text-xs">
+                    Report source: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">{result.download_report_from}</code>
+                    {result.source_result_exists === false && (
+                      <span className="text-yellow-600 dark:text-yellow-400 ml-2">(source deleted)</span>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Metadata */}
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2">
@@ -669,7 +697,7 @@ export function ResultDetailPanel({
           )}
 
           {/* Tool-specific results */}
-          {result.status === 'COMPLETED' && renderToolResults()}
+          {(result.status === 'COMPLETED' || result.status === 'NO_CHANGE') && renderToolResults()}
 
           {/* Download report button */}
           {result.has_report && onDownloadReport && (

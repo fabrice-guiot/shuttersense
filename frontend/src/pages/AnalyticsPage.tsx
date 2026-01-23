@@ -8,7 +8,7 @@
  * - Runs: Job execution monitoring and tool launching
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import {
   Play,
@@ -19,7 +19,8 @@ import {
   CheckCircle,
   XCircle,
   CalendarClock,
-  AlertTriangle
+  AlertTriangle,
+  HardDrive
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -51,6 +52,7 @@ import {
   PipelineFilter,
   TrendSummaryCard
 } from '@/components/trends'
+import { ReportStorageTab, type ReportStorageTabRef } from '@/components/analytics/ReportStorageTab'
 import { getDateRangeFromPreset } from '@/contracts/api/trends-api'
 import type { ToolRunRequest, Job } from '@/contracts/api/tools-api'
 import type { AnalysisResultSummary, ResultListQueryParams } from '@/contracts/api/results-api'
@@ -77,6 +79,9 @@ export default function AnalyticsPage() {
     urlResultId || null
   )
   const [detailOpen, setDetailOpen] = useState(!!urlResultId)
+
+  // Ref for storage tab
+  const storageTabRef = useRef<ReportStorageTabRef>(null)
 
   // Trends filter state
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<number[]>([])
@@ -168,7 +173,10 @@ export default function AnalyticsPage() {
     error: summaryError,
     refetch: refetchSummary
   } = useTrendSummary({
-    collectionId: selectedCollectionIds.length === 1 ? selectedCollectionIds[0] : undefined
+    // selectedCollectionIds actually contains GUIDs (strings) cast as numbers
+    collectionGuid: selectedCollectionIds.length === 1
+      ? (selectedCollectionIds[0] as unknown as string)
+      : undefined
   })
 
   // Header stats context
@@ -288,6 +296,9 @@ export default function AnalyticsPage() {
         break
       case 'runs':
         fetchJobsForSubTab()
+        break
+      case 'storage':
+        storageTabRef.current?.refetch()
         break
     }
   }
@@ -515,6 +526,10 @@ export default function AnalyticsPage() {
             <Clock className="h-4 w-4" />
             Runs
           </TabsTrigger>
+          <TabsTrigger value="storage" className="flex items-center gap-2">
+            <HardDrive className="h-4 w-4" />
+            Storage
+          </TabsTrigger>
           </TabsList>
           <div className="flex gap-2">
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
@@ -698,6 +713,11 @@ export default function AnalyticsPage() {
               )}
             </TabsContent>
           </Tabs>
+        </TabsContent>
+
+        {/* Storage Tab */}
+        <TabsContent value="storage">
+          <ReportStorageTab ref={storageTabRef} />
         </TabsContent>
       </Tabs>
 

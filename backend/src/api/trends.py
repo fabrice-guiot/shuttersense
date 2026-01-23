@@ -270,10 +270,9 @@ def get_display_graph_trends(
 )
 def get_trend_summary(
     ctx: TenantContext = Depends(require_auth),
-    collection_id: Optional[int] = Query(
+    collection_guid: Optional[str] = Query(
         None,
-        gt=0,
-        description="Filter by collection ID"
+        description="Filter by collection GUID (col_xxx format)"
     ),
     service: TrendService = Depends(get_trend_service)
 ) -> TrendSummaryResponse:
@@ -284,9 +283,12 @@ def get_trend_summary(
     and consistency metrics.
 
     Args:
-        collection_id: Optional collection ID filter
+        collection_guid: Optional collection GUID filter (col_xxx format)
 
     Returns:
         Trend summary with direction indicators and latest timestamps
     """
-    return service.get_trend_summary(team_id=ctx.team_id, collection_id=collection_id)
+    return service.get_trend_summary(
+        team_id=ctx.team_id,
+        collection_guid=collection_guid
+    )

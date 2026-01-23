@@ -1,0 +1,266 @@
+# OpenAPI 3.1.0 Specification: Results API Extensions
+# Feature: 022-storage-optimization
+# Date: 2026-01-22
+
+openapi: 3.1.0
+info:
+  title: Results API - Storage Optimization Extensions
+  version: 1.0.0
+  description: |
+    Extensions to the existing Results API for storage optimization.
+    Adds Input State tracking fields and handles report reference following.
+
+paths:
+  /api/results:
+    get:
+      summary: List results (extended response)
+      description: |
+        List analysis results with pagination and filtering.
+        Response now includes `input_state_hash` and `no_change_copy` fields.
+      operationId: listResults
+      tags:
+        - Results
+      security:
+        - session: []
+        - apiToken: []
+      parameters:
+        - name: collection_guid
+          in: query
+          schema:
+            type: string
+        - name: tool
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: ['COMPLETED', 'FAILED', 'CANCELLED', 'NO_CHANGE']
+        - name: no_change_copy
+          in: query
+          schema:
+            type: boolean
+          description: Filter by no_change_copy flag (true/false)
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Paginated results list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListResponse'
+
+  /api/results/{guid}:
+    get:
+      summary: Get result details (extended response)
+      description: |
+        Get full details for a specific result.
+        Response now includes Input State tracking fields.
+      operationId: getResult
+      tags:
+        - Results
+      security:
+        - session: []
+        - apiToken: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^res_[a-z0-9]{26}$'
+      responses:
+        '200':
+          description: Result details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResultResponse'
+        '404':
+          description: Result not found
+
+  /api/results/{guid}/report:
+    get:
+      summary: Download result report (with reference following)
+      description: |
+        Download the HTML report for a result. For NO_CHANGE results, the
+        server follows the `download_report_from` reference to retrieve
+        the report from the source result.
+      operationId: downloadReport
+      tags:
+        - Results
+      security:
+        - session: []
+        - apiToken: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^res_[a-z0-9]{26}$'
+      responses:
+        '200':
+          description: HTML report content
+          content:
+            text/html:
+              schema:
+                type: string
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment filename
+        '404':
+          description: |
+            Result not found OR source result has been deleted.
+            For deleted sources, error message indicates the report
+            is no longer available due to retention cleanup.
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: session
+    apiToken:
+      type: http
+      scheme: bearer
+
+  schemas:
+    AnalysisResultSummary:
+      type: object
+      required:
+        - guid
+        - tool
+        - status
+        - started_at
+        - completed_at
+        - duration_seconds
+        - has_report
+        - no_change_copy
+      properties:
+        guid:
+          type: string
+          pattern: '^res_[a-z0-9]{26}$'
+          example: 'res_01hgw2bbg0000000000000003'
+        collection_guid:
+          type: string
+          nullable: true
+          pattern: '^col_[a-z0-9]{26}$'
+        collection_name:
+          type: string
+          nullable: true
+        tool:
+          type: string
+          example: 'photostats'
+        pipeline_guid:
+          type: string
+          nullable: true
+          pattern: '^pip_[a-z0-9]{26}$'
+        pipeline_version:
+          type: integer
+          nullable: true
+        pipeline_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: ['COMPLETED', 'FAILED', 'CANCELLED', 'NO_CHANGE']
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+        files_scanned:
+          type: integer
+          nullable: true
+        issues_found:
+          type: integer
+          nullable: true
+        has_report:
+          type: boolean
+          description: True if report is available (directly or via reference)
+        no_change_copy:
+          type: boolean
+          description: True if this result references a previous result
+        input_state_hash:
+          type: string
+          nullable: true
+          minLength: 64
+          maxLength: 64
+          description: SHA-256 hash of Input State (null for legacy results)
+
+    AnalysisResultResponse:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/AnalysisResultSummary'
+        - type: object
+          properties:
+            error_message:
+              type: string
+              nullable: true
+            results:
+              type: object
+              description: Tool-specific results
+            created_at:
+              type: string
+              format: date-time
+            download_report_from:
+              type: string
+              nullable: true
+              pattern: '^res_[a-z0-9]{26}$'
+              description: |
+                GUID of source result containing the actual report.
+                Present only for NO_CHANGE results.
+            source_result_exists:
+              type: boolean
+              nullable: true
+              description: |
+                For NO_CHANGE results, indicates if the source result
+                still exists. False if source was deleted by retention.
+
+    ResultListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisResultSummary'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
