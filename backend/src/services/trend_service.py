@@ -388,7 +388,7 @@ class TrendService:
             AnalysisResult.tool == "pipeline_validation",
             AnalysisResult.team_id == team_id,
             AnalysisResult.collection_id.is_(None),  # Display-graph only
-            AnalysisResult.status == ResultStatus.COMPLETED,
+            AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
             AnalysisResult.completed_at < datetime.combine(before_date, datetime.min.time()),
             or_(*pair_conditions)
         ]
