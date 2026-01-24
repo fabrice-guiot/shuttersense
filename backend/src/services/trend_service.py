@@ -304,10 +304,19 @@ class TrendService:
                 }
             elif tool == "pipeline_validation":
                 counts = results_json.get("consistency_counts", {})
+                by_termination = results_json.get("by_termination", {})
+                black_box = by_termination.get("Black Box Archive", {})
+                browsable = by_termination.get("Browsable Archive", {})
                 seed_values[result.collection_id] = {
                     'consistent_count': counts.get("CONSISTENT", 0),
                     'partial_count': counts.get("PARTIAL", 0),
                     'inconsistent_count': counts.get("INCONSISTENT", 0),
+                    'black_box_consistent': black_box.get("CONSISTENT", 0),
+                    'black_box_partial': black_box.get("PARTIAL", 0),
+                    'black_box_inconsistent': black_box.get("INCONSISTENT", 0),
+                    'browsable_consistent': browsable.get("CONSISTENT", 0),
+                    'browsable_partial': browsable.get("PARTIAL", 0),
+                    'browsable_inconsistent': browsable.get("INCONSISTENT", 0),
                     'no_change_copy': result.no_change_copy or False
                 }
 
