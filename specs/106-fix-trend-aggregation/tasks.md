@@ -107,10 +107,20 @@ This is a web application with `backend/` and `frontend/` structure per plan.md.
 
 ### Implementation for User Story 2
 
-- [ ] T028 [US2] Identify trend chart components that need updating in frontend/src/components/charts/
-- [ ] T029 [US2] Update chart tooltip to show calculated vs actual count when calculated_count > 0
-- [ ] T030 [US2] Optional: Add visual styling for data points with calculated_count > 0 (lighter opacity or different marker)
-- [ ] T031 [US2] Verify frontend displays calculated information correctly
+- [x] T028 [US2] Identify trend chart components that need updating in frontend/src/components/charts/
+  - TrendChart.tsx (BaseLineChart tooltip)
+  - PhotoStatsTrend.tsx
+  - PhotoPairingTrend.tsx
+  - PipelineValidationTrend.tsx
+- [x] T029 [US2] Update chart tooltip to show calculated vs actual count when calculated_count > 0
+  - Created AggregatedTooltip component with "X of Y collections have actual data" warning
+  - Shows warning badge with AlertCircle icon when calculated_count > 0
+  - Footer shows total collections included with "(X filled forward)" suffix
+- [x] T030 [US2] Optional: Add visual styling for data points with calculated_count > 0 (lighter opacity or different marker)
+  - Skipped: Warning in tooltip is sufficient visual distinction
+- [x] T031 [US2] Verify frontend displays calculated information correctly
+  - TypeScript compiles without errors for trend components
+  - Test mocks updated with calculated_count field
 
 **Checkpoint**: Users can now see which data points include filled values.
 

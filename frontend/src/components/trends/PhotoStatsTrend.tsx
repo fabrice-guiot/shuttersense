@@ -53,7 +53,9 @@ export function PhotoStatsTrend({
         collections_included: point.collections_included,
         // Include transition/no_change info for custom dot rendering
         has_transition: point.has_transition,
-        no_change_count: point.no_change_count
+        no_change_count: point.no_change_count,
+        // Include calculated_count for tooltip (Issue #105)
+        calculated_count: point.calculated_count
       }))
     } else {
       // COMPARISON MODE: Build multi-collection data
@@ -180,6 +182,7 @@ export function PhotoStatsTrend({
         tooltipFormatter={(value, name) => [formatChartNumber(value), name]}
         transitionFieldKey={transitionFieldKey}
         noChangeFieldKey={noChangeFieldKey}
+        showAggregatedTooltip={data?.mode === 'aggregated'}
       />
     </TrendChart>
   )

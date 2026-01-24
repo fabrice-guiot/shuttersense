@@ -1590,6 +1590,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
         {
           date: '2025-01-02T00:00:00Z',
@@ -1598,6 +1599,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
         {
           date: '2025-01-03T00:00:00Z',
@@ -1606,6 +1608,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
       ],
       collections: [],
@@ -1666,6 +1669,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
         {
           date: '2025-01-02T00:00:00Z',
@@ -1674,6 +1678,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
         {
           date: '2025-01-03T00:00:00Z',
@@ -1682,6 +1687,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
       ],
       collections: [],
@@ -1756,6 +1762,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
         {
           date: '2025-01-02T00:00:00Z',
@@ -1769,6 +1776,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
         {
           date: '2025-01-03T00:00:00Z',
@@ -1782,6 +1790,7 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
           collections_included: 2,
           no_change_count: 0,
           has_transition: false,
+          calculated_count: 0,
         },
       ],
       collections: [],

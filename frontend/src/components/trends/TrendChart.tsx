@@ -13,10 +13,12 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend
+  Legend,
+  TooltipProps
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { formatDate, formatDateTime } from '@/utils/dateFormat'
+import { AlertCircle } from 'lucide-react'
 
 // Chart color palette using CSS variables for theme consistency
 export const CHART_COLORS = [
@@ -129,6 +131,97 @@ export function formatChartPercent(value: number): string {
 }
 
 // ============================================================================
+// Custom Tooltip with Calculated Count Support (Issue #105)
+// ============================================================================
+
+interface AggregatedTooltipPayload {
+  calculated_count?: number
+  collections_included?: number
+  [key: string]: unknown
+}
+
+interface CustomTooltipProps extends TooltipProps<number, string> {
+  valueFormatter?: (value: number, name: string) => [string, string]
+}
+
+/**
+ * Custom tooltip that shows "X of Y collections have actual data" when some
+ * values are calculated (filled forward) rather than actual results.
+ *
+ * This implements Issue #105 visual distinction of calculated vs actual data.
+ */
+export function AggregatedTooltip({
+  active,
+  payload,
+  label,
+  valueFormatter = (v, n) => [v.toString(), n]
+}: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) {
+    return null
+  }
+
+  // Get calculated_count and collections_included from the first payload entry
+  const dataPoint = payload[0]?.payload as AggregatedTooltipPayload | undefined
+  const calculatedCount = dataPoint?.calculated_count ?? 0
+  const collectionsIncluded = dataPoint?.collections_included ?? 0
+  const actualCount = collectionsIncluded - calculatedCount
+
+  const showCalculatedWarning = calculatedCount > 0 && collectionsIncluded > 0
+
+  return (
+    <div
+      className="rounded-md border bg-popover p-3 text-sm shadow-md"
+      style={{
+        backgroundColor: 'hsl(var(--popover))',
+        border: '1px solid hsl(var(--border))',
+        borderRadius: 'var(--radius)'
+      }}
+    >
+      {/* Date header */}
+      <p className="mb-2 font-medium text-foreground">{formatDateTime(label)}</p>
+
+      {/* Calculated data warning */}
+      {showCalculatedWarning && (
+        <div className="mb-2 flex items-center gap-1.5 rounded bg-warning/10 px-2 py-1 text-xs text-warning">
+          <AlertCircle className="h-3 w-3" />
+          <span>
+            {actualCount} of {collectionsIncluded} collections have actual data
+          </span>
+        </div>
+      )}
+
+      {/* Value entries */}
+      <div className="space-y-1">
+        {payload.map((entry, index) => {
+          if (entry.value === null || entry.value === undefined) return null
+          const [formattedValue, formattedName] = valueFormatter(entry.value as number, entry.name || '')
+          return (
+            <div key={index} className="flex items-center justify-between gap-4">
+              <span className="flex items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-muted-foreground">{formattedName}</span>
+              </span>
+              <span className="font-medium">{formattedValue}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Collections included footer */}
+      {collectionsIncluded > 0 && (
+        <p className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
+          {collectionsIncluded} collection{collectionsIncluded !== 1 ? 's' : ''} included
+          {calculatedCount > 0 && ` (${calculatedCount} filled forward)`}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
 // Reusable Chart Components
 // ============================================================================
 
@@ -148,6 +241,8 @@ interface BaseLineChartProps {
   transitionFieldKey?: string
   /** Field name indicating if the point is a NO_CHANGE copy (renders as hollow circle) */
   noChangeFieldKey?: string
+  /** Use aggregated tooltip with calculated_count support (Issue #105) */
+  showAggregatedTooltip?: boolean
 }
 
 /**
@@ -224,7 +319,8 @@ export function BaseLineChart({
   yAxisFormatter,
   tooltipFormatter,
   transitionFieldKey,
-  noChangeFieldKey
+  noChangeFieldKey,
+  showAggregatedTooltip = false
 }: BaseLineChartProps) {
   // Create a custom dot component that has access to the field keys
   const createCustomDot = (color: string) => {
@@ -267,15 +363,21 @@ export function BaseLineChart({
           className="text-xs"
           tick={{ fill: 'hsl(var(--muted-foreground))' }}
         />
-        <Tooltip
-          formatter={tooltipFormatter}
-          labelFormatter={(label: string) => formatDateTime(label)}
-          contentStyle={{
-            backgroundColor: 'hsl(var(--popover))',
-            border: '1px solid hsl(var(--border))',
-            borderRadius: 'var(--radius)'
-          }}
-        />
+        {showAggregatedTooltip ? (
+          <Tooltip
+            content={<AggregatedTooltip valueFormatter={tooltipFormatter} />}
+          />
+        ) : (
+          <Tooltip
+            formatter={tooltipFormatter}
+            labelFormatter={(label: string) => formatDateTime(label)}
+            contentStyle={{
+              backgroundColor: 'hsl(var(--popover))',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: 'var(--radius)'
+            }}
+          />
+        )}
         <Legend />
         {lines.map((line) => (
           <Line

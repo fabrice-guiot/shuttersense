@@ -25,7 +25,7 @@ import {
   Tooltip,
   Legend
 } from 'recharts'
-import { TrendChart, formatChartDate, formatChartPercent } from './TrendChart'
+import { TrendChart, formatChartDate, formatChartPercent, AggregatedTooltip } from './TrendChart'
 import type { PipelineValidationTrendResponse } from '@/contracts/api/trends-api'
 import { formatDateTime } from '@/utils/dateFormat'
 
@@ -113,7 +113,9 @@ export function PipelineValidationTrend({
         collections_included: point.collections_included,
         // Include transition/no_change info for custom dot rendering
         has_transition: point.has_transition,
-        no_change_count: point.no_change_count
+        no_change_count: point.no_change_count,
+        // Include calculated_count for tooltip (Issue #105)
+        calculated_count: point.calculated_count
       }))
     } else {
       // COMPARISON MODE
@@ -191,13 +193,11 @@ export function PipelineValidationTrend({
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
             />
             <Tooltip
-              formatter={(value: number, name: string) => [formatChartPercent(value), name]}
-              labelFormatter={(label: string) => formatDateTime(label)}
-              contentStyle={{
-                backgroundColor: 'hsl(var(--popover))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: 'var(--radius)'
-              }}
+              content={
+                <AggregatedTooltip
+                  valueFormatter={(value, name) => [formatChartPercent(value), name]}
+                />
+              }
             />
             <Legend />
             <Line
