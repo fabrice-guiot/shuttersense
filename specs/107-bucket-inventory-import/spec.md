@@ -155,7 +155,7 @@ As an administrator, I want to schedule automatic inventory imports so that Coll
 
 **Why this priority**: Scheduling is an efficiency improvement over manual imports but is not required for core functionality. Users can still manually trigger imports.
 
-**Independent Test**: Configure a weekly import schedule on a connector, complete an import, verify the next scheduled job is automatically created with the correct scheduled_at timestamp.
+**Independent Test**: Configure a weekly import schedule on a connector, complete an import, verify the next scheduled job is automatically created with `scheduled_at` set to the next weekly occurrence (same weekday at 00:00 UTC), not based on completion time.
 
 **Acceptance Scenarios**:
 
@@ -163,7 +163,7 @@ As an administrator, I want to schedule automatic inventory imports so that Coll
 
 2. **Given** I select a daily or weekly schedule, **When** I save the configuration, **Then** the system creates the first scheduled Job in the JobQueue with a future scheduled_at timestamp.
 
-3. **Given** a scheduled import job completes, **When** the job finishes all phases, **Then** the system automatically creates the next scheduled Job based on the configured frequency.
+3. **Given** a scheduled import job completes, **When** the job finishes all phases, **Then** the system automatically creates the next scheduled Job with `scheduled_at` set to the next fixed schedule occurrence (e.g., next daily at 00:00 UTC, or next weekly on the same weekday at 00:00 UTC), regardless of when the previous job completed.
 
 4. **Given** scheduled imports are configured, **When** I view the connector, **Then** I see both the last import timestamp and the next scheduled import time.
 
@@ -246,6 +246,8 @@ As a system optimization, when a Collection has inventory-sourced FileInfo store
 - **Very deep folder hierarchies**: What happens when folders are nested 10+ levels deep? The system should handle arbitrary nesting depth, though UI may need scrolling or truncation for display.
 
 - **Concurrent imports**: What happens when a user triggers an import while another is running? The system should prevent concurrent imports for the same Connector with an appropriate message.
+
+- **Scheduled job completes past next occurrence**: What happens when a daily scheduled job takes longer than 24 hours to complete? The system should schedule the next job for the next future occurrence (skipping any missed occurrences), not a timestamp in the past.
 
 - **Agent unavailable**: What happens when no agent is available to process the import job? The job remains queued and the UI indicates no agents are available (per existing agent architecture).
 
@@ -366,7 +368,7 @@ As a system optimization, when a Collection has inventory-sourced FileInfo store
 - **FR-061**: Schedule options MUST include: manual only, daily, weekly.
 - **FR-062**: When schedule is enabled, system MUST create the first scheduled Job with a future `scheduled_at` timestamp.
 - **FR-063**: Upon job completion (all phases), system MUST automatically create the next scheduled Job.
-- **FR-064**: Next job's `scheduled_at` MUST be calculated as: completion time + configured interval.
+- **FR-064**: Next job's `scheduled_at` MUST be calculated as the next fixed schedule occurrence (e.g., next daily at 00:00 UTC, or next weekly on the same weekday at 00:00 UTC), NOT as completion time + interval. This prevents schedule drift over time.
 - **FR-065**: System MUST prevent concurrent imports for the same Connector.
 - **FR-066**: Disabling the schedule MUST cancel any pending scheduled jobs.
 - **FR-067**: "Import Now" action MUST create an immediate job independent of any configured schedule.

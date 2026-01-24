@@ -186,9 +186,7 @@ export interface FolderSelectionState {
 // API Request/Response Types
 // ============================================================================
 
-export interface InventoryConfigUpdateRequest {
-  config: InventoryConfig
-}
+export type InventoryConfigUpdateRequest = InventoryConfig
 
 export interface InventoryImportTriggerResponse {
   job_guid: string
