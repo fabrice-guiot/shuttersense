@@ -234,7 +234,9 @@ class TrendService:
         tool: str,
         team_id: int,
         collection_ids: List[int],
-        before_date: date
+        before_date: date,
+        pipeline_id: Optional[int] = None,
+        pipeline_version: Optional[int] = None
     ) -> Dict[int, Dict[str, Any]]:
         """
         Get the latest result for each collection before the window starts.
@@ -247,6 +249,8 @@ class TrendService:
             team_id: Team ID for tenant isolation
             collection_ids: List of collection IDs to seed
             before_date: Date before which to find the latest result
+            pipeline_id: Optional pipeline ID filter (for pipeline_validation)
+            pipeline_version: Optional pipeline version filter (for pipeline_validation)
 
         Returns:
             Dict mapping collection_id -> extracted metric values
@@ -259,17 +263,40 @@ class TrendService:
         from sqlalchemy import distinct
         from sqlalchemy.orm import aliased
 
-        # Find the max completed_at per collection before the window
-        subquery = self.db.query(
-            AnalysisResult.collection_id,
-            func.max(AnalysisResult.completed_at).label('max_completed')
-        ).filter(
+        # Build base filters for the subquery
+        subquery_filters = [
             AnalysisResult.tool == tool,
             AnalysisResult.team_id == team_id,
             AnalysisResult.collection_id.in_(collection_ids),
             AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
             AnalysisResult.completed_at < datetime.combine(before_date, datetime.min.time())
+        ]
+
+        # Add pipeline filtering for pipeline_validation tool
+        if tool == "pipeline_validation":
+            if pipeline_id is not None:
+                subquery_filters.append(AnalysisResult.pipeline_id == pipeline_id)
+            if pipeline_version is not None:
+                subquery_filters.append(AnalysisResult.pipeline_version == pipeline_version)
+
+        # Find the max completed_at per collection before the window
+        subquery = self.db.query(
+            AnalysisResult.collection_id,
+            func.max(AnalysisResult.completed_at).label('max_completed')
+        ).filter(
+            *subquery_filters
         ).group_by(AnalysisResult.collection_id).subquery()
+
+        # Build filters for the main query (same as subquery for consistency)
+        main_filters = [
+            AnalysisResult.tool == tool,
+            AnalysisResult.team_id == team_id
+        ]
+        if tool == "pipeline_validation":
+            if pipeline_id is not None:
+                main_filters.append(AnalysisResult.pipeline_id == pipeline_id)
+            if pipeline_version is not None:
+                main_filters.append(AnalysisResult.pipeline_version == pipeline_version)
 
         # Join to get the actual result rows
         results = self.db.query(AnalysisResult).join(
@@ -279,8 +306,7 @@ class TrendService:
                 AnalysisResult.completed_at == subquery.c.max_completed
             )
         ).filter(
-            AnalysisResult.tool == tool,
-            AnalysisResult.team_id == team_id
+            *main_filters
         ).all()
 
         seed_values: Dict[int, Dict[str, Any]] = {}
@@ -327,7 +353,8 @@ class TrendService:
         self,
         team_id: int,
         pipeline_version_pairs: List[Tuple[int, int]],
-        before_date: date
+        before_date: date,
+        pipeline_ids: Optional[List[int]] = None
     ) -> Dict[Tuple[int, int], Dict[str, Any]]:
         """
         Get the latest display-graph result for each pipeline+version before the window starts.
@@ -339,6 +366,7 @@ class TrendService:
             team_id: Team ID for tenant isolation
             pipeline_version_pairs: List of (pipeline_id, version) tuples to seed
             before_date: Date before which to find the latest result
+            pipeline_ids: Optional list of pipeline IDs to filter by
 
         Returns:
             Dict mapping (pipeline_id, version) -> extracted metric values
@@ -355,14 +383,23 @@ class TrendService:
             for pid, ver in pipeline_version_pairs
         ]
 
-        # Query all results before the window for these pipeline+version pairs
-        results = self.db.query(AnalysisResult).filter(
+        # Build base filters
+        base_filters = [
             AnalysisResult.tool == "pipeline_validation",
             AnalysisResult.team_id == team_id,
             AnalysisResult.collection_id.is_(None),  # Display-graph only
             AnalysisResult.status == ResultStatus.COMPLETED,
             AnalysisResult.completed_at < datetime.combine(before_date, datetime.min.time()),
             or_(*pair_conditions)
+        ]
+
+        # Add pipeline_ids filter if specified
+        if pipeline_ids:
+            base_filters.append(AnalysisResult.pipeline_id.in_(pipeline_ids))
+
+        # Query all results before the window for these pipeline+version pairs
+        results = self.db.query(AnalysisResult).filter(
+            *base_filters
         ).order_by(AnalysisResult.completed_at).all()
 
         # Keep only the latest result per pipeline+version
@@ -523,15 +560,22 @@ class TrendService:
             # Include collections with results in window AND collections with results before window
             window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
 
-            # Find ALL collection IDs that have any photostats results for this team
-            # (either in window or as potential seeds)
-            all_relevant_collection_ids = self.db.query(
-                AnalysisResult.collection_id
-            ).filter(
+            # Find collection IDs that have any photostats results for this team
+            # If collection_ids filter was provided, only consider those collections
+            relevant_collection_filters = [
                 AnalysisResult.tool == "photostats",
                 AnalysisResult.team_id == team_id,
                 AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
                 AnalysisResult.collection_id.isnot(None)
+            ]
+            # Apply collection filter if provided (aggregated mode with >5 collections)
+            if parsed_ids:
+                relevant_collection_filters.append(AnalysisResult.collection_id.in_(parsed_ids))
+
+            all_relevant_collection_ids = self.db.query(
+                AnalysisResult.collection_id
+            ).filter(
+                *relevant_collection_filters
             ).distinct().all()
             all_relevant_collection_ids = {r[0] for r in all_relevant_collection_ids}
 
@@ -778,14 +822,22 @@ class TrendService:
             # Step 3: Get seed values (latest result before window for each collection)
             window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
 
-            # Find ALL collection IDs that have any photo_pairing results for this team
-            all_relevant_collection_ids = self.db.query(
-                AnalysisResult.collection_id
-            ).filter(
+            # Find collection IDs that have any photo_pairing results for this team
+            # If collection_ids filter was provided, only consider those collections
+            relevant_collection_filters = [
                 AnalysisResult.tool == "photo_pairing",
                 AnalysisResult.team_id == team_id,
                 AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
                 AnalysisResult.collection_id.isnot(None)
+            ]
+            # Apply collection filter if provided (aggregated mode with >5 collections)
+            if parsed_ids:
+                relevant_collection_filters.append(AnalysisResult.collection_id.in_(parsed_ids))
+
+            all_relevant_collection_ids = self.db.query(
+                AnalysisResult.collection_id
+            ).filter(
+                *relevant_collection_filters
             ).distinct().all()
             all_relevant_collection_ids = {r[0] for r in all_relevant_collection_ids}
 
@@ -1063,14 +1115,26 @@ class TrendService:
             # Step 3: Get seed values (latest result before window for each collection)
             window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
 
-            # Find ALL collection IDs that have any pipeline_validation results for this team
-            all_relevant_collection_ids = self.db.query(
-                AnalysisResult.collection_id
-            ).filter(
+            # Find collection IDs that have any pipeline_validation results for this team
+            # Filter by pipeline_id/pipeline_version if specified, and by collection_ids if provided
+            relevant_collection_filters = [
                 AnalysisResult.tool == "pipeline_validation",
                 AnalysisResult.team_id == team_id,
                 AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
                 AnalysisResult.collection_id.isnot(None)
+            ]
+            # Apply collection filter if provided (aggregated mode with >5 collections)
+            if parsed_ids:
+                relevant_collection_filters.append(AnalysisResult.collection_id.in_(parsed_ids))
+            if pipeline_id is not None:
+                relevant_collection_filters.append(AnalysisResult.pipeline_id == pipeline_id)
+            if pipeline_version is not None:
+                relevant_collection_filters.append(AnalysisResult.pipeline_version == pipeline_version)
+
+            all_relevant_collection_ids = self.db.query(
+                AnalysisResult.collection_id
+            ).filter(
+                *relevant_collection_filters
             ).distinct().all()
             all_relevant_collection_ids = {r[0] for r in all_relevant_collection_ids}
 
@@ -1078,7 +1142,9 @@ class TrendService:
                 tool="pipeline_validation",
                 team_id=team_id,
                 collection_ids=list(all_relevant_collection_ids),
-                before_date=window_start
+                before_date=window_start,
+                pipeline_id=pipeline_id,
+                pipeline_version=pipeline_version
             )
 
             # Step 4: Fill-forward aggregation
@@ -1137,8 +1203,7 @@ class TrendService:
                             daily_agg['has_completed'] = True
                         last_known[collection_id] = metrics
                     elif collection_id in last_known:
-                        # Fill forward from last known value
-                        # Note: seeds from _get_seed_values don't have by_termination data
+                        # Fill forward from last known value (includes by_termination data)
                         metrics = last_known[collection_id]
                         daily_agg['consistent'] += metrics['consistent_count']
                         daily_agg['partial'] += metrics['partial_count']
@@ -1329,22 +1394,30 @@ class TrendService:
         window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
 
         # Find ALL pipeline+version pairs that have any display-graph results for this team
-        all_relevant_pairs_query = self.db.query(
-            AnalysisResult.pipeline_id,
-            AnalysisResult.pipeline_version
-        ).filter(
+        # Filter by parsed_ids if specified
+        relevant_pairs_filters = [
             AnalysisResult.tool == "pipeline_validation",
             AnalysisResult.team_id == team_id,
             AnalysisResult.collection_id.is_(None),
             AnalysisResult.status == ResultStatus.COMPLETED,
             AnalysisResult.pipeline_id.isnot(None)
+        ]
+        if parsed_ids:
+            relevant_pairs_filters.append(AnalysisResult.pipeline_id.in_(parsed_ids))
+
+        all_relevant_pairs_query = self.db.query(
+            AnalysisResult.pipeline_id,
+            AnalysisResult.pipeline_version
+        ).filter(
+            *relevant_pairs_filters
         ).distinct().all()
         all_relevant_pairs = [(r[0], r[1]) for r in all_relevant_pairs_query]
 
         seed_values = self._get_display_graph_seed_values(
             team_id=team_id,
             pipeline_version_pairs=all_relevant_pairs,
-            before_date=window_start
+            before_date=window_start,
+            pipeline_ids=parsed_ids
         )
 
         # Step 4: Fill-forward aggregation by pipeline+version
