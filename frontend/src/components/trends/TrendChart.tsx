@@ -164,6 +164,7 @@ interface TransitionDotProps {
   cy: number
   stroke: string
   payload: Record<string, unknown>
+  value?: number | null
   transitionFieldKey?: string
   noChangeFieldKey?: string
 }
@@ -173,9 +174,15 @@ function TransitionDot({
   cy,
   stroke,
   payload,
+  value,
   transitionFieldKey,
   noChangeFieldKey
 }: TransitionDotProps) {
+  // Don't render dot for null/undefined values (days without data)
+  if (value === null || value === undefined) {
+    return null
+  }
+
   const isTransition = transitionFieldKey && payload[transitionFieldKey] === true
   const isNoChange = noChangeFieldKey && payload[noChangeFieldKey] === true
 
@@ -224,14 +231,25 @@ export function BaseLineChart({
     if (!transitionFieldKey && !noChangeFieldKey) {
       return { r: 3 }
     }
-    return (props: { cx: number; cy: number; payload: Record<string, unknown> }) => (
-      <TransitionDot
-        {...props}
-        stroke={color}
-        transitionFieldKey={transitionFieldKey}
-        noChangeFieldKey={noChangeFieldKey}
-      />
-    )
+    return (props: {
+      key?: string
+      cx: number
+      cy: number
+      value?: number | null
+      payload: Record<string, unknown>
+    }) => {
+      // Destructure key to pass it directly to JSX, not via spread
+      const { key, ...rest } = props
+      return (
+        <TransitionDot
+          key={key}
+          {...rest}
+          stroke={color}
+          transitionFieldKey={transitionFieldKey}
+          noChangeFieldKey={noChangeFieldKey}
+        />
+      )
+    }
   }
 
   return (

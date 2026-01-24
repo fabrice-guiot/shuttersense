@@ -20,10 +20,10 @@ This is a web application with `backend/` and `frontend/` structure per plan.md.
 
 **Purpose**: Verify environment and understand existing code
 
-- [ ] T001 Verify feature branch 106-fix-trend-aggregation is checked out
-- [ ] T002 [P] Review existing trend_service.py structure in backend/src/services/trend_service.py
-- [ ] T003 [P] Review existing trends.py schemas in backend/src/schemas/trends.py
-- [ ] T004 [P] Review existing trend tests in backend/tests/unit/test_trend_service.py
+- [x] T001 Verify feature branch 106-fix-trend-aggregation is checked out
+- [x] T002 [P] Review existing trend_service.py structure in backend/src/services/trend_service.py
+- [x] T003 [P] Review existing trends.py schemas in backend/src/schemas/trends.py
+- [x] T004 [P] Review existing trend tests in backend/tests/unit/test_trend_service.py
 
 **Checkpoint**: Environment ready, existing code understood
 
@@ -35,12 +35,12 @@ This is a web application with `backend/` and `frontend/` structure per plan.md.
 
 **⚠️ CRITICAL**: Schema changes must be complete before service layer changes
 
-- [ ] T005 Add `calculated_count` field to PhotoStatsAggregatedPoint in backend/src/schemas/trends.py
-- [ ] T006 Add `calculated_count` field to PhotoPairingAggregatedPoint in backend/src/schemas/trends.py
-- [ ] T007 Add `calculated_count` field to PipelineValidationAggregatedPoint in backend/src/schemas/trends.py
-- [ ] T008 Add `calculated_count` field to PhotoStatsAggregatedPoint in frontend/src/contracts/api/trends-api.ts
-- [ ] T009 Add `calculated_count` field to PhotoPairingAggregatedPoint in frontend/src/contracts/api/trends-api.ts
-- [ ] T010 Add `calculated_count` field to PipelineValidationAggregatedPoint in frontend/src/contracts/api/trends-api.ts
+- [x] T005 Add `calculated_count` field to PhotoStatsAggregatedPoint in backend/src/schemas/trends.py
+- [x] T006 Add `calculated_count` field to PhotoPairingAggregatedPoint in backend/src/schemas/trends.py
+- [x] T007 Add `calculated_count` field to PipelineValidationAggregatedPoint in backend/src/schemas/trends.py
+- [x] T008 Add `calculated_count` field to PhotoStatsAggregatedPoint in frontend/src/contracts/api/trends-api.ts
+- [x] T009 Add `calculated_count` field to PhotoPairingAggregatedPoint in frontend/src/contracts/api/trends-api.ts
+- [x] T010 Add `calculated_count` field to PipelineValidationAggregatedPoint in frontend/src/contracts/api/trends-api.ts
 
 **Checkpoint**: Schema foundation ready - service layer can now be updated
 
@@ -56,18 +56,18 @@ This is a web application with `backend/` and `frontend/` structure per plan.md.
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T011 [P] [US1] Add unit test for _get_seed_values helper in backend/tests/unit/test_trend_service.py
-- [ ] T012 [P] [US1] Add unit test for _fill_forward_aggregation helper in backend/tests/unit/test_trend_service.py
-- [ ] T013 [P] [US1] Add unit test for fill-forward with gaps scenario in backend/tests/unit/test_trend_service.py
-- [ ] T014 [P] [US1] Add unit test for new collection mid-window scenario in backend/tests/unit/test_trend_service.py
-- [ ] T015 [P] [US1] Add integration test for Issue #105 exact scenario in backend/tests/integration/test_trend_aggregation.py
+- [x] T011 [P] [US1] Add unit test for _get_seed_values helper in backend/tests/unit/test_trend_service.py
+- [x] T012 [P] [US1] Add unit test for _fill_forward_aggregation helper in backend/tests/unit/test_trend_service.py
+- [x] T013 [P] [US1] Add unit test for fill-forward with gaps scenario in backend/tests/unit/test_trend_service.py
+- [x] T014 [P] [US1] Add unit test for new collection mid-window scenario in backend/tests/unit/test_trend_service.py
+- [x] T015 [P] [US1] Add integration test for Issue #105 exact scenario in backend/tests/integration/test_trend_aggregation.py
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement _get_seed_values helper method in backend/src/services/trend_service.py
-- [ ] T017 [US1] Implement _fill_forward_aggregation helper method in backend/src/services/trend_service.py
-- [ ] T018 [US1] Update get_photostats_trends aggregated mode to use fill-forward in backend/src/services/trend_service.py
-- [ ] T019 [US1] Verify tests pass for PhotoStats fill-forward implementation
+- [x] T016 [US1] Implement _get_seed_values helper method in backend/src/services/trend_service.py
+- [x] T017 [US1] Implement _fill_forward_aggregation helper method in backend/src/services/trend_service.py
+- [x] T018 [US1] Update get_photostats_trends aggregated mode to use fill-forward in backend/src/services/trend_service.py
+- [x] T019 [US1] Verify tests pass for PhotoStats fill-forward implementation
 
 **Checkpoint**: PhotoStats aggregation is now mathematically correct. US1 can be tested independently.
 
@@ -83,17 +83,17 @@ This is a web application with `backend/` and `frontend/` structure per plan.md.
 
 ### Tests for User Story 3
 
-- [ ] T020 [P] [US3] Add unit test for Photo Pairing fill-forward in backend/tests/unit/test_trend_service.py
-- [ ] T021 [P] [US3] Add unit test for Pipeline Validation fill-forward in backend/tests/unit/test_trend_service.py
-- [ ] T022 [P] [US3] Add unit test for Trend Summary fill-forward in backend/tests/unit/test_trend_service.py
-- [ ] T023 [P] [US3] Add regression test for comparison mode (no fill-forward) in backend/tests/unit/test_trend_service.py
+- [x] T020 [P] [US3] Add unit test for Photo Pairing fill-forward in backend/tests/unit/test_trend_service.py
+- [x] T021 [P] [US3] Add unit test for Pipeline Validation fill-forward in backend/tests/unit/test_trend_service.py (includes collection mode AND display-graph mode by pipeline+version)
+- [x] T022 [P] [US3] Add unit test for Trend Summary fill-forward in backend/tests/unit/test_trend_service.py
+- [x] T023 [P] [US3] Add regression test for comparison mode (no fill-forward) in backend/tests/unit/test_trend_service.py
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Update get_photo_pairing_trends aggregated mode to use fill-forward in backend/src/services/trend_service.py
-- [ ] T025 [US3] Update get_pipeline_validation_trends aggregated mode to use fill-forward in backend/src/services/trend_service.py
-- [ ] T026 [US3] Update get_trend_summary to use fill-forward for both orphaned and consistency trends in backend/src/services/trend_service.py
-- [ ] T027 [US3] Verify all tool tests pass
+- [x] T024 [US3] Update get_photo_pairing_trends aggregated mode to use fill-forward in backend/src/services/trend_service.py
+- [x] T025 [US3] Update get_pipeline_validation_trends aggregated mode to use fill-forward in backend/src/services/trend_service.py (includes display-graph mode with fill-forward by pipeline+version)
+- [x] T026 [US3] Update get_trend_summary to use fill-forward for both orphaned and consistency trends in backend/src/services/trend_service.py (already implemented via PhotoStats aggregation logic)
+- [x] T027 [US3] Verify all tool tests pass (37 unit tests + 12 integration tests pass)
 
 **Checkpoint**: All tools now have correct aggregation. Core bug fix complete.
 

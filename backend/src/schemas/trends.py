@@ -99,6 +99,7 @@ class PhotoStatsAggregatedPoint(BaseModel):
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
     no_change_count: int = Field(0, ge=0, description="Count of NO_CHANGE results included for this date (Issue #92)")
     has_transition: bool = Field(False, description="Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period)")
+    calculated_count: int = Field(0, ge=0, description="Number of collections with filled (calculated) values for this date (Issue #105). 0 means all collections have actual results.")
 
 
 class PhotoStatsTrendResponse(BaseModel):
@@ -186,6 +187,7 @@ class PhotoPairingAggregatedPoint(BaseModel):
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
     no_change_count: int = Field(0, ge=0, description="Count of NO_CHANGE results included for this date (Issue #92)")
     has_transition: bool = Field(False, description="Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period)")
+    calculated_count: int = Field(0, ge=0, description="Number of collections with filled (calculated) values for this date (Issue #105). 0 means all collections have actual results.")
 
 
 class PhotoPairingTrendResponse(BaseModel):
@@ -285,6 +287,7 @@ class PipelineValidationAggregatedPoint(BaseModel):
     collections_included: int = Field(0, ge=0, description="Number of collections with data for this date")
     no_change_count: int = Field(0, ge=0, description="Count of NO_CHANGE results included for this date (Issue #92)")
     has_transition: bool = Field(False, description="Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period)")
+    calculated_count: int = Field(0, ge=0, description="Number of collections with filled (calculated) values for this date (Issue #105). 0 means all collections have actual results.")
 
 
 class PipelineValidationTrendResponse(BaseModel):

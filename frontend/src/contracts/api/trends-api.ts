@@ -52,6 +52,8 @@ export interface PhotoStatsAggregatedPoint {
   no_change_count: number
   /** Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period) */
   has_transition: boolean
+  /** Number of collections with filled (calculated) values for this date (Issue #105). 0 means all collections have actual results. */
+  calculated_count: number
 }
 
 /**
@@ -108,6 +110,8 @@ export interface PhotoPairingAggregatedPoint {
   no_change_count: number
   /** Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period) */
   has_transition: boolean
+  /** Number of collections with filled (calculated) values for this date (Issue #105). 0 means all collections have actual results. */
+  calculated_count: number
 }
 
 /**
@@ -192,6 +196,8 @@ export interface PipelineValidationAggregatedPoint {
   no_change_count: number
   /** Whether this date has an Input State transition (no_change_copy=false after no_change_copy=true period) */
   has_transition: boolean
+  /** Number of collections with filled (calculated) values for this date (Issue #105). 0 means all collections have actual results. */
+  calculated_count: number
 }
 
 /**

@@ -229,6 +229,151 @@ class TrendService:
 
         return query
 
+    def _get_seed_values(
+        self,
+        tool: str,
+        team_id: int,
+        collection_ids: List[int],
+        before_date: date
+    ) -> Dict[int, Dict[str, Any]]:
+        """
+        Get the latest result for each collection before the window starts.
+
+        This provides the "seed state" for fill-forward logic (Issue #105).
+        Collections without any results before the window will not be in the returned dict.
+
+        Args:
+            tool: Tool type (photostats, photo_pairing, pipeline_validation)
+            team_id: Team ID for tenant isolation
+            collection_ids: List of collection IDs to seed
+            before_date: Date before which to find the latest result
+
+        Returns:
+            Dict mapping collection_id -> extracted metric values
+        """
+        if not collection_ids:
+            return {}
+
+        # Query the latest result per collection before the window
+        # Using subquery to get max completed_at per collection
+        from sqlalchemy import distinct
+        from sqlalchemy.orm import aliased
+
+        # Find the max completed_at per collection before the window
+        subquery = self.db.query(
+            AnalysisResult.collection_id,
+            func.max(AnalysisResult.completed_at).label('max_completed')
+        ).filter(
+            AnalysisResult.tool == tool,
+            AnalysisResult.team_id == team_id,
+            AnalysisResult.collection_id.in_(collection_ids),
+            AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
+            AnalysisResult.completed_at < datetime.combine(before_date, datetime.min.time())
+        ).group_by(AnalysisResult.collection_id).subquery()
+
+        # Join to get the actual result rows
+        results = self.db.query(AnalysisResult).join(
+            subquery,
+            and_(
+                AnalysisResult.collection_id == subquery.c.collection_id,
+                AnalysisResult.completed_at == subquery.c.max_completed
+            )
+        ).filter(
+            AnalysisResult.tool == tool,
+            AnalysisResult.team_id == team_id
+        ).all()
+
+        seed_values: Dict[int, Dict[str, Any]] = {}
+
+        for result in results:
+            results_json = result.results_json or {}
+
+            if tool == "photostats":
+                orphaned_images = results_json.get("orphaned_images", [])
+                orphaned_xmp = results_json.get("orphaned_xmp", [])
+                seed_values[result.collection_id] = {
+                    'orphaned_images': len(orphaned_images) if isinstance(orphaned_images, list) else orphaned_images,
+                    'orphaned_xmp': len(orphaned_xmp) if isinstance(orphaned_xmp, list) else orphaned_xmp,
+                    'no_change_copy': result.no_change_copy or False
+                }
+            elif tool == "photo_pairing":
+                seed_values[result.collection_id] = {
+                    'group_count': results_json.get("group_count", 0),
+                    'image_count': results_json.get("image_count", 0),
+                    'no_change_copy': result.no_change_copy or False
+                }
+            elif tool == "pipeline_validation":
+                counts = results_json.get("consistency_counts", {})
+                seed_values[result.collection_id] = {
+                    'consistent_count': counts.get("CONSISTENT", 0),
+                    'partial_count': counts.get("PARTIAL", 0),
+                    'inconsistent_count': counts.get("INCONSISTENT", 0),
+                    'no_change_copy': result.no_change_copy or False
+                }
+
+        logger.debug(f"Seed values for {tool}: {len(seed_values)} collections seeded before {before_date}")
+        return seed_values
+
+    def _get_display_graph_seed_values(
+        self,
+        team_id: int,
+        pipeline_version_pairs: List[Tuple[int, int]],
+        before_date: date
+    ) -> Dict[Tuple[int, int], Dict[str, Any]]:
+        """
+        Get the latest display-graph result for each pipeline+version before the window starts.
+
+        This provides the "seed state" for fill-forward logic in display-graph mode (Issue #105).
+        Unlike collection-based seeds, this keys by (pipeline_id, version).
+
+        Args:
+            team_id: Team ID for tenant isolation
+            pipeline_version_pairs: List of (pipeline_id, version) tuples to seed
+            before_date: Date before which to find the latest result
+
+        Returns:
+            Dict mapping (pipeline_id, version) -> extracted metric values
+        """
+        if not pipeline_version_pairs:
+            return {}
+
+        # Build filter for all pipeline+version pairs
+        pair_conditions = [
+            and_(
+                AnalysisResult.pipeline_id == pid,
+                AnalysisResult.pipeline_version == ver
+            )
+            for pid, ver in pipeline_version_pairs
+        ]
+
+        # Query all results before the window for these pipeline+version pairs
+        results = self.db.query(AnalysisResult).filter(
+            AnalysisResult.tool == "pipeline_validation",
+            AnalysisResult.team_id == team_id,
+            AnalysisResult.collection_id.is_(None),  # Display-graph only
+            AnalysisResult.status == ResultStatus.COMPLETED,
+            AnalysisResult.completed_at < datetime.combine(before_date, datetime.min.time()),
+            or_(*pair_conditions)
+        ).order_by(AnalysisResult.completed_at).all()
+
+        # Keep only the latest result per pipeline+version
+        seed_values: Dict[Tuple[int, int], Dict[str, Any]] = {}
+        for result in results:
+            key = (result.pipeline_id, result.pipeline_version)
+            results_json = result.results_json or {}
+            by_term = results_json.get('non_truncated_by_termination', {})
+
+            # Later results overwrite earlier (we ordered by completed_at ASC)
+            seed_values[key] = {
+                'total_paths': results_json.get('total_paths', 0),
+                'valid_paths': results_json.get('non_truncated_paths', 0),
+                'black_box_archive_paths': by_term.get('Black Box Archive', 0),
+                'browsable_archive_paths': by_term.get('Browsable Archive', 0)
+            }
+
+        logger.debug(f"Display-graph seed values: {len(seed_values)} pipeline+version pairs seeded before {before_date}")
+        return seed_values
+
     def get_photostats_trends(
         self,
         team_id: int,
@@ -331,8 +476,11 @@ class TrendService:
             return PhotoStatsTrendResponse(mode="comparison", collections=collection_trends)
 
         else:
-            # AGGREGATED MODE: Sum across all collections per day
-            aggregated_by_date: Dict[str, Dict[str, Any]] = {}
+            # AGGREGATED MODE: Sum across all collections per day with fill-forward (Issue #105)
+
+            # Step 1: Extract per-collection metrics for each day from deduplicated results
+            per_collection_by_date: Dict[str, Dict[int, Dict[str, Any]]] = {}
+            all_collection_ids_in_window: set = set()
 
             for (date_key, collection_id), result in deduplicated.items():
                 results_json = result.results_json or {}
@@ -342,67 +490,128 @@ class TrendService:
                 orphaned_images_count = len(orphaned_images) if isinstance(orphaned_images, list) else orphaned_images
                 orphaned_xmp_count = len(orphaned_xmp) if isinstance(orphaned_xmp, list) else orphaned_xmp
 
-                if date_key not in aggregated_by_date:
-                    aggregated_by_date[date_key] = {
-                        'orphaned_images': 0,
-                        'orphaned_metadata': 0,
-                        'collections_included': 0,
-                        'no_change_count': 0,
-                        'has_completed': False  # Track if any COMPLETED result exists
-                    }
+                if date_key not in per_collection_by_date:
+                    per_collection_by_date[date_key] = {}
 
-                agg = aggregated_by_date[date_key]
-                agg['orphaned_images'] += orphaned_images_count
-                agg['orphaned_metadata'] += orphaned_xmp_count
-                agg['collections_included'] += 1
-                if result.no_change_copy:
-                    agg['no_change_count'] += 1
-                else:
-                    agg['has_completed'] = True
+                per_collection_by_date[date_key][collection_id] = {
+                    'orphaned_images': orphaned_images_count,
+                    'orphaned_xmp': orphaned_xmp_count,
+                    'no_change_copy': result.no_change_copy or False
+                }
+                all_collection_ids_in_window.add(collection_id)
 
-            # Build complete date range (including days without data)
+            # Step 2: Build complete date range
             all_dates = _generate_complete_date_range(
-                list(aggregated_by_date.keys()),
+                list(per_collection_by_date.keys()),
                 from_date=from_date,
                 to_date=to_date
             )
+
+            if not all_dates:
+                return PhotoStatsTrendResponse(mode="aggregated", data_points=[])
+
+            # Step 3: Get seed values (latest result before window for each collection)
+            # Include collections with results in window AND collections with results before window
+            window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
+
+            # Find ALL collection IDs that have any photostats results for this team
+            # (either in window or as potential seeds)
+            all_relevant_collection_ids = self.db.query(
+                AnalysisResult.collection_id
+            ).filter(
+                AnalysisResult.tool == "photostats",
+                AnalysisResult.team_id == team_id,
+                AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
+                AnalysisResult.collection_id.isnot(None)
+            ).distinct().all()
+            all_relevant_collection_ids = {r[0] for r in all_relevant_collection_ids}
+
+            seed_values = self._get_seed_values(
+                tool="photostats",
+                team_id=team_id,
+                collection_ids=list(all_relevant_collection_ids),
+                before_date=window_start
+            )
+
+            # Step 4: Fill-forward aggregation
+            # Track last known value for each collection (start with seeds)
+            last_known: Dict[int, Dict[str, Any]] = dict(seed_values)
+
             # Only apply limit when no date range is specified ("all time" mode)
-            # When a date range is specified, show the full range
             if from_date is None and to_date is None:
                 sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
             else:
                 sorted_dates = all_dates
-            data_points = []
 
-            # Track previous day's state for transition detection
+            data_points = []
             prev_was_all_no_change = False
 
             for date_key in sorted_dates:
-                if date_key in aggregated_by_date:
-                    agg = aggregated_by_date[date_key]
-                    # Transition: previous day was all NO_CHANGE and today has a COMPLETED result
-                    has_transition = prev_was_all_no_change and agg['has_completed']
+                daily_agg = {
+                    'orphaned_images': 0,
+                    'orphaned_metadata': 0,
+                    'collections_included': 0,
+                    'no_change_count': 0,
+                    'calculated_count': 0,
+                    'has_completed': False
+                }
+
+                # Get collections that have results for this day
+                day_results = per_collection_by_date.get(date_key, {})
+
+                # Determine which collections to include:
+                # - Collections that have actual results on this day
+                # - Collections that have been seen before (in window or as seed)
+                collections_to_include = set(day_results.keys()) | set(last_known.keys())
+
+                for collection_id in collections_to_include:
+                    if collection_id in day_results:
+                        # Actual result for this day
+                        metrics = day_results[collection_id]
+                        daily_agg['orphaned_images'] += metrics['orphaned_images']
+                        daily_agg['orphaned_metadata'] += metrics['orphaned_xmp']
+                        daily_agg['collections_included'] += 1
+                        if metrics['no_change_copy']:
+                            daily_agg['no_change_count'] += 1
+                        else:
+                            daily_agg['has_completed'] = True
+                        # Update last known
+                        last_known[collection_id] = metrics
+                    elif collection_id in last_known:
+                        # Fill forward from last known value
+                        metrics = last_known[collection_id]
+                        daily_agg['orphaned_images'] += metrics['orphaned_images']
+                        daily_agg['orphaned_metadata'] += metrics['orphaned_xmp']
+                        daily_agg['collections_included'] += 1
+                        daily_agg['calculated_count'] += 1
+                        # NO_CHANGE status carries forward
+                        if metrics.get('no_change_copy', False):
+                            daily_agg['no_change_count'] += 1
+
+                # Build data point
+                if daily_agg['collections_included'] > 0:
+                    has_transition = prev_was_all_no_change and daily_agg['has_completed']
                     data_points.append(PhotoStatsAggregatedPoint(
                         date=datetime.strptime(date_key, '%Y-%m-%d').date(),
-                        orphaned_images=agg['orphaned_images'],
-                        orphaned_metadata=agg['orphaned_metadata'],
-                        collections_included=agg['collections_included'],
-                        no_change_count=agg['no_change_count'],
-                        has_transition=has_transition
+                        orphaned_images=daily_agg['orphaned_images'],
+                        orphaned_metadata=daily_agg['orphaned_metadata'],
+                        collections_included=daily_agg['collections_included'],
+                        no_change_count=daily_agg['no_change_count'],
+                        has_transition=has_transition,
+                        calculated_count=daily_agg['calculated_count']
                     ))
-                    # Update previous state: all NO_CHANGE if no completed results
-                    prev_was_all_no_change = not agg['has_completed'] and agg['no_change_count'] > 0
+                    prev_was_all_no_change = not daily_agg['has_completed'] and daily_agg['no_change_count'] > 0
                 else:
-                    # No data for this date - append with None values
+                    # No data for this date (no results and no seeds)
                     data_points.append(PhotoStatsAggregatedPoint(
                         date=datetime.strptime(date_key, '%Y-%m-%d').date(),
                         orphaned_images=None,
                         orphaned_metadata=None,
                         collections_included=0,
                         no_change_count=0,
-                        has_transition=False
+                        has_transition=False,
+                        calculated_count=0
                     ))
-                    # No data doesn't change previous state
 
             return PhotoStatsTrendResponse(mode="aggregated", data_points=data_points)
 
@@ -520,69 +729,126 @@ class TrendService:
             return PhotoPairingTrendResponse(mode="comparison", collections=collection_trends)
 
         else:
-            # AGGREGATED MODE: Sum group_count and image_count across all collections per day
-            aggregated_by_date: Dict[str, Dict[str, Any]] = {}
+            # AGGREGATED MODE: Sum across all collections per day with fill-forward (Issue #105)
+
+            # Step 1: Extract per-collection metrics for each day from deduplicated results
+            per_collection_by_date: Dict[str, Dict[int, Dict[str, Any]]] = {}
+            all_collection_ids_in_window: set = set()
 
             for (date_key, collection_id), result in deduplicated.items():
                 results_json = result.results_json or {}
 
-                if date_key not in aggregated_by_date:
-                    aggregated_by_date[date_key] = {
-                        'group_count': 0,
-                        'image_count': 0,
-                        'collections_included': 0,
-                        'no_change_count': 0,
-                        'has_completed': False
-                    }
+                if date_key not in per_collection_by_date:
+                    per_collection_by_date[date_key] = {}
 
-                agg = aggregated_by_date[date_key]
-                agg['group_count'] += results_json.get("group_count", 0)
-                agg['image_count'] += results_json.get("image_count", 0)
-                agg['collections_included'] += 1
-                if result.no_change_copy:
-                    agg['no_change_count'] += 1
-                else:
-                    agg['has_completed'] = True
+                per_collection_by_date[date_key][collection_id] = {
+                    'group_count': results_json.get("group_count", 0),
+                    'image_count': results_json.get("image_count", 0),
+                    'no_change_copy': result.no_change_copy or False
+                }
+                all_collection_ids_in_window.add(collection_id)
 
-            # Build complete date range (including days without data)
+            # Step 2: Build complete date range
             all_dates = _generate_complete_date_range(
-                list(aggregated_by_date.keys()),
+                list(per_collection_by_date.keys()),
                 from_date=from_date,
                 to_date=to_date
             )
+
+            if not all_dates:
+                return PhotoPairingTrendResponse(mode="aggregated", data_points=[])
+
+            # Step 3: Get seed values (latest result before window for each collection)
+            window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
+
+            # Find ALL collection IDs that have any photo_pairing results for this team
+            all_relevant_collection_ids = self.db.query(
+                AnalysisResult.collection_id
+            ).filter(
+                AnalysisResult.tool == "photo_pairing",
+                AnalysisResult.team_id == team_id,
+                AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
+                AnalysisResult.collection_id.isnot(None)
+            ).distinct().all()
+            all_relevant_collection_ids = {r[0] for r in all_relevant_collection_ids}
+
+            seed_values = self._get_seed_values(
+                tool="photo_pairing",
+                team_id=team_id,
+                collection_ids=list(all_relevant_collection_ids),
+                before_date=window_start
+            )
+
+            # Step 4: Fill-forward aggregation
+            last_known: Dict[int, Dict[str, Any]] = dict(seed_values)
+
             # Only apply limit when no date range is specified ("all time" mode)
-            # When a date range is specified, show the full range
             if from_date is None and to_date is None:
                 sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
             else:
                 sorted_dates = all_dates
-            data_points = []
 
-            # Track previous day's state for transition detection
+            data_points = []
             prev_was_all_no_change = False
 
             for date_key in sorted_dates:
-                if date_key in aggregated_by_date:
-                    agg = aggregated_by_date[date_key]
-                    has_transition = prev_was_all_no_change and agg['has_completed']
+                daily_agg = {
+                    'group_count': 0,
+                    'image_count': 0,
+                    'collections_included': 0,
+                    'no_change_count': 0,
+                    'calculated_count': 0,
+                    'has_completed': False
+                }
+
+                day_results = per_collection_by_date.get(date_key, {})
+                collections_to_include = set(day_results.keys()) | set(last_known.keys())
+
+                for collection_id in collections_to_include:
+                    if collection_id in day_results:
+                        # Actual result for this day
+                        metrics = day_results[collection_id]
+                        daily_agg['group_count'] += metrics['group_count']
+                        daily_agg['image_count'] += metrics['image_count']
+                        daily_agg['collections_included'] += 1
+                        if metrics['no_change_copy']:
+                            daily_agg['no_change_count'] += 1
+                        else:
+                            daily_agg['has_completed'] = True
+                        last_known[collection_id] = metrics
+                    elif collection_id in last_known:
+                        # Fill forward from last known value
+                        metrics = last_known[collection_id]
+                        daily_agg['group_count'] += metrics['group_count']
+                        daily_agg['image_count'] += metrics['image_count']
+                        daily_agg['collections_included'] += 1
+                        daily_agg['calculated_count'] += 1
+                        if metrics.get('no_change_copy', False):
+                            daily_agg['no_change_count'] += 1
+
+                # Build data point
+                if daily_agg['collections_included'] > 0:
+                    has_transition = prev_was_all_no_change and daily_agg['has_completed']
                     data_points.append(PhotoPairingAggregatedPoint(
                         date=datetime.strptime(date_key, '%Y-%m-%d').date(),
-                        group_count=agg['group_count'],
-                        image_count=agg['image_count'],
-                        collections_included=agg['collections_included'],
-                        no_change_count=agg['no_change_count'],
-                        has_transition=has_transition
+                        group_count=daily_agg['group_count'],
+                        image_count=daily_agg['image_count'],
+                        collections_included=daily_agg['collections_included'],
+                        no_change_count=daily_agg['no_change_count'],
+                        has_transition=has_transition,
+                        calculated_count=daily_agg['calculated_count']
                     ))
-                    prev_was_all_no_change = not agg['has_completed'] and agg['no_change_count'] > 0
+                    prev_was_all_no_change = not daily_agg['has_completed'] and daily_agg['no_change_count'] > 0
                 else:
-                    # No data for this date - append with None values
+                    # No data for this date (no results and no seeds)
                     data_points.append(PhotoPairingAggregatedPoint(
                         date=datetime.strptime(date_key, '%Y-%m-%d').date(),
                         group_count=None,
                         image_count=None,
                         collections_included=0,
                         no_change_count=0,
-                        has_transition=False
+                        has_transition=False,
+                        calculated_count=0
                     ))
 
             return PhotoPairingTrendResponse(mode="aggregated", data_points=data_points)
@@ -726,96 +992,165 @@ class TrendService:
             return PipelineValidationTrendResponse(mode="comparison", collections=collection_trends)
 
         else:
-            # AGGREGATED MODE: Sum counts across collections, recalculate percentages
-            aggregated_by_date: Dict[str, Dict[str, Any]] = {}
+            # AGGREGATED MODE: Sum counts across collections with fill-forward (Issue #105)
+
+            # Step 1: Extract per-collection metrics for each day from deduplicated results
+            per_collection_by_date: Dict[str, Dict[int, Dict[str, Any]]] = {}
+            all_collection_ids_in_window: set = set()
 
             for (date_key, (collection_id, _, _)), result in deduplicated.items():
                 results_json = result.results_json or {}
-
-                if date_key not in aggregated_by_date:
-                    aggregated_by_date[date_key] = {
-                        # Overall counts
-                        'consistent': 0,
-                        'partial': 0,
-                        'inconsistent': 0,
-                        # Per-termination counts
-                        'black_box_consistent': 0,
-                        'black_box_total': 0,
-                        'browsable_consistent': 0,
-                        'browsable_total': 0,
-                        'collections_included': 0,
-                        'no_change_count': 0,
-                        'has_completed': False
-                    }
-
-                agg = aggregated_by_date[date_key]
-
-                # Overall consistency counts
                 consistency_counts = results_json.get("consistency_counts", {})
-                agg['consistent'] += consistency_counts.get("CONSISTENT", 0)
-                agg['partial'] += consistency_counts.get("PARTIAL", 0)
-                agg['inconsistent'] += consistency_counts.get("INCONSISTENT", 0)
-
-                # Per-termination counts (from by_termination field)
                 by_termination = results_json.get("by_termination", {})
 
-                # Black Box Archive
+                # Extract all metrics we need to fill-forward
                 black_box = by_termination.get("Black Box Archive", {})
-                bb_consistent = black_box.get("CONSISTENT", 0)
-                bb_partial = black_box.get("PARTIAL", 0)
-                bb_inconsistent = black_box.get("INCONSISTENT", 0)
-                agg['black_box_consistent'] += bb_consistent
-                agg['black_box_total'] += bb_consistent + bb_partial + bb_inconsistent
-
-                # Browsable Archive
                 browsable = by_termination.get("Browsable Archive", {})
-                br_consistent = browsable.get("CONSISTENT", 0)
-                br_partial = browsable.get("PARTIAL", 0)
-                br_inconsistent = browsable.get("INCONSISTENT", 0)
-                agg['browsable_consistent'] += br_consistent
-                agg['browsable_total'] += br_consistent + br_partial + br_inconsistent
 
-                agg['collections_included'] += 1
-                if result.no_change_copy:
-                    agg['no_change_count'] += 1
-                else:
-                    agg['has_completed'] = True
+                if date_key not in per_collection_by_date:
+                    per_collection_by_date[date_key] = {}
 
-            # Build complete date range (including days without data)
+                # Use same key names as _get_seed_values for consistent fill-forward
+                per_collection_by_date[date_key][collection_id] = {
+                    'consistent_count': consistency_counts.get("CONSISTENT", 0),
+                    'partial_count': consistency_counts.get("PARTIAL", 0),
+                    'inconsistent_count': consistency_counts.get("INCONSISTENT", 0),
+                    'black_box_consistent': black_box.get("CONSISTENT", 0),
+                    'black_box_partial': black_box.get("PARTIAL", 0),
+                    'black_box_inconsistent': black_box.get("INCONSISTENT", 0),
+                    'browsable_consistent': browsable.get("CONSISTENT", 0),
+                    'browsable_partial': browsable.get("PARTIAL", 0),
+                    'browsable_inconsistent': browsable.get("INCONSISTENT", 0),
+                    'no_change_copy': result.no_change_copy or False
+                }
+                all_collection_ids_in_window.add(collection_id)
+
+            # Step 2: Build complete date range
             all_dates = _generate_complete_date_range(
-                list(aggregated_by_date.keys()),
+                list(per_collection_by_date.keys()),
                 from_date=from_date,
                 to_date=to_date
             )
+
+            if not all_dates:
+                return PipelineValidationTrendResponse(mode="aggregated", data_points=[])
+
+            # Step 3: Get seed values (latest result before window for each collection)
+            window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
+
+            # Find ALL collection IDs that have any pipeline_validation results for this team
+            all_relevant_collection_ids = self.db.query(
+                AnalysisResult.collection_id
+            ).filter(
+                AnalysisResult.tool == "pipeline_validation",
+                AnalysisResult.team_id == team_id,
+                AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE]),
+                AnalysisResult.collection_id.isnot(None)
+            ).distinct().all()
+            all_relevant_collection_ids = {r[0] for r in all_relevant_collection_ids}
+
+            seed_values = self._get_seed_values(
+                tool="pipeline_validation",
+                team_id=team_id,
+                collection_ids=list(all_relevant_collection_ids),
+                before_date=window_start
+            )
+
+            # Step 4: Fill-forward aggregation
+            last_known: Dict[int, Dict[str, Any]] = dict(seed_values)
+
             # Only apply limit when no date range is specified ("all time" mode)
             if from_date is None and to_date is None:
                 sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
             else:
                 sorted_dates = all_dates
-            data_points = []
 
-            # Track previous day's state for transition detection
+            data_points = []
             prev_was_all_no_change = False
 
             for date_key in sorted_dates:
-                if date_key in aggregated_by_date:
-                    agg = aggregated_by_date[date_key]
+                daily_agg = {
+                    'consistent': 0,
+                    'partial': 0,
+                    'inconsistent': 0,
+                    'black_box_consistent': 0,
+                    'black_box_total': 0,
+                    'browsable_consistent': 0,
+                    'browsable_total': 0,
+                    'collections_included': 0,
+                    'no_change_count': 0,
+                    'calculated_count': 0,
+                    'has_completed': False
+                }
 
-                    total_images = agg['consistent'] + agg['partial'] + agg['inconsistent']
+                day_results = per_collection_by_date.get(date_key, {})
+                collections_to_include = set(day_results.keys()) | set(last_known.keys())
 
-                    # Calculate percentages from summed counts
-                    overall_consistency_pct = (agg['consistent'] / total_images * 100) if total_images > 0 else 0.0
-                    overall_inconsistent_pct = (agg['inconsistent'] / total_images * 100) if total_images > 0 else 0.0
+                for collection_id in collections_to_include:
+                    if collection_id in day_results:
+                        # Actual result for this day
+                        metrics = day_results[collection_id]
+                        daily_agg['consistent'] += metrics['consistent_count']
+                        daily_agg['partial'] += metrics['partial_count']
+                        daily_agg['inconsistent'] += metrics['inconsistent_count']
+                        daily_agg['black_box_consistent'] += metrics.get('black_box_consistent', 0)
+                        daily_agg['black_box_total'] += (
+                            metrics.get('black_box_consistent', 0) +
+                            metrics.get('black_box_partial', 0) +
+                            metrics.get('black_box_inconsistent', 0)
+                        )
+                        daily_agg['browsable_consistent'] += metrics.get('browsable_consistent', 0)
+                        daily_agg['browsable_total'] += (
+                            metrics.get('browsable_consistent', 0) +
+                            metrics.get('browsable_partial', 0) +
+                            metrics.get('browsable_inconsistent', 0)
+                        )
+                        daily_agg['collections_included'] += 1
+                        if metrics['no_change_copy']:
+                            daily_agg['no_change_count'] += 1
+                        else:
+                            daily_agg['has_completed'] = True
+                        last_known[collection_id] = metrics
+                    elif collection_id in last_known:
+                        # Fill forward from last known value
+                        # Note: seeds from _get_seed_values don't have by_termination data
+                        metrics = last_known[collection_id]
+                        daily_agg['consistent'] += metrics['consistent_count']
+                        daily_agg['partial'] += metrics['partial_count']
+                        daily_agg['inconsistent'] += metrics['inconsistent_count']
+                        daily_agg['black_box_consistent'] += metrics.get('black_box_consistent', 0)
+                        daily_agg['black_box_total'] += (
+                            metrics.get('black_box_consistent', 0) +
+                            metrics.get('black_box_partial', 0) +
+                            metrics.get('black_box_inconsistent', 0)
+                        )
+                        daily_agg['browsable_consistent'] += metrics.get('browsable_consistent', 0)
+                        daily_agg['browsable_total'] += (
+                            metrics.get('browsable_consistent', 0) +
+                            metrics.get('browsable_partial', 0) +
+                            metrics.get('browsable_inconsistent', 0)
+                        )
+                        daily_agg['collections_included'] += 1
+                        daily_agg['calculated_count'] += 1
+                        if metrics.get('no_change_copy', False):
+                            daily_agg['no_change_count'] += 1
+
+                # Build data point
+                if daily_agg['collections_included'] > 0:
+                    total_images = daily_agg['consistent'] + daily_agg['partial'] + daily_agg['inconsistent']
+
+                    overall_consistency_pct = (daily_agg['consistent'] / total_images * 100) if total_images > 0 else 0.0
+                    overall_inconsistent_pct = (daily_agg['inconsistent'] / total_images * 100) if total_images > 0 else 0.0
 
                     black_box_consistency_pct = (
-                        agg['black_box_consistent'] / agg['black_box_total'] * 100
-                    ) if agg['black_box_total'] > 0 else 0.0
+                        daily_agg['black_box_consistent'] / daily_agg['black_box_total'] * 100
+                    ) if daily_agg['black_box_total'] > 0 else 0.0
 
                     browsable_consistency_pct = (
-                        agg['browsable_consistent'] / agg['browsable_total'] * 100
-                    ) if agg['browsable_total'] > 0 else 0.0
+                        daily_agg['browsable_consistent'] / daily_agg['browsable_total'] * 100
+                    ) if daily_agg['browsable_total'] > 0 else 0.0
 
-                    has_transition = prev_was_all_no_change and agg['has_completed']
+                    has_transition = prev_was_all_no_change and daily_agg['has_completed']
                     data_points.append(PipelineValidationAggregatedPoint(
                         date=datetime.strptime(date_key, '%Y-%m-%d').date(),
                         overall_consistency_pct=round(overall_consistency_pct, 1),
@@ -823,15 +1158,16 @@ class TrendService:
                         black_box_consistency_pct=round(black_box_consistency_pct, 1),
                         browsable_consistency_pct=round(browsable_consistency_pct, 1),
                         total_images=total_images,
-                        consistent_count=agg['consistent'],
-                        inconsistent_count=agg['inconsistent'],
-                        collections_included=agg['collections_included'],
-                        no_change_count=agg['no_change_count'],
-                        has_transition=has_transition
+                        consistent_count=daily_agg['consistent'],
+                        inconsistent_count=daily_agg['inconsistent'],
+                        collections_included=daily_agg['collections_included'],
+                        no_change_count=daily_agg['no_change_count'],
+                        has_transition=has_transition,
+                        calculated_count=daily_agg['calculated_count']
                     ))
-                    prev_was_all_no_change = not agg['has_completed'] and agg['no_change_count'] > 0
+                    prev_was_all_no_change = not daily_agg['has_completed'] and daily_agg['no_change_count'] > 0
                 else:
-                    # No data for this date - append with None values
+                    # No data for this date (no results and no seeds)
                     data_points.append(PipelineValidationAggregatedPoint(
                         date=datetime.strptime(date_key, '%Y-%m-%d').date(),
                         overall_consistency_pct=None,
@@ -843,7 +1179,8 @@ class TrendService:
                         inconsistent_count=None,
                         collections_included=0,
                         no_change_count=0,
-                        has_transition=False
+                        has_transition=False,
+                        calculated_count=0
                     ))
 
             return PipelineValidationTrendResponse(mode="aggregated", data_points=data_points)
@@ -921,33 +1258,119 @@ class TrendService:
 
         deduplicated = _deduplicate_results_by_day(results, display_graph_key)
 
-        # Track pipeline info for response
+        # AGGREGATED MODE with fill-forward by pipeline+version (Issue #105)
+
+        # Step 1: Extract per-pipeline+version metrics for each day from deduplicated results
+        # Key is (pipeline_id, version), value is metrics dict
+        per_pipeline_by_date: Dict[str, Dict[Tuple[int, int], Dict[str, Any]]] = {}
+        all_pipeline_versions_in_window: set = set()
         pipeline_result_counts: Dict[int, int] = {}
 
-        # Aggregate deduplicated results by date
-        aggregated_by_date: Dict[str, Dict[str, int]] = {}
+        for (date_key, (pipeline_id, version)), result in deduplicated.items():
+            results_json = result.results_json or {}
+            by_term = results_json.get('non_truncated_by_termination', {})
 
-        for (date_key, (pipeline_id, _)), result in deduplicated.items():
+            if date_key not in per_pipeline_by_date:
+                per_pipeline_by_date[date_key] = {}
+
+            per_pipeline_by_date[date_key][(pipeline_id, version)] = {
+                'total_paths': results_json.get('total_paths', 0),
+                'valid_paths': results_json.get('non_truncated_paths', 0),
+                'black_box_archive_paths': by_term.get('Black Box Archive', 0),
+                'browsable_archive_paths': by_term.get('Browsable Archive', 0)
+            }
+            all_pipeline_versions_in_window.add((pipeline_id, version))
             pipeline_result_counts[pipeline_id] = pipeline_result_counts.get(pipeline_id, 0) + 1
 
-            results_json = result.results_json or {}
+        # Step 2: Build complete date range
+        all_dates = _generate_complete_date_range(
+            list(per_pipeline_by_date.keys()),
+            from_date=from_date,
+            to_date=to_date
+        )
 
-            if date_key not in aggregated_by_date:
-                aggregated_by_date[date_key] = {
-                    'total_paths': 0,
-                    'valid_paths': 0,
-                    'black_box_archive_paths': 0,
-                    'browsable_archive_paths': 0
-                }
+        if not all_dates:
+            return DisplayGraphTrendResponse(data_points=[], pipelines_included=[])
 
-            agg = aggregated_by_date[date_key]
-            agg['total_paths'] += results_json.get('total_paths', 0)
-            agg['valid_paths'] += results_json.get('non_truncated_paths', 0)
+        # Step 3: Get seed values (latest result before window for each pipeline+version)
+        window_start = datetime.strptime(all_dates[0], '%Y-%m-%d').date()
 
-            # Extract termination type counts
-            by_term = results_json.get('non_truncated_by_termination', {})
-            agg['black_box_archive_paths'] += by_term.get('Black Box Archive', 0)
-            agg['browsable_archive_paths'] += by_term.get('Browsable Archive', 0)
+        # Find ALL pipeline+version pairs that have any display-graph results for this team
+        all_relevant_pairs_query = self.db.query(
+            AnalysisResult.pipeline_id,
+            AnalysisResult.pipeline_version
+        ).filter(
+            AnalysisResult.tool == "pipeline_validation",
+            AnalysisResult.team_id == team_id,
+            AnalysisResult.collection_id.is_(None),
+            AnalysisResult.status == ResultStatus.COMPLETED,
+            AnalysisResult.pipeline_id.isnot(None)
+        ).distinct().all()
+        all_relevant_pairs = [(r[0], r[1]) for r in all_relevant_pairs_query]
+
+        seed_values = self._get_display_graph_seed_values(
+            team_id=team_id,
+            pipeline_version_pairs=all_relevant_pairs,
+            before_date=window_start
+        )
+
+        # Step 4: Fill-forward aggregation by pipeline+version
+        last_known: Dict[Tuple[int, int], Dict[str, Any]] = dict(seed_values)
+
+        # Only apply limit when no date range is specified ("all time" mode)
+        if from_date is None and to_date is None:
+            sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
+        else:
+            sorted_dates = all_dates
+
+        data_points = []
+
+        for date_key in sorted_dates:
+            daily_agg = {
+                'total_paths': 0,
+                'valid_paths': 0,
+                'black_box_archive_paths': 0,
+                'browsable_archive_paths': 0
+            }
+
+            day_results = per_pipeline_by_date.get(date_key, {})
+            pipelines_to_include = set(day_results.keys()) | set(last_known.keys())
+
+            for pipeline_key in pipelines_to_include:
+                if pipeline_key in day_results:
+                    # Actual result for this day
+                    metrics = day_results[pipeline_key]
+                    daily_agg['total_paths'] += metrics['total_paths']
+                    daily_agg['valid_paths'] += metrics['valid_paths']
+                    daily_agg['black_box_archive_paths'] += metrics['black_box_archive_paths']
+                    daily_agg['browsable_archive_paths'] += metrics['browsable_archive_paths']
+                    last_known[pipeline_key] = metrics
+                elif pipeline_key in last_known:
+                    # Fill forward from last known value
+                    metrics = last_known[pipeline_key]
+                    daily_agg['total_paths'] += metrics['total_paths']
+                    daily_agg['valid_paths'] += metrics['valid_paths']
+                    daily_agg['black_box_archive_paths'] += metrics['black_box_archive_paths']
+                    daily_agg['browsable_archive_paths'] += metrics['browsable_archive_paths']
+
+            # Build data point
+            if daily_agg['total_paths'] > 0 or len(pipelines_to_include) > 0:
+                data_points.append(DisplayGraphTrendPoint(
+                    date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                    total_paths=daily_agg['total_paths'],
+                    valid_paths=daily_agg['valid_paths'],
+                    black_box_archive_paths=daily_agg['black_box_archive_paths'],
+                    browsable_archive_paths=daily_agg['browsable_archive_paths']
+                ))
+            else:
+                # No data for this date (no results and no seeds)
+                data_points.append(DisplayGraphTrendPoint(
+                    date=datetime.strptime(date_key, '%Y-%m-%d').date(),
+                    total_paths=None,
+                    valid_paths=None,
+                    black_box_archive_paths=None,
+                    browsable_archive_paths=None
+                ))
 
         # Get pipeline names
         pipeline_names = {}
@@ -956,39 +1379,6 @@ class TrendService:
                 Pipeline.id.in_(pipeline_result_counts.keys())
             ).all()
             pipeline_names = {p.id: p.name for p in pipelines}
-
-        # Build complete date range (including days without data)
-        all_dates = _generate_complete_date_range(
-            list(aggregated_by_date.keys()),
-            from_date=from_date,
-            to_date=to_date
-        )
-        # Only apply limit when no date range is specified ("all time" mode)
-        if from_date is None and to_date is None:
-            sorted_dates = all_dates[-limit:] if len(all_dates) > limit else all_dates
-        else:
-            sorted_dates = all_dates
-        data_points = []
-
-        for date_key in sorted_dates:
-            if date_key in aggregated_by_date:
-                agg = aggregated_by_date[date_key]
-                data_points.append(DisplayGraphTrendPoint(
-                    date=datetime.strptime(date_key, '%Y-%m-%d').date(),
-                    total_paths=agg['total_paths'],
-                    valid_paths=agg['valid_paths'],
-                    black_box_archive_paths=agg['black_box_archive_paths'],
-                    browsable_archive_paths=agg['browsable_archive_paths']
-                ))
-            else:
-                # No data for this date - append with None values
-                data_points.append(DisplayGraphTrendPoint(
-                    date=datetime.strptime(date_key, '%Y-%m-%d').date(),
-                    total_paths=None,
-                    valid_paths=None,
-                    black_box_archive_paths=None,
-                    browsable_archive_paths=None
-                ))
 
         # Build pipelines included list
         pipelines_included = [
@@ -1110,7 +1500,14 @@ class TrendService:
 
             if first_stable_date:
                 # Calculate days since first stable result
-                stable_days = (datetime.now(first_stable_date.tzinfo) - first_stable_date).days
+                # Handle both timezone-aware and naive datetimes
+                if first_stable_date.tzinfo is not None:
+                    now = datetime.now(first_stable_date.tzinfo)
+                else:
+                    now = datetime.utcnow()
+                delta = now - first_stable_date
+                # Ensure non-negative (could be negative if clock skew or future timestamp)
+                stable_days = max(0, delta.days)
 
             return (is_stable, stable_days)
 
