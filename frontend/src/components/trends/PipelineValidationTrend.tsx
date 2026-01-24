@@ -25,7 +25,7 @@ import {
   Tooltip,
   Legend
 } from 'recharts'
-import { TrendChart, formatChartDate, formatChartPercent } from './TrendChart'
+import { TrendChart, formatChartDate, formatChartPercent, AggregatedTooltip } from './TrendChart'
 import type { PipelineValidationTrendResponse } from '@/contracts/api/trends-api'
 import { formatDateTime } from '@/utils/dateFormat'
 
@@ -48,15 +48,22 @@ const CONSISTENCY_COLORS = {
  * Custom dot component for transition point visualization.
  * - Transition points: Diamond shape
  * - Normal points: Filled circle
+ * - Null values: No dot rendered
  */
 interface TransitionDotProps {
   cx: number
   cy: number
   stroke: string
   payload: Record<string, unknown>
+  value?: number | null
 }
 
-function TransitionDot({ cx, cy, stroke, payload }: TransitionDotProps) {
+function TransitionDot({ cx, cy, stroke, payload, value }: TransitionDotProps) {
+  // Don't render dot for null/undefined values (days without data)
+  if (value === null || value === undefined) {
+    return null
+  }
+
   const isTransition = payload.has_transition === true
 
   if (isTransition) {
@@ -106,7 +113,9 @@ export function PipelineValidationTrend({
         collections_included: point.collections_included,
         // Include transition/no_change info for custom dot rendering
         has_transition: point.has_transition,
-        no_change_count: point.no_change_count
+        no_change_count: point.no_change_count,
+        // Include calculated_count for tooltip (Issue #105)
+        calculated_count: point.calculated_count
       }))
     } else {
       // COMPARISON MODE
@@ -184,13 +193,11 @@ export function PipelineValidationTrend({
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
             />
             <Tooltip
-              formatter={(value: number, name: string) => [formatChartPercent(value), name]}
-              labelFormatter={(label: string) => formatDateTime(label)}
-              contentStyle={{
-                backgroundColor: 'hsl(var(--popover))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: 'var(--radius)'
-              }}
+              content={
+                <AggregatedTooltip
+                  valueFormatter={(value, name) => [formatChartPercent(value), name]}
+                />
+              }
             />
             <Legend />
             <Line
@@ -199,7 +206,10 @@ export function PipelineValidationTrend({
               name="Overall Consistency"
               stroke={SERIES_COLORS.overall_consistency}
               strokeWidth={2}
-              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.overall_consistency} />}
+              dot={(props) => {
+                const { key, ...rest } = props
+                return <TransitionDot key={key} {...rest} stroke={SERIES_COLORS.overall_consistency} />
+              }}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />
@@ -209,7 +219,10 @@ export function PipelineValidationTrend({
               name="Black Box Archive"
               stroke={SERIES_COLORS.black_box_consistency}
               strokeWidth={2}
-              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.black_box_consistency} />}
+              dot={(props) => {
+                const { key, ...rest } = props
+                return <TransitionDot key={key} {...rest} stroke={SERIES_COLORS.black_box_consistency} />
+              }}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />
@@ -219,7 +232,10 @@ export function PipelineValidationTrend({
               name="Browsable Archive"
               stroke={SERIES_COLORS.browsable_consistency}
               strokeWidth={2}
-              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.browsable_consistency} />}
+              dot={(props) => {
+                const { key, ...rest } = props
+                return <TransitionDot key={key} {...rest} stroke={SERIES_COLORS.browsable_consistency} />
+              }}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />
@@ -229,7 +245,10 @@ export function PipelineValidationTrend({
               name="Inconsistent"
               stroke={SERIES_COLORS.overall_inconsistent}
               strokeWidth={2}
-              dot={(props) => <TransitionDot {...props} stroke={SERIES_COLORS.overall_inconsistent} />}
+              dot={(props) => {
+                const { key, ...rest } = props
+                return <TransitionDot key={key} {...rest} stroke={SERIES_COLORS.overall_inconsistent} />
+              }}
               activeDot={{ r: 5 }}
               connectNulls={true}
             />

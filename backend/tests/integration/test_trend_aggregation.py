@@ -420,3 +420,211 @@ class TestTrendCalculationAccuracy:
 
         # Decreasing consistency = degrading
         assert data["consistency_trend"] == "degrading"
+
+
+class TestIssue105FillForwardAggregation:
+    """
+    Integration tests for Issue #105: Fill-Forward Aggregation Bug.
+
+    Tests the exact scenario from the issue where storage optimization
+    causes incorrect trend aggregation when collections have staggered results.
+    """
+
+    def test_issue_105_exact_scenario(
+        self, test_client, test_db_session, sample_collection, test_team
+    ):
+        """
+        Test the exact scenario from Issue #105.
+
+        Given 2 collections:
+        - Day 1: Both analyzed (Col1: 5 orphaned, Col2: 13 orphaned) → Aggregate: 18
+        - Day 4: Only Col1 changes (7 orphaned), Col2 unchanged (no new record)
+
+        Expected:
+        - Day 1: 5 + 13 = 18
+        - Day 4: 7 + 13 = 20 (NOT just 7)
+
+        The bug was that Day 4 would show only 7 (Col1's value) instead of 20.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(
+                name="Issue 105 - Collection 1",
+                type="local",
+                location=temp_dir1
+            )
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(
+                name="Issue 105 - Collection 2",
+                type="local",
+                location=temp_dir2
+            )
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        # Day 1: Both collections analyzed
+        # Col1: 5 orphaned XMP files
+        result1_day1 = AnalysisResult(
+            collection_id=col1.id,
+            tool="photostats",
+            status=ResultStatus.COMPLETED,
+            started_at=day1 - timedelta(seconds=10),
+            completed_at=day1,
+            duration_seconds=10.0,
+            results_json={
+                "orphaned_images": [],
+                "orphaned_xmp": ["a", "b", "c", "d", "e"],  # 5 files
+                "total_files": 100,
+                "total_size": 1000000
+            },
+            files_scanned=100,
+            team_id=test_team.id
+        )
+        test_db_session.add(result1_day1)
+
+        # Col2: 13 orphaned images
+        result2_day1 = AnalysisResult(
+            collection_id=col2.id,
+            tool="photostats",
+            status=ResultStatus.COMPLETED,
+            started_at=day1 - timedelta(seconds=10),
+            completed_at=day1,
+            duration_seconds=10.0,
+            results_json={
+                "orphaned_images": [f"img{i}" for i in range(13)],  # 13 files
+                "orphaned_xmp": [],
+                "total_files": 200,
+                "total_size": 2000000
+            },
+            files_scanned=200,
+            team_id=test_team.id
+        )
+        test_db_session.add(result2_day1)
+
+        # Day 4: Only Col1 changes (Col2 unchanged - no new record)
+        # Col1: 7 orphaned XMP files
+        result1_day4 = AnalysisResult(
+            collection_id=col1.id,
+            tool="photostats",
+            status=ResultStatus.COMPLETED,
+            started_at=day4 - timedelta(seconds=10),
+            completed_at=day4,
+            duration_seconds=10.0,
+            results_json={
+                "orphaned_images": [],
+                "orphaned_xmp": ["a", "b", "c", "d", "e", "f", "g"],  # 7 files
+                "total_files": 100,
+                "total_size": 1000000
+            },
+            files_scanned=100,
+            team_id=test_team.id
+        )
+        test_db_session.add(result1_day4)
+
+        test_db_session.commit()
+
+        # Query trends for the date range
+        response = test_client.get(
+            "/api/trends/photostats",
+            params={
+                "from_date": "2026-01-01",
+                "to_date": "2026-01-04"
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should be in aggregated mode (no collection filter = all collections)
+        assert data["mode"] == "aggregated"
+
+        # Find the data points
+        day1_point = next(
+            (p for p in data["data_points"] if p["date"] == "2026-01-01"),
+            None
+        )
+        day4_point = next(
+            (p for p in data["data_points"] if p["date"] == "2026-01-04"),
+            None
+        )
+
+        assert day1_point is not None, "Day 1 data point should exist"
+        assert day4_point is not None, "Day 4 data point should exist"
+
+        # Day 1: 5 (xmp) + 13 (images) = 18 total orphaned
+        total_day1 = (day1_point["orphaned_images"] or 0) + (day1_point["orphaned_metadata"] or 0)
+        assert total_day1 == 18, f"Day 1 should have 18 total orphaned files, got {total_day1}"
+        assert day1_point["collections_included"] == 2
+        assert day1_point["calculated_count"] == 0  # Both actual
+
+        # Day 4: 7 (xmp from Col1) + 13 (images from Col2, filled forward) = 20 total
+        # THIS IS THE KEY ASSERTION - the bug would show only 7 here
+        total_day4 = (day4_point["orphaned_images"] or 0) + (day4_point["orphaned_metadata"] or 0)
+        assert total_day4 == 20, f"Day 4 should have 20 total orphaned files (7 + 13), got {total_day4}"
+        assert day4_point["collections_included"] == 2
+        assert day4_point["calculated_count"] == 1  # Col2 is filled forward
+
+    def test_fill_forward_maintains_sequence(
+        self, test_client, test_db_session, sample_collection, test_team
+    ):
+        """
+        Test that fill-forward maintains a monotonic sequence when collections
+        have staggered updates.
+
+        Sequence should be: 18 → 18 → 18 → 20 (not 18 → 5 → 7 → 20)
+        """
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Sequence Col1", type="local", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="Sequence Col2", type="local", location=temp_dir2)
+
+        base_date = datetime(2026, 1, 1, 10, 0, 0)
+
+        # Day 1: Both collections
+        test_db_session.add(AnalysisResult(
+            collection_id=col1.id, tool="photostats", status=ResultStatus.COMPLETED,
+            started_at=base_date, completed_at=base_date, duration_seconds=10.0,
+            results_json={"orphaned_images": list(range(5)), "orphaned_xmp": []},
+            files_scanned=100, team_id=test_team.id
+        ))
+        test_db_session.add(AnalysisResult(
+            collection_id=col2.id, tool="photostats", status=ResultStatus.COMPLETED,
+            started_at=base_date, completed_at=base_date, duration_seconds=10.0,
+            results_json={"orphaned_images": list(range(13)), "orphaned_xmp": []},
+            files_scanned=100, team_id=test_team.id
+        ))
+
+        # Day 4: Only Col1 updates
+        test_db_session.add(AnalysisResult(
+            collection_id=col1.id, tool="photostats", status=ResultStatus.COMPLETED,
+            started_at=base_date + timedelta(days=3), completed_at=base_date + timedelta(days=3),
+            duration_seconds=10.0,
+            results_json={"orphaned_images": list(range(7)), "orphaned_xmp": []},
+            files_scanned=100, team_id=test_team.id
+        ))
+
+        test_db_session.commit()
+
+        response = test_client.get(
+            "/api/trends/photostats",
+            params={"from_date": "2026-01-01", "to_date": "2026-01-04"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Extract values for all days
+        values = {}
+        for point in data["data_points"]:
+            total = (point["orphaned_images"] or 0) + (point["orphaned_metadata"] or 0)
+            values[point["date"]] = total
+
+        # Day 1: 5 + 13 = 18
+        # Day 2: 5 + 13 = 18 (both filled)
+        # Day 3: 5 + 13 = 18 (both filled)
+        # Day 4: 7 + 13 = 20
+
+        assert values.get("2026-01-01") == 18
+        assert values.get("2026-01-02") == 18
+        assert values.get("2026-01-03") == 18
+        assert values.get("2026-01-04") == 20

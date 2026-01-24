@@ -7,7 +7,7 @@ and trend direction calculation.
 
 import pytest
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from backend.src.models import AnalysisResult, ResultStatus, Pipeline
 from backend.src.services.trend_service import TrendService
@@ -573,3 +573,1001 @@ class TestTrendSummary:
             TrendDirection.STABLE,
             TrendDirection.DEGRADING
         ]
+
+
+# ============================================================================
+# Issue #105: Fill-Forward Aggregation Tests
+# ============================================================================
+
+class TestGetSeedValues:
+    """Tests for _get_seed_values helper method (Issue #105)."""
+
+    def test_get_seed_values_returns_latest_before_window(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test that seed values return the latest result before the window start."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(name="Seed Test", location=temp_dir)
+
+        base_time = datetime(2026, 1, 10, 12, 0, 0)
+
+        # Result before window (should be seed)
+        sample_result(
+            tool="photostats",
+            collection_id=collection.id,
+            results_json={"orphaned_images": ["a", "b", "c"], "orphaned_xmp": ["x", "y"]},
+            completed_at=base_time - timedelta(days=5)
+        )
+
+        # Another result even earlier (should NOT be seed)
+        sample_result(
+            tool="photostats",
+            collection_id=collection.id,
+            results_json={"orphaned_images": ["old"], "orphaned_xmp": []},
+            completed_at=base_time - timedelta(days=10)
+        )
+
+        # Get seed values for window starting at base_time
+        seed_values = trend_service._get_seed_values(
+            tool="photostats",
+            team_id=test_team.id,
+            collection_ids=[collection.id],
+            before_date=base_time.date()
+        )
+
+        assert collection.id in seed_values
+        # Should have the values from the -5 day result, not -10 day
+        assert seed_values[collection.id]["orphaned_images"] == 3
+        assert seed_values[collection.id]["orphaned_xmp"] == 2
+
+    def test_get_seed_values_multiple_collections(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test seed values for multiple collections."""
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            collection1 = sample_collection(name="Collection 1", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            collection2 = sample_collection(name="Collection 2", location=temp_dir2)
+
+        base_time = datetime(2026, 1, 10, 12, 0, 0)
+
+        # Seeds for collection1
+        sample_result(
+            tool="photostats",
+            collection_id=collection1.id,
+            results_json={"orphaned_images": list(range(5)), "orphaned_xmp": []},
+            completed_at=base_time - timedelta(days=3)
+        )
+
+        # Seeds for collection2
+        sample_result(
+            tool="photostats",
+            collection_id=collection2.id,
+            results_json={"orphaned_images": [], "orphaned_xmp": list(range(13))},
+            completed_at=base_time - timedelta(days=2)
+        )
+
+        seed_values = trend_service._get_seed_values(
+            tool="photostats",
+            team_id=test_team.id,
+            collection_ids=[collection1.id, collection2.id],
+            before_date=base_time.date()
+        )
+
+        assert len(seed_values) == 2
+        assert seed_values[collection1.id]["orphaned_images"] == 5
+        assert seed_values[collection2.id]["orphaned_xmp"] == 13
+
+    def test_get_seed_values_no_prior_results(
+        self, trend_service, sample_collection, test_team
+    ):
+        """Test that collections without prior results are not in seed values."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(name="No Prior", location=temp_dir)
+
+        base_time = datetime(2026, 1, 10, 12, 0, 0)
+
+        seed_values = trend_service._get_seed_values(
+            tool="photostats",
+            team_id=test_team.id,
+            collection_ids=[collection.id],
+            before_date=base_time.date()
+        )
+
+        # Collection should not be in seeds (no prior results)
+        assert collection.id not in seed_values
+
+
+class TestFillForwardAggregation:
+    """Tests for fill-forward aggregation logic (Issue #105)."""
+
+    def test_fill_forward_with_gaps(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test fill-forward correctly fills gaps in collection results.
+
+        Scenario from Issue #105:
+        - Day 1: Both collections analyzed (Col1: 5, Col2: 13) → Aggregate: 18
+        - Day 4: Only Col1 changes (7), Col2 unchanged (no new record)
+
+        Expected: Day 4 should aggregate 7 + 13 = 20 (not just 7)
+        """
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Collection 1", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="Collection 2", location=temp_dir2)
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        # Day 1: Both collections analyzed
+        sample_result(
+            tool="photostats",
+            collection_id=col1.id,
+            results_json={"orphaned_images": [], "orphaned_xmp": list(range(5))},
+            completed_at=day1
+        )
+        sample_result(
+            tool="photostats",
+            collection_id=col2.id,
+            results_json={"orphaned_images": list(range(13)), "orphaned_xmp": []},
+            completed_at=day1
+        )
+
+        # Day 4: Only Col1 changes
+        sample_result(
+            tool="photostats",
+            collection_id=col1.id,
+            results_json={"orphaned_images": [], "orphaned_xmp": list(range(7))},
+            completed_at=day4
+        )
+
+        # Query trends
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=day1.date(),
+            to_date=day4.date()
+        )
+
+        assert response.mode == "aggregated"
+
+        # Find day 1 and day 4 points
+        day1_point = next((p for p in response.data_points if str(p.date) == "2026-01-01"), None)
+        day4_point = next((p for p in response.data_points if str(p.date) == "2026-01-04"), None)
+
+        assert day1_point is not None
+        assert day4_point is not None
+
+        # Day 1: 5 + 13 = 18 orphaned files total
+        total_day1 = (day1_point.orphaned_images or 0) + (day1_point.orphaned_metadata or 0)
+        assert total_day1 == 18
+        assert day1_point.calculated_count == 0  # Both have actual results
+
+        # Day 4: 7 + 13 = 20 orphaned files total (Col2 filled forward)
+        total_day4 = (day4_point.orphaned_images or 0) + (day4_point.orphaned_metadata or 0)
+        assert total_day4 == 20
+        assert day4_point.calculated_count == 1  # Col2 is filled forward
+        assert day4_point.collections_included == 2
+
+    def test_fill_forward_uses_seed_for_first_day(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test that seed values are used for collections without Day 1 results."""
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Collection 1", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="Collection 2", location=temp_dir2)
+
+        seed_date = datetime(2026, 1, 1, 10, 0, 0)
+        window_start = datetime(2026, 1, 5, 10, 0, 0)
+        window_end = datetime(2026, 1, 7, 10, 0, 0)
+
+        # Seed for Col2 (before window)
+        sample_result(
+            tool="photostats",
+            collection_id=col2.id,
+            results_json={"orphaned_images": list(range(10)), "orphaned_xmp": []},
+            completed_at=seed_date
+        )
+
+        # Day 5: Only Col1 has result
+        sample_result(
+            tool="photostats",
+            collection_id=col1.id,
+            results_json={"orphaned_images": list(range(5)), "orphaned_xmp": []},
+            completed_at=window_start
+        )
+
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=window_start.date(),
+            to_date=window_end.date()
+        )
+
+        day5_point = next((p for p in response.data_points if str(p.date) == "2026-01-05"), None)
+
+        assert day5_point is not None
+        # Should include Col1 (actual: 5) + Col2 (seed: 10) = 15
+        total = (day5_point.orphaned_images or 0) + (day5_point.orphaned_metadata or 0)
+        assert total == 15
+        assert day5_point.collections_included == 2
+        assert day5_point.calculated_count == 1  # Col2 is filled from seed
+
+
+class TestNewCollectionMidWindow:
+    """Tests for new collections added mid-window (Issue #105)."""
+
+    def test_new_collection_excluded_until_first_result(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test that new collections are excluded until their first result."""
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Existing Collection", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="New Collection", location=temp_dir2)
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day3 = datetime(2026, 1, 3, 10, 0, 0)
+        day5 = datetime(2026, 1, 5, 10, 0, 0)
+
+        # Col1 has results on Day 1 and Day 5
+        sample_result(
+            tool="photostats",
+            collection_id=col1.id,
+            results_json={"orphaned_images": list(range(10)), "orphaned_xmp": []},
+            completed_at=day1
+        )
+        sample_result(
+            tool="photostats",
+            collection_id=col1.id,
+            results_json={"orphaned_images": list(range(12)), "orphaned_xmp": []},
+            completed_at=day5
+        )
+
+        # Col2 (new) has first result on Day 3
+        sample_result(
+            tool="photostats",
+            collection_id=col2.id,
+            results_json={"orphaned_images": list(range(5)), "orphaned_xmp": []},
+            completed_at=day3
+        )
+
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=day1.date(),
+            to_date=day5.date()
+        )
+
+        day1_point = next((p for p in response.data_points if str(p.date) == "2026-01-01"), None)
+        day3_point = next((p for p in response.data_points if str(p.date) == "2026-01-03"), None)
+        day5_point = next((p for p in response.data_points if str(p.date) == "2026-01-05"), None)
+
+        # Day 1: Only Col1 (Col2 doesn't exist yet)
+        assert day1_point.orphaned_images == 10
+        assert day1_point.collections_included == 1
+
+        # Day 3: Col1 (filled: 10) + Col2 (actual: 5) = 15
+        total_day3 = (day3_point.orphaned_images or 0) + (day3_point.orphaned_metadata or 0)
+        assert total_day3 == 15
+        assert day3_point.collections_included == 2
+
+        # Day 5: Col1 (actual: 12) + Col2 (filled: 5) = 17
+        total_day5 = (day5_point.orphaned_images or 0) + (day5_point.orphaned_metadata or 0)
+        assert total_day5 == 17
+        assert day5_point.collections_included == 2
+
+
+# ============================================================================
+# Phase 4: User Story 3 - Consistent Behavior Across All Tools (Issue #105)
+# ============================================================================
+
+class TestPhotoPairingFillForward:
+    """Tests for Photo Pairing fill-forward aggregation (Issue #105)."""
+
+    def test_fill_forward_with_gaps_photo_pairing(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test fill-forward correctly fills gaps in Photo Pairing results.
+
+        Scenario:
+        - Day 1: Both collections analyzed (Col1: 100 images, Col2: 200 images)
+        - Day 4: Only Col1 changes (150), Col2 unchanged
+
+        Expected: Day 4 should aggregate 150 + 200 = 350 (not just 150)
+        """
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Collection 1", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="Collection 2", location=temp_dir2)
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        # Day 1: Both collections analyzed
+        sample_result(
+            tool="photo_pairing",
+            collection_id=col1.id,
+            results_json={"group_count": 25, "image_count": 100, "camera_usage": {}},
+            completed_at=day1
+        )
+        sample_result(
+            tool="photo_pairing",
+            collection_id=col2.id,
+            results_json={"group_count": 50, "image_count": 200, "camera_usage": {}},
+            completed_at=day1
+        )
+
+        # Day 4: Only Col1 changes
+        sample_result(
+            tool="photo_pairing",
+            collection_id=col1.id,
+            results_json={"group_count": 40, "image_count": 150, "camera_usage": {}},
+            completed_at=day4
+        )
+
+        # Query trends
+        response = trend_service.get_photo_pairing_trends(
+            team_id=test_team.id,
+            from_date=day1.date(),
+            to_date=day4.date()
+        )
+
+        assert response.mode == "aggregated"
+
+        day1_point = next((p for p in response.data_points if str(p.date) == "2026-01-01"), None)
+        day4_point = next((p for p in response.data_points if str(p.date) == "2026-01-04"), None)
+
+        assert day1_point is not None
+        assert day4_point is not None
+
+        # Day 1: 25 + 50 = 75 groups, 100 + 200 = 300 images
+        assert day1_point.group_count == 75
+        assert day1_point.image_count == 300
+        assert day1_point.calculated_count == 0  # Both have actual results
+
+        # Day 4: 40 + 50 = 90 groups, 150 + 200 = 350 images (Col2 filled forward)
+        assert day4_point.group_count == 90
+        assert day4_point.image_count == 350
+        assert day4_point.calculated_count == 1  # Col2 is filled forward
+        assert day4_point.collections_included == 2
+
+
+class TestPipelineValidationFillForward:
+    """Tests for Pipeline Validation fill-forward aggregation (Issue #105)."""
+
+    def test_fill_forward_with_gaps_pipeline_validation(
+        self, trend_service, sample_result, sample_collection, sample_pipeline, test_team
+    ):
+        """Test fill-forward correctly fills gaps in Pipeline Validation results.
+
+        Scenario:
+        - Day 1: Both collections analyzed (Col1: 80 consistent, Col2: 40 consistent)
+        - Day 4: Only Col1 changes (90 consistent), Col2 unchanged
+
+        Expected: Day 4 should aggregate 90 + 40 = 130 consistent
+        """
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Collection 1", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="Collection 2", location=temp_dir2)
+
+        pipeline = sample_pipeline(name="Test Pipeline")
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        # Day 1: Both collections analyzed
+        sample_result(
+            tool="pipeline_validation",
+            collection_id=col1.id,
+            pipeline_id=pipeline.id,
+            results_json={
+                "consistency_counts": {"CONSISTENT": 80, "PARTIAL": 10, "INCONSISTENT": 10},
+                "by_termination": {}
+            },
+            completed_at=day1
+        )
+        sample_result(
+            tool="pipeline_validation",
+            collection_id=col2.id,
+            pipeline_id=pipeline.id,
+            results_json={
+                "consistency_counts": {"CONSISTENT": 40, "PARTIAL": 5, "INCONSISTENT": 5},
+                "by_termination": {}
+            },
+            completed_at=day1
+        )
+
+        # Day 4: Only Col1 changes
+        sample_result(
+            tool="pipeline_validation",
+            collection_id=col1.id,
+            pipeline_id=pipeline.id,
+            results_json={
+                "consistency_counts": {"CONSISTENT": 90, "PARTIAL": 5, "INCONSISTENT": 5},
+                "by_termination": {}
+            },
+            completed_at=day4
+        )
+
+        # Query trends
+        response = trend_service.get_pipeline_validation_trends(
+            team_id=test_team.id,
+            from_date=day1.date(),
+            to_date=day4.date()
+        )
+
+        assert response.mode == "aggregated"
+
+        day1_point = next((p for p in response.data_points if str(p.date) == "2026-01-01"), None)
+        day4_point = next((p for p in response.data_points if str(p.date) == "2026-01-04"), None)
+
+        assert day1_point is not None
+        assert day4_point is not None
+
+        # Day 1: 80 + 40 = 120 consistent, total = 150
+        assert day1_point.consistent_count == 120
+        assert day1_point.total_images == 150
+        assert day1_point.calculated_count == 0  # Both have actual results
+
+        # Day 4: 90 + 40 = 130 consistent (Col2 filled forward), total = 150
+        assert day4_point.consistent_count == 130
+        assert day4_point.total_images == 150
+        assert day4_point.calculated_count == 1  # Col2 is filled forward
+        assert day4_point.collections_included == 2
+
+
+class TestDisplayGraphFillForward:
+    """Tests for display-graph fill-forward aggregation by pipeline+version (Issue #105).
+
+    Display-graph mode doesn't use collections - it uses pipeline_id + version.
+    Fill-forward should work by pipeline+version, not by collection.
+    """
+
+    def test_fill_forward_by_pipeline_version(
+        self, trend_service, sample_pipeline, test_team, test_db_session
+    ):
+        """Test fill-forward correctly fills gaps by pipeline+version.
+
+        Scenario:
+        - Day 1: Both pipelines run (Pipe1: 100 paths, Pipe2: 200 paths)
+        - Day 4: Only Pipe1 runs again (150 paths), Pipe2 unchanged
+
+        Expected: Day 4 should aggregate 150 + 200 = 350 paths
+        """
+        from backend.src.models import AnalysisResult, ResultStatus
+
+        pipeline1 = sample_pipeline(name="Pipeline 1")
+        pipeline2 = sample_pipeline(name="Pipeline 2")
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        # Day 1: Both pipelines run (display-graph = collection_id is None)
+        result1 = AnalysisResult(
+            collection_id=None,  # Display-graph has no collection
+            tool="pipeline_validation",
+            pipeline_id=pipeline1.id,
+            pipeline_version=1,
+            status=ResultStatus.COMPLETED,
+            started_at=day1,
+            completed_at=day1,
+            duration_seconds=10.0,
+            results_json={
+                "total_paths": 100,
+                "non_truncated_paths": 80,
+                "non_truncated_by_termination": {"Black Box Archive": 30, "Browsable Archive": 50}
+            },
+            files_scanned=0,
+            issues_found=0,
+            team_id=test_team.id
+        )
+        test_db_session.add(result1)
+
+        result2 = AnalysisResult(
+            collection_id=None,
+            tool="pipeline_validation",
+            pipeline_id=pipeline2.id,
+            pipeline_version=1,
+            status=ResultStatus.COMPLETED,
+            started_at=day1,
+            completed_at=day1,
+            duration_seconds=10.0,
+            results_json={
+                "total_paths": 200,
+                "non_truncated_paths": 160,
+                "non_truncated_by_termination": {"Black Box Archive": 60, "Browsable Archive": 100}
+            },
+            files_scanned=0,
+            issues_found=0,
+            team_id=test_team.id
+        )
+        test_db_session.add(result2)
+
+        # Day 4: Only Pipe1 runs again
+        result3 = AnalysisResult(
+            collection_id=None,
+            tool="pipeline_validation",
+            pipeline_id=pipeline1.id,
+            pipeline_version=1,
+            status=ResultStatus.COMPLETED,
+            started_at=day4,
+            completed_at=day4,
+            duration_seconds=10.0,
+            results_json={
+                "total_paths": 150,
+                "non_truncated_paths": 120,
+                "non_truncated_by_termination": {"Black Box Archive": 50, "Browsable Archive": 70}
+            },
+            files_scanned=0,
+            issues_found=0,
+            team_id=test_team.id
+        )
+        test_db_session.add(result3)
+        test_db_session.commit()
+
+        # Query display-graph trends
+        response = trend_service.get_display_graph_trends(
+            team_id=test_team.id,
+            from_date=day1.date(),
+            to_date=day4.date()
+        )
+
+        day1_point = next((p for p in response.data_points if str(p.date) == "2026-01-01"), None)
+        day4_point = next((p for p in response.data_points if str(p.date) == "2026-01-04"), None)
+
+        assert day1_point is not None
+        assert day4_point is not None
+
+        # Day 1: 100 + 200 = 300 total paths
+        assert day1_point.total_paths == 300
+        assert day1_point.valid_paths == 240  # 80 + 160
+
+        # Day 4: 150 + 200 = 350 total paths (Pipe2 filled forward)
+        assert day4_point.total_paths == 350
+        assert day4_point.valid_paths == 280  # 120 + 160
+
+
+class TestTrendSummaryFillForward:
+    """Tests for Trend Summary fill-forward aggregation (Issue #105)."""
+
+    def test_orphaned_trend_uses_fill_forward_aggregation(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test that orphaned trend calculation uses fill-forward logic.
+
+        The trend summary should aggregate across collections like the
+        photostats aggregated mode, not just sum individual results.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Collection 1", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="Collection 2", location=temp_dir2)
+
+        base_time = datetime.utcnow() - timedelta(days=10)
+
+        # Create results pattern showing improvement with fill-forward
+        # Col1: 20 -> 15 -> 10 -> 5 orphaned (actual results)
+        # Col2: 30 orphaned (only first result, then filled forward)
+        for i in range(4):
+            sample_result(
+                tool="photostats",
+                collection_id=col1.id,
+                results_json={
+                    "orphaned_images": ["x"] * (20 - i * 5),
+                    "orphaned_xmp": []
+                },
+                completed_at=base_time + timedelta(days=i)
+            )
+
+        # Col2: Only one result on day 0
+        sample_result(
+            tool="photostats",
+            collection_id=col2.id,
+            results_json={
+                "orphaned_images": ["x"] * 30,
+                "orphaned_xmp": []
+            },
+            completed_at=base_time
+        )
+
+        summary = trend_service.get_trend_summary(team_id=test_team.id)
+
+        # With fill-forward:
+        # Day 0: 20 + 30 = 50
+        # Day 1: 15 + 30 = 45 (Col2 filled)
+        # Day 2: 10 + 30 = 40 (Col2 filled)
+        # Day 3: 5 + 30 = 35 (Col2 filled)
+        # This shows an improving trend (50 -> 35)
+        assert summary.orphaned_trend == TrendDirection.IMPROVING
+
+
+class TestComparisonModeNoFillForward:
+    """Regression tests to ensure comparison mode does NOT use fill-forward."""
+
+    def test_photostats_comparison_mode_no_fill_forward(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test that PhotoStats comparison mode doesn't fill gaps."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(name="Comparison Test", location=temp_dir)
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        sample_result(
+            tool="photostats",
+            collection_id=collection.id,
+            results_json={"orphaned_images": list(range(5)), "orphaned_xmp": []},
+            completed_at=day1
+        )
+        sample_result(
+            tool="photostats",
+            collection_id=collection.id,
+            results_json={"orphaned_images": list(range(10)), "orphaned_xmp": []},
+            completed_at=day4
+        )
+
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            collection_ids=str(collection.id),  # Comparison mode (1-5 collections)
+            from_date=day1.date(),
+            to_date=day4.date()
+        )
+
+        assert response.mode == "comparison"
+        assert len(response.collections) == 1
+
+        # Should only have 2 data points (no fill-forward in comparison mode)
+        assert len(response.collections[0].data_points) == 2
+
+    def test_photo_pairing_comparison_mode_no_fill_forward(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test that Photo Pairing comparison mode doesn't fill gaps."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(name="Comparison Test", location=temp_dir)
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        sample_result(
+            tool="photo_pairing",
+            collection_id=collection.id,
+            results_json={"group_count": 10, "image_count": 40, "camera_usage": {}},
+            completed_at=day1
+        )
+        sample_result(
+            tool="photo_pairing",
+            collection_id=collection.id,
+            results_json={"group_count": 15, "image_count": 60, "camera_usage": {}},
+            completed_at=day4
+        )
+
+        response = trend_service.get_photo_pairing_trends(
+            team_id=test_team.id,
+            collection_ids=str(collection.id),
+            from_date=day1.date(),
+            to_date=day4.date()
+        )
+
+        assert response.mode == "comparison"
+        assert len(response.collections[0].data_points) == 2
+
+    def test_pipeline_validation_comparison_mode_no_fill_forward(
+        self, trend_service, sample_result, sample_collection, sample_pipeline, test_team
+    ):
+        """Test that Pipeline Validation comparison mode doesn't fill gaps."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(name="Comparison Test", location=temp_dir)
+
+        pipeline = sample_pipeline(name="Test Pipeline")
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day4 = datetime(2026, 1, 4, 10, 0, 0)
+
+        sample_result(
+            tool="pipeline_validation",
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            results_json={"consistency_counts": {"CONSISTENT": 80, "PARTIAL": 10, "INCONSISTENT": 10}},
+            completed_at=day1
+        )
+        sample_result(
+            tool="pipeline_validation",
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            results_json={"consistency_counts": {"CONSISTENT": 90, "PARTIAL": 5, "INCONSISTENT": 5}},
+            completed_at=day4
+        )
+
+        response = trend_service.get_pipeline_validation_trends(
+            team_id=test_team.id,
+            collection_ids=str(collection.id),
+            from_date=day1.date(),
+            to_date=day4.date()
+        )
+
+        assert response.mode == "comparison"
+        assert len(response.collections[0].data_points) == 2
+
+
+# ============================================================================
+# Phase 6: Edge Cases and Performance Tests (Issue #105)
+# ============================================================================
+
+class TestAllNoChangeDayScenario:
+    """Tests for days where ALL results are NO_CHANGE (Issue #105 edge case)."""
+
+    def test_all_no_change_day_still_aggregates_correctly(
+        self, trend_service, sample_result, sample_collection, test_team, test_db_session
+    ):
+        """Test that a day with all NO_CHANGE results still fills forward correctly.
+
+        Scenario:
+        - Day 1: Both collections have actual results (Col1: 10, Col2: 20)
+        - Day 2: Both collections have NO_CHANGE results
+        - Day 3: Col1 changes (15), Col2 still NO_CHANGE
+
+        Expected:
+        - Day 2 should show 10 + 20 = 30 (both NO_CHANGE, correctly aggregated)
+        - Day 3 should show 15 + 20 = 35 (Col1 actual, Col2 filled forward)
+        """
+        from backend.src.models import AnalysisResult, ResultStatus
+
+        with tempfile.TemporaryDirectory() as temp_dir1:
+            col1 = sample_collection(name="Collection 1", location=temp_dir1)
+        with tempfile.TemporaryDirectory() as temp_dir2:
+            col2 = sample_collection(name="Collection 2", location=temp_dir2)
+
+        day1 = datetime(2026, 1, 1, 10, 0, 0)
+        day2 = datetime(2026, 1, 2, 10, 0, 0)
+        day3 = datetime(2026, 1, 3, 10, 0, 0)
+
+        # Day 1: Both collections have actual results
+        original_result1 = sample_result(
+            tool="photostats",
+            collection_id=col1.id,
+            results_json={"orphaned_images": list(range(10)), "orphaned_xmp": []},
+            completed_at=day1
+        )
+        original_result2 = sample_result(
+            tool="photostats",
+            collection_id=col2.id,
+            results_json={"orphaned_images": list(range(20)), "orphaned_xmp": []},
+            completed_at=day1
+        )
+        test_db_session.refresh(original_result1)
+        test_db_session.refresh(original_result2)
+
+        # Day 2: Both collections have NO_CHANGE results (referencing Day 1 results)
+        no_change_result1 = AnalysisResult(
+            collection_id=col1.id,
+            tool="photostats",
+            status=ResultStatus.NO_CHANGE,
+            started_at=day2,
+            completed_at=day2,
+            duration_seconds=1.0,
+            results_json={"orphaned_images": list(range(10)), "orphaned_xmp": []},
+            files_scanned=100,
+            issues_found=10,
+            team_id=test_team.id,
+            no_change_copy=True,
+            download_report_from=original_result1.guid  # Required by constraint
+        )
+        test_db_session.add(no_change_result1)
+
+        no_change_result2 = AnalysisResult(
+            collection_id=col2.id,
+            tool="photostats",
+            status=ResultStatus.NO_CHANGE,
+            started_at=day2,
+            completed_at=day2,
+            duration_seconds=1.0,
+            results_json={"orphaned_images": list(range(20)), "orphaned_xmp": []},
+            files_scanned=200,
+            issues_found=20,
+            team_id=test_team.id,
+            no_change_copy=True,
+            download_report_from=original_result2.guid  # Required by constraint
+        )
+        test_db_session.add(no_change_result2)
+        test_db_session.commit()
+
+        # Day 3: Col1 changes, Col2 doesn't run (no result at all)
+        sample_result(
+            tool="photostats",
+            collection_id=col1.id,
+            results_json={"orphaned_images": list(range(15)), "orphaned_xmp": []},
+            completed_at=day3
+        )
+
+        # Query trends
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=day1.date(),
+            to_date=day3.date()
+        )
+
+        assert response.mode == "aggregated"
+
+        day1_point = next((p for p in response.data_points if str(p.date) == "2026-01-01"), None)
+        day2_point = next((p for p in response.data_points if str(p.date) == "2026-01-02"), None)
+        day3_point = next((p for p in response.data_points if str(p.date) == "2026-01-03"), None)
+
+        assert day1_point is not None
+        assert day2_point is not None
+        assert day3_point is not None
+
+        # Day 1: 10 + 20 = 30
+        assert day1_point.orphaned_images == 30
+        assert day1_point.calculated_count == 0
+
+        # Day 2: 10 + 20 = 30 (both NO_CHANGE, correctly aggregated)
+        assert day2_point.orphaned_images == 30
+        assert day2_point.no_change_count == 2  # Both are NO_CHANGE
+
+        # Day 3: 15 + 20 = 35 (Col1 actual, Col2 filled forward)
+        assert day3_point.orphaned_images == 35
+        assert day3_point.calculated_count == 1  # Col2 is filled forward
+
+
+class TestEmptyTrendWindowScenario:
+    """Tests for empty trend window edge cases (Issue #105)."""
+
+    def test_empty_window_returns_data_points_with_none_values(
+        self, trend_service, test_team
+    ):
+        """Test that a window with no results returns data_points with None values.
+
+        The service generates the full date range but with None/0 metrics
+        when there are no collections or no results.
+        """
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=date(2099, 1, 1),  # Future dates - no data
+            to_date=date(2099, 1, 31)
+        )
+
+        assert response.mode == "aggregated"
+        # Should have data points for each day in the range (31 days in January)
+        assert len(response.data_points) == 31
+
+        # All data points should have None/0 values since no collections exist
+        for point in response.data_points:
+            assert point.orphaned_images is None
+            assert point.orphaned_metadata is None
+            assert point.collections_included == 0
+            assert point.calculated_count == 0
+
+    def test_window_with_only_seeds_no_actual_results(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test window where collections only have seed values (results before window).
+
+        Scenario:
+        - Collection has result on Dec 15, 2025
+        - Query window is Jan 1-5, 2026 (no results IN window)
+
+        Expected: All days should show the seeded value
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(name="Test Collection", location=temp_dir)
+
+        # Result BEFORE the query window
+        seed_date = datetime(2025, 12, 15, 10, 0, 0)
+        sample_result(
+            tool="photostats",
+            collection_id=collection.id,
+            results_json={"orphaned_images": list(range(25)), "orphaned_xmp": []},
+            completed_at=seed_date
+        )
+
+        # Query a window AFTER the result
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 1, 5)
+        )
+
+        assert response.mode == "aggregated"
+        # Should have data points for each day in the range, all filled from seed
+        assert len(response.data_points) == 5
+
+        # All should show the seeded value (25 orphaned images)
+        for point in response.data_points:
+            assert point.orphaned_images == 25
+            assert point.calculated_count == 1  # All are filled forward
+            assert point.collections_included == 1
+
+
+class TestLargeDateRangePerformance:
+    """Performance tests for large date ranges (Issue #105)."""
+
+    def test_large_date_range_completes_in_reasonable_time(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test that a 365-day range with sparse data completes quickly.
+
+        This tests that fill-forward doesn't have O(n²) or worse complexity.
+        """
+        import time
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = sample_collection(name="Performance Test", location=temp_dir)
+
+        # Create sparse results - one per month for a year
+        base_date = datetime(2025, 1, 1, 10, 0, 0)
+        for month in range(12):
+            result_date = base_date + timedelta(days=month * 30)
+            sample_result(
+                tool="photostats",
+                collection_id=collection.id,
+                results_json={
+                    "orphaned_images": list(range(10 + month)),
+                    "orphaned_xmp": []
+                },
+                completed_at=result_date
+            )
+
+        # Time the query
+        start_time = time.time()
+
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 12, 31)
+        )
+
+        elapsed_time = time.time() - start_time
+
+        assert response.mode == "aggregated"
+        # Should have ~365 data points (one per day)
+        assert len(response.data_points) >= 360
+
+        # Should complete in under 2 seconds (generous limit for CI)
+        assert elapsed_time < 2.0, f"Query took {elapsed_time:.2f}s, expected < 2s"
+
+    def test_multiple_collections_large_range(
+        self, trend_service, sample_result, sample_collection, test_team
+    ):
+        """Test fill-forward with multiple collections over large date range."""
+        import time
+
+        collections = []
+        for i in range(5):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                col = sample_collection(name=f"Collection {i}", location=temp_dir)
+                collections.append(col)
+
+        # Create staggered results for each collection
+        base_date = datetime(2025, 1, 1, 10, 0, 0)
+        for col_idx, col in enumerate(collections):
+            # Each collection starts at a different offset
+            for month in range(6):
+                result_date = base_date + timedelta(days=col_idx * 7 + month * 30)
+                sample_result(
+                    tool="photostats",
+                    collection_id=col.id,
+                    results_json={
+                        "orphaned_images": list(range(5 * (col_idx + 1))),
+                        "orphaned_xmp": []
+                    },
+                    completed_at=result_date
+                )
+
+        start_time = time.time()
+
+        response = trend_service.get_photostats_trends(
+            team_id=test_team.id,
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 6, 30)
+        )
+
+        elapsed_time = time.time() - start_time
+
+        assert response.mode == "aggregated"
+        assert len(response.data_points) >= 180  # ~6 months
+
+        # Should complete in under 3 seconds even with 5 collections
+        assert elapsed_time < 3.0, f"Query took {elapsed_time:.2f}s, expected < 3s"
