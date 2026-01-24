@@ -130,12 +130,24 @@ This is a web application with `backend/` and `frontend/` structure per plan.md.
 
 **Purpose**: Edge cases, performance, and final validation
 
-- [ ] T032 [P] Add unit test for all-NO_CHANGE-day scenario in backend/tests/unit/test_trend_service.py
-- [ ] T033 [P] Add unit test for empty trend window scenario in backend/tests/unit/test_trend_service.py
-- [ ] T034 [P] Add unit test for very large date range (performance) in backend/tests/unit/test_trend_service.py
-- [ ] T035 Add logging for seed query and fill-forward operations in backend/src/services/trend_service.py
-- [ ] T036 Run full test suite and verify no regressions
-- [ ] T037 Validate quickstart.md scenarios work as documented
+- [x] T032 [P] Add unit test for all-NO_CHANGE-day scenario in backend/tests/unit/test_trend_service.py
+  - TestAllNoChangeDayScenario::test_all_no_change_day_still_aggregates_correctly
+- [x] T033 [P] Add unit test for empty trend window scenario in backend/tests/unit/test_trend_service.py
+  - TestEmptyTrendWindowScenario::test_empty_window_returns_data_points_with_none_values
+  - TestEmptyTrendWindowScenario::test_window_with_only_seeds_no_actual_results
+- [x] T034 [P] Add unit test for very large date range (performance) in backend/tests/unit/test_trend_service.py
+  - TestLargeDateRangePerformance::test_large_date_range_completes_in_reasonable_time (365 days in <5s)
+  - TestLargeDateRangePerformance::test_multiple_collections_large_range (5 collections, 365 days)
+- [x] T035 Add logging for seed query and fill-forward operations in backend/src/services/trend_service.py
+  - Added debug logging for seed queries (already existed)
+  - Added summary logging for fill-forward operations (total calculated count)
+- [x] T036 Run full test suite and verify no regressions
+  - 42 unit tests PASSED
+  - 12 integration tests PASSED
+- [x] T037 Validate quickstart.md scenarios work as documented
+  - Issue #105 exact scenario covered by integration tests
+
+**Checkpoint**: All phases complete. Feature ready for review.
 
 ---
 

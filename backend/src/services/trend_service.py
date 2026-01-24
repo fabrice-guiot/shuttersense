@@ -613,6 +613,14 @@ class TrendService:
                         calculated_count=0
                     ))
 
+            # Log fill-forward summary (Issue #105)
+            total_calculated = sum(p.calculated_count for p in data_points)
+            if total_calculated > 0:
+                logger.debug(
+                    f"PhotoStats aggregation: {len(data_points)} data points, "
+                    f"{total_calculated} fill-forward values used"
+                )
+
             return PhotoStatsTrendResponse(mode="aggregated", data_points=data_points)
 
     def get_photo_pairing_trends(
@@ -850,6 +858,14 @@ class TrendService:
                         has_transition=False,
                         calculated_count=0
                     ))
+
+            # Log fill-forward summary (Issue #105)
+            total_calculated = sum(p.calculated_count for p in data_points)
+            if total_calculated > 0:
+                logger.debug(
+                    f"PhotoPairing aggregation: {len(data_points)} data points, "
+                    f"{total_calculated} fill-forward values used"
+                )
 
             return PhotoPairingTrendResponse(mode="aggregated", data_points=data_points)
 
@@ -1182,6 +1198,14 @@ class TrendService:
                         has_transition=False,
                         calculated_count=0
                     ))
+
+            # Log fill-forward summary (Issue #105)
+            total_calculated = sum(p.calculated_count for p in data_points)
+            if total_calculated > 0:
+                logger.debug(
+                    f"PipelineValidation aggregation: {len(data_points)} data points, "
+                    f"{total_calculated} fill-forward values used"
+                )
 
             return PipelineValidationTrendResponse(mode="aggregated", data_points=data_points)
 
