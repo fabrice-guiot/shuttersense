@@ -19,20 +19,20 @@
 
 ### Implementation
 
-- [ ] T001 Create `backend/src/models/inventory_folder.py` with InventoryFolder model (GuidMixin, fld_ prefix)
-- [ ] T002 [P] Add inventory fields to `backend/src/models/connector.py` (inventory_config JSONB, validation_status, schedule)
-- [ ] T003 [P] Add FileInfo fields to `backend/src/models/collection.py` (file_info JSONB, file_info_updated_at, file_info_source, file_info_delta)
-- [ ] T004 Create database migration for inventory tables and column extensions
-- [ ] T005 [P] Create `backend/src/schemas/inventory.py` (S3InventoryConfig, GCSInventoryConfig, FileInfo, InventoryFolder schemas)
-- [ ] T006 [P] Extend `backend/src/schemas/collection.py` with FileInfo and delta summary response fields
-- [ ] T007 [P] Create `frontend/src/contracts/api/inventory-api.ts` TypeScript types (copy from contracts/inventory-types.ts)
+- [x] T001 Create `backend/src/models/inventory_folder.py` with InventoryFolder model (GuidMixin, fld_ prefix)
+- [x] T002 [P] Add inventory fields to `backend/src/models/connector.py` (inventory_config JSONB, validation_status, schedule)
+- [x] T003 [P] Add FileInfo fields to `backend/src/models/collection.py` (file_info JSONB, file_info_updated_at, file_info_source, file_info_delta)
+- [x] T004 Create database migration for inventory tables and column extensions
+- [x] T005 [P] Create `backend/src/schemas/inventory.py` (S3InventoryConfig, GCSInventoryConfig, FileInfo, InventoryFolder schemas)
+- [x] T006 [P] Extend `backend/src/schemas/collection.py` with FileInfo and delta summary response fields
+- [x] T007 [P] Create `frontend/src/contracts/api/inventory-api.ts` TypeScript types (copy from contracts/inventory-types.ts)
 
 ### Tests for Phase 1
 
-- [ ] T008 [P] Unit tests for InventoryFolder model in `backend/tests/unit/models/test_inventory_folder.py`
-- [ ] T008a [P] Unit tests for Connector model inventory extensions in `backend/tests/unit/models/test_connector.py`
-- [ ] T008b [P] Unit tests for Collection model FileInfo extensions in `backend/tests/unit/models/test_collection.py`
-- [ ] T008c [P] Unit tests for Pydantic schemas (S3InventoryConfig, GCSInventoryConfig, FileInfo validation) in `backend/tests/unit/schemas/test_inventory_schemas.py`
+- [x] T008 [P] Unit tests for InventoryFolder model in `backend/tests/unit/models/test_inventory_folder.py`
+- [x] T008a [P] Unit tests for Connector model inventory extensions in `backend/tests/unit/models/test_connector_inventory.py`
+- [x] T008b [P] Unit tests for Collection model FileInfo extensions in `backend/tests/unit/models/test_collection_fileinfo.py`
+- [x] T008c [P] Unit tests for Pydantic schemas (S3InventoryConfig, GCSInventoryConfig, FileInfo validation) in `backend/tests/unit/schemas/test_inventory_schemas.py`
 
 **Checkpoint**: Database schema ready, models and types available for all user stories
 

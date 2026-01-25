@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, Boolean, Index, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
@@ -137,11 +138,29 @@ class Connector(Base, GuidMixin):
         nullable=False
     )
 
+    # Inventory configuration fields (Issue #107 - Bucket Inventory Import)
+    # JSONB containing S3InventoryConfig or GCSInventoryConfig
+    inventory_config = Column(JSONB, nullable=True)
+    # Validation status: "pending" / "validating" / "validated" / "failed"
+    inventory_validation_status = Column(String(20), nullable=True)
+    # Error message if validation failed
+    inventory_validation_error = Column(String(500), nullable=True)
+    # Timestamp of last successful inventory import
+    inventory_last_import_at = Column(DateTime, nullable=True)
+    # Schedule: "manual" / "daily" / "weekly"
+    inventory_schedule = Column(String(20), default="manual", nullable=True)
+
     # Relationships
     collections = relationship(
         "Collection",
         back_populates="connector",
         lazy="dynamic"  # Enable filtering in queries like connector.collections.filter_by(state="LIVE")
+    )
+    inventory_folders = relationship(
+        "InventoryFolder",
+        back_populates="connector",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
     )
 
     # Table-level constraints
@@ -181,6 +200,38 @@ class Connector(Base, GuidMixin):
             True if credential_location is PENDING
         """
         return self.credential_location == CredentialLocation.PENDING
+
+    @property
+    def has_inventory_config(self) -> bool:
+        """
+        Check if this connector has inventory configuration.
+
+        Returns:
+            True if inventory_config is set
+        """
+        return self.inventory_config is not None
+
+    @property
+    def is_inventory_validated(self) -> bool:
+        """
+        Check if inventory configuration has been validated successfully.
+
+        Returns:
+            True if inventory_validation_status is "validated"
+        """
+        return self.inventory_validation_status == "validated"
+
+    @property
+    def supports_inventory(self) -> bool:
+        """
+        Check if this connector type supports inventory import.
+
+        Only S3 and GCS connectors support inventory (SMB does not).
+
+        Returns:
+            True if connector type is S3 or GCS
+        """
+        return self.type in (ConnectorType.S3, ConnectorType.GCS)
 
     def __repr__(self) -> str:
         """String representation for debugging."""
