@@ -86,8 +86,10 @@
 - [ ] T024 [US2] Create `agent/src/analysis/inventory_parser.py` with S3 manifest parser (manifest.json → files array)
 - [ ] T025 [P] [US2] Add GCS manifest parser to inventory_parser.py (manifest.json → report_shards_file_names)
 - [ ] T026 [US2] Implement CSV parser with streaming/chunked processing in inventory_parser.py
+- [ ] T026a [P] [US2] Implement Parquet parser with streaming/chunked processing in inventory_parser.py (handle GCS manifest.json → report_shards_file_names, parse Parquet files into same record stream as CSV parser)
 - [ ] T027 [US2] Implement folder extraction algorithm (single-pass with set deduplication)
 - [ ] T028 [US2] Create `agent/src/tools/inventory_import_tool.py` with InventoryImportTool class
+- [ ] T028a [US2] Update InventoryImportTool to detect Parquet format from manifest and route to Parquet parser (reference T026, T026a for parser implementations)
 - [ ] T029 [US2] Implement Phase A (Folder Extraction) in inventory_import_tool.py
 - [ ] T030 [US2] Register inventory_import tool in `agent/src/capabilities.py`
 - [ ] T031 [US2] Add dispatch case in `agent/src/job_executor.py` for inventory_import
@@ -117,7 +119,10 @@
 - [ ] T033a [P] [US2] Unit tests for GCS manifest parser (report_shards_file_names array) in `agent/tests/unit/test_inventory_parser.py`
 - [ ] T033b [P] [US2] Unit tests for folder extraction algorithm (edge cases: deep nesting, URL-encoded paths, trailing slashes) in `agent/tests/unit/test_inventory_parser.py`
 - [ ] T033c [P] [US2] Unit tests for streaming CSV parser (chunked processing, memory efficiency) in `agent/tests/unit/test_inventory_parser.py`
+- [ ] T033d [P] [US2] Unit tests for streaming Parquet parser (chunked processing, memory efficiency, same record stream output as CSV) in `agent/tests/unit/test_inventory_parser.py`
+- [ ] T033e [P] [US2] Unit tests for InventoryImportTool Parquet format detection and routing in `agent/tests/unit/test_inventory_import_tool.py`
 - [ ] T034 [US2] Integration tests for InventoryImportTool in `agent/tests/integration/test_inventory_import_tool.py`
+- [ ] T034a [US2] Integration tests for InventoryImportTool with Parquet manifests in `agent/tests/integration/test_inventory_import_tool.py`
 - [ ] T040a [US2] Integration test for folder storage endpoint (upsert behavior, duplicate handling) in `backend/tests/integration/api/test_inventory_api.py`
 - [ ] T040b [US2] Integration test for concurrent import prevention (409 response) in `backend/tests/integration/api/test_inventory_api.py`
 
@@ -406,7 +411,7 @@
 Within each phase, tasks marked [P] can run in parallel:
 - Phase 1: T002, T003, T005, T006, T007, T008, T008a, T008b, T008c can all run in parallel
 - Phase 2: T015, T015a, T017, T018 can run in parallel
-- Phase 3: T024, T025, T033, T033a, T033b, T033c can run in parallel
+- Phase 3: T024, T025, T026a, T033, T033a, T033b, T033c, T033d, T033e can run in parallel
 - Phase 4: T046a, T053a, T058a, T058b can run in parallel
 - Phase 5: T065a, T066a, T074 can run in parallel
 - Phase 6: T081, T081a, T081b, T082 can run in parallel
@@ -445,16 +450,16 @@ Task: "Unit tests for Pydantic schemas"
 |-------|------------|----------|-------|------------|-------|
 | 1 | Setup | - | 7 | 4 | 11 |
 | 2 | US1 - Configure Inventory Source | P1 | 12 | 6 | 18 |
-| 3 | US2 - Import and Extract Folders | P1 | 16 | 7 | 23 |
+| 3 | US2 - Import and Extract Folders | P1 | 18 | 11 | 29 |
 | 4 | US3 - Map Folders to Collections | P1 | 11 | 10 | 21 |
 | 5 | US4 - FileInfo Population | P1 | 8 | 7 | 15 |
 | 6 | US5 - Scheduled Import | P2 | 6 | 4 | 10 |
 | 7 | US7 - Server-Side No-Change Detection | P2 | 11 | 9 | 20 |
 | 8 | US6 - Delta Detection | P3 | 8 | 5 | 13 |
 | 9 | Polish | - | 17 | 17 | 34 |
-| **Total** | | | **96** | **69** | **165** |
+| **Total** | | | **98** | **73** | **171** |
 
-**Test Coverage**: 69 test tasks / 165 total = **42%** test task ratio
+**Test Coverage**: 73 test tasks / 171 total = **43%** test task ratio
 
 ---
 
@@ -487,10 +492,10 @@ backend/tests/
 
 agent/tests/
 ├── unit/
-│   ├── test_inventory_parser.py          # T033, T033a, T033b, T033c, T096a, T097a, T098a, T108a
-│   └── test_inventory_import_tool.py     # T065a, T066a, T067, T086a, T088a, T089a, T090
+│   ├── test_inventory_parser.py          # T033, T033a, T033b, T033c, T033d, T096a, T097a, T098a, T108a
+│   └── test_inventory_import_tool.py     # T033e, T065a, T066a, T067, T086a, T088a, T089a, T090
 ├── integration/
-│   └── test_inventory_import_tool.py     # T034, T118
+│   └── test_inventory_import_tool.py     # T034, T034a, T118
 └── performance/
     └── test_inventory_performance.py     # T113, T114, T116
 
