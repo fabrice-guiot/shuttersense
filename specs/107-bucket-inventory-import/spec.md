@@ -305,7 +305,7 @@ As a system optimization, when a Collection has inventory-sourced FileInfo store
 - **FR-012**: Agent MUST fetch and parse manifest file from the inventory location (S3: `manifest.json` with `files` array; GCS: `manifest.json` with `report_shards_file_names` array).
 - **FR-013**: Agent MUST download data files referenced in the manifest (S3: decompress gzip-compressed files; GCS: read uncompressed CSV or Parquet).
 - **FR-014**: Agent MUST parse inventory format with provider-specific field mapping (S3: Key, Size, LastModifiedDate, ETag, StorageClass; GCS: name, size, updated, etag, storageClass).
-- **FR-015**: Agent MUST retain parsed inventory data locally for the duration of the pipeline execution.
+- **FR-015**: Agent MUST make parsed inventory data available across all pipeline phases (A, B, C) using a memory-safe strategy. Implementations MUST NOT hold full parsed inventory in-memory; instead, agents MUST use on-disk spooling (e.g., temporary SQLite database or structured temp files) or streaming re-reads of source data files per phase. Only derived metadata required for processing (e.g., unique folder path set for Phase A) may be retained in-memory. This requirement works in conjunction with FR-035 to ensure the 1GB memory cap is maintained for inventories with millions of objects.
 - **FR-016**: Agent MUST extract unique folder paths from object keys/names.
 - **FR-017**: Agent MUST report folder results to the server; server MUST store folders as `InventoryFolder` records.
 
