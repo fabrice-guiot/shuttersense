@@ -163,7 +163,7 @@ class Job(Base, GuidMixin):
     required_capabilities_json = Column(
         JSONB().with_variant(Text, "sqlite"),
         nullable=False,
-        default=list
+        default=lambda: "[]"  # JSON string for SQLite Text variant compatibility
     )
 
     # Currently executing agent

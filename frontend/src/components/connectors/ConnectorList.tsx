@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Bot, CloudCheck, Edit, Trash2 } from 'lucide-react'
+import { Bot, CloudCheck, Edit, Trash2, Archive } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -37,6 +37,7 @@ import type { Connector, ConnectorType, CredentialLocation } from '@/contracts/a
 import type { Agent } from '@/contracts/api/agent-api'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/utils/dateFormat'
+import { InventoryConfigSection } from '@/components/inventory'
 
 // ============================================================================
 // Component Props
@@ -50,6 +51,8 @@ export interface ConnectorListProps {
   onTest: (connector: Connector) => void
   /** List of agents (to show which have credentials for agent-based connectors) */
   agents?: Agent[]
+  /** Callback when inventory config changes (to refresh connector data) */
+  onInventoryChange?: () => void
   className?: string
 }
 
@@ -105,9 +108,15 @@ export function ConnectorList({
   onDelete,
   onTest,
   agents = [],
+  onInventoryChange,
   className
 }: ConnectorListProps) {
   const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean
+    connector: Connector | null
+  }>({ open: false, connector: null })
+
+  const [inventoryDialog, setInventoryDialog] = useState<{
     open: boolean
     connector: Connector | null
   }>({ open: false, connector: null })
@@ -144,6 +153,18 @@ export function ConnectorList({
 
   const handleDeleteCancel = () => {
     setDeleteDialog({ open: false, connector: null })
+  }
+
+  const handleInventoryClick = (connector: Connector) => {
+    setInventoryDialog({ open: true, connector })
+  }
+
+  const handleInventoryClose = () => {
+    setInventoryDialog({ open: false, connector: null })
+  }
+
+  const supportsInventory = (type: ConnectorType): boolean => {
+    return type === 's3' || type === 'gcs'
   }
 
   if (loading) {
@@ -351,6 +372,24 @@ export function ConnectorList({
                           </Tooltip>
                         </TooltipProvider>
 
+                        {supportsInventory(connector.type) && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleInventoryClick(connector)}
+                                  aria-label="Inventory Configuration"
+                                >
+                                  <Archive className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Bucket Inventory</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -410,6 +449,27 @@ export function ConnectorList({
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inventory Configuration Dialog */}
+      <Dialog open={inventoryDialog.open} onOpenChange={handleInventoryClose}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bucket Inventory - {inventoryDialog.connector?.name}</DialogTitle>
+            <DialogDescription>
+              Configure bucket inventory import to efficiently discover folders and
+              populate file metadata without making per-object API calls.
+            </DialogDescription>
+          </DialogHeader>
+          {inventoryDialog.connector && (
+            <InventoryConfigSection
+              connector={inventoryDialog.connector}
+              onConfigChange={() => {
+                onInventoryChange?.()
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </>

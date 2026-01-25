@@ -16,8 +16,9 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, Boolean, Index, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
+
+from backend.src.models.types import JSONBType
 
 from backend.src.models import Base
 from backend.src.models.mixins import GuidMixin
@@ -140,7 +141,7 @@ class Connector(Base, GuidMixin):
 
     # Inventory configuration fields (Issue #107 - Bucket Inventory Import)
     # JSONB containing S3InventoryConfig or GCSInventoryConfig
-    inventory_config = Column(JSONB, nullable=True)
+    inventory_config = Column(JSONBType, nullable=True)
     # Validation status: "pending" / "validating" / "validated" / "failed"
     inventory_validation_status = Column(String(20), nullable=True)
     # Error message if validation failed

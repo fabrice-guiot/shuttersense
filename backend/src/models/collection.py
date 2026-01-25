@@ -17,8 +17,9 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Enum, Text, Boolean, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
+
+from backend.src.models.types import JSONBType
 
 from backend.src.models import Base
 from backend.src.models.mixins import GuidMixin
@@ -184,13 +185,13 @@ class Collection(Base, GuidMixin):
 
     # FileInfo cache from inventory import (Issue #107 - Bucket Inventory Import)
     # JSONB array of FileInfo objects: {key, size, last_modified, etag, storage_class}
-    file_info = Column(JSONB, nullable=True)
+    file_info = Column(JSONBType, nullable=True)
     # When FileInfo was last updated from inventory or API
     file_info_updated_at = Column(DateTime, nullable=True)
     # Source of FileInfo: "api" (direct cloud list) or "inventory" (from inventory import)
     file_info_source = Column(String(20), nullable=True)
     # Delta summary from last inventory import: {new_count, modified_count, deleted_count, computed_at}
-    file_info_delta = Column(JSONB, nullable=True)
+    file_info_delta = Column(JSONBType, nullable=True)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -77,6 +77,9 @@ from backend.src.api.agent.schemas import (
     FinalizeUploadRequest,
     FinalizeUploadResponse,
     UploadStatusResponse,
+    # Inventory validation schemas (Issue #107)
+    InventoryValidationRequest,
+    InventoryValidationResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -1886,3 +1889,171 @@ async def revoke_agent(
     )
 
     return None
+
+
+# ============================================================================
+# Inventory Validation Endpoints (Issue #107)
+# ============================================================================
+
+@router.post(
+    "/jobs/{job_guid}/inventory/validate",
+    response_model=InventoryValidationResponse,
+    summary="Report inventory validation result",
+    description="Submit the result of an inventory configuration validation job."
+)
+async def report_inventory_validation(
+    job_guid: str,
+    data: InventoryValidationRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Report inventory validation result.
+
+    Called by agents after validating inventory configuration accessibility.
+    Updates the connector's inventory_validation_status based on the result.
+
+    Path Parameters:
+        job_guid: GUID of the validation job (job_xxx format)
+
+    Request Body:
+        InventoryValidationRequest with validation results
+
+    Returns:
+        InventoryValidationResponse with status update confirmation
+
+    Raises:
+        404: If job or connector not found
+        400: If job is not an inventory validation job
+        403: If job is not assigned to this agent
+    """
+    from backend.src.models.job import Job, JobStatus
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    from backend.src.services.inventory_service import InventoryService
+
+    # Parse job GUID
+    try:
+        job_uuid = Job.parse_guid(job_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Get job
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id,
+    ).first()
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job type is inventory_validate
+    if job.tool != "inventory_validate":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job is not an inventory validation job"
+        )
+
+    # Verify agent is assigned to this job
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Get connector from job progress
+    progress = job.progress or {}
+    connector_id = progress.get("connector_id")
+    connector_guid = progress.get("connector_guid")
+
+    if not connector_id:
+        # Try to get connector by GUID from request
+        if data.connector_guid:
+            from backend.src.services.guid import GuidService
+            try:
+                connector_uuid = GuidService.parse_identifier(data.connector_guid, expected_prefix="con")
+                from backend.src.models import Connector
+                connector = db.query(Connector).filter(
+                    Connector.uuid == connector_uuid,
+                    Connector.team_id == ctx.team_id,
+                ).first()
+                if connector:
+                    connector_id = connector.id
+            except ValueError:
+                pass
+
+    if not connector_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not determine connector from job"
+        )
+
+    # Update connector validation status
+    inventory_service = InventoryService(db)
+    try:
+        connector = inventory_service.update_validation_status(
+            connector_id=connector_id,
+            success=data.success,
+            error_message=data.error_message,
+            team_id=ctx.team_id
+        )
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Connector not found"
+        )
+
+    # Complete the job
+    coordinator = JobCoordinatorService(db)
+    try:
+        if data.success:
+            # Complete job successfully
+            job.status = JobStatus.COMPLETED
+            job.completed_at = datetime.utcnow()
+        else:
+            # Mark job as failed
+            job.status = JobStatus.FAILED
+            job.error_message = data.error_message
+            job.completed_at = datetime.utcnow()
+
+        db.commit()
+
+        # Broadcast pool status update
+        pool_status = service.get_pool_status(ctx.team_id)
+        manager = get_connection_manager()
+        asyncio.create_task(
+            manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+        )
+
+        # Broadcast job update
+        job_response = _db_job_to_response(job)
+        asyncio.create_task(
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+        )
+
+    except Exception as e:
+        logger.error(f"Error completing validation job: {str(e)}", exc_info=True)
+        # Continue - validation status is already updated
+
+    status_str = "validated" if data.success else "failed"
+    message = "Inventory configuration validated successfully" if data.success else f"Validation failed: {data.error_message}"
+
+    logger.info(
+        f"Inventory validation completed",
+        extra={
+            "job_guid": job_guid,
+            "connector_guid": connector.guid if connector else connector_guid,
+            "success": data.success
+        }
+    )
+
+    return InventoryValidationResponse(
+        status=status_str,
+        message=message
+    )

@@ -1274,3 +1274,62 @@ class JobCompleteWithUploadRequest(BaseModel):
             }
         }
     }
+
+
+# ============================================================================
+# Inventory Validation Schemas (Issue #107)
+# ============================================================================
+
+class InventoryValidationRequest(BaseModel):
+    """Request schema for reporting inventory validation results."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx) being validated"
+    )
+    success: bool = Field(
+        ...,
+        description="Whether validation succeeded"
+    )
+    error_message: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="Error message if validation failed"
+    )
+    manifest_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Number of manifests found (if successful)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "success": True,
+                "manifest_count": 3
+            }
+        }
+    }
+
+
+class InventoryValidationResponse(BaseModel):
+    """Response schema for inventory validation result submission."""
+
+    status: str = Field(
+        ...,
+        description="Validation status (validated/failed)"
+    )
+    message: str = Field(
+        ...,
+        description="Status message"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "validated",
+                "message": "Inventory configuration validated successfully"
+            }
+        }
+    }

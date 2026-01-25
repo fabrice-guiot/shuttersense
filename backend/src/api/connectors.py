@@ -31,7 +31,14 @@ from backend.src.schemas.collection import (
     ConnectorTestResponse,
     ConnectorStatsResponse,
 )
+from backend.src.schemas.inventory import (
+    InventoryConfigRequest,
+    InventoryStatusResponse,
+    InventoryFolderListResponse,
+    InventoryFolderResponse,
+)
 from backend.src.services.connector_service import ConnectorService
+from backend.src.services.inventory_service import InventoryService
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
 from backend.src.middleware.auth import require_auth, TenantContext
@@ -60,6 +67,11 @@ def get_connector_service(
 ) -> ConnectorService:
     """Create ConnectorService instance with dependencies."""
     return ConnectorService(db=db, encryptor=encryptor)
+
+
+def get_inventory_service(db: Session = Depends(get_db)) -> InventoryService:
+    """Create InventoryService instance with dependencies."""
+    return InventoryService(db=db)
 
 
 # ============================================================================
@@ -593,4 +605,348 @@ async def test_connector(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to test connector: {str(e)}"
+        )
+
+
+# ============================================================================
+# Inventory Configuration Endpoints (Issue #107)
+# ============================================================================
+
+@router.put(
+    "/{guid}/inventory/config",
+    response_model=ConnectorResponse,
+    summary="Configure inventory source",
+    description="Set inventory configuration on a connector (S3 or GCS)"
+)
+async def update_inventory_config(
+    guid: str,
+    request: InventoryConfigRequest,
+    ctx: TenantContext = Depends(require_auth),
+    connector_service: ConnectorService = Depends(get_connector_service),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+) -> ConnectorResponse:
+    """
+    Configure inventory source on a connector.
+
+    Sets S3 or GCS inventory configuration and triggers validation.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx format)
+
+    Request Body:
+        InventoryConfigRequest with config and schedule
+
+    Returns:
+        ConnectorResponse with updated inventory configuration
+
+    Raises:
+        400 Bad Request: If connector type doesn't support inventory
+        404 Not Found: If connector doesn't exist
+
+    Example:
+        PUT /api/connectors/con_01hgw2bbg.../inventory/config
+        {
+          "config": {
+            "provider": "s3",
+            "destination_bucket": "my-inventory-bucket",
+            "source_bucket": "my-photo-bucket",
+            "config_name": "daily-inventory"
+          },
+          "schedule": "weekly"
+        }
+    """
+    try:
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not connector:
+            logger.warning(f"Connector not found for inventory config: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        # Set inventory configuration
+        updated_connector = inventory_service.set_inventory_config(
+            connector_id=connector.id,
+            config=request.config,
+            schedule=request.schedule,
+            team_id=ctx.team_id
+        )
+
+        logger.info(
+            f"Set inventory config on connector",
+            extra={
+                "guid": guid,
+                "provider": request.config.provider,
+                "schedule": request.schedule
+            }
+        )
+
+        return ConnectorResponse.model_validate(updated_connector)
+
+    except ValueError as e:
+        error_msg = str(e)
+        logger.warning(f"Invalid inventory config: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Error setting inventory config: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set inventory configuration: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{guid}/inventory/config",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove inventory configuration",
+    description="Clear inventory configuration from connector"
+)
+async def delete_inventory_config(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    connector_service: ConnectorService = Depends(get_connector_service),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+) -> None:
+    """
+    Remove inventory configuration from a connector.
+
+    Clears config, validation status, and deletes associated inventory folders.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx format)
+
+    Returns:
+        204 No Content on success
+
+    Raises:
+        404 Not Found: If connector doesn't exist
+
+    Example:
+        DELETE /api/connectors/con_01hgw2bbg.../inventory/config
+    """
+    try:
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not connector:
+            logger.warning(f"Connector not found for inventory config delete: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        inventory_service.clear_inventory_config(
+            connector_id=connector.id,
+            team_id=ctx.team_id
+        )
+
+        logger.info(
+            f"Cleared inventory config from connector",
+            extra={"guid": guid}
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Error clearing inventory config: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear inventory configuration: {str(e)}"
+        )
+
+
+@router.get(
+    "/{guid}/inventory/status",
+    response_model=InventoryStatusResponse,
+    summary="Get inventory status",
+    description="Get current inventory import status and statistics"
+)
+async def get_inventory_status(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    connector_service: ConnectorService = Depends(get_connector_service),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+) -> InventoryStatusResponse:
+    """
+    Get inventory status for a connector.
+
+    Returns validation status, folder counts, and current job info.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx format)
+
+    Returns:
+        InventoryStatusResponse with status and statistics
+
+    Raises:
+        404 Not Found: If connector doesn't exist
+
+    Example:
+        GET /api/connectors/con_01hgw2bbg.../inventory/status
+
+        Response:
+        {
+          "validation_status": "validated",
+          "folder_count": 42,
+          "mapped_folder_count": 15,
+          "current_job": null
+        }
+    """
+    try:
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not connector:
+            logger.warning(f"Connector not found for inventory status: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        status_data = inventory_service.get_inventory_status(
+            connector_id=connector.id,
+            team_id=ctx.team_id
+        )
+
+        logger.info(
+            f"Retrieved inventory status for connector",
+            extra={"guid": guid, "validation_status": status_data.get("validation_status")}
+        )
+
+        return InventoryStatusResponse(**status_data)
+
+    except ValueError as e:
+        # Invalid GUID format
+        logger.warning(f"Invalid GUID: {guid} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Error getting inventory status: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get inventory status: {str(e)}"
+        )
+
+
+@router.get(
+    "/{guid}/inventory/folders",
+    response_model=InventoryFolderListResponse,
+    summary="List discovered folders",
+    description="Get folders discovered from inventory import"
+)
+async def list_inventory_folders(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    path_prefix: Optional[str] = Query(None, description="Filter by path prefix"),
+    unmapped_only: bool = Query(False, description="Only unmapped folders"),
+    limit: int = Query(1000, ge=1, le=10000, description="Maximum results"),
+    offset: int = Query(0, ge=0, description="Skip first N results"),
+    connector_service: ConnectorService = Depends(get_connector_service),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+) -> InventoryFolderListResponse:
+    """
+    List inventory folders discovered from a connector.
+
+    Supports filtering by path prefix and mapping status.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx format)
+
+    Query Parameters:
+        path_prefix: Filter by path prefix (e.g., "2020/")
+        unmapped_only: If true, only return unmapped folders
+        limit: Maximum results (default 1000, max 10000)
+        offset: Skip first N results
+
+    Returns:
+        InventoryFolderListResponse with folders and pagination info
+
+    Raises:
+        404 Not Found: If connector doesn't exist
+
+    Example:
+        GET /api/connectors/con_01hgw2bbg.../inventory/folders?unmapped_only=true
+    """
+    try:
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not connector:
+            logger.warning(f"Connector not found for inventory folders: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        folders, total_count, has_more = inventory_service.list_folders(
+            connector_id=connector.id,
+            team_id=ctx.team_id,
+            path_prefix=path_prefix,
+            unmapped_only=unmapped_only,
+            limit=limit,
+            offset=offset
+        )
+
+        # Convert to response models with suggested names
+        folder_responses = []
+        for folder in folders:
+            folder_response = InventoryFolderResponse(
+                guid=folder.guid,
+                path=folder.path,
+                object_count=folder.object_count or 0,
+                total_size_bytes=folder.total_size_bytes or 0,
+                deepest_modified=folder.deepest_modified,
+                discovered_at=folder.discovered_at,
+                collection_guid=folder.collection_guid,
+                suggested_name=folder.name  # Use the name property as suggested name
+            )
+            folder_responses.append(folder_response)
+
+        logger.info(
+            f"Listed inventory folders",
+            extra={
+                "guid": guid,
+                "total_count": total_count,
+                "returned_count": len(folder_responses)
+            }
+        )
+
+        return InventoryFolderListResponse(
+            folders=folder_responses,
+            total_count=total_count,
+            has_more=has_more
+        )
+
+    except ValueError as e:
+        # Invalid GUID format
+        logger.warning(f"Invalid GUID: {guid} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Error listing inventory folders: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list inventory folders: {str(e)}"
         )
