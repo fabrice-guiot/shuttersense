@@ -15,6 +15,7 @@ export type InventoryValidationStatus = 'pending' | 'validating' | 'validated' |
 export interface S3InventoryConfig {
   provider: 's3'
   destination_bucket: string
+  destination_prefix?: string
   source_bucket: string
   config_name: string
   format: 'CSV' | 'ORC' | 'Parquet'
@@ -209,6 +210,7 @@ export interface InventoryImportTriggerResponse {
 export interface S3InventoryFormData {
   provider: 's3'
   destination_bucket: string
+  destination_prefix?: string
   source_bucket: string
   config_name: string
   format: 'CSV' | 'ORC' | 'Parquet'

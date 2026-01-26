@@ -26,12 +26,17 @@ class S3InventoryConfig(BaseModel):
 
     Required fields for locating S3 inventory reports:
     - destination_bucket: Bucket where inventory reports are stored
+    - destination_prefix: Optional prefix path within destination bucket
     - source_bucket: Bucket being inventoried
     - config_name: AWS inventory configuration name
+
+    The full inventory path is:
+    s3://{destination_bucket}/{destination_prefix}/{source_bucket}/{config_name}/{timestamp}/manifest.json
 
     Example:
         >>> config = S3InventoryConfig(
         ...     destination_bucket="my-inventory-bucket",
+        ...     destination_prefix="Inventories/PhotoArchive",
         ...     source_bucket="my-photo-bucket",
         ...     config_name="daily-inventory"
         ... )
@@ -42,6 +47,11 @@ class S3InventoryConfig(BaseModel):
         min_length=3,
         max_length=63,
         description="Bucket where inventory reports are stored"
+    )
+    destination_prefix: str = Field(
+        default="",
+        max_length=1024,
+        description="Optional prefix path within destination bucket (e.g., 'Inventories/PhotoArchive')"
     )
     source_bucket: str = Field(
         ...,
@@ -79,6 +89,7 @@ class S3InventoryConfig(BaseModel):
             "example": {
                 "provider": "s3",
                 "destination_bucket": "my-inventory-bucket",
+                "destination_prefix": "Inventories/PhotoArchive",
                 "source_bucket": "my-photo-bucket",
                 "config_name": "daily-inventory",
                 "format": "CSV"

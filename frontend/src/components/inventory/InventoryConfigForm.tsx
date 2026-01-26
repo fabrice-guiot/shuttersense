@@ -45,6 +45,7 @@ import type { ConnectorType } from '@/contracts/api/connector-api'
 const s3InventorySchema = z.object({
   provider: z.literal('s3'),
   destination_bucket: z.string().min(3, 'Bucket name required').max(63),
+  destination_prefix: z.string().max(1024).optional(),
   source_bucket: z.string().min(3, 'Bucket name required').max(63),
   config_name: z.string().min(1, 'Config name required').max(64),
   format: z.enum(['CSV', 'ORC', 'Parquet'] as const)
@@ -105,8 +106,18 @@ export function InventoryConfigForm({
   const provider: InventoryProvider = connectorType === 'gcs' ? 'gcs' : 's3'
 
   // Build default values based on provider
-  const getDefaultValues = (): InventoryFormData => {
+  const getDefaultValues = () => {
     if (existingConfig) {
+      // Ensure S3 config has destination_prefix (may be missing in older data)
+      if (existingConfig.provider === 's3') {
+        return {
+          config: {
+            ...existingConfig,
+            destination_prefix: existingConfig.destination_prefix || ''
+          },
+          schedule: existingSchedule
+        }
+      }
       return {
         config: existingConfig,
         schedule: existingSchedule
@@ -116,24 +127,25 @@ export function InventoryConfigForm({
     if (provider === 's3') {
       return {
         config: {
-          provider: 's3',
+          provider: 's3' as const,
           destination_bucket: '',
+          destination_prefix: '',
           source_bucket: '',
           config_name: '',
           format: 'CSV' as const
         },
-        schedule: 'manual'
+        schedule: 'manual' as const
       }
     }
 
     return {
       config: {
-        provider: 'gcs',
+        provider: 'gcs' as const,
         destination_bucket: '',
         report_config_name: '',
         format: 'CSV' as const
       },
-      schedule: 'manual'
+      schedule: 'manual' as const
     }
   }
 
@@ -205,6 +217,27 @@ export function InventoryConfigForm({
                     </FormControl>
                     <FormDescription>
                       The bucket where S3 stores inventory reports
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="config.destination_prefix"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Destination Prefix (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Inventories/PhotoArchive"
+                        {...field}
+                        value={field.value || ''}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Optional path prefix within the destination bucket (e.g., "Inventories/MyProject")
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

@@ -297,13 +297,16 @@ class InventoryService:
             Path to manifest.json (relative to destination bucket)
         """
         if connector_type == ConnectorType.S3:
-            # S3: {source-bucket}/{config-name}/
+            # S3: {destination_prefix}/{source-bucket}/{config-name}/
             # Note: Full path requires finding latest timestamp folder
+            destination_prefix = config.get("destination_prefix", "").strip("/")
             source_bucket = config.get("source_bucket", "")
             config_name = config.get("config_name", "")
+            if destination_prefix:
+                return f"{destination_prefix}/{source_bucket}/{config_name}/"
             return f"{source_bucket}/{config_name}/"
         else:
-            # GCS: {source-bucket}/{config-name}/
+            # GCS: {report_config_name}/
             # Note: Full path requires finding latest snapshot date folder
             report_config_name = config.get("report_config_name", "")
             return f"{report_config_name}/"
