@@ -46,30 +46,30 @@
 
 ### Backend Implementation
 
-- [ ] T009 [US1] Create `backend/src/services/inventory_service.py` with config validation methods (server-side credential path)
-- [ ] T010 [US1] Add `create_validation_job()` method to InventoryService for agent-side credential path
-- [ ] T011 [US1] Extend `backend/src/services/connector_service.py` with inventory config CRUD operations
-- [ ] T012 [US1] Create `backend/src/api/inventory/routes.py` with PUT/DELETE config endpoints
-- [ ] T013 [US1] Add GET status endpoint to inventory routes (validation_status, last_import_at, folder counts)
-- [ ] T014 [US1] Add agent endpoint `POST /api/agent/v1/jobs/{guid}/inventory/validate` for validation results
+- [x] T009 [US1] Create `backend/src/services/inventory_service.py` with config validation methods (server-side credential path)
+- [x] T010 [US1] Add `create_validation_job()` method to InventoryService for agent-side credential path
+- [x] T011 [US1] Extend `backend/src/services/connector_service.py` with inventory config CRUD operations
+- [x] T012 [US1] Create `backend/src/api/inventory/routes.py` with PUT/DELETE config endpoints
+- [x] T013 [US1] Add GET status endpoint to inventory routes (validation_status, last_import_at, folder counts)
+- [x] T014 [US1] Add agent endpoint `POST /api/agent/v1/jobs/{guid}/inventory/validate` for validation results
 
 ### Frontend Implementation
 
-- [ ] T017 [P] [US1] Create `frontend/src/services/inventory.ts` API client (config CRUD, status polling)
-- [ ] T018 [P] [US1] Create `frontend/src/hooks/useInventory.ts` React hooks (useInventoryConfig, useInventoryStatus)
-- [ ] T019 [US1] Create `frontend/src/components/inventory/InventoryConfigForm.tsx` (provider-specific fields, schedule selection)
-- [ ] T020 [US1] Add inventory configuration section to connector detail page
-- [ ] T021 [US1] Implement validation status display (pending, validating, validated, failed states)
-- [ ] T022 [US1] Add error message display for validation failures with guidance
+- [x] T017 [P] [US1] Create `frontend/src/services/inventory.ts` API client (config CRUD, status polling)
+- [x] T018 [P] [US1] Create `frontend/src/hooks/useInventory.ts` React hooks (useInventoryConfig, useInventoryStatus)
+- [x] T019 [US1] Create `frontend/src/components/inventory/InventoryConfigForm.tsx` (provider-specific fields, schedule selection)
+- [x] T020 [US1] Add inventory configuration section to connector detail page
+- [x] T021 [US1] Implement validation status display (pending, validating, validated, failed states)
+- [x] T022 [US1] Add error message display for validation failures with guidance
 
 ### Tests for US1
 
-- [ ] T015 [P] [US1] Unit tests for server-side credential validation path in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T015a [P] [US1] Unit tests for agent-side credential validation job creation in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T016 [US1] Integration tests for config endpoints in `backend/tests/integration/api/test_inventory_api.py`
-- [ ] T016a [US1] Integration test for agent-side credential validation flow (job creation → agent report → status update) in `backend/tests/integration/api/test_inventory_validation_flow.py`
-- [ ] T016b [US1] Integration test for SMB connector inventory exclusion (verify 404/hidden) in `backend/tests/integration/api/test_inventory_api.py`
-- [ ] T023 [US1] Component tests for InventoryConfigForm in `frontend/tests/components/inventory/InventoryConfigForm.test.tsx`
+- [x] T015 [P] [US1] Unit tests for server-side credential validation path in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T015a [P] [US1] Unit tests for agent-side credential validation job creation in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T016 [US1] Integration tests for config endpoints in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T016a [US1] Integration test for agent-side credential validation flow (job creation → agent report → status update) in `backend/tests/integration/api/test_inventory_validation_flow.py`
+- [x] T016b [US1] Integration test for SMB connector inventory exclusion (verify 404/hidden) in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T023 [US1] Component tests for InventoryConfigForm in `frontend/tests/components/inventory/InventoryConfigForm.test.tsx`
 
 **Checkpoint**: Users can configure inventory sources on S3/GCS connectors with proper validation feedback
 
