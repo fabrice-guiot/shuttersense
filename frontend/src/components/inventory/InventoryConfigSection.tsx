@@ -85,8 +85,16 @@ export function InventoryConfigSection({
   const handleSaveConfig = async (config: InventoryConfig, schedule: InventorySchedule) => {
     await setConfig(connector.guid, config, schedule)
     setConfigDialogOpen(false)
-    refetchStatus()
     onConfigChange?.()
+
+    // Auto-trigger validation after saving config
+    // This verifies the manifest.json is accessible
+    try {
+      await validate(connector.guid)
+    } catch {
+      // Validation failure is reported via toast, don't block the save
+    }
+    refetchStatus()
   }
 
   const handleClearConfig = async () => {
@@ -110,10 +118,10 @@ export function InventoryConfigSection({
     status?.validation_status === 'validated' &&
     !status?.current_job
 
+  // Show validate button when validation failed (for retry) or is pending
   const canValidate =
     hasConfig &&
-    status?.validation_status !== 'validated' &&
-    status?.validation_status !== 'validating' &&
+    (status?.validation_status === 'failed' || status?.validation_status === 'pending') &&
     !status?.current_job
 
   return (
@@ -165,7 +173,7 @@ export function InventoryConfigSection({
         {/* Actions */}
         {hasConfig && (
           <div className="flex flex-wrap gap-2">
-            {/* Validate Button - shown when validation is needed */}
+            {/* Validate/Retry Button - shown when validation failed or pending */}
             {canValidate && (
               <Button
                 variant="outline"
@@ -174,7 +182,11 @@ export function InventoryConfigSection({
                 className="gap-2"
               >
                 <CheckCircle className="h-4 w-4" />
-                {validateLoading ? 'Validating...' : 'Validate Configuration'}
+                {validateLoading
+                  ? 'Validating...'
+                  : status?.validation_status === 'failed'
+                    ? 'Retry Validation'
+                    : 'Validate'}
               </Button>
             )}
 
