@@ -319,6 +319,11 @@ class ConnectorResponse(BaseModel):
         is_active: Active status
         last_validated: Last successful connection test
         last_error: Last connection error message
+        inventory_config: Inventory configuration (S3/GCS)
+        inventory_validation_status: Validation status (pending/validating/validated/failed)
+        inventory_validation_error: Error message if validation failed
+        inventory_last_import_at: Last successful import timestamp
+        inventory_schedule: Import schedule (manual/daily/weekly)
         created_at: Creation timestamp
         updated_at: Last update timestamp
 
@@ -335,6 +340,22 @@ class ConnectorResponse(BaseModel):
     is_active: bool
     last_validated: Optional[datetime]
     last_error: Optional[str]
+    # Inventory configuration fields (Issue #107)
+    inventory_config: Optional[Dict[str, Any]] = Field(
+        default=None, description="Inventory configuration (S3/GCS)"
+    )
+    inventory_validation_status: Optional[str] = Field(
+        default=None, description="Validation status (pending/validating/validated/failed)"
+    )
+    inventory_validation_error: Optional[str] = Field(
+        default=None, description="Error message if validation failed"
+    )
+    inventory_last_import_at: Optional[datetime] = Field(
+        default=None, description="Last successful import timestamp"
+    )
+    inventory_schedule: Optional[str] = Field(
+        default=None, description="Import schedule (manual/daily/weekly)"
+    )
     created_at: datetime
     updated_at: datetime
 

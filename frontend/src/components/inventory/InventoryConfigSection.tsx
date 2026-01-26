@@ -78,8 +78,8 @@ export function InventoryConfigSection({
     )
   }
 
-  // Determine if config exists (we check validation_status as proxy)
-  const hasConfig = status?.validation_status !== null
+  // Determine if config exists - use connector's inventory_config
+  const hasConfig = connector.inventory_config !== null && connector.inventory_config !== undefined
 
   const handleSaveConfig = async (config: InventoryConfig, schedule: InventorySchedule) => {
     await setConfig(connector.guid, config, schedule)
@@ -190,16 +190,8 @@ export function InventoryConfigSection({
           </DialogHeader>
           <InventoryConfigForm
             connectorType={connector.type}
-            existingConfig={
-              status?.validation_status
-                ? {
-                    provider: connector.type === 'gcs' ? 'gcs' : 's3',
-                    // Note: We don't have the full config in status, this is a limitation
-                    // The form will show empty fields for edit - user must re-enter
-                  } as InventoryConfig
-                : null
-            }
-            existingSchedule="manual"
+            existingConfig={connector.inventory_config ?? null}
+            existingSchedule={connector.inventory_schedule ?? 'manual'}
             onSubmit={handleSaveConfig}
             onCancel={() => setConfigDialogOpen(false)}
             loading={configLoading}
