@@ -36,7 +36,7 @@ class S3InventoryConfig(BaseModel):
     Example:
         >>> config = S3InventoryConfig(
         ...     destination_bucket="my-inventory-bucket",
-        ...     destination_prefix="Inventories/PhotoArchive",
+        ...     destination_prefix="Inventories/MyProject",
         ...     source_bucket="my-photo-bucket",
         ...     config_name="daily-inventory"
         ... )
@@ -89,7 +89,7 @@ class S3InventoryConfig(BaseModel):
             "example": {
                 "provider": "s3",
                 "destination_bucket": "my-inventory-bucket",
-                "destination_prefix": "Inventories/PhotoArchive",
+                "destination_prefix": "Inventories/MyProject",
                 "source_bucket": "my-photo-bucket",
                 "config_name": "daily-inventory",
                 "format": "CSV"

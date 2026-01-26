@@ -231,7 +231,7 @@ export function InventoryConfigForm({
                     <FormLabel>Destination Prefix (Optional)</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Inventories/PhotoArchive"
+                        placeholder="Inventories/MyProject"
                         {...field}
                         value={field.value || ''}
                       />
