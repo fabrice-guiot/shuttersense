@@ -26,12 +26,14 @@ class ToolType(str, Enum):
     PHOTO_PAIRING = "photo_pairing"
     PIPELINE_VALIDATION = "pipeline_validation"
     COLLECTION_TEST = "collection_test"  # Accessibility test for LOCAL collections
+    INVENTORY_VALIDATE = "inventory_validate"  # Validate inventory configuration
 
 
 class ToolMode(str, Enum):
-    """Execution mode for pipeline validation tool."""
+    """Execution mode for tools."""
     COLLECTION = "collection"      # Validate files in a collection against pipeline
     DISPLAY_GRAPH = "display_graph"  # Validate pipeline definition only (no collection)
+    VALIDATION = "validation"      # Validate inventory configuration (no collection)
 
 
 class JobStatus(str, Enum):

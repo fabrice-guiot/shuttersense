@@ -845,6 +845,10 @@ class ConnectorTestData(BaseModel):
         None,
         description="Decrypted credentials (only for server credential mode)"
     )
+    inventory_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Inventory configuration for inventory_validate jobs"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -853,7 +857,8 @@ class ConnectorTestData(BaseModel):
                 "type": "s3",
                 "name": "Production AWS S3",
                 "credential_location": "agent",
-                "credentials": None
+                "credentials": None,
+                "inventory_config": None
             }
         }
     }

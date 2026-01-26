@@ -11,7 +11,7 @@
 
 export type ResultStatus = 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'NO_CHANGE'
 
-export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation'
+export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation' | 'collection_test' | 'inventory_validate'
 
 export type SortField = 'created_at' | 'duration_seconds' | 'files_scanned'
 

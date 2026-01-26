@@ -704,6 +704,64 @@ class AgentApiClient:
                 status_code=response.status_code,
             )
 
+    async def report_inventory_validation(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        success: bool,
+        error_message: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Report inventory validation result to the server.
+
+        Args:
+            job_guid: GUID of the validation job
+            connector_guid: GUID of the connector being validated
+            success: Whether validation succeeded
+            error_message: Error message if validation failed
+
+        Returns:
+            Response with status confirmation
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+            ApiError: If the request fails
+        """
+        payload: dict[str, Any] = {
+            "connector_guid": connector_guid,
+            "success": success,
+        }
+        if error_message:
+            payload["error_message"] = error_message
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/inventory/validate",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        elif response.status_code == 403:
+            raise ApiError("Job not assigned to this agent", status_code=403)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Inventory validation report failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
     # -------------------------------------------------------------------------
     # Synchronous Methods (for CLI use)
     # -------------------------------------------------------------------------

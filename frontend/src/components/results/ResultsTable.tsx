@@ -10,7 +10,6 @@ import {
   Download,
   Eye,
   FileText,
-  Search,
   ChevronLeft,
   ChevronRight,
   Copy
@@ -25,7 +24,6 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -90,7 +88,9 @@ const STATUS_CONFIG: Record<
 const TOOL_LABELS: Record<ToolType, string> = {
   photostats: 'PhotoStats',
   photo_pairing: 'Photo Pairing',
-  pipeline_validation: 'Pipeline Validation'
+  pipeline_validation: 'Pipeline Validation',
+  collection_test: 'Collection Test',
+  inventory_validate: 'Inventory Validation'
 }
 
 // ============================================================================
@@ -233,7 +233,7 @@ export function ResultsTable({
                 <TableRow key={result.guid}>
                   <TableCell className="font-medium">
                     {result.collection_name ?? (
-                      <span className="text-muted-foreground italic">Pipeline only</span>
+                      <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -392,7 +392,7 @@ export function ResultsTable({
               Are you sure you want to delete this analysis result
               {deleteDialog.result?.collection_name
                 ? ` for "${deleteDialog.result.collection_name}"`
-                : ' (Pipeline only)'}
+                : ''}
               ? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>

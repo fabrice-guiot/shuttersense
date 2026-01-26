@@ -824,7 +824,37 @@ async def get_job_config(
     # Get connector data for ALL jobs with connectors (not just collection_test)
     # This allows agents to use storage adapters for remote collections
     connector_data = None
-    if job.collection and job.collection.connector:
+    inventory_config = None
+
+    # For inventory_validate jobs, get connector from job.progress
+    if job.tool == "inventory_validate" and job.progress:
+        connector_guid = job.progress.get("connector_guid")
+        inventory_config = job.progress.get("config")
+        if connector_guid:
+            connector = connector_service.get_by_guid(connector_guid, team_id=ctx.team_id)
+            if connector:
+                # For SERVER credentials, decrypt and include credentials
+                # For AGENT credentials, agent uses locally stored credentials
+                credentials = None
+                if connector.credential_location == CredentialLocation.SERVER:
+                    connector_with_creds = connector_service.get_by_guid(
+                        connector.guid,
+                        team_id=ctx.team_id,
+                        decrypt_credentials=True
+                    )
+                    if connector_with_creds:
+                        credentials = getattr(connector_with_creds, 'decrypted_credentials', None)
+
+                connector_data = ConnectorTestData(
+                    guid=connector.guid,
+                    type=connector.type.value,
+                    name=connector.name,
+                    credential_location=connector.credential_location.value,
+                    credentials=credentials,
+                    inventory_config=inventory_config,
+                )
+
+    elif job.collection and job.collection.connector:
         connector = job.collection.connector
 
         # For SERVER credentials, decrypt and include credentials

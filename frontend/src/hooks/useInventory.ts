@@ -278,9 +278,10 @@ export const useInventoryStatus = (
     }
   }, [autoFetch, connectorGuid, refetch])
 
-  // Poll while validating or job is running
+  // Poll while validation is pending/validating or job is running
   useEffect(() => {
     const shouldPoll = isPolling ||
+      status?.validation_status === 'pending' ||
       status?.validation_status === 'validating' ||
       status?.current_job !== null
 

@@ -169,6 +169,12 @@ class JobExecutor:
             # Execute the appropriate tool
             result = await self._execute_tool(job, config)
 
+            # inventory_validate jobs handle their own completion via the
+            # /inventory/validate endpoint, so skip the normal completion flow
+            if tool == "inventory_validate":
+                logger.info(f"Job {job_guid} (inventory_validate) completed via validation endpoint")
+                return
+
             if result.success:
                 # Sign results
                 signature = self._result_signer.sign(result.results)
@@ -306,6 +312,9 @@ class JobExecutor:
             job_with_connector = dict(job)
             job_with_connector["connector"] = config.get("connector")
             return await self._run_collection_test(job_with_connector)
+        elif tool == "inventory_validate":
+            # Validate inventory configuration (manifest.json accessibility)
+            return await self._run_inventory_validate(job, config)
         else:
             return JobResult(
                 success=False,
@@ -1664,6 +1673,195 @@ class JobExecutor:
                     "success": False,
                     "error": error,
                 }
+            )
+
+    async def _run_inventory_validate(
+        self,
+        job: Dict[str, Any],
+        config: Dict[str, Any]
+    ) -> JobResult:
+        """
+        Validate inventory configuration by checking manifest.json accessibility.
+
+        This validates that the S3 Inventory or GCS Storage Insights configuration
+        is set up correctly and has generated at least one inventory report.
+
+        Args:
+            job: Job data with connector info in progress
+            config: Configuration data with connector details
+
+        Returns:
+            JobResult with validation result
+        """
+        job_guid = job.get("guid", "unknown")
+        connector = config.get("connector")
+
+        if not connector:
+            return JobResult(
+                success=False,
+                results={"success": False},
+                error_message="No connector information provided for inventory validation"
+            )
+
+        connector_guid = connector.get("guid")
+        connector_type = connector.get("type")
+        inventory_config = connector.get("inventory_config")
+
+        if not inventory_config:
+            return JobResult(
+                success=False,
+                results={"success": False},
+                error_message="No inventory configuration found for connector"
+            )
+
+        logger.info(
+            f"Validating inventory config for connector {connector_guid}",
+            extra={
+                "job_guid": job_guid,
+                "connector_type": connector_type,
+                "inventory_config": inventory_config
+            }
+        )
+
+        try:
+            # Get storage adapter with credentials
+            adapter = self._get_storage_adapter(connector)
+
+            # Build the manifest path based on connector type
+            if connector_type == "s3":
+                # S3: {destination_prefix}/{source-bucket}/{config-name}/
+                destination_bucket = inventory_config.get("destination_bucket", "")
+                destination_prefix = inventory_config.get("destination_prefix", "").strip("/")
+                source_bucket = inventory_config.get("source_bucket", "")
+                config_name = inventory_config.get("config_name", "")
+
+                if destination_prefix:
+                    manifest_prefix = f"{destination_prefix}/{source_bucket}/{config_name}/"
+                else:
+                    manifest_prefix = f"{source_bucket}/{config_name}/"
+
+                location = f"{destination_bucket}/{manifest_prefix}"
+
+            elif connector_type == "gcs":
+                # GCS: {destination_bucket}/{report_config_name}/
+                destination_bucket = inventory_config.get("destination_bucket", "")
+                report_config_name = inventory_config.get("report_config_name", "")
+                manifest_prefix = f"{report_config_name}/"
+                location = f"{destination_bucket}/{manifest_prefix}"
+
+            else:
+                return JobResult(
+                    success=False,
+                    results={"success": False},
+                    error_message=f"Inventory validation not supported for connector type: {connector_type}"
+                )
+
+            logger.info(f"Searching for manifest.json at: {location}")
+
+            # List files at the manifest location
+            import asyncio
+            loop = asyncio.get_event_loop()
+            files = await loop.run_in_executor(None, adapter.list_files, location)
+
+            # Look for any manifest.json file
+            manifest_files = [f for f in files if f.endswith("manifest.json")]
+
+            if manifest_files:
+                message = f"Found {len(manifest_files)} inventory manifest(s)"
+                logger.info(f"Inventory validation succeeded: {message}")
+
+                # Report success to server
+                await self._report_inventory_validation_result(
+                    job_guid, connector_guid, success=True, message=message
+                )
+
+                return JobResult(
+                    success=True,
+                    results={
+                        "success": True,
+                        "message": message,
+                        "manifest_count": len(manifest_files)
+                    }
+                )
+            else:
+                error_msg = (
+                    f"No manifest.json found at {location}. "
+                    "Verify the inventory is enabled and has generated at least one report."
+                )
+                logger.warning(f"Inventory validation failed: {error_msg}")
+
+                # Report failure to server
+                await self._report_inventory_validation_result(
+                    job_guid, connector_guid, success=False, error_message=error_msg
+                )
+
+                return JobResult(
+                    success=True,  # Job completed successfully, but validation failed
+                    results={
+                        "success": False,
+                        "error": error_msg
+                    }
+                )
+
+        except PermissionError as e:
+            error_msg = f"Access denied: {str(e)}"
+            logger.error(f"Inventory validation failed: {error_msg}")
+            await self._report_inventory_validation_result(
+                job_guid, connector_guid, success=False, error_message=error_msg
+            )
+            return JobResult(
+                success=True,
+                results={"success": False, "error": error_msg}
+            )
+
+        except Exception as e:
+            error_msg = f"Validation error: {str(e)}"
+            logger.error(f"Inventory validation failed: {error_msg}", exc_info=True)
+            await self._report_inventory_validation_result(
+                job_guid, connector_guid, success=False, error_message=error_msg
+            )
+            return JobResult(
+                success=True,
+                results={"success": False, "error": error_msg}
+            )
+
+    async def _report_inventory_validation_result(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        success: bool,
+        message: str = "",
+        error_message: str = ""
+    ) -> None:
+        """
+        Report inventory validation result to the server.
+
+        Args:
+            job_guid: Job GUID
+            connector_guid: Connector GUID
+            success: Whether validation succeeded
+            message: Success message
+            error_message: Error message if failed
+        """
+        try:
+            await self._api_client.report_inventory_validation(
+                job_guid=job_guid,
+                connector_guid=connector_guid,
+                success=success,
+                error_message=error_message if not success else None
+            )
+            logger.info(
+                f"Reported inventory validation result",
+                extra={
+                    "job_guid": job_guid,
+                    "connector_guid": connector_guid,
+                    "success": success
+                }
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to report inventory validation result: {str(e)}",
+                exc_info=True
             )
 
     def _sync_progress_callback(
