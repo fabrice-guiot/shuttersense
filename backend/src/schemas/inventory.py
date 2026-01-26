@@ -429,6 +429,33 @@ class InventoryImportTriggerResponse(BaseModel):
     }
 
 
+class InventoryValidationResponse(BaseModel):
+    """
+    Response from inventory configuration validation.
+
+    For server-side credentials, validation happens synchronously.
+    For agent-side credentials, a validation job is created.
+    """
+    success: bool = Field(..., description="Whether validation succeeded")
+    message: str = Field(..., description="Validation result message")
+    validation_status: str = Field(..., description="New validation status")
+    job_guid: Optional[str] = Field(
+        default=None,
+        description="Job GUID if validation requires agent (agent credentials)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "success": True,
+                "message": "Found 3 inventory manifest(s)",
+                "validation_status": "validated",
+                "job_guid": None
+            }
+        }
+    }
+
+
 # ============================================================================
 # Collection Creation from Inventory
 # ============================================================================

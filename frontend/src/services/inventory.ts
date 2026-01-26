@@ -112,6 +112,31 @@ export const getInventoryFolder = async (folderGuid: string): Promise<InventoryF
 }
 
 // ============================================================================
+// Inventory Validation API
+// ============================================================================
+
+export interface ValidateInventoryResponse {
+  success: boolean
+  message: string
+  validation_status: string
+  job_guid?: string | null
+}
+
+/**
+ * Validate inventory configuration by checking manifest.json accessibility
+ * @param connectorGuid - Connector GUID (con_xxx format)
+ */
+export const validateInventoryConfig = async (
+  connectorGuid: string
+): Promise<ValidateInventoryResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(connectorGuid, 'con'))
+  const response = await api.post<ValidateInventoryResponse>(
+    `/connectors/${safeGuid}/inventory/validate`
+  )
+  return response.data
+}
+
+// ============================================================================
 // Inventory Import API
 // ============================================================================
 

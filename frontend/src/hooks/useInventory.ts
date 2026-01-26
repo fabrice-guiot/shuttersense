@@ -109,6 +109,81 @@ export const useInventoryConfig = (): UseInventoryConfigReturn => {
 }
 
 // ============================================================================
+// useInventoryValidation Hook
+// ============================================================================
+
+interface UseInventoryValidationReturn {
+  /** Validate inventory configuration */
+  validate: (connectorGuid: string) => Promise<inventoryService.ValidateInventoryResponse>
+  /** Whether validation is in progress */
+  loading: boolean
+  /** Last error message, if any */
+  error: string | null
+}
+
+/**
+ * Hook for validating inventory configuration.
+ *
+ * Triggers manifest.json accessibility check for the configured inventory.
+ *
+ * @example
+ * ```tsx
+ * const { validate, loading } = useInventoryValidation()
+ *
+ * const handleValidate = async () => {
+ *   const result = await validate(connectorGuid)
+ *   if (result.success) {
+ *     console.log('Validation passed:', result.message)
+ *   }
+ * }
+ * ```
+ */
+export const useInventoryValidation = (): UseInventoryValidationReturn => {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const validate = useCallback(async (
+    connectorGuid: string
+  ): Promise<inventoryService.ValidateInventoryResponse> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await inventoryService.validateInventoryConfig(connectorGuid)
+      if (result.success) {
+        if (result.job_guid) {
+          // Agent-side validation - job created
+          toast.success('Validation job created', {
+            description: 'An agent will validate the inventory configuration'
+          })
+        } else {
+          // Server-side validation succeeded
+          toast.success('Inventory configuration validated', {
+            description: result.message
+          })
+        }
+      } else {
+        // Validation failed
+        toast.error('Inventory validation failed', {
+          description: result.message
+        })
+      }
+      return result
+    } catch (err: any) {
+      const errorMessage = err.userMessage || 'Failed to validate inventory configuration'
+      setError(errorMessage)
+      toast.error('Failed to validate inventory configuration', {
+        description: errorMessage
+      })
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { validate, loading, error }
+}
+
+// ============================================================================
 // useInventoryStatus Hook
 // ============================================================================
 

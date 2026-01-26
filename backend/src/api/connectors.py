@@ -34,6 +34,7 @@ from backend.src.schemas.collection import (
 from backend.src.schemas.inventory import (
     InventoryConfigRequest,
     InventoryStatusResponse,
+    InventoryValidationResponse,
     InventoryFolderListResponse,
     InventoryFolderResponse,
 )
@@ -762,6 +763,148 @@ async def delete_inventory_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clear inventory configuration: {str(e)}"
+        )
+
+
+@router.post(
+    "/{guid}/inventory/validate",
+    response_model=InventoryValidationResponse,
+    summary="Validate inventory configuration",
+    description="Validate inventory manifest.json accessibility"
+)
+async def validate_inventory_config(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    connector_service: ConnectorService = Depends(get_connector_service),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+) -> InventoryValidationResponse:
+    """
+    Validate inventory configuration by checking manifest.json accessibility.
+
+    For connectors with server-side credentials, validation happens synchronously
+    by checking if manifest.json exists at the configured inventory location.
+
+    For connectors with agent-side credentials, a validation job is created
+    for an agent to execute.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx format)
+
+    Returns:
+        InventoryValidationResponse with validation result
+
+    Raises:
+        400 Bad Request: If no inventory config exists
+        404 Not Found: If connector doesn't exist
+
+    Example:
+        POST /api/connectors/con_01hgw2bbg.../inventory/validate
+
+        Server-side credentials response:
+        {
+          "success": true,
+          "message": "Found 3 inventory manifest(s)",
+          "validation_status": "validated",
+          "job_guid": null
+        }
+
+        Agent-side credentials response:
+        {
+          "success": true,
+          "message": "Validation job created for agent",
+          "validation_status": "pending",
+          "job_guid": "job_01hgw2bbg..."
+        }
+    """
+    try:
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not connector:
+            logger.warning(f"Connector not found for inventory validation: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        if not connector.inventory_config:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Connector has no inventory configuration to validate"
+            )
+
+        # Check if connector uses agent-side credentials
+        if connector.requires_agent_credentials:
+            # Create validation job for agent
+            job = inventory_service.create_validation_job(
+                connector_id=connector.id,
+                team_id=ctx.team_id
+            )
+
+            logger.info(
+                f"Created inventory validation job for agent",
+                extra={
+                    "guid": guid,
+                    "job_guid": job.guid
+                }
+            )
+
+            return InventoryValidationResponse(
+                success=True,
+                message="Validation job created for agent",
+                validation_status="pending",
+                job_guid=job.guid
+            )
+
+        # Server-side credentials: validate synchronously
+        # Get connector with decrypted credentials for validation
+        connector_with_creds = connector_service.get_connector(
+            connector.id, decrypt_credentials=True
+        )
+        if not connector_with_creds:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        success, message = inventory_service.validate_inventory_config_server_side(
+            connector_id=connector.id,
+            team_id=ctx.team_id,
+            credentials=connector_with_creds.decrypted_credentials
+        )
+
+        # Refresh connector to get updated validation status
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
+        if not connector:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        logger.info(
+            f"Validated inventory config (server-side)",
+            extra={
+                "guid": guid,
+                "success": success,
+                "validation_status": connector.inventory_validation_status
+            }
+        )
+
+        return InventoryValidationResponse(
+            success=success,
+            message=message,
+            validation_status=connector.inventory_validation_status or "unknown",
+            job_guid=None
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Error validating inventory config: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate inventory configuration: {str(e)}"
         )
 
 

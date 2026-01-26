@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react'
-import { Settings, Trash2, Play, RefreshCw } from 'lucide-react'
+import { Settings, Trash2, Play, RefreshCw, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { InventoryConfigForm } from './InventoryConfigForm'
 import { InventoryStatusDisplay } from './InventoryStatusDisplay'
-import { useInventoryConfig, useInventoryStatus, useInventoryImport } from '@/hooks/useInventory'
+import { useInventoryConfig, useInventoryStatus, useInventoryImport, useInventoryValidation } from '@/hooks/useInventory'
 import type { Connector } from '@/contracts/api/connector-api'
 import type { InventoryConfig, InventorySchedule } from '@/contracts/api/inventory-api'
 
@@ -64,6 +64,7 @@ export function InventoryConfigSection({
     autoFetch: true
   })
   const { triggerImport, loading: importLoading } = useInventoryImport()
+  const { validate, loading: validateLoading } = useInventoryValidation()
 
   // Only S3 and GCS connectors support inventory
   const supportsInventory = connector.type === 's3' || connector.type === 'gcs'
@@ -100,8 +101,19 @@ export function InventoryConfigSection({
     refetchStatus()
   }
 
+  const handleValidate = async () => {
+    await validate(connector.guid)
+    refetchStatus()
+  }
+
   const canTriggerImport =
     status?.validation_status === 'validated' &&
+    !status?.current_job
+
+  const canValidate =
+    hasConfig &&
+    status?.validation_status !== 'validated' &&
+    status?.validation_status !== 'validating' &&
     !status?.current_job
 
   return (
@@ -150,9 +162,23 @@ export function InventoryConfigSection({
         {/* Status Display */}
         <InventoryStatusDisplay status={status} loading={statusLoading} />
 
-        {/* Import Action */}
+        {/* Actions */}
         {hasConfig && (
-          <div className="flex justify-start">
+          <div className="flex flex-wrap gap-2">
+            {/* Validate Button - shown when validation is needed */}
+            {canValidate && (
+              <Button
+                variant="outline"
+                onClick={handleValidate}
+                disabled={validateLoading}
+                className="gap-2"
+              >
+                <CheckCircle className="h-4 w-4" />
+                {validateLoading ? 'Validating...' : 'Validate Configuration'}
+              </Button>
+            )}
+
+            {/* Import Button */}
             <Button
               onClick={handleTriggerImport}
               disabled={!canTriggerImport || importLoading}
@@ -161,13 +187,20 @@ export function InventoryConfigSection({
               <Play className="h-4 w-4" />
               {importLoading ? 'Starting...' : 'Import Now'}
             </Button>
-            {!canTriggerImport && status?.validation_status !== 'validated' && (
-              <span className="ml-3 self-center text-sm text-muted-foreground">
-                Validation required before import
+
+            {/* Status messages */}
+            {status?.validation_status === 'validating' && (
+              <span className="self-center text-sm text-muted-foreground">
+                Validation in progress...
+              </span>
+            )}
+            {status?.validation_status === 'failed' && (
+              <span className="self-center text-sm text-destructive">
+                Validation failed - check configuration
               </span>
             )}
             {status?.current_job && (
-              <span className="ml-3 self-center text-sm text-muted-foreground">
+              <span className="self-center text-sm text-muted-foreground">
                 Import in progress...
               </span>
             )}
