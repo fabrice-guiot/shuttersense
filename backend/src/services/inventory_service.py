@@ -259,7 +259,7 @@ class InventoryService:
                 extra={
                     "connector_id": connector_id,
                     "success": success,
-                    "message": message
+                    "result_message": message
                 }
             )
 
