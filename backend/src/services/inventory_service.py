@@ -240,7 +240,7 @@ class InventoryService:
             manifest_path = self._get_manifest_path(connector.type, config)
 
             # Validate using appropriate adapter
-            success, message = self._validate_manifest_access(
+            success, message, latest_manifest = self._validate_manifest_access(
                 connector.type, credentials, config, manifest_path
             )
 
@@ -248,9 +248,11 @@ class InventoryService:
             if success:
                 connector.inventory_validation_status = InventoryValidationStatus.VALIDATED
                 connector.inventory_validation_error = None
+                connector.inventory_latest_manifest = latest_manifest
             else:
                 connector.inventory_validation_status = InventoryValidationStatus.FAILED
                 connector.inventory_validation_error = message
+                connector.inventory_latest_manifest = None
 
             self.db.commit()
 
@@ -259,7 +261,8 @@ class InventoryService:
                 extra={
                     "connector_id": connector_id,
                     "success": success,
-                    "result_message": message
+                    "result_message": message,
+                    "latest_manifest": latest_manifest
                 }
             )
 
@@ -317,7 +320,7 @@ class InventoryService:
         credentials: Dict[str, Any],
         config: Dict[str, Any],
         manifest_prefix: str
-    ) -> Tuple[bool, str]:
+    ) -> Tuple[bool, str, Optional[str]]:
         """
         Validate access to inventory manifest using storage adapter.
 
@@ -328,7 +331,8 @@ class InventoryService:
             manifest_prefix: Path prefix to search for manifest
 
         Returns:
-            Tuple of (success, message)
+            Tuple of (success, message, latest_manifest_display)
+            latest_manifest_display is the timestamp/manifest.json portion for display
         """
         from backend.src.services.remote import S3Adapter, GCSAdapter
 
@@ -341,36 +345,55 @@ class InventoryService:
                 location = f"{destination_bucket}/{manifest_prefix}"
                 files = adapter.list_files(location)
 
-                # Look for any manifest.json file
-                manifest_files = [f for f in files if f.endswith("manifest.json")]
+                # Look for any manifest.json file, sort to get latest
+                manifest_files = sorted(
+                    [f for f in files if f.endswith("manifest.json")],
+                    reverse=True  # Latest first (timestamp folders sort lexicographically)
+                )
                 if manifest_files:
-                    return True, f"Found {len(manifest_files)} inventory manifest(s)"
+                    # Extract just the timestamp/manifest.json part for display
+                    latest_manifest = manifest_files[0]
+                    manifest_parts = latest_manifest.split("/")
+                    if len(manifest_parts) >= 2:
+                        latest_manifest_display = "/".join(manifest_parts[-2:])
+                    else:
+                        latest_manifest_display = latest_manifest
+                    return True, f"Found {len(manifest_files)} inventory manifest(s)", latest_manifest_display
                 else:
                     return False, (
                         f"No manifest.json found at {location}. "
                         "Verify the inventory is enabled and has generated at least one report."
-                    )
+                    ), None
 
             else:  # GCS
                 adapter = GCSAdapter(credentials)
                 location = f"{destination_bucket}/{manifest_prefix}"
                 files = adapter.list_files(location)
 
-                manifest_files = [f for f in files if f.endswith("manifest.json")]
+                manifest_files = sorted(
+                    [f for f in files if f.endswith("manifest.json")],
+                    reverse=True
+                )
                 if manifest_files:
-                    return True, f"Found {len(manifest_files)} inventory manifest(s)"
+                    latest_manifest = manifest_files[0]
+                    manifest_parts = latest_manifest.split("/")
+                    if len(manifest_parts) >= 2:
+                        latest_manifest_display = "/".join(manifest_parts[-2:])
+                    else:
+                        latest_manifest_display = latest_manifest
+                    return True, f"Found {len(manifest_files)} inventory manifest(s)", latest_manifest_display
                 else:
                     return False, (
                         f"No manifest.json found at {location}. "
                         "Verify Storage Insights is enabled and has generated at least one report."
-                    )
+                    ), None
 
         except PermissionError as e:
-            return False, f"Access denied: {str(e)}"
+            return False, f"Access denied: {str(e)}", None
         except ConnectionError as e:
-            return False, f"Connection failed: {str(e)}"
+            return False, f"Connection failed: {str(e)}", None
         except Exception as e:
-            return False, f"Validation error: {str(e)}"
+            return False, f"Validation error: {str(e)}", None
 
     # =========================================================================
     # Inventory Validation (Agent-Side Credentials)
