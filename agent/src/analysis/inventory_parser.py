@@ -285,25 +285,56 @@ def parse_s3_csv_stream(
         byte_stream = csv_data
         owns_stream = False  # Caller owns it
 
+    # Wrap in BufferedReader for peek() support on non-seekable streams (e.g., S3 StreamingBody)
+    # BufferedReader provides peek() which reads without consuming the stream
+    if hasattr(byte_stream, 'peek'):
+        # Already has peek support (e.g., already a BufferedReader)
+        buffered_stream = byte_stream
+    elif hasattr(byte_stream, 'read'):
+        # Wrap in BufferedReader for peek support
+        # Note: BufferedReader requires a raw stream with readinto(); for streams
+        # without it (like S3 StreamingBody), we use a small read + prepend approach
+        try:
+            buffered_stream = io.BufferedReader(byte_stream)  # type: ignore
+        except (TypeError, AttributeError):
+            # Stream doesn't support BufferedReader (no readinto)
+            # Fall back to reading first 2 bytes and creating a combined stream
+            magic_bytes = byte_stream.read(2)
+            # Create a new stream that prepends the magic bytes
+            remaining = byte_stream.read()
+            byte_stream = io.BytesIO(magic_bytes + remaining)
+            buffered_stream = byte_stream
+            owns_stream = True  # We created a new BytesIO
+    else:
+        buffered_stream = byte_stream
+
     if is_gzipped:
-        # Check magic bytes to confirm it's actually gzipped
-        magic = byte_stream.read(2)
-        byte_stream.seek(0)
+        # Check magic bytes to confirm it's actually gzipped using peek (non-consuming)
+        try:
+            if hasattr(buffered_stream, 'peek'):
+                magic = buffered_stream.peek(2)[:2]
+            else:
+                # Fallback: read and check (stream should be BytesIO at this point)
+                magic = buffered_stream.read(2)
+                buffered_stream.seek(0)
+        except Exception as e:
+            logger.warning(f"Could not peek magic bytes: {e}, assuming gzipped")
+            magic = b'\x1f\x8b'  # Assume gzipped if we can't check
 
         if magic == b'\x1f\x8b':
             # Use streaming GzipFile instead of gzip.decompress()
             try:
-                gz_stream = gzip.GzipFile(fileobj=byte_stream, mode='rb')
+                gz_stream = gzip.GzipFile(fileobj=buffered_stream, mode='rb')
                 text_stream = io.TextIOWrapper(gz_stream, encoding='utf-8')
             except Exception as e:
                 logger.warning(f"Failed to open gzip stream: {e}, trying raw")
-                byte_stream.seek(0)
-                text_stream = io.TextIOWrapper(byte_stream, encoding='utf-8')
+                # Don't seek - stream may not be seekable. Create text wrapper on what we have
+                text_stream = io.TextIOWrapper(buffered_stream, encoding='utf-8')
         else:
             logger.warning("Data not gzipped despite is_gzipped=True (no gzip magic), trying raw")
-            text_stream = io.TextIOWrapper(byte_stream, encoding='utf-8')
+            text_stream = io.TextIOWrapper(buffered_stream, encoding='utf-8')
     else:
-        text_stream = io.TextIOWrapper(byte_stream, encoding='utf-8')
+        text_stream = io.TextIOWrapper(buffered_stream, encoding='utf-8')
 
     # Parse CSV rows (S3 Inventory has no header row)
     # Wrap the entire iteration in try/except to catch gzip errors during streaming

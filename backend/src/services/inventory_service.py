@@ -1277,14 +1277,19 @@ class InventoryService:
         collection_guids = [f.collection_guid for f in mapped_folders]
 
         # Query collections by GUID (via UUID lookup)
+        # Include tenant scoping to prevent cross-tenant data leakage
         from backend.src.services.guid import GuidService
+
+        # Use provided team_id or fall back to connector's team_id
+        effective_team_id = team_id if team_id is not None else connector.team_id
 
         collections_data = []
         for folder in mapped_folders:
             try:
                 uuid_value = GuidService.parse_identifier(folder.collection_guid, expected_prefix="col")
                 collection = self.db.query(Collection).filter(
-                    Collection.uuid == uuid_value
+                    Collection.uuid == uuid_value,
+                    Collection.team_id == effective_team_id
                 ).first()
 
                 if collection:
