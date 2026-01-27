@@ -74,9 +74,13 @@ class MockGCSAdapter:
         """Mock GCS blob object."""
         blob = MagicMock()
         if key in self._files:
-            blob.download_as_bytes.return_value = self._files[key]
+            content = self._files[key]
+            blob.download_as_bytes.return_value = content
+            # Mock blob.open("rb") to return a file-like object
+            blob.open.return_value = io.BytesIO(content)
         else:
             blob.download_as_bytes.side_effect = Exception(f"NotFound: {key}")
+            blob.open.side_effect = Exception(f"NotFound: {key}")
         return blob
 
     def list_files(self, location: str) -> List[str]:
