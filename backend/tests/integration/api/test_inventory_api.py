@@ -813,7 +813,7 @@ class TestFolderStorageEndpoint:
             }
         }
         response = test_client.post("/api/connectors", json=connector_data)
-        assert response.status_code == 200
+        assert response.status_code == 201
         return response.json()["guid"]
 
     def test_trigger_import_requires_validated_status(self, test_client, test_db_session):
@@ -909,7 +909,7 @@ class TestConcurrentImportPrevention:
             }
         }
         response = test_client.post("/api/connectors", json=connector_data)
-        assert response.status_code == 200
+        assert response.status_code == 201
         return response.json()["guid"]
 
     def test_concurrent_import_returns_409(self, test_client, test_db_session):
@@ -1104,6 +1104,16 @@ class TestCreateCollectionsFromInventory:
         connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
         connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
 
+        # Set inventory config (required for creating collections from inventory)
+        connector.inventory_config = {
+            "provider": "s3",
+            "source_bucket": "test-photos-bucket",
+            "destination_bucket": "test-inventory-bucket",
+            "config_name": "test-inventory",
+            "format": "CSV"
+        }
+        test_db_session.commit()
+
         # Add inventory folders
         folders = [
             InventoryFolder(
@@ -1245,6 +1255,16 @@ class TestCreateCollectionsFromInventory:
 
         connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
         connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+
+        # Set inventory config (required for creating collections from inventory)
+        connector.inventory_config = {
+            "provider": "s3",
+            "source_bucket": "test-photos-bucket",
+            "destination_bucket": "test-inventory-bucket",
+            "config_name": "test-inventory",
+            "format": "CSV"
+        }
+        test_db_session.commit()
 
         # Add overlapping folders (parent and child)
         parent_folder = InventoryFolder(

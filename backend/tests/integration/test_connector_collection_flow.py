@@ -193,8 +193,8 @@ class TestConnectorCollectionFlow:
             # LOCAL with bound agent: accessibility is deferred to agent
             assert collection["bound_agent"]["guid"] == agent.guid
 
-            # Step 3: Delete collection
-            delete_response = test_client.delete(f"/api/collections/{collection_guid}")
+            # Step 3: Delete collection (force=true due to auto-created collection_test job)
+            delete_response = test_client.delete(f"/api/collections/{collection_guid}?force=true")
             assert delete_response.status_code == 204
 
             # Step 4: Verify deletion
