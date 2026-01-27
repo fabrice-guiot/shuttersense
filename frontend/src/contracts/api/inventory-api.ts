@@ -86,6 +86,7 @@ export interface JobSummary {
 export interface InventoryStatus {
   validation_status: InventoryValidationStatus | null
   validation_error: string | null
+  latest_manifest: string | null
   last_import_at: string | null
   next_scheduled_at: string | null
   folder_count: number

@@ -451,6 +451,7 @@ class InventoryService:
         connector_id: int,
         success: bool,
         error_message: Optional[str] = None,
+        latest_manifest: Optional[str] = None,
         team_id: Optional[int] = None
     ) -> Connector:
         """
@@ -462,6 +463,7 @@ class InventoryService:
             connector_id: Internal connector ID
             success: Whether validation succeeded
             error_message: Error message if validation failed
+            latest_manifest: Path of the latest detected manifest.json
             team_id: Team ID for tenant isolation
 
         Returns:
@@ -475,9 +477,11 @@ class InventoryService:
         if success:
             connector.inventory_validation_status = InventoryValidationStatus.VALIDATED
             connector.inventory_validation_error = None
+            connector.inventory_latest_manifest = latest_manifest
         else:
             connector.inventory_validation_status = InventoryValidationStatus.FAILED
             connector.inventory_validation_error = error_message
+            connector.inventory_latest_manifest = None
 
         self.db.commit()
         self.db.refresh(connector)
@@ -488,7 +492,8 @@ class InventoryService:
                 "connector_id": connector_id,
                 "connector_guid": connector.guid,
                 "success": success,
-                "error": error_message
+                "error": error_message,
+                "latest_manifest": latest_manifest
             }
         )
 
@@ -713,6 +718,7 @@ class InventoryService:
         return {
             "validation_status": connector.inventory_validation_status,
             "validation_error": connector.inventory_validation_error,
+            "latest_manifest": connector.inventory_latest_manifest,
             "last_import_at": connector.inventory_last_import_at.isoformat() if connector.inventory_last_import_at else None,
             "next_scheduled_at": None,  # TODO: Calculate from schedule
             "folder_count": folder_count,

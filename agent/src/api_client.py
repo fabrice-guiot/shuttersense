@@ -710,6 +710,7 @@ class AgentApiClient:
         connector_guid: str,
         success: bool,
         error_message: Optional[str] = None,
+        latest_manifest: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Report inventory validation result to the server.
@@ -719,6 +720,7 @@ class AgentApiClient:
             connector_guid: GUID of the connector being validated
             success: Whether validation succeeded
             error_message: Error message if validation failed
+            latest_manifest: Path of the latest detected manifest.json
 
         Returns:
             Response with status confirmation
@@ -734,6 +736,8 @@ class AgentApiClient:
         }
         if error_message:
             payload["error_message"] = error_message
+        if latest_manifest:
+            payload["latest_manifest"] = latest_manifest
 
         try:
             response = await self._client.post(

@@ -2034,6 +2034,7 @@ async def report_inventory_validation(
             connector_id=connector_id,
             success=data.success,
             error_message=data.error_message,
+            latest_manifest=data.latest_manifest,
             team_id=ctx.team_id
         )
     except NotFoundError:

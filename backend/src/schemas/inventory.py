@@ -371,6 +371,7 @@ class InventoryStatusResponse(BaseModel):
     """
     validation_status: Optional[str] = Field(default=None, description="Validation status")
     validation_error: Optional[str] = Field(default=None, description="Validation error message")
+    latest_manifest: Optional[str] = Field(default=None, description="Latest detected manifest path (e.g., '2026-01-26T01-00Z/manifest.json')")
     last_import_at: Optional[datetime] = Field(default=None, description="Last import timestamp")
     next_scheduled_at: Optional[datetime] = Field(default=None, description="Next scheduled import")
     folder_count: int = Field(default=0, ge=0, description="Total discovered folders")
@@ -382,6 +383,7 @@ class InventoryStatusResponse(BaseModel):
             "example": {
                 "validation_status": "validated",
                 "validation_error": None,
+                "latest_manifest": "2026-01-26T01-00Z/manifest.json",
                 "last_import_at": "2026-01-24T10:00:00Z",
                 "next_scheduled_at": "2026-01-25T00:00:00Z",
                 "folder_count": 42,

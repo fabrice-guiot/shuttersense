@@ -146,6 +146,8 @@ class Connector(Base, GuidMixin):
     inventory_validation_status = Column(String(20), nullable=True)
     # Error message if validation failed
     inventory_validation_error = Column(String(500), nullable=True)
+    # Latest detected manifest path (e.g., "2026-01-26T01-00Z/manifest.json")
+    inventory_latest_manifest = Column(String(500), nullable=True)
     # Timestamp of last successful inventory import
     inventory_last_import_at = Column(DateTime, nullable=True)
     # Schedule: "manual" / "daily" / "weekly"

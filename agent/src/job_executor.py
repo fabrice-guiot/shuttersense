@@ -1766,16 +1766,33 @@ class JobExecutor:
             loop = asyncio.get_event_loop()
             files = await loop.run_in_executor(None, adapter.list_files, location)
 
-            # Look for any manifest.json file
-            manifest_files = [f for f in files if f.endswith("manifest.json")]
+            # Look for any manifest.json file and sort to get the latest
+            manifest_files = sorted(
+                [f for f in files if f.endswith("manifest.json")],
+                reverse=True  # Latest first (timestamp folders sort lexicographically)
+            )
 
             if manifest_files:
-                message = f"Found {len(manifest_files)} inventory manifest(s)"
-                logger.info(f"Inventory validation succeeded: {message}")
+                # Get the latest manifest path (relative to the config location)
+                latest_manifest = manifest_files[0]
+                # Extract just the timestamp/manifest.json part for display
+                # e.g., "2026-01-26T01-00Z/manifest.json" from full path
+                manifest_parts = latest_manifest.split("/")
+                if len(manifest_parts) >= 2:
+                    latest_manifest_display = "/".join(manifest_parts[-2:])
+                else:
+                    latest_manifest_display = latest_manifest
 
-                # Report success to server
+                message = f"Found {len(manifest_files)} inventory manifest(s)"
+                logger.info(
+                    f"Inventory validation succeeded: {message}",
+                    extra={"latest_manifest": latest_manifest_display}
+                )
+
+                # Report success to server with latest manifest path
                 await self._report_inventory_validation_result(
-                    job_guid, connector_guid, success=True, message=message
+                    job_guid, connector_guid, success=True, message=message,
+                    latest_manifest=latest_manifest_display
                 )
 
                 return JobResult(
@@ -1783,7 +1800,8 @@ class JobExecutor:
                     results={
                         "success": True,
                         "message": message,
-                        "manifest_count": len(manifest_files)
+                        "manifest_count": len(manifest_files),
+                        "latest_manifest": latest_manifest_display
                     }
                 )
             else:
@@ -1834,7 +1852,8 @@ class JobExecutor:
         connector_guid: str,
         success: bool,
         message: str = "",
-        error_message: str = ""
+        error_message: str = "",
+        latest_manifest: str = ""
     ) -> None:
         """
         Report inventory validation result to the server.
@@ -1845,20 +1864,23 @@ class JobExecutor:
             success: Whether validation succeeded
             message: Success message
             error_message: Error message if failed
+            latest_manifest: Path of the latest detected manifest.json
         """
         try:
             await self._api_client.report_inventory_validation(
                 job_guid=job_guid,
                 connector_guid=connector_guid,
                 success=success,
-                error_message=error_message if not success else None
+                error_message=error_message if not success else None,
+                latest_manifest=latest_manifest if success else None
             )
             logger.info(
                 f"Reported inventory validation result",
                 extra={
                     "job_guid": job_guid,
                     "connector_guid": connector_guid,
-                    "success": success
+                    "success": success,
+                    "latest_manifest": latest_manifest
                 }
             )
         except Exception as e:

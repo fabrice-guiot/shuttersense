@@ -1306,13 +1306,19 @@ class InventoryValidationRequest(BaseModel):
         ge=0,
         description="Number of manifests found (if successful)"
     )
+    latest_manifest: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="Path of the latest manifest.json (e.g., '2026-01-26T01-00Z/manifest.json')"
+    )
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "connector_guid": "con_01hgw2bbg0000000000000001",
                 "success": True,
-                "manifest_count": 3
+                "manifest_count": 3,
+                "latest_manifest": "2026-01-26T01-00Z/manifest.json"
             }
         }
     }
