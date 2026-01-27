@@ -21,6 +21,20 @@ export interface BoundAgentSummary {
   status: 'online' | 'offline' | 'error'
 }
 
+/**
+ * FileInfo summary for cached inventory data (Issue #107)
+ */
+export interface FileInfoSummary {
+  /** Number of cached FileInfo entries */
+  count: number
+  /** Source of FileInfo: 'api' (from cloud API) or 'inventory' (from bucket inventory) */
+  source: 'api' | 'inventory' | null
+  /** When FileInfo was last updated (ISO 8601 timestamp) */
+  updated_at: string | null
+  /** Delta summary from last inventory import */
+  delta: Record<string, unknown> | null
+}
+
 export interface Collection {
   guid: string  // External identifier (col_xxx) for URL-safe references
   name: string
@@ -35,6 +49,7 @@ export interface Collection {
   accessibility_message: string | null
   cache_ttl: number | null
   bound_agent: BoundAgentSummary | null  // only for LOCAL collections
+  file_info: FileInfoSummary | null  // cached inventory data (Issue #107)
   created_at: string  // ISO 8601 timestamp
   updated_at: string  // ISO 8601 timestamp
   last_scanned_at: string | null  // ISO 8601 timestamp

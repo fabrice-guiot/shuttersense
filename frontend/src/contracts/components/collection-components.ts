@@ -51,6 +51,12 @@ export interface CollectionListProps {
   onInfo: (collection: Collection) => void
 
   /**
+   * Callback when "Refresh from Cloud" button clicked (Issue #107 - T075)
+   * Only applicable for remote collections (S3, GCS, SMB)
+   */
+  onRefreshFromCloud?: (collection: Collection) => void
+
+  /**
    * Current search term for empty state message (Issue #38)
    */
   search?: string

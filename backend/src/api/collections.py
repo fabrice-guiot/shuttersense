@@ -30,6 +30,7 @@ from backend.src.schemas.collection import (
     CollectionResponse,
     CollectionTestResponse,
     CollectionRefreshResponse,
+    CollectionClearCacheResponse,
     CollectionStatsResponse,
 )
 from backend.src.schemas.inventory import (
@@ -1440,4 +1441,111 @@ async def create_collections_from_inventory(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create collections: {str(e)}"
+        )
+
+
+@router.post(
+    "/{guid}/clear-inventory-cache",
+    response_model=CollectionClearCacheResponse,
+    summary="Clear inventory cache (Issue #107 - T075)",
+    description="Clear cached FileInfo from bucket inventory to force fresh cloud API listing"
+)
+async def clear_inventory_cache(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+    collection_service: CollectionService = Depends(get_collection_service)
+) -> CollectionClearCacheResponse:
+    """
+    Clear cached FileInfo from a collection's inventory import.
+
+    This endpoint is used before running analysis tools when fresh file listings
+    from the cloud API are needed (bypassing cached inventory data).
+
+    The operation clears:
+    - file_info: Cached FileInfo array
+    - file_info_source: Source indicator ("api" or "inventory")
+    - file_info_updated_at: Last update timestamp
+    - file_info_delta: Import delta summary
+
+    Path Parameters:
+        guid: Collection GUID (col_xxx format)
+
+    Returns:
+        CollectionClearCacheResponse with success status and cleared entry count
+
+    Raises:
+        400 Bad Request: If GUID format is invalid, prefix mismatch, or collection is LOCAL type
+        404 Not Found: If collection doesn't exist
+
+    Example:
+        POST /api/collections/col_01hgw2bbg0000000000000001/clear-inventory-cache
+
+        Response:
+        {
+          "success": true,
+          "message": "Inventory cache cleared. Tools will fetch fresh file listings from cloud.",
+          "cleared_count": 12345
+        }
+    """
+    try:
+        # Validate GUID format
+        try:
+            GuidService.parse_identifier(guid, expected_prefix="col")
+        except ValueError as e:
+            logger.warning(f"Invalid collection GUID format: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+
+        # Get collection with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not collection:
+            logger.warning(f"Collection not found for clear-inventory-cache: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection not found: {guid}"
+            )
+
+        # Local collections don't have inventory cache
+        if collection.type == CollectionType.LOCAL:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Local collections do not have inventory cache"
+            )
+
+        # Count entries before clearing
+        cleared_count = collection.file_info_count
+
+        # Clear the cached FileInfo
+        collection.file_info = None
+        collection.file_info_source = None
+        collection.file_info_updated_at = None
+        collection.file_info_delta = None
+
+        db.commit()
+
+        logger.info(
+            f"Cleared inventory cache for collection {guid}",
+            extra={
+                "collection_guid": guid,
+                "cleared_count": cleared_count
+            }
+        )
+
+        return CollectionClearCacheResponse(
+            success=True,
+            message="Inventory cache cleared. Tools will fetch fresh file listings from cloud.",
+            cleared_count=cleared_count
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error clearing inventory cache: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear inventory cache: {str(e)}"
         )

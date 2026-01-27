@@ -829,6 +829,106 @@ class AgentApiClient:
                 status_code=response.status_code,
             )
 
+    async def get_connector_collections(
+        self,
+        connector_guid: str,
+    ) -> list[dict[str, Any]]:
+        """
+        Get collections mapped to a connector's inventory folders.
+
+        Used during Phase B of inventory import to determine which
+        collections need FileInfo populated.
+
+        Args:
+            connector_guid: GUID of the connector
+
+        Returns:
+            List of dicts with collection_guid and folder_path
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+            ApiError: If the request fails
+        """
+        try:
+            response = await self._client.get(
+                f"{API_BASE_PATH}/connectors/{connector_guid}/collections",
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("collections", [])
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Connector not found", status_code=404)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Get connector collections failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def report_inventory_file_info(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        collections_file_info: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Report FileInfo for collections from inventory import Phase B.
+
+        Args:
+            job_guid: GUID of the import job
+            connector_guid: GUID of the connector
+            collections_file_info: List of dicts with collection_guid and file_info
+
+        Returns:
+            Response with collections_updated count
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+            ApiError: If the request fails
+        """
+        payload: dict[str, Any] = {
+            "connector_guid": connector_guid,
+            "collections": collections_file_info,
+        }
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/inventory/file-info",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        elif response.status_code == 403:
+            raise ApiError("Job not assigned to this agent", status_code=403)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Inventory file-info report failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
     # -------------------------------------------------------------------------
     # Synchronous Methods (for CLI use)
     # -------------------------------------------------------------------------

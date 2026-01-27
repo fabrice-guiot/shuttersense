@@ -186,36 +186,36 @@
 
 ### Agent Phase B Implementation
 
-- [ ] T063 [US4] Implement Phase B (FileInfo Population) in `agent/src/tools/inventory_import_tool.py`
-- [ ] T064 [US4] Add Collection query from server (GET collections for connector)
-- [ ] T065 [US4] Implement inventory filtering by Collection folder path prefix
-- [ ] T066 [US4] Extract FileInfo (key, size, last_modified, etag, storage_class) per Collection
+- [x] T063 [US4] Implement Phase B (FileInfo Population) in `agent/src/tools/inventory_import_tool.py`
+- [x] T064 [US4] Add Collection query from server (GET collections for connector)
+- [x] T065 [US4] Implement inventory filtering by Collection folder path prefix
+- [x] T066 [US4] Extract FileInfo (key, size, last_modified, etag, storage_class) per Collection
 
 ### Backend FileInfo Storage
 
-- [ ] T068 [US4] Add POST endpoint `/api/agent/v1/jobs/{guid}/inventory/file-info` for FileInfo results
-- [ ] T069 [US4] Implement FileInfo storage on Collection (file_info JSONB, file_info_updated_at, file_info_source)
-- [ ] T070 [US4] Add GET endpoint for Collection FileInfo status (last updated, source)
+- [x] T068 [US4] Add POST endpoint `/api/agent/v1/jobs/{guid}/inventory/file-info` for FileInfo results
+- [x] T069 [US4] Implement FileInfo storage on Collection (file_info JSONB, file_info_updated_at, file_info_source)
+- [x] T070 [US4] Add GET endpoint for Collection FileInfo status (last updated, source) - included in Collection response
 
 ### Tool Integration
 
-- [ ] T071 [US4] Update analysis tools to check Collection.file_info before calling cloud list APIs
-- [ ] T072 [US4] Add "Refresh from Cloud" action that creates separate job for live file fetch
+- [x] T071 [US4] Update analysis tools to check Collection.file_info before calling cloud list APIs
+- [x] T072 [US4] Add "Refresh from Cloud" action that creates separate job for live file fetch
 
 ### Frontend FileInfo Display
 
-- [ ] T074 [P] [US4] Display "Last updated from inventory" timestamp on Collection view
-- [ ] T075 [US4] Add "Refresh from Cloud" button to Collection detail page
+- [x] T074 [P] [US4] Display "Last updated from inventory" timestamp on Collection view
+- [x] T075 [P] [US4] Add "Refresh from Cloud" button to Collection detail page
 
 ### Tests for US4
 
-- [ ] T065a [P] [US4] Unit tests for inventory filtering by Collection folder path prefix in `agent/tests/unit/test_inventory_import_tool.py`
-- [ ] T066a [P] [US4] Unit tests for FileInfo extraction (field mapping, missing optional fields) in `agent/tests/unit/test_inventory_import_tool.py`
-- [ ] T067 [US4] Unit tests for Phase B pipeline in `agent/tests/unit/test_inventory_import_tool.py`
-- [ ] T069a [US4] Unit tests for FileInfo storage service (source tracking, timestamp update) in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T071a [US4] Integration test for analysis tool FileInfo check behavior in `backend/tests/integration/tools/test_fileinfo_integration.py`
-- [ ] T073 [US4] Integration tests for FileInfo population endpoint in `backend/tests/integration/api/test_inventory_api.py`
-- [ ] T073a [US4] Integration test for Phase B skip when no Collections exist in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T065a [US4] Unit tests for inventory filtering by Collection folder path prefix in `agent/tests/unit/test_inventory_import_phase_b.py`
+- [x] T066a [US4] Unit tests for FileInfo extraction (field mapping, missing optional fields) in `agent/tests/unit/test_inventory_import_phase_b.py`
+- [x] T067 [US4] Unit tests for Phase B pipeline in `agent/tests/unit/test_inventory_import_phase_b.py`
+- [x] T069a [US4] Unit tests for FileInfo storage service (source tracking, timestamp update) in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T071a [US4] Unit tests for analysis tool FileInfo check behavior in `agent/tests/unit/test_job_executor.py::TestCachedFileInfo`
+- [x] T073 [US4] Integration tests for FileInfo population endpoint in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T073a [US4] Integration test for Phase B skip when no Collections exist in `backend/tests/integration/api/test_inventory_api.py`
 
 **Checkpoint**: Collections receive FileInfo from inventory, analysis tools skip cloud API calls when cached data available
 

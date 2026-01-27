@@ -1391,3 +1391,198 @@ class TestCreateCollectionsFromInventory:
         assert len(data["errors"]) == 1
         error_msg = data["errors"][0]["error"].lower()
         assert "not found" in error_msg or "invalid" in error_msg
+
+
+# =============================================================================
+# T073, T073a: Integration tests for FileInfo population endpoint
+# =============================================================================
+
+class TestInventoryFileInfoEndpoint:
+    """Integration tests for FileInfo population endpoint (T073, T073a)."""
+
+    def _create_connector_with_collection(self, test_client, test_db_session):
+        """Helper to create a connector with a collection from inventory."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+
+        # Create connector
+        connector_data = {
+            "name": "S3 FileInfo Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        assert response.status_code == 201
+        connector_guid = response.json()["guid"]
+
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+
+        # Create a collection
+        collection_uuid = GuidService.generate_uuid()
+        collection = Collection(
+            uuid=collection_uuid,
+            name="Test Collection",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location=f"{connector_data['credentials']['aws_access_key_id']}/2020/vacation/",
+            team_id=connector.team_id,
+            connector_id=connector.id,
+            is_accessible=True
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Create inventory folder mapped to collection
+        folder = InventoryFolder(
+            connector_id=connector.id,
+            path="2020/vacation/",
+            object_count=100,
+            total_size_bytes=1000000,
+            collection_guid=collection.guid
+        )
+        test_db_session.add(folder)
+        test_db_session.commit()
+
+        return connector_guid, connector, collection
+
+    def _create_agent_with_api_key(self, test_db_session, test_team, test_user):
+        """Create an agent and return the agent with api_key."""
+        from backend.src.services.agent_service import AgentService
+
+        service = AgentService(test_db_session)
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Register agent
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Test Agent",
+            version="1.0.0",
+            capabilities=["local_filesystem"],
+        )
+        test_db_session.commit()
+
+        return result.agent, result.api_key
+
+    def test_get_connector_collections_returns_mapped_collections(
+        self, test_client, test_db_session, test_team, test_user
+    ):
+        """Test GET /connectors/{guid}/collections returns mapped collections."""
+        # Create an agent with API key
+        agent, api_key = self._create_agent_with_api_key(
+            test_db_session, test_team, test_user
+        )
+
+        # Create agent-authenticated client
+        from starlette.testclient import TestClient
+        from backend.src.main import app as fastapi_app
+        agent_client = TestClient(fastapi_app)
+        agent_client.headers["Authorization"] = f"Bearer {api_key}"
+
+        connector_guid, connector, collection = self._create_connector_with_collection(
+            test_client, test_db_session
+        )
+
+        response = agent_client.get(f"/api/agent/v1/connectors/{connector_guid}/collections")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["connector_guid"] == connector_guid
+        assert len(data["collections"]) == 1
+        assert data["collections"][0]["collection_guid"] == collection.guid
+        assert data["collections"][0]["folder_path"] == "2020/vacation/"
+
+    def test_get_connector_collections_empty_when_no_mappings(
+        self, test_client, test_db_session, test_team, test_user
+    ):
+        """Test GET /connectors/{guid}/collections returns empty when no mappings (T073a)."""
+        # Create an agent with API key
+        agent, api_key = self._create_agent_with_api_key(
+            test_db_session, test_team, test_user
+        )
+
+        # Create agent-authenticated client
+        from starlette.testclient import TestClient
+        from backend.src.main import app as fastapi_app
+        agent_client = TestClient(fastapi_app)
+        agent_client.headers["Authorization"] = f"Bearer {api_key}"
+
+        # Create connector without any collections
+        connector_data = {
+            "name": "S3 Empty Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        response = agent_client.get(f"/api/agent/v1/connectors/{connector_guid}/collections")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["connector_guid"] == connector_guid
+        assert len(data["collections"]) == 0
+
+    def test_collection_response_includes_file_info_summary(self, test_client, test_db_session):
+        """Test that Collection response includes FileInfo summary after population."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+
+        # Create connector
+        connector_data = {
+            "name": "S3 Summary Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+
+        # Create collection with FileInfo
+        from datetime import datetime
+        collection_uuid = GuidService.generate_uuid()
+        collection = Collection(
+            uuid=collection_uuid,
+            name="Collection With FileInfo",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="bucket/folder/",
+            team_id=connector.team_id,
+            connector_id=connector.id,
+            is_accessible=True,
+            file_info=[
+                {"key": "file1.jpg", "size": 1000, "last_modified": "2020-01-01T00:00:00Z"},
+                {"key": "file2.jpg", "size": 2000, "last_modified": "2020-01-01T00:00:00Z"},
+            ],
+            file_info_source="inventory",
+            file_info_updated_at=datetime.utcnow()
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Get collection via API
+        response = test_client.get(f"/api/collections/{collection.guid}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["file_info"] is not None
+        assert data["file_info"]["count"] == 2
+        assert data["file_info"]["source"] == "inventory"
+        assert data["file_info"]["updated_at"] is not None

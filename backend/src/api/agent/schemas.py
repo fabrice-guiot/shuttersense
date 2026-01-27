@@ -582,6 +582,32 @@ class PreviousResultData(BaseModel):
     }
 
 
+class CachedFileInfo(BaseModel):
+    """
+    Cached FileInfo from inventory import (Issue #107 - T071).
+
+    Represents a file's metadata from the bucket inventory, used to skip
+    cloud API calls when computing Input State hashes.
+    """
+    key: str = Field(..., description="Full object key/path (e.g., '2020/vacation/IMG_001.CR3')")
+    size: int = Field(..., ge=0, description="File size in bytes")
+    last_modified: str = Field(..., description="ISO8601 timestamp of last modification")
+    etag: Optional[str] = Field(None, description="Object ETag (for change detection)")
+    storage_class: Optional[str] = Field(None, description="Storage class (e.g., STANDARD, GLACIER)")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "key": "2020/vacation/IMG_001.CR3",
+                "size": 25000000,
+                "last_modified": "2022-11-25T13:30:49.000Z",
+                "etag": "371e1101d4248ef2609e269697bb0221-2",
+                "storage_class": "STANDARD"
+            }
+        }
+    }
+
+
 class JobClaimResponse(BaseModel):
     """Response schema for job claim."""
 
@@ -603,6 +629,17 @@ class JobClaimResponse(BaseModel):
         description="Previous result for comparison (null if no previous result exists)"
     )
 
+    # Cached FileInfo from Inventory Import (Issue #107 - T071)
+    file_info: Optional[List[CachedFileInfo]] = Field(
+        None,
+        description="Cached file metadata from inventory import. When present, agent should "
+                    "use this instead of calling cloud APIs (unless force_cloud_refresh is true)."
+    )
+    file_info_source: Optional[str] = Field(
+        None,
+        description="Source of file_info: 'inventory' (from bucket inventory) or 'api' (from cloud API)"
+    )
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -620,7 +657,15 @@ class JobClaimResponse(BaseModel):
                     "guid": "res_01hgw2bbg...",
                     "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb924...",
                     "completed_at": "2026-01-20T10:00:00.000Z"
-                }
+                },
+                "file_info": [
+                    {
+                        "key": "2020/vacation/IMG_001.CR3",
+                        "size": 25000000,
+                        "last_modified": "2022-11-25T13:30:49.000Z"
+                    }
+                ],
+                "file_info_source": "inventory"
             }
         }
     }
@@ -1415,6 +1460,194 @@ class InventoryFoldersResponse(BaseModel):
                 "status": "success",
                 "message": "Stored 42 inventory folders",
                 "folders_stored": 42
+            }
+        }
+    }
+
+
+# ============================================================================
+# Inventory FileInfo Schemas (Issue #107 - Phase B)
+# ============================================================================
+
+class CollectionFileInfoItem(BaseModel):
+    """FileInfo item for a single file."""
+
+    key: str = Field(
+        ...,
+        description="Full object key/path"
+    )
+    size: int = Field(
+        ...,
+        ge=0,
+        description="File size in bytes"
+    )
+    last_modified: str = Field(
+        ...,
+        description="ISO8601 timestamp of last modification"
+    )
+    etag: Optional[str] = Field(
+        None,
+        description="Object ETag (for change detection)"
+    )
+    storage_class: Optional[str] = Field(
+        None,
+        description="Storage class (e.g., STANDARD, GLACIER)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "key": "2020/vacation/IMG_001.CR3",
+                "size": 25000000,
+                "last_modified": "2022-11-25T13:30:49.000Z",
+                "etag": "371e1101d4248ef2609e269697bb0221-2",
+                "storage_class": "STANDARD"
+            }
+        }
+    }
+
+
+class CollectionFileInfo(BaseModel):
+    """FileInfo for a single collection from inventory."""
+
+    collection_guid: str = Field(
+        ...,
+        description="Collection GUID (col_xxx)"
+    )
+    file_info: List[CollectionFileInfoItem] = Field(
+        ...,
+        description="List of FileInfo items for this collection"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "file_info": [
+                    {
+                        "key": "2020/vacation/IMG_001.CR3",
+                        "size": 25000000,
+                        "last_modified": "2022-11-25T13:30:49.000Z"
+                    }
+                ]
+            }
+        }
+    }
+
+
+class InventoryFileInfoRequest(BaseModel):
+    """Request schema for reporting FileInfo from inventory import Phase B."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx)"
+    )
+    collections: List[CollectionFileInfo] = Field(
+        ...,
+        description="List of collections with their FileInfo"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "collections": [
+                    {
+                        "collection_guid": "col_01hgw2bbg0000000000000001",
+                        "file_info": [
+                            {
+                                "key": "2020/vacation/IMG_001.CR3",
+                                "size": 25000000,
+                                "last_modified": "2022-11-25T13:30:49.000Z"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+
+
+class InventoryFileInfoResponse(BaseModel):
+    """Response schema for FileInfo submission."""
+
+    status: str = Field(
+        ...,
+        description="Processing status (success/error)"
+    )
+    message: str = Field(
+        ...,
+        description="Status message"
+    )
+    collections_updated: int = Field(
+        ...,
+        ge=0,
+        description="Number of collections updated with FileInfo"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "success",
+                "message": "Updated FileInfo for 5 collections",
+                "collections_updated": 5
+            }
+        }
+    }
+
+
+# ============================================================================
+# Connector Collections Query (Issue #107 - Phase B)
+# ============================================================================
+
+class ConnectorCollectionInfo(BaseModel):
+    """Collection info for inventory FileInfo population."""
+
+    collection_guid: str = Field(
+        ...,
+        description="Collection GUID (col_xxx)"
+    )
+    folder_path: str = Field(
+        ...,
+        description="Inventory folder path prefix for this collection"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "folder_path": "2020/vacation/"
+            }
+        }
+    }
+
+
+class ConnectorCollectionsResponse(BaseModel):
+    """Response with collections mapped to a connector's inventory folders."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx)"
+    )
+    collections: List[ConnectorCollectionInfo] = Field(
+        default_factory=list,
+        description="Collections with their folder path prefix"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "collections": [
+                    {
+                        "collection_guid": "col_01hgw2bbg0000000000000001",
+                        "folder_path": "2020/vacation/"
+                    },
+                    {
+                        "collection_guid": "col_01hgw2bbg0000000000000002",
+                        "folder_path": "2021/wedding/"
+                    }
+                ]
             }
         }
     }

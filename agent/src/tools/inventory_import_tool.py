@@ -2,19 +2,25 @@
 Inventory Import Tool for S3 Inventory and GCS Storage Insights.
 
 Agent-executable tool that fetches inventory data, parses manifests,
-and extracts unique folder paths without making expensive cloud API calls.
+extracts unique folder paths, and populates FileInfo on collections
+without making expensive cloud API calls.
 
 Issue #107: Cloud Storage Bucket Inventory Import
-Tasks: T028, T028a, T029, T032
+Tasks: T028, T028a, T029, T032, T063, T064, T065, T066
 
 Architecture:
-    Phase A (this implementation): Folder Extraction
+    Phase A: Folder Extraction
         1. Fetch manifest.json from inventory location
         2. Download and parse data files (CSV/Parquet)
         3. Extract unique folder paths
         4. Report folders to server
 
-    Phase B (future): FileInfo Population
+    Phase B: FileInfo Population
+        1. Query server for collections mapped to connector's folders
+        2. Filter inventory entries by collection folder path prefix
+        3. Extract FileInfo (key, size, last_modified, etag, storage_class)
+        4. Report FileInfo to server per collection
+
     Phase C (future): Delta Detection
 """
 
@@ -40,6 +46,53 @@ logger = logging.getLogger("shuttersense.agent.tools.inventory_import")
 
 
 @dataclass
+class FileInfoData:
+    """
+    FileInfo for a single file from inventory.
+
+    Attributes:
+        key: Full object key/path
+        size: File size in bytes
+        last_modified: ISO8601 timestamp
+        etag: Object ETag (optional)
+        storage_class: Storage class (optional)
+    """
+    key: str
+    size: int
+    last_modified: str
+    etag: Optional[str] = None
+    storage_class: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API submission."""
+        result = {
+            "key": self.key,
+            "size": self.size,
+            "last_modified": self.last_modified,
+        }
+        if self.etag:
+            result["etag"] = self.etag
+        if self.storage_class:
+            result["storage_class"] = self.storage_class
+        return result
+
+
+@dataclass
+class CollectionFileInfoData:
+    """
+    FileInfo data for a single collection.
+
+    Attributes:
+        collection_guid: Collection GUID (col_xxx)
+        folder_path: Folder path prefix for filtering
+        file_info: List of FileInfo items
+    """
+    collection_guid: str
+    folder_path: str
+    file_info: List[FileInfoData]
+
+
+@dataclass
 class InventoryImportResult:
     """
     Result of inventory import execution.
@@ -50,6 +103,7 @@ class InventoryImportResult:
         folder_stats: Dict of folder path to stats (file_count, total_size)
         total_files: Total number of files processed
         total_size: Total size of all files in bytes
+        all_entries: All inventory entries (for Phase B processing)
         error_message: Error message if import failed
     """
     success: bool
@@ -57,6 +111,24 @@ class InventoryImportResult:
     folder_stats: Dict[str, Dict[str, Any]]
     total_files: int
     total_size: int
+    all_entries: Optional[List[InventoryEntry]] = None  # For Phase B
+    error_message: Optional[str] = None
+
+
+@dataclass
+class PhaseBResult:
+    """
+    Result of Phase B FileInfo population.
+
+    Attributes:
+        success: Whether Phase B completed successfully
+        collections_processed: Number of collections with FileInfo populated
+        collection_file_info: Dict mapping collection_guid to FileInfo list
+        error_message: Error message if Phase B failed
+    """
+    success: bool
+    collections_processed: int
+    collection_file_info: Dict[str, List[FileInfoData]]
     error_message: Optional[str] = None
 
 
@@ -345,7 +417,8 @@ class InventoryImportTool:
             folders=folders,
             folder_stats=folder_stats,
             total_files=len(all_entries),
-            total_size=total_size
+            total_size=total_size,
+            all_entries=all_entries  # Keep for Phase B
         )
 
     async def _process_gcs_data_files(
@@ -421,7 +494,8 @@ class InventoryImportTool:
             folders=folders,
             folder_stats=folder_stats,
             total_files=len(all_entries),
-            total_size=total_size
+            total_size=total_size,
+            all_entries=all_entries  # Keep for Phase B
         )
 
     def _fetch_object(self, bucket: str, key: str) -> bytes:
@@ -450,3 +524,168 @@ class InventoryImportTool:
         """Report progress via callback."""
         self._progress_callback(stage, percentage, message)
         logger.debug(f"Progress: {stage} {percentage}% - {message}")
+
+    # =========================================================================
+    # Phase B: FileInfo Population
+    # =========================================================================
+
+    def execute_phase_b(
+        self,
+        phase_a_result: InventoryImportResult,
+        collections_data: List[Dict[str, Any]]
+    ) -> PhaseBResult:
+        """
+        Execute Phase B: FileInfo Population.
+
+        Filters inventory entries by collection folder path prefix and
+        extracts FileInfo for each collection.
+
+        Args:
+            phase_a_result: Result from Phase A containing all_entries
+            collections_data: List of dicts with collection_guid and folder_path
+                from server query (GET /connectors/{guid}/collections)
+
+        Returns:
+            PhaseBResult with FileInfo per collection
+
+        Example:
+            >>> # After Phase A completes
+            >>> phase_a = await tool.execute()
+            >>> # Query server for collections
+            >>> collections = api.get_connector_collections(connector_guid)
+            >>> # Execute Phase B
+            >>> phase_b = tool.execute_phase_b(phase_a, collections)
+        """
+        if not phase_a_result.success:
+            return PhaseBResult(
+                success=False,
+                collections_processed=0,
+                collection_file_info={},
+                error_message="Phase A did not complete successfully"
+            )
+
+        if phase_a_result.all_entries is None or len(phase_a_result.all_entries) == 0:
+            return PhaseBResult(
+                success=True,
+                collections_processed=0,
+                collection_file_info={},
+                error_message=None
+            )
+
+        if not collections_data:
+            logger.info("No collections to populate FileInfo for")
+            return PhaseBResult(
+                success=True,
+                collections_processed=0,
+                collection_file_info={},
+                error_message=None
+            )
+
+        self._report_progress("phase_b_start", 0, "Starting FileInfo population...")
+
+        collection_file_info: Dict[str, List[FileInfoData]] = {}
+        total_collections = len(collections_data)
+
+        for idx, coll in enumerate(collections_data):
+            collection_guid = coll.get("collection_guid", "")
+            folder_path = coll.get("folder_path", "")
+
+            if not collection_guid or not folder_path:
+                continue
+
+            progress_pct = int((idx / total_collections) * 100)
+            self._report_progress(
+                "phase_b_filtering",
+                progress_pct,
+                f"Processing collection {idx + 1}/{total_collections}..."
+            )
+
+            # Filter entries by folder path prefix
+            filtered_entries = self._filter_entries_by_prefix(
+                phase_a_result.all_entries,
+                folder_path
+            )
+
+            # Extract FileInfo from filtered entries
+            file_info_list = self._extract_file_info(filtered_entries)
+
+            collection_file_info[collection_guid] = file_info_list
+
+            logger.info(
+                f"Collection {collection_guid}: {len(file_info_list)} files "
+                f"(filtered from {len(phase_a_result.all_entries)} total)"
+            )
+
+        self._report_progress(
+            "phase_b_complete",
+            100,
+            f"Populated FileInfo for {len(collection_file_info)} collections"
+        )
+
+        logger.info(
+            f"Phase B complete: {len(collection_file_info)} collections processed"
+        )
+
+        return PhaseBResult(
+            success=True,
+            collections_processed=len(collection_file_info),
+            collection_file_info=collection_file_info,
+            error_message=None
+        )
+
+    def _filter_entries_by_prefix(
+        self,
+        entries: List[InventoryEntry],
+        folder_path: str
+    ) -> List[InventoryEntry]:
+        """
+        Filter inventory entries by folder path prefix.
+
+        Only returns entries whose key starts with the folder path.
+
+        Args:
+            entries: All inventory entries from Phase A
+            folder_path: Folder path prefix to filter by (e.g., "2020/vacation/")
+
+        Returns:
+            List of entries matching the prefix
+        """
+        # Normalize folder path to ensure it ends with /
+        prefix = folder_path if folder_path.endswith("/") else folder_path + "/"
+
+        return [
+            entry for entry in entries
+            if entry.key.startswith(prefix)
+        ]
+
+    def _extract_file_info(
+        self,
+        entries: List[InventoryEntry]
+    ) -> List[FileInfoData]:
+        """
+        Extract FileInfo from inventory entries.
+
+        Converts InventoryEntry objects to FileInfoData with the required fields.
+
+        Args:
+            entries: Filtered inventory entries for a collection
+
+        Returns:
+            List of FileInfoData objects
+        """
+        file_info_list = []
+
+        for entry in entries:
+            # last_modified is already an ISO8601 string from InventoryEntry
+            last_modified_str = entry.last_modified or ""
+
+            file_info = FileInfoData(
+                key=entry.key,
+                size=entry.size,
+                last_modified=last_modified_str,
+                etag=entry.etag,
+                storage_class=entry.storage_class
+            )
+            file_info_list.append(file_info)
+
+        return file_info_list

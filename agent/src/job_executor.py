@@ -112,6 +112,92 @@ class JobExecutor:
         if self._cancel_requested:
             raise JobCancelledException(f"Job {self._current_job_guid} was cancelled")
 
+    def _convert_cached_file_info(
+        self,
+        cached_file_info: List[Dict[str, Any]],
+        collection_path: str
+    ) -> List[FileInfo]:
+        """
+        Convert cached FileInfo from server format to adapter FileInfo format.
+
+        Issue #107 - T071: Use stored FileInfo instead of calling cloud APIs.
+
+        The server stores FileInfo with full object keys (e.g., "2020/vacation/IMG_001.CR3")
+        while the adapter FileInfo uses paths relative to the collection location.
+
+        Note: S3/GCS inventory keys are URL-encoded (e.g., %20 for space), so we
+        decode them here to match how the cloud adapters return file paths.
+
+        Args:
+            cached_file_info: List of FileInfo dicts from server
+            collection_path: Collection location (used to extract relative paths)
+
+        Returns:
+            List of FileInfo objects for adapter compatibility
+        """
+        from urllib.parse import unquote
+
+        file_infos: List[FileInfo] = []
+
+        # Normalize collection path (remove trailing slash for prefix matching)
+        # Also URL-decode the collection path for consistent matching
+        prefix = unquote(collection_path.rstrip("/") + "/") if collection_path else ""
+
+        for fi in cached_file_info:
+            key = fi.get("key", "")
+            if not key:
+                continue
+
+            # URL-decode the key (S3/GCS inventory keys are URL-encoded)
+            decoded_key = unquote(key)
+
+            # Extract relative path by removing collection prefix
+            if prefix and decoded_key.startswith(prefix):
+                relative_path = decoded_key[len(prefix):]
+            else:
+                # If key doesn't match prefix, use full decoded key
+                relative_path = decoded_key
+
+            file_infos.append(FileInfo(
+                path=relative_path,
+                size=fi.get("size", 0),
+                last_modified=fi.get("last_modified"),
+            ))
+
+        logger.debug(
+            f"Converted {len(file_infos)} cached FileInfo entries",
+            extra={
+                "collection_path": collection_path,
+                "prefix": prefix,
+            }
+        )
+
+        return file_infos
+
+    def _should_use_cached_file_info(self, job: Dict[str, Any]) -> bool:
+        """
+        Check if cached FileInfo should be used instead of cloud API.
+
+        Issue #107 - T071/T072: Use cached FileInfo unless force_cloud_refresh is requested.
+
+        Args:
+            job: Job data from claim response
+
+        Returns:
+            True if cached FileInfo should be used
+        """
+        # Check if file_info is available in the job
+        if not job.get("file_info"):
+            return False
+
+        # Check if force_cloud_refresh is requested in parameters
+        parameters = job.get("parameters") or {}
+        if parameters.get("force_cloud_refresh", False):
+            logger.info("force_cloud_refresh requested - bypassing cached FileInfo")
+            return False
+
+        return True
+
     async def execute(self, job: Dict[str, Any]) -> None:
         """
         Execute a job.
@@ -279,6 +365,9 @@ class JobExecutor:
         For remote collections (with connector info), uses storage adapters
         to list files and processes them without downloading.
 
+        Issue #107 - T071: When cached FileInfo is available from inventory import,
+        tools use it instead of calling cloud APIs (unless force_cloud_refresh is set).
+
         Args:
             job: Job data
             config: Configuration data
@@ -294,16 +383,31 @@ class JobExecutor:
         # Check if this is a remote collection
         is_remote = connector is not None
 
+        # Extract cached FileInfo for T071 (Issue #107)
+        # Tools will use this instead of calling cloud APIs when available
+        cached_file_info: Optional[List[FileInfo]] = None
+        if self._should_use_cached_file_info(job):
+            raw_file_info = job.get("file_info", [])
+            if raw_file_info and collection_path:
+                cached_file_info = self._convert_cached_file_info(raw_file_info, collection_path)
+                logger.info(
+                    f"Using cached FileInfo for tool execution ({len(cached_file_info)} files)",
+                    extra={
+                        "tool": tool,
+                        "file_info_source": job.get("file_info_source"),
+                    }
+                )
+
         if tool == "photostats":
             # Unified code path: connector=None means local, connector!=None means remote
-            return await self._run_photostats(collection_path, config, connector)
+            return await self._run_photostats(collection_path, config, connector, cached_file_info)
         elif tool == "photo_pairing":
             # Unified code path: connector=None means local, connector!=None means remote
-            return await self._run_photo_pairing(collection_path, config, connector)
+            return await self._run_photo_pairing(collection_path, config, connector, cached_file_info)
         elif tool == "pipeline_validation":
             # Unified code path: connector=None means local, connector!=None means remote
             return await self._run_pipeline_validation(
-                collection_path, pipeline_guid, config, connector
+                collection_path, pipeline_guid, config, connector, cached_file_info
             )
         elif tool == "collection_test":
             # Merge connector info from config into job for collection_test
@@ -396,9 +500,26 @@ class JobExecutor:
                     }
                 )
             elif connector:
-                # Remote collection - list files from storage adapter
-                adapter = self._get_storage_adapter(connector)
-                file_infos = adapter.list_files_with_metadata(collection_path)
+                # Remote collection - check for cached FileInfo first (Issue #107 - T071)
+                if self._should_use_cached_file_info(job):
+                    # Use cached FileInfo from inventory import
+                    cached_file_info = job.get("file_info", [])
+                    file_infos = self._convert_cached_file_info(cached_file_info, collection_path)
+                    logger.info(
+                        f"Using cached FileInfo for Input State hash ({len(file_infos)} files)",
+                        extra={
+                            "job_guid": job_guid,
+                            "file_info_source": job.get("file_info_source"),
+                        }
+                    )
+                else:
+                    # No cache or force_cloud_refresh - list files from storage adapter
+                    adapter = self._get_storage_adapter(connector)
+                    file_infos = adapter.list_files_with_metadata(collection_path)
+                    logger.info(
+                        f"Listed files from cloud adapter ({len(file_infos)} files)",
+                        extra={"job_guid": job_guid}
+                    )
                 file_hash, file_count = computer.compute_file_list_hash_from_file_info(file_infos)
             else:
                 # Local collection
@@ -485,7 +606,8 @@ class JobExecutor:
         self,
         collection_path: Optional[str],
         config: Dict[str, Any],
-        connector: Optional[Dict[str, Any]] = None
+        connector: Optional[Dict[str, Any]] = None,
+        cached_file_info: Optional[List[FileInfo]] = None
     ) -> JobResult:
         """
         Run PhotoStats analysis on local or remote collection.
@@ -494,10 +616,14 @@ class JobExecutor:
         - connector=None: Use LocalAdapter for local filesystem
         - connector provided: Use appropriate remote adapter (S3/GCS/SMB)
 
+        Issue #107 - T071: When cached_file_info is provided, uses it instead
+        of calling cloud APIs for remote collections.
+
         Args:
             collection_path: Path to collection (local path or remote location)
             config: Configuration data
             connector: Optional connector info for remote collections
+            cached_file_info: Optional cached FileInfo from inventory (T071)
 
         Returns:
             JobResult with analysis results
@@ -545,10 +671,16 @@ class JobExecutor:
                     message=f"Scanning {location_display}..."
                 )
 
-                # List files with metadata (same interface for local and remote)
-                logger.info(f"Listing files from collection: {normalized_path}")
-                file_infos = adapter.list_files_with_metadata(normalized_path)
-                logger.info(f"Found {len(file_infos)} files in collection")
+                # Use cached FileInfo if available (T071), otherwise list from adapter
+                if cached_file_info is not None:
+                    # Issue #107 - T071: Use cached FileInfo from inventory import
+                    file_infos = cached_file_info
+                    logger.info(f"Using cached FileInfo ({len(file_infos)} files)")
+                else:
+                    # List files with metadata (same interface for local and remote)
+                    logger.info(f"Listing files from collection: {normalized_path}")
+                    file_infos = adapter.list_files_with_metadata(normalized_path)
+                    logger.info(f"Found {len(file_infos)} files in collection")
 
                 # Report progress
                 self._sync_progress_callback(
@@ -602,7 +734,8 @@ class JobExecutor:
         self,
         collection_path: Optional[str],
         config: Dict[str, Any],
-        connector: Optional[Dict[str, Any]] = None
+        connector: Optional[Dict[str, Any]] = None,
+        cached_file_info: Optional[List[FileInfo]] = None
     ) -> JobResult:
         """
         Run Photo Pairing analysis on local or remote collection.
@@ -611,10 +744,14 @@ class JobExecutor:
         - connector=None: Use LocalAdapter for local filesystem
         - connector provided: Use appropriate remote adapter (S3/GCS/SMB)
 
+        Issue #107 - T071: When cached_file_info is provided, uses it instead
+        of calling cloud APIs for remote collections.
+
         Args:
             collection_path: Path to collection (local path or remote location)
             config: Configuration data
             connector: Optional connector info for remote collections
+            cached_file_info: Optional cached FileInfo from inventory (T071)
 
         Returns:
             JobResult with analysis results
@@ -662,9 +799,15 @@ class JobExecutor:
                     message=f"Scanning {location_display}..."
                 )
 
-                # List files with metadata (same interface for local and remote)
-                logger.info(f"Listing files from collection: {normalized_path}")
-                all_files = adapter.list_files_with_metadata(normalized_path)
+                # Use cached FileInfo if available (T071), otherwise list from adapter
+                if cached_file_info is not None:
+                    # Issue #107 - T071: Use cached FileInfo from inventory import
+                    all_files = cached_file_info
+                    logger.info(f"Using cached FileInfo ({len(all_files)} files)")
+                else:
+                    # List files with metadata (same interface for local and remote)
+                    logger.info(f"Listing files from collection: {normalized_path}")
+                    all_files = adapter.list_files_with_metadata(normalized_path)
 
                 # Filter to photo extensions
                 photo_extensions = set(config.get('photo_extensions', []))
@@ -748,7 +891,8 @@ class JobExecutor:
         collection_path: Optional[str],
         pipeline_guid: Optional[str],
         config: Dict[str, Any],
-        connector: Optional[Dict[str, Any]] = None
+        connector: Optional[Dict[str, Any]] = None,
+        cached_file_info: Optional[List[FileInfo]] = None
     ) -> JobResult:
         """
         Run Pipeline Validation analysis on local or remote collection.
@@ -760,11 +904,15 @@ class JobExecutor:
         For display_graph mode (no collection_path), generates a graph visualization.
         For collection mode, runs full pipeline validation.
 
+        Issue #107 - T071: When cached_file_info is provided, uses it instead
+        of calling cloud APIs for remote collections.
+
         Args:
             collection_path: Path to collection (optional for display_graph mode)
             pipeline_guid: Pipeline GUID
             config: Configuration data (includes pipeline definition)
             connector: Optional connector info for remote collections
+            cached_file_info: Optional cached FileInfo from inventory (T071)
 
         Returns:
             JobResult with analysis results
@@ -778,7 +926,9 @@ class JobExecutor:
                 return await self._run_display_graph(config, loop)
             else:
                 # Collection validation mode - full pipeline validation (local or remote)
-                return await self._run_collection_validation(collection_path, config, loop, connector)
+                return await self._run_collection_validation(
+                    collection_path, config, loop, connector, cached_file_info
+                )
 
         except Exception as e:
             logger.error(f"Pipeline Validation failed: {e}", exc_info=True)
@@ -904,18 +1054,23 @@ class JobExecutor:
         collection_path: str,
         config: Dict[str, Any],
         loop: asyncio.AbstractEventLoop,
-        connector: Optional[Dict[str, Any]] = None
+        connector: Optional[Dict[str, Any]] = None,
+        cached_file_info: Optional[List[FileInfo]] = None
     ) -> JobResult:
         """
         Run collection validation mode - full pipeline validation.
 
         Unified code path for both local and remote collections.
 
+        Issue #107 - T071: When cached_file_info is provided, uses it instead
+        of calling cloud APIs for remote collections.
+
         Args:
             collection_path: Path to collection (local path or remote location)
             config: Configuration data with pipeline definition
             loop: Event loop for running in executor
             connector: Optional connector info for remote collections
+            cached_file_info: Optional cached FileInfo from inventory (T071)
 
         Returns:
             JobResult with validation results
@@ -969,10 +1124,16 @@ class JobExecutor:
                 message=f"Scanning {location_display}..."
             )
 
-            # List files with metadata (same interface for local and remote)
-            logger.info(f"Listing files from collection: {normalized_path}")
-            all_files = adapter.list_files_with_metadata(normalized_path)
-            logger.info(f"Found {len(all_files)} files in collection")
+            # Use cached FileInfo if available (T071), otherwise list from adapter
+            if cached_file_info is not None:
+                # Issue #107 - T071: Use cached FileInfo from inventory import
+                all_files = cached_file_info
+                logger.info(f"Using cached FileInfo ({len(all_files)} files)")
+            else:
+                # List files with metadata (same interface for local and remote)
+                logger.info(f"Listing files from collection: {normalized_path}")
+                all_files = adapter.list_files_with_metadata(normalized_path)
+                logger.info(f"Found {len(all_files)} files in collection")
 
             # Report progress
             # Get config
@@ -1956,7 +2117,7 @@ class JobExecutor:
             result = await tool.execute()
 
             if result.success:
-                # Report folders to server
+                # Phase A: Report folders to server
                 await self._report_inventory_folders(
                     job_guid=job_guid,
                     connector_guid=connector_guid,
@@ -1967,12 +2128,31 @@ class JobExecutor:
                 )
 
                 logger.info(
-                    f"Inventory import completed successfully",
+                    f"Phase A completed: Folder extraction",
                     extra={
                         "job_guid": job_guid,
                         "folders_found": len(result.folders),
                         "total_files": result.total_files,
                         "total_size": result.total_size
+                    }
+                )
+
+                # Phase B: FileInfo Population
+                collections_updated = await self._execute_phase_b(
+                    job_guid=job_guid,
+                    connector_guid=connector_guid,
+                    tool=tool,
+                    phase_a_result=result
+                )
+
+                logger.info(
+                    f"Inventory import completed successfully",
+                    extra={
+                        "job_guid": job_guid,
+                        "folders_found": len(result.folders),
+                        "total_files": result.total_files,
+                        "total_size": result.total_size,
+                        "collections_with_file_info": collections_updated
                     }
                 )
 
@@ -1982,7 +2162,8 @@ class JobExecutor:
                         "success": True,
                         "folders_count": len(result.folders),
                         "total_files": result.total_files,
-                        "total_size": result.total_size
+                        "total_size": result.total_size,
+                        "collections_with_file_info": collections_updated
                     }
                 )
             else:
@@ -2045,6 +2226,114 @@ class JobExecutor:
                 exc_info=True
             )
             raise
+
+    async def _execute_phase_b(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        tool: Any,  # InventoryImportTool
+        phase_a_result: Any,  # InventoryImportResult
+    ) -> int:
+        """
+        Execute Phase B: FileInfo Population.
+
+        Queries the server for collections mapped to the connector's folders,
+        filters inventory entries by collection path prefix, extracts FileInfo,
+        and reports it back to the server.
+
+        Args:
+            job_guid: Job GUID
+            connector_guid: Connector GUID
+            tool: InventoryImportTool instance (for execute_phase_b method)
+            phase_a_result: Result from Phase A (with all_entries)
+
+        Returns:
+            Number of collections updated with FileInfo
+        """
+        try:
+            # Query server for collections mapped to this connector
+            collections_data = await self._api_client.get_connector_collections(
+                connector_guid=connector_guid
+            )
+
+            if not collections_data:
+                logger.info(
+                    f"No collections mapped to connector, skipping Phase B",
+                    extra={
+                        "job_guid": job_guid,
+                        "connector_guid": connector_guid
+                    }
+                )
+                return 0
+
+            logger.info(
+                f"Found {len(collections_data)} collections for Phase B",
+                extra={
+                    "job_guid": job_guid,
+                    "connector_guid": connector_guid,
+                    "collection_count": len(collections_data)
+                }
+            )
+
+            # Execute Phase B using the tool
+            phase_b_result = tool.execute_phase_b(
+                phase_a_result=phase_a_result,
+                collections_data=collections_data
+            )
+
+            if not phase_b_result.success:
+                logger.warning(
+                    f"Phase B failed: {phase_b_result.error_message}",
+                    extra={
+                        "job_guid": job_guid,
+                        "connector_guid": connector_guid
+                    }
+                )
+                return 0
+
+            if phase_b_result.collections_processed == 0:
+                logger.info(
+                    f"Phase B: No collections to update",
+                    extra={
+                        "job_guid": job_guid,
+                        "connector_guid": connector_guid
+                    }
+                )
+                return 0
+
+            # Convert FileInfo to API format and report to server
+            collections_file_info = []
+            for collection_guid, file_info_list in phase_b_result.collection_file_info.items():
+                collections_file_info.append({
+                    "collection_guid": collection_guid,
+                    "file_info": [fi.to_dict() for fi in file_info_list]
+                })
+
+            await self._api_client.report_inventory_file_info(
+                job_guid=job_guid,
+                connector_guid=connector_guid,
+                collections_file_info=collections_file_info
+            )
+
+            logger.info(
+                f"Phase B complete: Reported FileInfo for {len(collections_file_info)} collections",
+                extra={
+                    "job_guid": job_guid,
+                    "connector_guid": connector_guid,
+                    "collections_updated": len(collections_file_info)
+                }
+            )
+
+            return len(collections_file_info)
+
+        except Exception as e:
+            logger.error(
+                f"Phase B error: {str(e)}",
+                exc_info=True
+            )
+            # Phase B failures should not fail the entire job
+            # The folders have already been reported successfully
+            return 0
 
     def _sync_progress_callback(
         self,

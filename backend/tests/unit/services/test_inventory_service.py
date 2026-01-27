@@ -835,3 +835,262 @@ class TestValidateFolderMappings:
 
         assert len(valid_folders) == 3
         assert len(errors) == 0
+
+
+# =============================================================================
+# T069a: Unit tests for FileInfo storage service
+# =============================================================================
+
+class TestFileInfoStorage:
+    """Tests for FileInfo storage methods (T069a)."""
+
+    def test_get_collections_for_connector(self, test_db_session, test_team, test_connector):
+        """Test retrieving collections mapped to connector folders."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+        from backend.src.services.guid import GuidService
+
+        service = InventoryService(test_db_session)
+
+        # Create a collection
+        collection_uuid = GuidService.generate_uuid()
+        collection_guid = GuidService.encode_uuid(collection_uuid, "col")
+        collection = Collection(
+            uuid=collection_uuid,
+            name="Test Collection",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="my-bucket/2020/vacation/",
+            team_id=test_team.id,
+            connector_id=test_connector.id,
+            is_accessible=True
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Create folder mapped to this collection
+        folder = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/vacation/",
+            object_count=100,
+            total_size_bytes=1000000,
+            collection_guid=collection_guid
+        )
+        test_db_session.add(folder)
+        test_db_session.commit()
+
+        # Get collections for connector
+        collections = service.get_collections_for_connector(
+            connector_id=test_connector.id,
+            team_id=test_team.id
+        )
+
+        assert len(collections) == 1
+        assert collections[0]["collection_guid"] == collection_guid
+        assert collections[0]["collection_id"] == collection.id
+        assert collections[0]["folder_path"] == "2020/vacation/"
+
+    def test_get_collections_for_connector_no_mappings(self, test_db_session, test_team, test_connector):
+        """Test getting collections when no mappings exist."""
+        service = InventoryService(test_db_session)
+
+        # Create folder without mapping
+        folder = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/vacation/",
+            object_count=100,
+            total_size_bytes=1000000
+        )
+        test_db_session.add(folder)
+        test_db_session.commit()
+
+        collections = service.get_collections_for_connector(
+            connector_id=test_connector.id,
+            team_id=test_team.id
+        )
+
+        assert len(collections) == 0
+
+    def test_store_file_info(self, test_db_session, test_team, test_connector):
+        """Test storing FileInfo on a collection."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+
+        service = InventoryService(test_db_session)
+
+        # Create a collection
+        collection = Collection(
+            name="Test Collection",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="my-bucket/2020/vacation/",
+            team_id=test_team.id,
+            connector_id=test_connector.id,
+            is_accessible=True
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Store FileInfo
+        file_info = [
+            {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2020-07-15T10:30:00Z"},
+            {"key": "2020/vacation/IMG_002.CR3", "size": 24000000, "last_modified": "2020-07-15T11:00:00Z"},
+        ]
+
+        result = service.store_file_info(
+            collection_id=collection.id,
+            file_info=file_info,
+            team_id=test_team.id
+        )
+
+        assert result is True
+
+        # Verify storage
+        test_db_session.refresh(collection)
+        assert collection.file_info is not None
+        assert len(collection.file_info) == 2
+        assert collection.file_info_source == "inventory"
+        assert collection.file_info_updated_at is not None
+
+    def test_store_file_info_updates_timestamp(self, test_db_session, test_team, test_connector):
+        """Test that storing FileInfo updates the timestamp."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+        from datetime import datetime, timedelta
+
+        service = InventoryService(test_db_session)
+
+        # Create collection with existing FileInfo
+        old_time = datetime.utcnow() - timedelta(days=1)
+        collection = Collection(
+            name="Test Collection",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="my-bucket/2020/vacation/",
+            team_id=test_team.id,
+            connector_id=test_connector.id,
+            is_accessible=True,
+            file_info=[{"key": "old.jpg", "size": 1000, "last_modified": "2020-01-01T00:00:00Z"}],
+            file_info_source="api",
+            file_info_updated_at=old_time
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Store new FileInfo
+        new_file_info = [
+            {"key": "new.jpg", "size": 2000, "last_modified": "2020-07-15T10:30:00Z"},
+        ]
+
+        service.store_file_info(
+            collection_id=collection.id,
+            file_info=new_file_info,
+            team_id=test_team.id
+        )
+
+        test_db_session.refresh(collection)
+        assert collection.file_info_source == "inventory"
+        assert collection.file_info_updated_at > old_time
+        assert len(collection.file_info) == 1
+        assert collection.file_info[0]["key"] == "new.jpg"
+
+    def test_store_file_info_batch(self, test_db_session, test_team, test_connector):
+        """Test batch storing FileInfo for multiple collections."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+        from backend.src.services.guid import GuidService
+
+        service = InventoryService(test_db_session)
+
+        # Create collections
+        collections = []
+        for i in range(3):
+            collection_uuid = GuidService.generate_uuid()
+            collection = Collection(
+                uuid=collection_uuid,
+                name=f"Test Collection {i}",
+                type=CollectionType.S3,
+                state=CollectionState.LIVE,
+                location=f"my-bucket/folder{i}/",
+                team_id=test_team.id,
+                connector_id=test_connector.id,
+                is_accessible=True
+            )
+            test_db_session.add(collection)
+            collections.append(collection)
+        test_db_session.commit()
+
+        # Build batch data
+        collections_data = [
+            {
+                "collection_guid": collections[0].guid,
+                "file_info": [{"key": "f0/a.jpg", "size": 1000, "last_modified": "2020-01-01T00:00:00Z"}]
+            },
+            {
+                "collection_guid": collections[1].guid,
+                "file_info": [{"key": "f1/b.jpg", "size": 2000, "last_modified": "2020-01-01T00:00:00Z"}]
+            },
+            {
+                "collection_guid": collections[2].guid,
+                "file_info": [{"key": "f2/c.jpg", "size": 3000, "last_modified": "2020-01-01T00:00:00Z"}]
+            },
+        ]
+
+        updated_count = service.store_file_info_batch(
+            collections_data=collections_data,
+            team_id=test_team.id
+        )
+
+        assert updated_count == 3
+
+        # Verify all collections updated
+        for i, coll in enumerate(collections):
+            test_db_session.refresh(coll)
+            assert coll.file_info is not None
+            assert coll.file_info_source == "inventory"
+            assert coll.file_info_updated_at is not None
+
+    def test_store_file_info_batch_skips_invalid_guid(self, test_db_session, test_team, test_connector):
+        """Test batch storage skips invalid collection GUIDs."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+        from backend.src.services.guid import GuidService
+
+        service = InventoryService(test_db_session)
+
+        # Create one valid collection
+        collection_uuid = GuidService.generate_uuid()
+        collection = Collection(
+            uuid=collection_uuid,
+            name="Test Collection",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="my-bucket/folder/",
+            team_id=test_team.id,
+            connector_id=test_connector.id,
+            is_accessible=True
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Build batch data with invalid GUID
+        collections_data = [
+            {
+                "collection_guid": collection.guid,
+                "file_info": [{"key": "a.jpg", "size": 1000, "last_modified": "2020-01-01T00:00:00Z"}]
+            },
+            {
+                "collection_guid": "invalid_guid",  # Invalid
+                "file_info": [{"key": "b.jpg", "size": 2000, "last_modified": "2020-01-01T00:00:00Z"}]
+            },
+            {
+                "collection_guid": "col_nonexistent12345678901234",  # Valid format but doesn't exist
+                "file_info": [{"key": "c.jpg", "size": 3000, "last_modified": "2020-01-01T00:00:00Z"}]
+            },
+        ]
+
+        updated_count = service.store_file_info_batch(
+            collections_data=collections_data,
+            team_id=test_team.id
+        )
+
+        # Only 1 should be updated (the valid one)
+        assert updated_count == 1
+
+        test_db_session.refresh(collection)
+        assert collection.file_info is not None

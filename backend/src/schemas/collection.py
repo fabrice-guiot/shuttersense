@@ -837,6 +837,30 @@ class CollectionRefreshResponse(BaseModel):
     message: str = Field(..., description="Descriptive message")
     file_count: int = Field(..., ge=0, description="Number of files found")
 
+
+class CollectionClearCacheResponse(BaseModel):
+    """
+    Schema for collection inventory cache clear response (Issue #107 - T075).
+
+    Used when clearing cached FileInfo from bucket inventory imports,
+    typically before running tools with fresh cloud API data.
+
+    Fields:
+        success: Clear operation result
+        message: Descriptive message
+        cleared_count: Number of cached FileInfo entries that were cleared
+
+    Example:
+        >>> response = CollectionClearCacheResponse(
+        ...     success=True,
+        ...     message="Inventory cache cleared",
+        ...     cleared_count=12345
+        ... )
+    """
+    success: bool = Field(..., description="Clear operation success status")
+    message: str = Field(..., description="Descriptive message")
+    cleared_count: int = Field(..., ge=0, description="Number of cached entries cleared")
+
     model_config = {
         "json_schema_extra": {
             "example": {

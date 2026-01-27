@@ -59,6 +59,7 @@ from backend.src.api.agent.schemas import (
     JobFailRequest,
     JobNoChangeRequest,  # Storage Optimization (Issue #92)
     PreviousResultData,   # Storage Optimization (Issue #92)
+    CachedFileInfo,       # Inventory FileInfo cache (Issue #107 - T071)
     JobStatusResponse,
     JobConfigData,
     JobConfigResponse,
@@ -83,6 +84,12 @@ from backend.src.api.agent.schemas import (
     # Inventory folders schemas (Issue #107)
     InventoryFoldersRequest,
     InventoryFoldersResponse,
+    # Inventory FileInfo schemas (Issue #107 - Phase B)
+    InventoryFileInfoRequest,
+    InventoryFileInfoResponse,
+    # Connector collections query (Issue #107 - Phase B)
+    ConnectorCollectionInfo,
+    ConnectorCollectionsResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -415,6 +422,28 @@ async def claim_job(
             completed_at=result.previous_result.completed_at,
         )
 
+    # Get cached FileInfo from inventory import (Issue #107 - T071)
+    # Include file_info if collection has cached data from inventory
+    file_info = None
+    file_info_source = None
+    if job.collection and job.collection.file_info:
+        # Check if force_cloud_refresh is requested in job parameters
+        force_refresh = (job.parameters or {}).get("force_cloud_refresh", False)
+        if not force_refresh:
+            # Convert stored FileInfo to API format
+            file_info = [
+                CachedFileInfo(
+                    key=fi.get("key", ""),
+                    size=fi.get("size", 0),
+                    last_modified=fi.get("last_modified", ""),
+                    etag=fi.get("etag"),
+                    storage_class=fi.get("storage_class"),
+                )
+                for fi in job.collection.file_info
+                if fi.get("key")  # Skip invalid entries
+            ]
+            file_info_source = job.collection.file_info_source
+
     return JobClaimResponse(
         guid=job.guid,
         tool=job.tool,
@@ -428,6 +457,8 @@ async def claim_job(
         retry_count=job.retry_count,
         max_retries=job.max_retries,
         previous_result=previous_result,
+        file_info=file_info,
+        file_info_source=file_info_source,
     )
 
 
@@ -2218,4 +2249,215 @@ async def report_inventory_folders(
         status="success",
         message=f"Stored {folders_stored} inventory folders",
         folders_stored=folders_stored
+    )
+
+
+@router.post(
+    "/jobs/{job_guid}/inventory/file-info",
+    response_model=InventoryFileInfoResponse,
+    summary="Report inventory FileInfo",
+    description="Submit FileInfo for collections from inventory import Phase B."
+)
+async def report_inventory_file_info(
+    job_guid: str,
+    data: InventoryFileInfoRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    agent_service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Report FileInfo for collections from inventory import.
+
+    Called by agents during inventory import Phase B (FileInfo Population)
+    to submit the extracted FileInfo for each mapped collection.
+
+    Path Parameters:
+        job_guid: GUID of the import job (job_xxx format)
+
+    Request Body:
+        connector_guid: Connector GUID (con_xxx)
+        collections: List of collection FileInfo data
+
+    Returns:
+        InventoryFileInfoResponse with update count
+
+    Raises:
+        404: If job or connector not found
+        400: If job is not an inventory import job
+        403: If job is not assigned to this agent
+    """
+    from backend.src.models.job import Job, JobStatus
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    from backend.src.services.inventory_service import InventoryService
+
+    # Parse job GUID
+    try:
+        from backend.src.services.guid import GuidService
+        job_uuid = GuidService.parse_identifier(job_guid, expected_prefix="job")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    # Get job
+    job = db.query(Job).filter(Job.uuid == job_uuid).first()
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job type is inventory_import
+    if job.tool != "inventory_import":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not an inventory import job (tool: {job.tool})"
+        )
+
+    # Verify job is assigned to this agent
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Verify job is in running status
+    if job.status != JobStatus.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not in running status (status: {job.status.value})"
+        )
+
+    # Get connector ID from job progress
+    progress = job.progress or {}
+    connector_id = progress.get("connector_id")
+    connector_guid_from_job = progress.get("connector_guid")
+
+    if not connector_id and not connector_guid_from_job:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job does not have connector information"
+        )
+
+    # Verify connector GUID matches
+    if connector_guid_from_job and connector_guid_from_job != data.connector_guid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connector GUID does not match job's connector"
+        )
+
+    # Store FileInfo for each collection
+    inventory_service = InventoryService(db)
+    try:
+        collections_data = [
+            {
+                "collection_guid": c.collection_guid,
+                "file_info": [fi.model_dump() for fi in c.file_info]
+            }
+            for c in data.collections
+        ]
+        collections_updated = inventory_service.store_file_info_batch(
+            collections_data=collections_data,
+            team_id=ctx.team_id
+        )
+    except Exception as e:
+        logger.error(f"Error storing FileInfo: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to store FileInfo: {str(e)}"
+        )
+
+    # Update job progress to indicate Phase B complete
+    if not job.progress:
+        job.progress = {}
+    job.progress["phase_b_complete"] = True
+    job.progress["collections_with_file_info"] = collections_updated
+    db.commit()
+
+    logger.info(
+        f"Inventory FileInfo stored",
+        extra={
+            "job_guid": job_guid,
+            "connector_guid": data.connector_guid,
+            "collections_updated": collections_updated
+        }
+    )
+
+    return InventoryFileInfoResponse(
+        status="success",
+        message=f"Updated FileInfo for {collections_updated} collections",
+        collections_updated=collections_updated
+    )
+
+
+@router.get(
+    "/connectors/{connector_guid}/collections",
+    response_model=ConnectorCollectionsResponse,
+    summary="Get collections for connector",
+    description="Get collections mapped to inventory folders for a connector (for Phase B FileInfo population)."
+)
+async def get_connector_collections(
+    connector_guid: str,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Get collections mapped to a connector's inventory folders.
+
+    Used by agents during inventory import Phase B to determine which
+    collections need FileInfo populated and what folder path prefix
+    to filter inventory entries by.
+
+    Path Parameters:
+        connector_guid: Connector GUID (con_xxx format)
+
+    Returns:
+        ConnectorCollectionsResponse with list of collections and their folder paths
+
+    Raises:
+        404: If connector not found
+        400: If connector GUID format is invalid
+    """
+    from backend.src.services.inventory_service import InventoryService
+    from backend.src.services.guid import GuidService
+
+    # Parse connector GUID
+    try:
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    # Get connector
+    from backend.src.models import Connector
+    connector = db.query(Connector).filter(
+        Connector.uuid == connector_uuid,
+        Connector.team_id == ctx.team_id
+    ).first()
+
+    if not connector:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Connector not found"
+        )
+
+    # Get collections for this connector
+    inventory_service = InventoryService(db)
+    collections_data = inventory_service.get_collections_for_connector(
+        connector_id=connector.id,
+        team_id=ctx.team_id
+    )
+
+    return ConnectorCollectionsResponse(
+        connector_guid=connector_guid,
+        collections=[
+            ConnectorCollectionInfo(
+                collection_guid=c["collection_guid"],
+                folder_path=c["folder_path"]
+            )
+            for c in collections_data
+        ]
     )

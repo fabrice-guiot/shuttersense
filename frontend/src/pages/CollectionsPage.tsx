@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, AlertTriangle } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,6 +21,7 @@ import { CollectionList } from '../components/collections/CollectionList'
 import { FiltersSection } from '../components/collections/FiltersSection'
 import CollectionForm from '../components/collections/CollectionForm'
 import { GuidBadge } from '@/components/GuidBadge'
+import { clearInventoryCache } from '@/services/collections'
 import type { Collection, CollectionState, CollectionType } from '@/contracts/api/collection-api'
 
 export default function CollectionsPage() {
@@ -143,6 +145,28 @@ export default function CollectionsPage() {
     })
   }
 
+  // T075: Refresh from Cloud - clear inventory cache then run all tools
+  const handleRefreshFromCloud = async (collection: Collection) => {
+    try {
+      // First, clear the inventory cache
+      const result = await clearInventoryCache(collection.guid)
+      if (result.cleared_count > 0) {
+        toast.info('Inventory cache cleared', {
+          description: `${result.cleared_count.toLocaleString()} cached entries removed`
+        })
+      }
+
+      // Then run all tools (they will fetch fresh listings from cloud)
+      await runAllTools(collection.guid)
+    } catch (err: any) {
+      // Handle clear cache errors separately
+      const errorMessage = err.userMessage || err?.response?.data?.detail || 'Failed to refresh from cloud'
+      toast.error('Refresh from Cloud failed', {
+        description: errorMessage
+      })
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Action Row (Issue #67 - Single Title Pattern) */}
@@ -194,6 +218,7 @@ export default function CollectionsPage() {
         onDelete={handleDelete}
         onInfo={handleInfo}
         onRefresh={handleRefresh}
+        onRefreshFromCloud={handleRefreshFromCloud}
         search={search}
       />
 

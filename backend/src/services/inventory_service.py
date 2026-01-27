@@ -1232,3 +1232,185 @@ class InventoryService:
         p2 = path2 if path2.endswith('/') else path2 + '/'
 
         return p1.startswith(p2) or p2.startswith(p1)
+
+    # =========================================================================
+    # FileInfo Storage (Phase B - Issue #107)
+    # =========================================================================
+
+    def get_collections_for_connector(
+        self,
+        connector_id: int,
+        team_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get collections mapped to folders for a connector.
+
+        Returns collections that have been created from inventory folders,
+        along with their folder path for filtering.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            List of dicts with collection_guid, collection_id, folder_path
+        """
+        from backend.src.models.collection import Collection
+
+        connector = self._get_connector(connector_id, team_id)
+
+        # Get inventory folders that have been mapped to collections
+        mapped_folders = self.db.query(InventoryFolder).filter(
+            InventoryFolder.connector_id == connector_id,
+            InventoryFolder.collection_guid.isnot(None)
+        ).all()
+
+        if not mapped_folders:
+            return []
+
+        # Get the collections for these mappings
+        collection_guids = [f.collection_guid for f in mapped_folders]
+
+        # Query collections by GUID (via UUID lookup)
+        from backend.src.services.guid import GuidService
+
+        collections_data = []
+        for folder in mapped_folders:
+            try:
+                uuid_value = GuidService.parse_identifier(folder.collection_guid, expected_prefix="col")
+                collection = self.db.query(Collection).filter(
+                    Collection.uuid == uuid_value
+                ).first()
+
+                if collection:
+                    collections_data.append({
+                        "collection_guid": folder.collection_guid,
+                        "collection_id": collection.id,
+                        "folder_path": folder.path
+                    })
+            except ValueError:
+                # Skip invalid GUIDs
+                continue
+
+        logger.info(
+            "Retrieved collections for connector",
+            extra={
+                "connector_id": connector_id,
+                "connector_guid": connector.guid,
+                "collection_count": len(collections_data)
+            }
+        )
+
+        return collections_data
+
+    def store_file_info(
+        self,
+        collection_id: int,
+        file_info: List[Dict[str, Any]],
+        team_id: Optional[int] = None
+    ) -> bool:
+        """
+        Store FileInfo on a collection from inventory import.
+
+        Updates the collection's file_info JSONB, file_info_updated_at,
+        and file_info_source fields.
+
+        Args:
+            collection_id: Internal collection ID
+            file_info: List of FileInfo dicts (key, size, last_modified, etc.)
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            True if stored successfully
+
+        Raises:
+            NotFoundError: If collection not found
+        """
+        from backend.src.models.collection import Collection
+
+        query = self.db.query(Collection).filter(Collection.id == collection_id)
+
+        if team_id is not None:
+            query = query.filter(Collection.team_id == team_id)
+
+        collection = query.first()
+
+        if not collection:
+            raise NotFoundError("Collection", str(collection_id))
+
+        # Store FileInfo
+        collection.file_info = file_info
+        collection.file_info_updated_at = datetime.utcnow()
+        collection.file_info_source = "inventory"
+
+        self.db.commit()
+
+        logger.info(
+            "Stored FileInfo on collection",
+            extra={
+                "collection_id": collection_id,
+                "collection_guid": collection.guid,
+                "file_count": len(file_info),
+                "source": "inventory"
+            }
+        )
+
+        return True
+
+    def store_file_info_batch(
+        self,
+        collections_data: List[Dict[str, Any]],
+        team_id: Optional[int] = None
+    ) -> int:
+        """
+        Store FileInfo for multiple collections from inventory import.
+
+        Args:
+            collections_data: List of dicts with collection_guid and file_info
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Number of collections updated
+        """
+        from backend.src.models.collection import Collection
+        from backend.src.services.guid import GuidService
+
+        updated_count = 0
+        now = datetime.utcnow()
+
+        for data in collections_data:
+            collection_guid = data.get("collection_guid")
+            file_info = data.get("file_info", [])
+
+            if not collection_guid:
+                continue
+
+            try:
+                uuid_value = GuidService.parse_identifier(collection_guid, expected_prefix="col")
+                query = self.db.query(Collection).filter(Collection.uuid == uuid_value)
+
+                if team_id is not None:
+                    query = query.filter(Collection.team_id == team_id)
+
+                collection = query.first()
+
+                if collection:
+                    collection.file_info = file_info
+                    collection.file_info_updated_at = now
+                    collection.file_info_source = "inventory"
+                    updated_count += 1
+            except ValueError:
+                # Skip invalid GUIDs
+                continue
+
+        self.db.commit()
+
+        logger.info(
+            "Stored FileInfo batch",
+            extra={
+                "collections_updated": updated_count,
+                "source": "inventory"
+            }
+        )
+
+        return updated_count

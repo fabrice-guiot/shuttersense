@@ -137,3 +137,21 @@ export const clearPipeline = async (collectionGuid: string): Promise<Collection>
   const response = await api.post<Collection>(`/collections/${safeGuid}/clear-pipeline`)
   return response.data
 }
+
+/**
+ * Clear inventory cache from a collection (Issue #107 - T075)
+ * Clears cached FileInfo so tools will fetch fresh file listings from cloud API
+ * @param collectionGuid - Collection GUID (col_xxx format)
+ * @returns Response with success status and cleared count
+ */
+export interface CollectionClearCacheResponse {
+  success: boolean
+  message: string
+  cleared_count: number
+}
+
+export const clearInventoryCache = async (collectionGuid: string): Promise<CollectionClearCacheResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(collectionGuid, 'col'))
+  const response = await api.post<CollectionClearCacheResponse>(`/collections/${safeGuid}/clear-inventory-cache`)
+  return response.data
+}

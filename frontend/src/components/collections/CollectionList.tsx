@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { FolderCheck, FolderSync, Edit, Trash2, Search, Bot } from 'lucide-react'
+import { FolderCheck, FolderSync, Edit, Trash2, Search, Bot, CloudDownload } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectionStatus } from './CollectionStatus'
+import { formatRelativeTime } from '@/utils/dateFormat'
 import type { CollectionListProps } from '@/contracts/components/collection-components'
 import type { Collection, CollectionType } from '@/contracts/api/collection-api'
 import {
@@ -64,6 +65,7 @@ export function CollectionList({
   onDelete,
   onRefresh,
   onInfo,
+  onRefreshFromCloud,
   search,
   className
 }: CollectionListProps) {
@@ -167,6 +169,7 @@ export function CollectionList({
               <TableHead>State</TableHead>
               <TableHead>Pipeline</TableHead>
               <TableHead>Location</TableHead>
+              <TableHead>Inventory</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -242,6 +245,34 @@ export function CollectionList({
                   {collection.location}
                 </TableCell>
                 <TableCell>
+                  {/* T074: Display inventory timestamp for remote collections */}
+                  {collection.type === 'local' ? (
+                    <span className="text-muted-foreground text-sm">-</span>
+                  ) : collection.file_info?.updated_at ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-sm cursor-default">
+                            {formatRelativeTime(collection.file_info.updated_at)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            <div>
+                              {collection.file_info.count.toLocaleString()} files cached
+                            </div>
+                            <div className="text-muted-foreground">
+                              Source: {collection.file_info.source === 'inventory' ? 'Bucket Inventory' : 'Cloud API'}
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Not imported</span>
+                  )}
+                </TableCell>
+                <TableCell>
                   <CollectionStatus collection={collection} />
                 </TableCell>
                 <TableCell>
@@ -277,6 +308,25 @@ export function CollectionList({
                         <TooltipContent>Refresh Collection</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+
+                    {/* T075: Refresh from Cloud button for remote collections */}
+                    {collection.type !== 'local' && onRefreshFromCloud && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onRefreshFromCloud(collection)}
+                              aria-label="Refresh from Cloud Storage"
+                            >
+                              <CloudDownload className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Refresh from Cloud Storage</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
 
                     <TooltipProvider>
                       <Tooltip>
