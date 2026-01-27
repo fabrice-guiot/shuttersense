@@ -41,6 +41,7 @@ from backend.src.schemas.inventory import (
 )
 from backend.src.services.connector_service import ConnectorService
 from backend.src.services.inventory_service import InventoryService
+from backend.src.services.exceptions import ConflictError
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
 from backend.src.middleware.auth import require_auth, TenantContext
@@ -1179,6 +1180,23 @@ async def trigger_inventory_import(
         return InventoryImportTriggerResponse(
             job_guid=job.guid,
             message="Inventory import job created"
+        )
+
+    except ConflictError as e:
+        # T039: Concurrent import prevention - return 409 if job already running
+        logger.warning(
+            f"Inventory import conflict: {e.message}",
+            extra={
+                "guid": guid,
+                "existing_job_guid": e.existing_job_id
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": e.message,
+                "existing_job_guid": e.existing_job_id
+            }
         )
 
     except HTTPException:

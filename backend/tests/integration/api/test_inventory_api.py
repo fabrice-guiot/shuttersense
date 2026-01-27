@@ -792,3 +792,286 @@ class TestInventoryTenantIsolation:
         )
         # Invalid GUID format returns 400
         assert response.status_code in [400, 404]
+
+
+# ============================================================================
+# T040a: Folder Storage Endpoint Integration Tests
+# ============================================================================
+
+class TestFolderStorageEndpoint:
+    """Integration tests for inventory folder storage endpoint (T040a)."""
+
+    def _create_s3_connector(self, test_client):
+        """Helper to create an S3 connector for testing."""
+        connector_data = {
+            "name": "S3 Import Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        assert response.status_code == 201
+        return response.json()["guid"]
+
+    def test_trigger_import_requires_validated_status(self, test_client, test_db_session):
+        """Test that import trigger requires validated inventory config."""
+        # Create S3 connector
+        connector_guid = self._create_s3_connector(test_client)
+
+        # Set up inventory config (not yet validated)
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inventory-bucket",
+                "source_bucket": "photos-bucket",
+                "config_name": "daily-inventory",
+                "format": "CSV"
+            },
+            "schedule": "manual"
+        }
+
+        response = test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+        assert response.status_code == 200
+
+        # Try to trigger import before validation
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+
+        # Should fail because inventory is not validated
+        assert response.status_code == 400
+        data = response.json()
+        assert "validated" in data.get("detail", "").lower()
+
+    def test_import_returns_job_guid(self, test_client, test_db_session):
+        """Test that successful import trigger returns job GUID."""
+        # Create S3 connector
+        connector_guid = self._create_s3_connector(test_client)
+
+        # Set up inventory config
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inventory-bucket",
+                "source_bucket": "photos-bucket",
+                "config_name": "daily-inventory",
+                "format": "CSV"
+            },
+            "schedule": "manual"
+        }
+
+        response = test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+        assert response.status_code == 200
+
+        # Manually set validation status to validated (bypassing actual validation)
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+        connector.inventory_validation_status = "validated"
+        test_db_session.commit()
+
+        # Trigger import
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "job_guid" in data
+        assert data["job_guid"].startswith("job_")
+        assert "message" in data
+
+
+# ============================================================================
+# T040b: Concurrent Import Prevention Integration Tests
+# ============================================================================
+
+class TestConcurrentImportPrevention:
+    """Integration tests for concurrent import prevention (T040b)."""
+
+    def _create_s3_connector(self, test_client):
+        """Helper to create an S3 connector for testing."""
+        connector_data = {
+            "name": "S3 Concurrent Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        assert response.status_code == 201
+        return response.json()["guid"]
+
+    def test_concurrent_import_returns_409(self, test_client, test_db_session):
+        """Test that triggering import while one is running returns 409."""
+        from backend.src.models.job import Job, JobStatus
+
+        # Create S3 connector
+        connector_guid = self._create_s3_connector(test_client)
+
+        # Set up inventory config
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inventory-bucket",
+                "source_bucket": "photos-bucket",
+                "config_name": "daily-inventory",
+                "format": "CSV"
+            },
+            "schedule": "manual"
+        }
+
+        response = test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+        assert response.status_code == 200
+
+        # Manually set validation status to validated
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+        connector.inventory_validation_status = "validated"
+        test_db_session.commit()
+
+        # First import trigger should succeed
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+        assert response.status_code == 200
+        first_job_guid = response.json()["job_guid"]
+
+        # Second import trigger should fail with 409 (job still pending)
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail", {})
+        # Detail should include the existing job GUID
+        if isinstance(detail, dict):
+            assert "existing_job_guid" in detail
+            assert detail["existing_job_guid"] == first_job_guid
+        else:
+            assert "already running" in str(detail).lower()
+
+    def test_import_allowed_after_previous_completes(self, test_client, test_db_session):
+        """Test that import is allowed after previous job completes."""
+        from backend.src.models.job import Job, JobStatus
+        from datetime import datetime, timezone
+
+        # Create S3 connector
+        connector_guid = self._create_s3_connector(test_client)
+
+        # Set up inventory config
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inventory-bucket",
+                "source_bucket": "photos-bucket",
+                "config_name": "daily-inventory",
+                "format": "CSV"
+            },
+            "schedule": "manual"
+        }
+
+        response = test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+        assert response.status_code == 200
+
+        # Set validation status
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+        connector.inventory_validation_status = "validated"
+        test_db_session.commit()
+
+        # First import
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+        assert response.status_code == 200
+        first_job_guid = response.json()["job_guid"]
+
+        # Mark the first job as completed
+        first_job_uuid = Job.parse_guid(first_job_guid)
+        first_job = test_db_session.query(Job).filter(Job.uuid == first_job_uuid).first()
+        first_job.status = JobStatus.COMPLETED
+        first_job.completed_at = datetime.now(timezone.utc)
+        test_db_session.commit()
+
+        # Second import should now succeed
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+
+        assert response.status_code == 200
+        second_job_guid = response.json()["job_guid"]
+        assert second_job_guid != first_job_guid
+
+    def test_import_allowed_after_previous_fails(self, test_client, test_db_session):
+        """Test that import is allowed after previous job fails."""
+        from backend.src.models.job import Job, JobStatus
+        from datetime import datetime, timezone
+
+        # Create S3 connector
+        connector_guid = self._create_s3_connector(test_client)
+
+        # Set up inventory config
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inventory-bucket",
+                "source_bucket": "photos-bucket",
+                "config_name": "daily-inventory",
+                "format": "CSV"
+            },
+            "schedule": "manual"
+        }
+
+        response = test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+        assert response.status_code == 200
+
+        # Set validation status
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+        connector.inventory_validation_status = "validated"
+        test_db_session.commit()
+
+        # First import
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+        assert response.status_code == 200
+        first_job_guid = response.json()["job_guid"]
+
+        # Mark the first job as failed
+        first_job_uuid = Job.parse_guid(first_job_guid)
+        first_job = test_db_session.query(Job).filter(Job.uuid == first_job_uuid).first()
+        first_job.status = JobStatus.FAILED
+        first_job.completed_at = datetime.now(timezone.utc)
+        first_job.error_message = "Simulated failure"
+        test_db_session.commit()
+
+        # Second import should now succeed
+        response = test_client.post(
+            f"/api/connectors/{connector_guid}/inventory/import"
+        )
+
+        assert response.status_code == 200
+        second_job_guid = response.json()["job_guid"]
+        assert second_job_guid != first_job_guid

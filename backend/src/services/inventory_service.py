@@ -26,7 +26,7 @@ from backend.src.schemas.inventory import (
     GCSInventoryConfig,
     InventoryFolderResponse,
 )
-from backend.src.services.exceptions import NotFoundError, ValidationError
+from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
 from backend.src.services.guid import GuidService
 from backend.src.utils.logging_config import get_logger
 
@@ -522,6 +522,40 @@ class InventoryService:
 
         return connector
 
+    def has_running_inventory_job(
+        self,
+        connector_id: int,
+        team_id: int
+    ) -> Optional[Job]:
+        """
+        Check if there's already a running inventory job for this connector.
+
+        A job is considered "running" if it's in PENDING, ASSIGNED, or RUNNING status.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID
+
+        Returns:
+            The running Job if one exists, None otherwise
+        """
+        running_job = self.db.query(Job).filter(
+            Job.team_id == team_id,
+            Job.tool.in_(["inventory_import", "inventory_validate"]),
+            Job.status.in_([JobStatus.PENDING, JobStatus.ASSIGNED, JobStatus.RUNNING])
+        ).first()
+
+        if running_job:
+            # Check if this job is for our connector by examining progress metadata
+            progress = running_job.progress or {}
+            if progress.get("connector_id") == connector_id or progress.get("connector_guid"):
+                # Verify connector_guid matches if present
+                connector = self._get_connector(connector_id, team_id)
+                if progress.get("connector_guid") == connector.guid or progress.get("connector_id") == connector_id:
+                    return running_job
+
+        return None
+
     def create_import_job(
         self,
         connector_id: int,
@@ -546,6 +580,7 @@ class InventoryService:
         Raises:
             NotFoundError: If connector not found
             ValidationError: If connector has no inventory config or not validated
+            ConflictError: If an import job is already running for this connector
         """
         connector = self._get_connector(connector_id, team_id)
 
@@ -556,6 +591,14 @@ class InventoryService:
             raise ValidationError(
                 f"Inventory configuration not validated. Current status: "
                 f"{connector.inventory_validation_status or 'none'}"
+            )
+
+        # Check for existing running inventory job (T039: concurrent import prevention)
+        existing_job = self.has_running_inventory_job(connector_id, team_id)
+        if existing_job:
+            raise ConflictError(
+                message=f"An inventory job is already running for this connector",
+                existing_job_id=existing_job.guid
             )
 
         # Create import job
@@ -580,7 +623,8 @@ class InventoryService:
             job.required_capabilities = [f"connector:{connector.guid}"]
         else:
             # For server credentials, job needs the cloud capability (s3/gcs)
-            job.required_capabilities = [connector.type]
+            # Convert enum to string value
+            job.required_capabilities = [connector.type.value if hasattr(connector.type, 'value') else str(connector.type)]
 
         self.db.add(job)
         self.db.commit()
