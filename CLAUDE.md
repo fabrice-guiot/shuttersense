@@ -36,6 +36,8 @@ ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyz
 - Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (022-storage-optimization)
 - Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, Recharts (106-fix-trend-aggregation)
 - PostgreSQL 12+ (JSONB columns for analysis results) (106-fix-trend-aggregation)
+- Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, boto3, google-cloud-storage, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (107-bucket-inventory-import)
+- PostgreSQL 12+ (JSONB columns for FileInfo, InventoryConfig embedded in credentials) (107-bucket-inventory-import)
 
 ### Core Stack
 - **Python 3.10+** - Backend and CLI tools (required for match/case syntax)
@@ -529,9 +531,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 107-bucket-inventory-import: Added Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, boto3, google-cloud-storage, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
 - 106-fix-trend-aggregation: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, Recharts
 - 022-storage-optimization: Added Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
-- 021-distributed-agent-architecture: Added Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend)
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 
