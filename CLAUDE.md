@@ -20,11 +20,21 @@ ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyz
 ## Active Technologies
 
 ### Backend
-- **Python 3.10+** - Backend, CLI tools, and Agent (required for match/case syntax)
+- **Python 3.10+** - Required for match/case syntax
 - **FastAPI** - Web framework with OpenAPI docs
 - **SQLAlchemy 2.0+** - ORM with async support
 - **Pydantic v2** - Data validation and serialization
 - **PostgreSQL 12+** - Primary database with JSONB columns (SQLite for tests)
+
+### Agent
+- **Python 3.10+** - Lightweight distributed agent binary
+- **httpx** - Async HTTP client for REST API communication
+- **websockets** - Real-time progress streaming
+- **Pydantic v2** - Data validation and settings management
+- **Click** - CLI framework
+- **cryptography** - Local credential storage encryption
+- **pyarrow** - Parquet format support for inventory import
+- **PyInstaller** - Single-file binary distribution
 
 ### Frontend
 - **TypeScript 5.9.3** - Type safety
