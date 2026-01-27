@@ -37,6 +37,7 @@ from backend.src.schemas.inventory import (
     InventoryValidationResponse,
     InventoryFolderListResponse,
     InventoryFolderResponse,
+    InventoryImportTriggerResponse,
 )
 from backend.src.services.connector_service import ConnectorService
 from backend.src.services.inventory_service import InventoryService
@@ -1092,4 +1093,100 @@ async def list_inventory_folders(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list inventory folders: {str(e)}"
+        )
+
+
+@router.post(
+    "/{guid}/inventory/import",
+    response_model=InventoryImportTriggerResponse,
+    summary="Trigger inventory import",
+    description="Start an inventory import job to extract folders from cloud storage inventory"
+)
+async def trigger_inventory_import(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    connector_service: ConnectorService = Depends(get_connector_service),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+) -> InventoryImportTriggerResponse:
+    """
+    Trigger an inventory import job.
+
+    Creates a job that will:
+    1. Fetch the latest inventory manifest
+    2. Parse data files (CSV/Parquet)
+    3. Extract unique folder paths
+    4. Store folders in the database
+
+    The job is executed by an agent with the appropriate connector capability.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx format)
+
+    Returns:
+        InventoryImportTriggerResponse with job GUID
+
+    Raises:
+        400 Bad Request: If no inventory config or config not validated
+        404 Not Found: If connector doesn't exist
+
+    Example:
+        POST /api/connectors/con_01hgw2bbg.../inventory/import
+
+        Response:
+        {
+          "job_guid": "job_01hgw2bbg...",
+          "message": "Inventory import job created"
+        }
+    """
+    try:
+        # Get connector by GUID with tenant filtering
+        connector = connector_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not connector:
+            logger.warning(f"Connector not found for inventory import: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Connector not found: {guid}"
+            )
+
+        if not connector.inventory_config:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Connector has no inventory configuration. Configure inventory first."
+            )
+
+        # Check if inventory is validated
+        if connector.inventory_validation_status != "validated":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Inventory configuration not validated. Current status: {connector.inventory_validation_status or 'none'}"
+            )
+
+        # Create import job
+        job = inventory_service.create_import_job(
+            connector_id=connector.id,
+            team_id=ctx.team_id
+        )
+
+        logger.info(
+            f"Created inventory import job",
+            extra={
+                "guid": guid,
+                "job_guid": job.guid
+            }
+        )
+
+        return InventoryImportTriggerResponse(
+            job_guid=job.guid,
+            message="Inventory import job created"
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Error triggering inventory import: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to trigger inventory import: {str(e)}"
         )

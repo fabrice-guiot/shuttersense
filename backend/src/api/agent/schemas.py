@@ -1338,3 +1338,77 @@ class InventoryValidationResponse(BaseModel):
             }
         }
     }
+
+
+# ============================================================================
+# Inventory Folders Schemas (Issue #107)
+# ============================================================================
+
+class InventoryFoldersRequest(BaseModel):
+    """Request schema for reporting discovered inventory folders."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx)"
+    )
+    folders: List[str] = Field(
+        ...,
+        description="List of discovered folder paths"
+    )
+    folder_stats: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Stats per folder (file_count, total_size)"
+    )
+    total_files: int = Field(
+        ...,
+        ge=0,
+        description="Total files processed"
+    )
+    total_size: int = Field(
+        ...,
+        ge=0,
+        description="Total size in bytes"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "folders": ["2020/", "2020/Vacation/", "2021/"],
+                "folder_stats": {
+                    "2020/": {"file_count": 150, "total_size": 3750000000},
+                    "2020/Vacation/": {"file_count": 100, "total_size": 2500000000}
+                },
+                "total_files": 250,
+                "total_size": 6250000000
+            }
+        }
+    }
+
+
+class InventoryFoldersResponse(BaseModel):
+    """Response schema for inventory folders submission."""
+
+    status: str = Field(
+        ...,
+        description="Processing status (success/error)"
+    )
+    message: str = Field(
+        ...,
+        description="Status message"
+    )
+    folders_stored: int = Field(
+        ...,
+        ge=0,
+        description="Number of folders stored/updated"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "success",
+                "message": "Stored 42 inventory folders",
+                "folders_stored": 42
+            }
+        }
+    }

@@ -11,7 +11,7 @@ Tasks: T092, T098
 import asyncio
 import hashlib
 import logging
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 
 from src.api_client import AgentApiClient
@@ -315,6 +315,9 @@ class JobExecutor:
         elif tool == "inventory_validate":
             # Validate inventory configuration (manifest.json accessibility)
             return await self._run_inventory_validate(job, config)
+        elif tool == "inventory_import":
+            # Import inventory data and extract folders
+            return await self._run_inventory_import(job, config)
         else:
             return JobResult(
                 success=False,
@@ -1863,6 +1866,165 @@ class JobExecutor:
                 f"Failed to report inventory validation result: {str(e)}",
                 exc_info=True
             )
+
+    async def _run_inventory_import(
+        self,
+        job: Dict[str, Any],
+        config: Dict[str, Any]
+    ) -> JobResult:
+        """
+        Import inventory data and extract folder structure.
+
+        Runs the InventoryImportTool to parse S3/GCS inventory reports
+        and extract unique folder paths.
+
+        Args:
+            job: Job data with connector info
+            config: Configuration data with connector details
+
+        Returns:
+            JobResult with import result
+        """
+        from src.tools.inventory_import_tool import InventoryImportTool
+
+        job_guid = job.get("guid", "unknown")
+        connector = config.get("connector")
+
+        if not connector:
+            return JobResult(
+                success=False,
+                results={"success": False},
+                error_message="No connector information provided for inventory import"
+            )
+
+        connector_guid = connector.get("guid")
+        connector_type = connector.get("type")
+        inventory_config = connector.get("inventory_config")
+
+        if not inventory_config:
+            return JobResult(
+                success=False,
+                results={"success": False},
+                error_message="No inventory configuration found for connector"
+            )
+
+        logger.info(
+            f"Starting inventory import for connector {connector_guid}",
+            extra={
+                "job_guid": job_guid,
+                "connector_type": connector_type,
+                "inventory_config": inventory_config
+            }
+        )
+
+        try:
+            # Get storage adapter
+            adapter = self._get_storage_adapter(connector)
+
+            # Create and execute the import tool
+            tool = InventoryImportTool(
+                adapter=adapter,
+                inventory_config=inventory_config,
+                connector_type=connector_type,
+                progress_callback=lambda stage, pct, msg: self._sync_progress_callback(
+                    stage=stage,
+                    percentage=pct,
+                    message=msg
+                )
+            )
+
+            result = await tool.execute()
+
+            if result.success:
+                # Report folders to server
+                await self._report_inventory_folders(
+                    job_guid=job_guid,
+                    connector_guid=connector_guid,
+                    folders=list(result.folders),
+                    folder_stats=result.folder_stats,
+                    total_files=result.total_files,
+                    total_size=result.total_size
+                )
+
+                logger.info(
+                    f"Inventory import completed successfully",
+                    extra={
+                        "job_guid": job_guid,
+                        "folders_found": len(result.folders),
+                        "total_files": result.total_files,
+                        "total_size": result.total_size
+                    }
+                )
+
+                return JobResult(
+                    success=True,
+                    results={
+                        "success": True,
+                        "folders_count": len(result.folders),
+                        "total_files": result.total_files,
+                        "total_size": result.total_size
+                    }
+                )
+            else:
+                logger.error(f"Inventory import failed: {result.error_message}")
+                return JobResult(
+                    success=False,
+                    results={"success": False},
+                    error_message=result.error_message
+                )
+
+        except Exception as e:
+            error_msg = f"Inventory import error: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return JobResult(
+                success=False,
+                results={"success": False},
+                error_message=error_msg
+            )
+
+    async def _report_inventory_folders(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        folders: List[str],
+        folder_stats: Dict[str, Dict[str, Any]],
+        total_files: int,
+        total_size: int
+    ) -> None:
+        """
+        Report discovered inventory folders to the server.
+
+        Args:
+            job_guid: Job GUID
+            connector_guid: Connector GUID
+            folders: List of folder paths
+            folder_stats: Dict mapping folder path to stats
+            total_files: Total files processed
+            total_size: Total size in bytes
+        """
+        try:
+            await self._api_client.report_inventory_folders(
+                job_guid=job_guid,
+                connector_guid=connector_guid,
+                folders=folders,
+                folder_stats=folder_stats,
+                total_files=total_files,
+                total_size=total_size
+            )
+            logger.info(
+                f"Reported {len(folders)} inventory folders",
+                extra={
+                    "job_guid": job_guid,
+                    "connector_guid": connector_guid,
+                    "folder_count": len(folders)
+                }
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to report inventory folders: {str(e)}",
+                exc_info=True
+            )
+            raise
 
     def _sync_progress_callback(
         self,

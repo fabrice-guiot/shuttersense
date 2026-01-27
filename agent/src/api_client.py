@@ -762,6 +762,69 @@ class AgentApiClient:
                 status_code=response.status_code,
             )
 
+    async def report_inventory_folders(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        folders: list[str],
+        folder_stats: dict[str, dict[str, Any]],
+        total_files: int,
+        total_size: int,
+    ) -> dict[str, Any]:
+        """
+        Report discovered inventory folders to the server.
+
+        Args:
+            job_guid: GUID of the import job
+            connector_guid: GUID of the connector
+            folders: List of discovered folder paths
+            folder_stats: Dict mapping folder path to stats (file_count, total_size)
+            total_files: Total files processed
+            total_size: Total size in bytes
+
+        Returns:
+            Response with status confirmation
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+            ApiError: If the request fails
+        """
+        payload: dict[str, Any] = {
+            "connector_guid": connector_guid,
+            "folders": folders,
+            "folder_stats": folder_stats,
+            "total_files": total_files,
+            "total_size": total_size,
+        }
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/inventory/folders",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        elif response.status_code == 403:
+            raise ApiError("Job not assigned to this agent", status_code=403)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Inventory folders report failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
     # -------------------------------------------------------------------------
     # Synchronous Methods (for CLI use)
     # -------------------------------------------------------------------------

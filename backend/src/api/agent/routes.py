@@ -80,6 +80,9 @@ from backend.src.api.agent.schemas import (
     # Inventory validation schemas (Issue #107)
     InventoryValidationRequest,
     InventoryValidationResponse,
+    # Inventory folders schemas (Issue #107)
+    InventoryFoldersRequest,
+    InventoryFoldersResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -2086,4 +2089,166 @@ async def report_inventory_validation(
     return InventoryValidationResponse(
         status=status_str,
         message=message
+    )
+
+
+@router.post(
+    "/jobs/{job_guid}/inventory/folders",
+    response_model=InventoryFoldersResponse,
+    summary="Report inventory folders",
+    description="Submit discovered folders from inventory import job."
+)
+async def report_inventory_folders(
+    job_guid: str,
+    data: InventoryFoldersRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Report discovered inventory folders.
+
+    Called by agents after completing inventory import to submit
+    the discovered folder structure.
+
+    Path Parameters:
+        job_guid: GUID of the import job (job_xxx format)
+
+    Request Body:
+        InventoryFoldersRequest with folders and statistics
+
+    Returns:
+        InventoryFoldersResponse with storage confirmation
+
+    Raises:
+        404: If job or connector not found
+        400: If job is not an inventory import job
+        403: If job is not assigned to this agent
+    """
+    from backend.src.models.job import Job, JobStatus
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    from backend.src.services.inventory_service import InventoryService
+
+    # Parse job GUID
+    try:
+        job_uuid = Job.parse_guid(job_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Get job
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id,
+    ).first()
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job type is inventory_import
+    if job.tool != "inventory_import":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not an inventory import job (tool: {job.tool})"
+        )
+
+    # Verify job is assigned to this agent
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Get connector from job progress
+    progress = job.progress or {}
+    connector_id = progress.get("connector_id")
+
+    if not connector_id:
+        # Try to get connector by GUID from request
+        if data.connector_guid:
+            from backend.src.services.guid import GuidService
+            try:
+                connector_uuid = GuidService.parse_identifier(data.connector_guid, expected_prefix="con")
+                from backend.src.models import Connector
+                connector = db.query(Connector).filter(
+                    Connector.uuid == connector_uuid,
+                    Connector.team_id == ctx.team_id,
+                ).first()
+                if connector:
+                    connector_id = connector.id
+            except ValueError:
+                pass
+
+    if not connector_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not determine connector from job"
+        )
+
+    # Store the discovered folders
+    inventory_service = InventoryService(db)
+    try:
+        folders_stored = inventory_service.store_folders(
+            connector_id=connector_id,
+            team_id=ctx.team_id,
+            folders=data.folders,
+            folder_stats=data.folder_stats,
+            total_files=data.total_files,
+            total_size=data.total_size
+        )
+    except Exception as e:
+        logger.error(f"Error storing inventory folders: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to store folders: {str(e)}"
+        )
+
+    # Complete the job successfully
+    coordinator = JobCoordinatorService(db)
+    try:
+        job.status = JobStatus.COMPLETED
+        job.completed_at = datetime.utcnow()
+        job.results = {
+            "folders_count": len(data.folders),
+            "total_files": data.total_files,
+            "total_size": data.total_size
+        }
+        db.commit()
+
+        # Broadcast pool status update
+        pool_status = service.get_pool_status(ctx.team_id)
+        manager = get_connection_manager()
+        asyncio.create_task(
+            manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+        )
+
+        # Broadcast job update
+        job_response = _db_job_to_response(job)
+        asyncio.create_task(
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+        )
+
+    except Exception as e:
+        logger.error(f"Error completing import job: {str(e)}", exc_info=True)
+        # Continue - folders are already stored
+
+    logger.info(
+        f"Inventory import completed",
+        extra={
+            "job_guid": job_guid,
+            "connector_guid": data.connector_guid,
+            "folders_stored": folders_stored,
+            "total_files": data.total_files
+        }
+    )
+
+    return InventoryFoldersResponse(
+        status="success",
+        message=f"Stored {folders_stored} inventory folders",
+        folders_stored=folders_stored
     )

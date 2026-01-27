@@ -2,8 +2,9 @@
 Shared analysis modules for ShutterSense tools.
 
 This package contains the canonical analysis logic for Photo Pairing,
-PhotoStats, and Pipeline Validation. These modules work with FileInfo
-objects to enable unified processing across local and remote collections.
+PhotoStats, Pipeline Validation, and Inventory Import. These modules work
+with FileInfo objects to enable unified processing across local and remote
+collections.
 
 Architecture:
     Local:  LocalAdapter → FileInfo → Shared Analyzer → Results
@@ -13,6 +14,7 @@ Modules:
     - photo_pairing_analyzer: build_imagegroups(), calculate_analytics()
     - photostats_analyzer: analyze_pairing(), calculate_stats()
     - pipeline_analyzer: run_pipeline_validation(), flatten_imagegroups_to_specific_images()
+    - inventory_parser: parse_s3_manifest(), parse_gcs_manifest(), extract_folders()
 """
 
 from src.analysis.photo_pairing_analyzer import build_imagegroups, calculate_analytics
@@ -21,6 +23,20 @@ from src.analysis.pipeline_analyzer import (
     run_pipeline_validation,
     flatten_imagegroups_to_specific_images,
     add_metadata_files,
+)
+from src.analysis.inventory_parser import (
+    InventoryEntry,
+    S3Manifest,
+    S3ManifestFile,
+    GCSManifest,
+    parse_s3_manifest,
+    parse_gcs_manifest,
+    parse_s3_csv_stream,
+    parse_gcs_csv_stream,
+    parse_parquet_stream,
+    extract_folders,
+    extract_folders_from_entries,
+    count_files_by_folder,
 )
 
 __all__ = [
@@ -34,4 +50,17 @@ __all__ = [
     "run_pipeline_validation",
     "flatten_imagegroups_to_specific_images",
     "add_metadata_files",
+    # Inventory Parser
+    "InventoryEntry",
+    "S3Manifest",
+    "S3ManifestFile",
+    "GCSManifest",
+    "parse_s3_manifest",
+    "parse_gcs_manifest",
+    "parse_s3_csv_stream",
+    "parse_gcs_csv_stream",
+    "parse_parquet_stream",
+    "extract_folders",
+    "extract_folders_from_entries",
+    "count_files_by_folder",
 ]

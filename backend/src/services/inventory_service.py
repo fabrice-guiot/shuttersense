@@ -494,6 +494,167 @@ class InventoryService:
 
         return connector
 
+    def create_import_job(
+        self,
+        connector_id: int,
+        team_id: int
+    ) -> Job:
+        """
+        Create an inventory import job.
+
+        Creates a job for an agent to:
+        1. Fetch the latest inventory manifest
+        2. Parse data files (CSV/Parquet)
+        3. Extract unique folder paths
+        4. Report folders to the server
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID
+
+        Returns:
+            Created import Job
+
+        Raises:
+            NotFoundError: If connector not found
+            ValidationError: If connector has no inventory config or not validated
+        """
+        connector = self._get_connector(connector_id, team_id)
+
+        if not connector.has_inventory_config:
+            raise ValidationError("Connector has no inventory configuration")
+
+        if connector.inventory_validation_status != InventoryValidationStatus.VALIDATED:
+            raise ValidationError(
+                f"Inventory configuration not validated. Current status: "
+                f"{connector.inventory_validation_status or 'none'}"
+            )
+
+        # Create import job
+        job = Job(
+            team_id=team_id,
+            collection_id=None,  # No collection for import jobs
+            tool="inventory_import",
+            mode="import",
+            status=JobStatus.PENDING,
+            priority=3,  # Normal priority
+        )
+
+        # Store connector info in job metadata for agent to use
+        job.progress = {
+            "connector_id": connector_id,
+            "connector_guid": connector.guid,
+            "config": connector.inventory_config
+        }
+
+        # If connector uses agent credentials, job requires that agent
+        if connector.requires_agent_credentials:
+            job.required_capabilities = [f"connector:{connector.guid}"]
+        else:
+            # For server credentials, job needs the cloud capability (s3/gcs)
+            job.required_capabilities = [connector.type]
+
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+
+        logger.info(
+            "Created inventory import job",
+            extra={
+                "job_guid": job.guid,
+                "connector_id": connector_id,
+                "connector_guid": connector.guid
+            }
+        )
+
+        return job
+
+    def store_folders(
+        self,
+        connector_id: int,
+        team_id: int,
+        folders: List[str],
+        folder_stats: Dict[str, Dict[str, Any]],
+        total_files: int,
+        total_size: int
+    ) -> int:
+        """
+        Store discovered folders from inventory import.
+
+        Creates InventoryFolder records for newly discovered paths
+        and updates statistics for existing folders.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID
+            folders: List of folder paths
+            folder_stats: Dict mapping path to stats (file_count, total_size)
+            total_files: Total files processed in inventory
+            total_size: Total size of all files in bytes
+
+        Returns:
+            Number of folders stored/updated
+
+        Raises:
+            NotFoundError: If connector not found
+        """
+        from backend.src.models.inventory_folder import InventoryFolder
+
+        connector = self._get_connector(connector_id, team_id)
+
+        # Get existing folders for this connector
+        existing_folders = {
+            f.path: f for f in self.db.query(InventoryFolder).filter(
+                InventoryFolder.connector_id == connector_id,
+                InventoryFolder.team_id == team_id
+            ).all()
+        }
+
+        stored_count = 0
+        now = datetime.utcnow()
+
+        for path in folders:
+            stats = folder_stats.get(path, {})
+            file_count = stats.get("file_count", 0)
+            size = stats.get("total_size", 0)
+
+            if path in existing_folders:
+                # Update existing folder
+                folder = existing_folders[path]
+                folder.object_count = file_count
+                folder.total_size_bytes = size
+                folder.discovered_at = now
+            else:
+                # Create new folder
+                folder = InventoryFolder(
+                    team_id=team_id,
+                    connector_id=connector_id,
+                    path=path,
+                    object_count=file_count,
+                    total_size_bytes=size,
+                    discovered_at=now
+                )
+                self.db.add(folder)
+
+            stored_count += 1
+
+        # Update connector's last import timestamp
+        connector.inventory_last_import_at = now
+        self.db.commit()
+
+        logger.info(
+            "Stored inventory folders",
+            extra={
+                "connector_id": connector_id,
+                "connector_guid": connector.guid,
+                "folder_count": stored_count,
+                "total_files": total_files,
+                "total_size": total_size
+            }
+        )
+
+        return stored_count
+
     # =========================================================================
     # Inventory Status
     # =========================================================================

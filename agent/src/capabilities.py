@@ -126,6 +126,7 @@ def detect_capabilities() -> list[str]:
     Returns:
         List of capability strings in format:
         - "local_filesystem" for storage access
+        - "s3" / "gcs" for cloud storage access
         - "tool:{name}:{version}" for each available tool
     """
     capabilities = []
@@ -135,6 +136,21 @@ def detect_capabilities() -> list[str]:
 
     # Get version for capability strings (tag only, no commit hash)
     version = _get_base_version()
+
+    # Check for cloud storage adapter availability
+    # S3 support via boto3
+    try:
+        import boto3  # noqa: F401
+        capabilities.append("s3")
+    except ImportError:
+        pass
+
+    # GCS support via google-cloud-storage
+    try:
+        from google.cloud import storage  # noqa: F401
+        capabilities.append("gcs")
+    except ImportError:
+        pass
 
     # Check for tool availability
     tools = [
@@ -146,5 +162,10 @@ def detect_capabilities() -> list[str]:
     for tool_name, module_name, filename in tools:
         if _is_tool_available(module_name, filename):
             capabilities.append(f"tool:{tool_name}:{version}")
+
+    # Built-in agent tools (always available)
+    # inventory_import and inventory_validate work with S3/GCS connectors
+    capabilities.append(f"tool:inventory_import:{version}")
+    capabilities.append(f"tool:inventory_validate:{version}")
 
     return capabilities

@@ -83,27 +83,27 @@
 
 ### Agent Tool Implementation
 
-- [ ] T024 [US2] Create `agent/src/analysis/inventory_parser.py` with S3 manifest parser (manifest.json → files array)
-- [ ] T025 [P] [US2] Add GCS manifest parser to inventory_parser.py (manifest.json → report_shards_file_names)
-- [ ] T026 [US2] Implement CSV parser with streaming/chunked processing in inventory_parser.py
-- [ ] T026a [P] [US2] Implement Parquet parser with streaming/chunked processing in inventory_parser.py (handle GCS manifest.json → report_shards_file_names, parse Parquet files into same record stream as CSV parser)
-- [ ] T027 [US2] Implement folder extraction algorithm (single-pass with set deduplication)
-- [ ] T028 [US2] Create `agent/src/tools/inventory_import_tool.py` with InventoryImportTool class
-- [ ] T028a [US2] Update InventoryImportTool to detect Parquet format from manifest and route to Parquet parser (reference T026, T026a for parser implementations)
-- [ ] T029 [US2] Implement Phase A (Folder Extraction) in inventory_import_tool.py
-- [ ] T030 [US2] Register inventory_import tool in `agent/src/capabilities.py`
-- [ ] T031 [US2] Add dispatch case in `agent/src/job_executor.py` for inventory_import
-- [ ] T032 [US2] Add progress reporting integration to inventory_import_tool.py
+- [x] T024 [US2] Create `agent/src/analysis/inventory_parser.py` with S3 manifest parser (manifest.json → files array)
+- [x] T025 [P] [US2] Add GCS manifest parser to inventory_parser.py (manifest.json → report_shards_file_names)
+- [x] T026 [US2] Implement CSV parser with streaming/chunked processing in inventory_parser.py
+- [x] T026a [P] [US2] Implement Parquet parser with streaming/chunked processing in inventory_parser.py (handle GCS manifest.json → report_shards_file_names, parse Parquet files into same record stream as CSV parser)
+- [x] T027 [US2] Implement folder extraction algorithm (single-pass with set deduplication)
+- [x] T028 [US2] Create `agent/src/tools/inventory_import_tool.py` with InventoryImportTool class
+- [x] T028a [US2] Update InventoryImportTool to detect Parquet format from manifest and route to Parquet parser (reference T026, T026a for parser implementations)
+- [x] T029 [US2] Implement Phase A (Folder Extraction) in inventory_import_tool.py
+- [x] T030 [US2] Register inventory_import tool in `agent/src/capabilities.py`
+- [x] T031 [US2] Add dispatch case in `agent/src/job_executor.py` for inventory_import
+- [x] T032 [US2] Add progress reporting integration to inventory_import_tool.py
 
 ### Backend API for Agent Results
 
-- [ ] T035 [US2] Add POST endpoint `/api/agent/v1/jobs/{guid}/inventory/folders` to report discovered folders
-- [ ] T036 [US2] Implement folder storage in InventoryService (upsert InventoryFolder records)
-- [ ] T037 [US2] Add GET endpoint `/api/connectors/{guid}/inventory/folders` (list with path_prefix filter)
+- [x] T035 [US2] Add POST endpoint `/api/agent/v1/jobs/{guid}/inventory/folders` to report discovered folders
+- [x] T036 [US2] Implement folder storage in InventoryService (upsert InventoryFolder records)
+- [x] T037 [US2] Add GET endpoint `/api/connectors/{guid}/inventory/folders` (list with path_prefix filter) [Already exists from Phase 2]
 
 ### Backend Job Trigger
 
-- [ ] T038 [US2] Create POST endpoint `/api/connectors/{guid}/inventory/import` to trigger import job
+- [x] T038 [US2] Create POST endpoint `/api/connectors/{guid}/inventory/import` to trigger import job
 - [ ] T039 [US2] Add concurrent import prevention (409 if job already running for connector)
 - [ ] T040 [US2] Extend JobCoordinatorService for inventory job handling
 
@@ -115,10 +115,10 @@
 
 ### Tests for US2
 
-- [ ] T033 [P] [US2] Unit tests for S3 manifest parser in `agent/tests/unit/test_inventory_parser.py`
-- [ ] T033a [P] [US2] Unit tests for GCS manifest parser (report_shards_file_names array) in `agent/tests/unit/test_inventory_parser.py`
-- [ ] T033b [P] [US2] Unit tests for folder extraction algorithm (edge cases: deep nesting, URL-encoded paths, trailing slashes) in `agent/tests/unit/test_inventory_parser.py`
-- [ ] T033c [P] [US2] Unit tests for streaming CSV parser (chunked processing, memory efficiency) in `agent/tests/unit/test_inventory_parser.py`
+- [x] T033 [P] [US2] Unit tests for S3 manifest parser in `agent/tests/unit/test_inventory_parser.py`
+- [x] T033a [P] [US2] Unit tests for GCS manifest parser (report_shards_file_names array) in `agent/tests/unit/test_inventory_parser.py`
+- [x] T033b [P] [US2] Unit tests for folder extraction algorithm (edge cases: deep nesting, URL-encoded paths, trailing slashes) in `agent/tests/unit/test_inventory_parser.py`
+- [x] T033c [P] [US2] Unit tests for streaming CSV parser (chunked processing, memory efficiency) in `agent/tests/unit/test_inventory_parser.py`
 - [ ] T033d [P] [US2] Unit tests for streaming Parquet parser (chunked processing, memory efficiency, same record stream output as CSV) in `agent/tests/unit/test_inventory_parser.py`
 - [ ] T033e [P] [US2] Unit tests for InventoryImportTool Parquet format detection and routing in `agent/tests/unit/test_inventory_import_tool.py`
 - [ ] T034 [US2] Integration tests for InventoryImportTool in `agent/tests/integration/test_inventory_import_tool.py`
