@@ -207,7 +207,14 @@ export function buildFolderTree(
     const parts = path.split('/').filter(Boolean)
     const rawName = parts[parts.length - 1] || path
     // Decode URL-encoded characters (e.g., %2C -> comma, %20 -> space)
-    const name = decodeURIComponent(rawName)
+    // Use try-catch to handle malformed percent-escapes gracefully
+    let name: string
+    try {
+      name = decodeURIComponent(rawName)
+    } catch {
+      // Fall back to raw name if decoding fails (malformed percent-escape)
+      name = rawName
+    }
 
     const isMapped = folder?.collection_guid !== null && folder?.collection_guid !== undefined
     const { canSelect, reason } = canSelectPath(path, selectionState)

@@ -623,12 +623,23 @@ class CollectionService:
             self.db.delete(collection)
             self.db.commit()
 
-            # Recalculate mappability for affected connectors
+            # Recalculate mappability for affected connectors (best-effort, don't rollback delete)
             if affected_connector_ids:
                 from backend.src.services.inventory_service import InventoryService
                 inventory_service = InventoryService(self.db)
                 for connector_id in affected_connector_ids:
-                    inventory_service.recalculate_folder_mappability(connector_id)
+                    try:
+                        inventory_service.recalculate_folder_mappability(connector_id)
+                    except Exception as mappability_error:
+                        logger.warning(
+                            f"Failed to recalculate mappability for connector {connector_id}: {mappability_error}",
+                            extra={
+                                "connector_id": connector_id,
+                                "collection_id": collection_id,
+                                "error": str(mappability_error)
+                            }
+                        )
+                        # Continue with other connectors - don't let this fail the delete
 
             logger.info(
                 f"Deleted collection: {collection.name}",

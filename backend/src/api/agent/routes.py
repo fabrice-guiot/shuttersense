@@ -2300,8 +2300,11 @@ async def report_inventory_file_info(
             detail=str(e)
         )
 
-    # Get job
-    job = db.query(Job).filter(Job.uuid == job_uuid).first()
+    # Get job (with team_id filter to prevent cross-tenant access)
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id
+    ).first()
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

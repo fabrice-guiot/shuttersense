@@ -539,20 +539,24 @@ class InventoryService:
         Returns:
             The running Job if one exists, None otherwise
         """
-        running_job = self.db.query(Job).filter(
+        # Get the connector to find its GUID for matching
+        connector = self._get_connector(connector_id, team_id)
+
+        # Query all running inventory jobs for this team
+        running_jobs = self.db.query(Job).filter(
             Job.team_id == team_id,
             Job.tool.in_(["inventory_import", "inventory_validate"]),
             Job.status.in_([JobStatus.PENDING, JobStatus.ASSIGNED, JobStatus.RUNNING])
-        ).first()
+        ).all()
 
-        if running_job:
-            # Check if this job is for our connector by examining progress metadata
-            progress = running_job.progress or {}
-            if progress.get("connector_id") == connector_id or progress.get("connector_guid"):
-                # Verify connector_guid matches if present
-                connector = self._get_connector(connector_id, team_id)
-                if progress.get("connector_guid") == connector.guid or progress.get("connector_id") == connector_id:
-                    return running_job
+        # Check each job to find one matching this connector
+        for job in running_jobs:
+            progress = job.progress or {}
+            # Match by connector_id or connector_guid
+            if progress.get("connector_id") == connector_id:
+                return job
+            if progress.get("connector_guid") == connector.guid:
+                return job
 
         return None
 
@@ -769,24 +773,25 @@ class InventoryService:
             InventoryFolder.is_mappable == True  # noqa: E712
         ).scalar() or 0
 
-        # Get current active job (if any)
-        current_job = self.db.query(Job).filter(
+        # Get current active job for this connector (if any)
+        running_jobs = self.db.query(Job).filter(
             Job.team_id == connector.team_id,
             Job.tool.in_(["inventory_validate", "inventory_import"]),
             Job.status.in_([JobStatus.PENDING, JobStatus.ASSIGNED, JobStatus.RUNNING])
-        ).first()
+        ).all()
 
         current_job_info = None
-        if current_job:
-            progress = current_job.progress or {}
-            # Check if job is for this connector
+        # Find the job that matches this specific connector
+        for job in running_jobs:
+            progress = job.progress or {}
             if progress.get("connector_id") == connector_id or progress.get("connector_guid") == connector.guid:
                 current_job_info = {
-                    "guid": current_job.guid,
-                    "status": current_job.status.value,
+                    "guid": job.guid,
+                    "status": job.status.value,
                     "phase": progress.get("phase", "unknown"),
                     "progress_percentage": progress.get("percentage", 0)
                 }
+                break
 
         return {
             "validation_status": connector.inventory_validation_status,

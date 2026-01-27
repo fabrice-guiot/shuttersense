@@ -11,9 +11,56 @@ Provides data validation and serialization for:
 Issue #107: Cloud Storage Bucket Inventory Import
 """
 
+import re
 from datetime import datetime
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field, field_validator
+
+
+# S3/GCS bucket name pattern: lowercase letters, digits, hyphens, and dots
+BUCKET_NAME_PATTERN = re.compile(r'^[a-z0-9][a-z0-9.\-]*[a-z0-9]$|^[a-z0-9]$')
+
+# GUID pattern for validating external identifiers
+# Format: {3-char prefix}_{26-char Crockford Base32}
+# Crockford Base32 excludes I, L, O, U to avoid confusion
+GUID_PATTERN = re.compile(
+    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|ten|usr|tok|agt|art|job|imp|fld|rel)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+    re.IGNORECASE
+)
+
+
+def validate_guid(v: str, allowed_prefixes: Optional[List[str]] = None) -> str:
+    """
+    Validate a GUID string format.
+
+    Args:
+        v: The GUID string to validate
+        allowed_prefixes: Optional list of allowed prefixes (e.g., ["fld", "col"])
+
+    Returns:
+        The validated GUID string
+
+    Raises:
+        ValueError: If GUID format is invalid or prefix not allowed
+    """
+    if not GUID_PATTERN.match(v):
+        raise ValueError(
+            f"Invalid GUID format: {v}. Expected format: {{prefix}}_{{26-char Crockford Base32}}"
+        )
+    if allowed_prefixes:
+        prefix = v.split("_")[0].lower()
+        if prefix not in [p.lower() for p in allowed_prefixes]:
+            raise ValueError(
+                f"Invalid GUID prefix: {prefix}. Expected one of: {', '.join(allowed_prefixes)}"
+            )
+    return v
+
+
+def validate_optional_guid(v: Optional[str], allowed_prefixes: Optional[List[str]] = None) -> Optional[str]:
+    """Validate an optional GUID string, allowing None."""
+    if v is None:
+        return None
+    return validate_guid(v, allowed_prefixes)
 
 
 # ============================================================================
@@ -74,9 +121,11 @@ class S3InventoryConfig(BaseModel):
     @classmethod
     def validate_bucket_name(cls, v: str) -> str:
         """Validate S3 bucket naming rules."""
-        if not v.islower() and not v.replace('-', '').replace('.', '').isalnum():
-            # Allow lowercase, numbers, hyphens, and dots
-            pass  # S3 bucket names are more permissive
+        # Must contain only lowercase letters, digits, hyphens, and dots
+        if not BUCKET_NAME_PATTERN.match(v):
+            raise ValueError(
+                "Bucket name must contain only lowercase letters, digits, hyphens, and dots"
+            )
         if v.startswith('-') or v.endswith('-'):
             raise ValueError("Bucket name cannot start or end with hyphen")
         if '..' in v:
@@ -287,6 +336,18 @@ class InventoryFolderResponse(BaseModel):
     collection_guid: Optional[str] = Field(default=None, description="Mapped collection GUID")
     suggested_name: Optional[str] = Field(default=None, description="Suggested collection name")
     is_mappable: bool = Field(default=True, description="Whether folder is eligible for mapping")
+
+    @field_validator('guid')
+    @classmethod
+    def validate_folder_guid(cls, v: str) -> str:
+        """Validate folder GUID format."""
+        return validate_guid(v, allowed_prefixes=["fld"])
+
+    @field_validator('collection_guid')
+    @classmethod
+    def validate_collection_guid(cls, v: Optional[str]) -> Optional[str]:
+        """Validate optional collection GUID format."""
+        return validate_optional_guid(v, allowed_prefixes=["col"])
 
     @property
     def is_mapped(self) -> bool:

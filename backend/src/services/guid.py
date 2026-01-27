@@ -53,6 +53,8 @@ ENTITY_PREFIXES = {
     "art": "AgentRegistrationToken",
     "job": "Job",
     "imp": "ImportSession",
+    "fld": "InventoryFolder",
+    "rel": "ReleaseManifest",
 }
 
 # Crockford Base32 alphabet (excludes I, L, O, U to avoid confusion)

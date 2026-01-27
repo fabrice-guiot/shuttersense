@@ -27,7 +27,7 @@ Architecture:
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, Set, Union
 
 from src.analysis.inventory_parser import (
     InventoryEntry,
@@ -498,11 +498,38 @@ class InventoryImportTool:
             all_entries=all_entries  # Keep for Phase B
         )
 
+    def _fetch_object_stream(self, bucket: str, key: str) -> BinaryIO:
+        """
+        Fetch an object from cloud storage as a streaming file-like object.
+
+        Returns a file-like object that can be read in chunks to avoid
+        loading entire content into memory. Callers are responsible for
+        closing the stream after use.
+
+        Args:
+            bucket: Bucket name
+            key: Object key
+
+        Returns:
+            File-like object (streaming body) for reading content
+        """
+        if self._connector_type == "s3":
+            response = self._adapter.client.get_object(Bucket=bucket, Key=key)
+            # response["Body"] is a botocore StreamingBody that supports read()
+            return response["Body"]
+        elif self._connector_type == "gcs":
+            blob = self._adapter.bucket.blob(key)
+            # blob.open("rb") returns a file-like object for streaming reads
+            return blob.open("rb")
+        else:
+            raise ValueError(f"Unsupported connector type: {self._connector_type}")
+
     def _fetch_object(self, bucket: str, key: str) -> bytes:
         """
         Fetch an object from cloud storage.
 
-        Uses the storage adapter's underlying client.
+        Uses streaming internally to fetch content. For large files,
+        consider using _fetch_object_stream() directly.
 
         Args:
             bucket: Bucket name
@@ -511,14 +538,15 @@ class InventoryImportTool:
         Returns:
             Object content as bytes
         """
-        if self._connector_type == "s3":
-            response = self._adapter.client.get_object(Bucket=bucket, Key=key)
-            return response["Body"].read()
-        elif self._connector_type == "gcs":
-            blob = self._adapter.bucket.blob(key)
-            return blob.download_as_bytes()
-        else:
-            raise ValueError(f"Unsupported connector type: {self._connector_type}")
+        stream = self._fetch_object_stream(bucket, key)
+        try:
+            return stream.read()
+        finally:
+            # Ensure stream is closed
+            try:
+                stream.close()
+            except Exception:
+                pass
 
     def _report_progress(self, stage: str, percentage: int, message: str) -> None:
         """Report progress via callback."""

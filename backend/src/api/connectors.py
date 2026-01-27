@@ -40,7 +40,7 @@ from backend.src.schemas.inventory import (
     InventoryImportTriggerResponse,
 )
 from backend.src.services.connector_service import ConnectorService
-from backend.src.services.inventory_service import InventoryService
+from backend.src.services.inventory_service import InventoryService, InventoryValidationStatus
 from backend.src.services.exceptions import ConflictError
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
@@ -1157,7 +1157,7 @@ async def trigger_inventory_import(
             )
 
         # Check if inventory is validated
-        if connector.inventory_validation_status != "validated":
+        if connector.inventory_validation_status != InventoryValidationStatus.VALIDATED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Inventory configuration not validated. Current status: {connector.inventory_validation_status or 'none'}"

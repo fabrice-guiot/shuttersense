@@ -11,7 +11,7 @@
 
 export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation' | 'collection_test'
 
-export type ToolMode = 'collection' | 'display_graph'
+export type ToolMode = 'collection' | 'display_graph' | 'validation' | 'import'
 
 export type JobStatus = 'scheduled' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

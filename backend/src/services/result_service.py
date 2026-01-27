@@ -239,10 +239,12 @@ class ResultService:
                 ).first()
 
             # Get connector info for inventory tools (Issue #107)
+            # Filter by team_id for tenant isolation
             connector = None
             if result.connector_id:
                 connector = self.db.query(Connector).filter(
-                    Connector.id == result.connector_id
+                    Connector.id == result.connector_id,
+                    Connector.team_id == team_id
                 ).first()
 
             summaries.append(AnalysisResultSummary(
@@ -328,11 +330,15 @@ class ResultService:
             ).first()
 
         # Get connector info for inventory tools (Issue #107)
+        # Conditionally filter by team_id for tenant isolation
         connector = None
         if result.connector_id:
-            connector = self.db.query(Connector).filter(
+            connector_query = self.db.query(Connector).filter(
                 Connector.id == result.connector_id
-            ).first()
+            )
+            if team_id is not None:
+                connector_query = connector_query.filter(Connector.team_id == team_id)
+            connector = connector_query.first()
 
         # Process results: truncate large arrays and remove internal IDs
         processed_results = truncate_results(result.results_json or {})

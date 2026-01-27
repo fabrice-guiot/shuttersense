@@ -21,7 +21,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Generator, Iterable, List, Optional, Set
+from typing import Any, BinaryIO, Dict, Generator, Iterable, List, Optional, Set, Union
 
 logger = logging.getLogger("shuttersense.agent.analysis.inventory_parser")
 
@@ -239,7 +239,7 @@ def parse_gcs_manifest(manifest_content: str) -> GCSManifest:
 
 
 def parse_s3_csv_stream(
-    csv_data: bytes,
+    csv_data: Union[bytes, BinaryIO],
     schema_fields: List[str],
     is_gzipped: bool = True
 ) -> Generator[InventoryEntry, None, None]:
@@ -250,7 +250,9 @@ def parse_s3_csv_stream(
     loading entire content into memory.
 
     Args:
-        csv_data: Raw bytes of CSV file (may be gzipped)
+        csv_data: Raw bytes or file-like stream of CSV file (may be gzipped).
+                  If a stream is provided, parsing is fully streaming.
+                  If bytes are provided, they are wrapped in BytesIO.
         schema_fields: List of field names from manifest fileSchema
         is_gzipped: Whether data is gzip compressed (default True for S3)
 
@@ -261,17 +263,6 @@ def parse_s3_csv_stream(
         >>> for entry in parse_s3_csv_stream(data, ["Bucket", "Key", "Size"]):
         ...     print(entry.key)
     """
-    # Decompress if needed
-    if is_gzipped:
-        try:
-            decompressed = gzip.decompress(csv_data)
-            text_data = decompressed.decode("utf-8")
-        except gzip.BadGzipFile:
-            logger.warning("Data not gzipped despite is_gzipped=True, trying raw")
-            text_data = csv_data.decode("utf-8")
-    else:
-        text_data = csv_data.decode("utf-8")
-
     # Build field index map (case-insensitive)
     field_map = {f.lower(): i for i, f in enumerate(schema_fields)}
 
@@ -285,60 +276,108 @@ def parse_s3_csv_stream(
     if key_idx is None:
         raise ValueError("CSV schema missing required field: Key")
 
+    # Create a streaming reader - accept either bytes or file-like object
+    # If bytes are provided, wrap them in BytesIO for consistent streaming interface
+    if isinstance(csv_data, bytes):
+        byte_stream: BinaryIO = io.BytesIO(csv_data)
+        owns_stream = True  # We created it, we close it
+    else:
+        byte_stream = csv_data
+        owns_stream = False  # Caller owns it
+
+    if is_gzipped:
+        # Check magic bytes to confirm it's actually gzipped
+        magic = byte_stream.read(2)
+        byte_stream.seek(0)
+
+        if magic == b'\x1f\x8b':
+            # Use streaming GzipFile instead of gzip.decompress()
+            try:
+                gz_stream = gzip.GzipFile(fileobj=byte_stream, mode='rb')
+                text_stream = io.TextIOWrapper(gz_stream, encoding='utf-8')
+            except Exception as e:
+                logger.warning(f"Failed to open gzip stream: {e}, trying raw")
+                byte_stream.seek(0)
+                text_stream = io.TextIOWrapper(byte_stream, encoding='utf-8')
+        else:
+            logger.warning("Data not gzipped despite is_gzipped=True (no gzip magic), trying raw")
+            text_stream = io.TextIOWrapper(byte_stream, encoding='utf-8')
+    else:
+        text_stream = io.TextIOWrapper(byte_stream, encoding='utf-8')
+
     # Parse CSV rows (S3 Inventory has no header row)
-    reader = csv.reader(io.StringIO(text_data))
+    # Wrap the entire iteration in try/except to catch gzip errors during streaming
     row_count = 0
     error_count = 0
 
-    for row in reader:
-        row_count += 1
-        try:
-            # Skip rows that don't have enough columns
-            if len(row) <= key_idx:
+    try:
+        reader = csv.reader(text_stream)
+
+        for row in reader:
+            row_count += 1
+            try:
+                # Skip rows that don't have enough columns
+                if len(row) <= key_idx:
+                    error_count += 1
+                    logger.warning(f"Row {row_count} has insufficient columns, skipping")
+                    continue
+
+                # Extract key (required)
+                key = row[key_idx]
+
+                # Skip folder markers (keys ending with /)
+                if key.endswith("/"):
+                    continue
+
+                # Extract size (default to 0)
+                size = 0
+                if size_idx is not None and len(row) > size_idx:
+                    try:
+                        size = int(row[size_idx])
+                    except (ValueError, TypeError):
+                        pass
+
+                # Extract optional fields
+                last_modified = None
+                if modified_idx is not None and len(row) > modified_idx:
+                    last_modified = row[modified_idx] or None
+
+                etag = None
+                if etag_idx is not None and len(row) > etag_idx:
+                    etag = row[etag_idx] or None
+
+                storage_class = None
+                if storage_class_idx is not None and len(row) > storage_class_idx:
+                    storage_class = row[storage_class_idx] or None
+
+                yield InventoryEntry(
+                    key=key,
+                    size=size,
+                    last_modified=last_modified,
+                    etag=etag,
+                    storage_class=storage_class
+                )
+
+            except Exception as e:
                 error_count += 1
-                logger.warning(f"Row {row_count} has insufficient columns, skipping")
-                continue
+                if error_count <= 10:  # Limit error logging
+                    logger.warning(f"Error parsing row {row_count}: {e}")
 
-            # Extract key (required)
-            key = row[key_idx]
-
-            # Skip folder markers (keys ending with /)
-            if key.endswith("/"):
-                continue
-
-            # Extract size (default to 0)
-            size = 0
-            if size_idx is not None and len(row) > size_idx:
-                try:
-                    size = int(row[size_idx])
-                except (ValueError, TypeError):
-                    pass
-
-            # Extract optional fields
-            last_modified = None
-            if modified_idx is not None and len(row) > modified_idx:
-                last_modified = row[modified_idx] or None
-
-            etag = None
-            if etag_idx is not None and len(row) > etag_idx:
-                etag = row[etag_idx] or None
-
-            storage_class = None
-            if storage_class_idx is not None and len(row) > storage_class_idx:
-                storage_class = row[storage_class_idx] or None
-
-            yield InventoryEntry(
-                key=key,
-                size=size,
-                last_modified=last_modified,
-                etag=etag,
-                storage_class=storage_class
-            )
-
-        except Exception as e:
-            error_count += 1
-            if error_count <= 10:  # Limit error logging
-                logger.warning(f"Error parsing row {row_count}: {e}")
+    except gzip.BadGzipFile as e:
+        # Handle gzip errors that occur during streaming decompression
+        logger.warning(f"Gzip error during streaming: {e}. Processing stopped at row {row_count}.")
+        # Don't re-raise - allow partial results if any were yielded
+    finally:
+        # Ensure streams are closed (only close streams we created)
+        try:
+            text_stream.close()
+        except Exception:
+            pass
+        if owns_stream:
+            try:
+                byte_stream.close()
+            except Exception:
+                pass
 
     if error_count > 0:
         logger.warning(f"Completed parsing with {error_count} errors out of {row_count} rows")
@@ -347,7 +386,7 @@ def parse_s3_csv_stream(
 
 
 def parse_gcs_csv_stream(
-    csv_data: bytes,
+    csv_data: Union[bytes, BinaryIO],
 ) -> Generator[InventoryEntry, None, None]:
     """
     Parse GCS Storage Insights CSV data as a stream.
@@ -359,44 +398,61 @@ def parse_gcs_csv_stream(
     - etag (vs ETag)
 
     Args:
-        csv_data: Raw bytes of CSV file (uncompressed for GCS)
+        csv_data: Raw bytes or file-like stream of CSV file (uncompressed for GCS).
+                  If a stream is provided, parsing is fully streaming.
 
     Yields:
         InventoryEntry objects for each row
     """
-    text_data = csv_data.decode("utf-8")
-    reader = csv.DictReader(io.StringIO(text_data))
+    # Accept either bytes or file-like object
+    if isinstance(csv_data, bytes):
+        text_stream = io.StringIO(csv_data.decode("utf-8"))
+        owns_stream = True
+    else:
+        text_stream = io.TextIOWrapper(csv_data, encoding="utf-8")
+        owns_stream = False
 
     row_count = 0
     error_count = 0
 
-    for row in reader:
-        row_count += 1
-        try:
-            key = row.get("name", "")
+    try:
+        reader = csv.DictReader(text_stream)
 
-            # Skip folder markers
-            if key.endswith("/") or not key:
-                continue
-
-            size = 0
+        for row in reader:
+            row_count += 1
             try:
-                size = int(row.get("size", 0))
-            except (ValueError, TypeError):
+                key = row.get("name", "")
+
+                # Skip folder markers
+                if key.endswith("/") or not key:
+                    continue
+
+                size = 0
+                try:
+                    size = int(row.get("size", 0))
+                except (ValueError, TypeError):
+                    pass
+
+                yield InventoryEntry(
+                    key=key,
+                    size=size,
+                    last_modified=row.get("updated"),
+                    etag=row.get("etag"),
+                    storage_class=row.get("storageClass")
+                )
+
+            except Exception as e:
+                error_count += 1
+                if error_count <= 10:
+                    logger.warning(f"Error parsing GCS row {row_count}: {e}")
+
+    finally:
+        # Close streams we own
+        if owns_stream:
+            try:
+                text_stream.close()
+            except Exception:
                 pass
-
-            yield InventoryEntry(
-                key=key,
-                size=size,
-                last_modified=row.get("updated"),
-                etag=row.get("etag"),
-                storage_class=row.get("storageClass")
-            )
-
-        except Exception as e:
-            error_count += 1
-            if error_count <= 10:
-                logger.warning(f"Error parsing GCS row {row_count}: {e}")
 
     if error_count > 0:
         logger.warning(f"GCS parsing completed with {error_count} errors out of {row_count} rows")
@@ -405,7 +461,7 @@ def parse_gcs_csv_stream(
 
 
 def parse_parquet_stream(
-    parquet_data: bytes,
+    parquet_data: Union[bytes, BinaryIO],
     provider: str = "gcs"
 ) -> Generator[InventoryEntry, None, None]:
     """
@@ -414,7 +470,8 @@ def parse_parquet_stream(
     Uses pyarrow for memory-efficient Parquet parsing with row batches.
 
     Args:
-        parquet_data: Raw bytes of Parquet file
+        parquet_data: Raw bytes or file-like stream of Parquet file.
+                      If a stream is provided, pyarrow reads directly from it.
         provider: Provider name ("s3" or "gcs") for field mapping
 
     Yields:
@@ -445,8 +502,15 @@ def parse_parquet_stream(
         etag_field = "ETag"
         storage_class_field = "StorageClass"
 
+    # Accept either bytes or file-like object
+    # pyarrow.parquet.ParquetFile accepts both
+    if isinstance(parquet_data, bytes):
+        source = io.BytesIO(parquet_data)
+    else:
+        source = parquet_data
+
     # Read Parquet file in batches for memory efficiency
-    reader = pq.ParquetFile(io.BytesIO(parquet_data))
+    reader = pq.ParquetFile(source)
     row_count = 0
 
     for batch in reader.iter_batches(batch_size=CHUNK_SIZE):
