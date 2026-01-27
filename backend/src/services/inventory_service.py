@@ -945,6 +945,11 @@ class InventoryService:
         """
         Map an inventory folder to a collection.
 
+        Validates that:
+        1. The folder exists and is accessible by the team
+        2. The folder is currently mappable (not blocked by hierarchy)
+        3. The collection exists and belongs to the same team
+
         Args:
             folder_id: Internal folder ID
             collection_guid: Collection GUID to map to
@@ -954,8 +959,11 @@ class InventoryService:
             Updated InventoryFolder
 
         Raises:
-            NotFoundError: If folder not found
+            NotFoundError: If folder or collection not found
+            ValidationError: If folder is not mappable or collection doesn't match tenant
         """
+        from backend.src.models.collection import Collection
+
         folder = self.db.query(InventoryFolder).filter(
             InventoryFolder.id == folder_id
         ).first()
@@ -963,15 +971,41 @@ class InventoryService:
         if not folder:
             raise NotFoundError("InventoryFolder", str(folder_id))
 
-        # Verify connector belongs to team if team_id provided
-        if team_id is not None:
-            connector = self.db.query(Connector).filter(
-                Connector.id == folder.connector_id,
-                Connector.team_id == team_id
-            ).first()
-            if not connector:
-                raise NotFoundError("InventoryFolder", str(folder_id))
+        # Get the connector to verify team ownership
+        connector = self.db.query(Connector).filter(
+            Connector.id == folder.connector_id
+        ).first()
 
+        if not connector:
+            raise NotFoundError("InventoryFolder", str(folder_id))
+
+        # Verify connector belongs to team if team_id provided
+        effective_team_id = team_id if team_id is not None else connector.team_id
+        if team_id is not None and connector.team_id != team_id:
+            raise NotFoundError("InventoryFolder", str(folder_id))
+
+        # Check if folder is currently mappable
+        if not folder.is_mappable:
+            raise ValidationError(
+                f"Folder '{folder.path}' is not mappable. "
+                "A parent or child folder may already be mapped to a collection."
+            )
+
+        # Validate that the collection exists and belongs to the same team
+        try:
+            uuid_value = GuidService.parse_identifier(collection_guid, expected_prefix="col")
+        except ValueError as e:
+            raise ValidationError(f"Invalid collection GUID: {e}")
+
+        collection = self.db.query(Collection).filter(
+            Collection.uuid == uuid_value,
+            Collection.team_id == effective_team_id
+        ).first()
+
+        if not collection:
+            raise NotFoundError("Collection", collection_guid)
+
+        # All validations passed - perform the mapping
         folder.collection_guid = collection_guid
         self.db.commit()
         self.db.refresh(folder)
@@ -984,7 +1018,8 @@ class InventoryService:
             extra={
                 "folder_id": folder_id,
                 "folder_path": folder.path,
-                "collection_guid": collection_guid
+                "collection_guid": collection_guid,
+                "collection_id": collection.id
             }
         )
 

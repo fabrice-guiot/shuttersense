@@ -30,6 +30,93 @@ logger = logging.getLogger("shuttersense.agent.analysis.inventory_parser")
 CHUNK_SIZE = 100_000  # Process 100k rows at a time for memory efficiency
 
 
+class PrependStream:
+    """
+    A stream wrapper that prepends bytes to a non-seekable stream.
+
+    This allows reading magic bytes for gzip detection without consuming them,
+    while avoiding loading the entire stream into memory. Implements readinto()
+    to work with io.BufferedReader.
+
+    Usage:
+        wrapper = PrependStream(original_stream, prepend_bytes=b'\\x1f\\x8b')
+        buffered = io.BufferedReader(wrapper)
+    """
+
+    def __init__(self, stream: BinaryIO, prepend_bytes: bytes = b""):
+        """
+        Initialize the prepend stream wrapper.
+
+        Args:
+            stream: The underlying non-seekable stream
+            prepend_bytes: Bytes to prepend (typically magic bytes already read)
+        """
+        self._stream = stream
+        self._prepend = prepend_bytes
+        self._prepend_pos = 0
+
+    def readinto(self, b: bytearray) -> int:
+        """
+        Read bytes into a pre-allocated buffer.
+
+        First serves bytes from prepend buffer, then reads from underlying stream.
+        Required for io.BufferedReader compatibility.
+
+        Args:
+            b: Buffer to read into
+
+        Returns:
+            Number of bytes read
+        """
+        total_read = 0
+        buf_len = len(b)
+
+        # First, serve any remaining prepend bytes
+        prepend_remaining = len(self._prepend) - self._prepend_pos
+        if prepend_remaining > 0:
+            to_copy = min(prepend_remaining, buf_len)
+            b[:to_copy] = self._prepend[self._prepend_pos:self._prepend_pos + to_copy]
+            self._prepend_pos += to_copy
+            total_read += to_copy
+
+            if total_read >= buf_len:
+                return total_read
+
+        # Then read from underlying stream
+        remaining_space = buf_len - total_read
+        if remaining_space > 0:
+            # Create a memoryview for the remaining buffer space
+            chunk = self._stream.read(remaining_space)
+            if chunk:
+                bytes_from_stream = len(chunk)
+                b[total_read:total_read + bytes_from_stream] = chunk
+                total_read += bytes_from_stream
+
+        return total_read
+
+    def read(self, size: int = -1) -> bytes:
+        """Read bytes from the stream."""
+        if size == -1:
+            # Read all remaining
+            prepend_remaining = self._prepend[self._prepend_pos:]
+            self._prepend_pos = len(self._prepend)
+            return prepend_remaining + self._stream.read()
+        elif size == 0:
+            return b""
+        else:
+            result = bytearray(size)
+            actual = self.readinto(result)
+            return bytes(result[:actual])
+
+    def readable(self) -> bool:
+        """Return True if stream is readable."""
+        return True
+
+    def close(self) -> None:
+        """Close the underlying stream."""
+        self._stream.close()
+
+
 @dataclass
 class InventoryEntry:
     """
@@ -293,18 +380,17 @@ def parse_s3_csv_stream(
     elif hasattr(byte_stream, 'read'):
         # Wrap in BufferedReader for peek support
         # Note: BufferedReader requires a raw stream with readinto(); for streams
-        # without it (like S3 StreamingBody), we use a small read + prepend approach
+        # without it (like S3 StreamingBody), use PrependStream wrapper
         try:
             buffered_stream = io.BufferedReader(byte_stream)  # type: ignore
         except (TypeError, AttributeError):
             # Stream doesn't support BufferedReader (no readinto)
-            # Fall back to reading first 2 bytes and creating a combined stream
+            # Read magic bytes and wrap with PrependStream to avoid loading entire stream
             magic_bytes = byte_stream.read(2)
-            # Create a new stream that prepends the magic bytes
-            remaining = byte_stream.read()
-            byte_stream = io.BytesIO(magic_bytes + remaining)
-            buffered_stream = byte_stream
-            owns_stream = True  # We created a new BytesIO
+            # Create a PrependStream wrapper that serves magic_bytes first, then delegates
+            prepend_wrapper = PrependStream(byte_stream, prepend_bytes=magic_bytes)
+            buffered_stream = io.BufferedReader(prepend_wrapper)  # type: ignore
+            owns_stream = True  # We own the wrapper
     else:
         buffered_stream = byte_stream
 
@@ -519,19 +605,22 @@ def parse_parquet_stream(
             "Install with: pip install pyarrow"
         )
 
-    # Field mappings per provider
-    if provider == "gcs":
-        key_field = "name"
-        size_field = "size"
-        modified_field = "updated"
-        etag_field = "etag"
-        storage_class_field = "storageClass"
-    else:  # s3
-        key_field = "Key"
-        size_field = "Size"
-        modified_field = "LastModifiedDate"
-        etag_field = "ETag"
-        storage_class_field = "StorageClass"
+    # Field mappings per provider - use match/case for explicit handling
+    match provider:
+        case "gcs":
+            key_field = "name"
+            size_field = "size"
+            modified_field = "updated"
+            etag_field = "etag"
+            storage_class_field = "storageClass"
+        case "s3":
+            key_field = "Key"
+            size_field = "Size"
+            modified_field = "LastModifiedDate"
+            etag_field = "ETag"
+            storage_class_field = "StorageClass"
+        case _:
+            raise ValueError(f"Unsupported provider: {provider}. Must be 'gcs' or 's3'.")
 
     # Accept either bytes or file-like object
     # pyarrow.parquet.ParquetFile accepts both
@@ -554,7 +643,8 @@ def parse_parquet_stream(
         storage_classes = table.get(storage_class_field, [None] * len(keys))
 
         for i, key in enumerate(keys):
-            if key.endswith("/") or not key:
+            # Check for null/empty key first to avoid calling endswith on None
+            if not key or key.endswith("/"):
                 continue
 
             row_count += 1
