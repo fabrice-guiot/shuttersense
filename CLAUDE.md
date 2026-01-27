@@ -18,33 +18,28 @@ ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyz
 - **Frontend** (React/TypeScript) - Modern, accessible UI with real-time progress updates
 
 ## Active Technologies
-- Python 3.10+ (Backend), TypeScript 5.x (Frontend) + FastAPI, SQLAlchemy 2.0, Pydantic v2, React 18.3.1, Axios (008-entity-uuid-implementation)
-- PostgreSQL 12+ with JSONB columns (SQLite for tests) (008-entity-uuid-implementation)
-- TypeScript 5.x (Frontend), React 18.3.1 + Tailwind CSS 4.x, shadcn/ui components, Radix UI primitives, class-variance-authority (cva) (009-dark-theme-compliance)
-- N/A (styling-only feature, no data persistence changes) (009-dark-theme-compliance)
-- TypeScript 5.9.3 + React 18.3.1, Vite 6.0.5, native browser Intl APIs (no external date libraries) (010-user-timezone-display)
-- N/A (frontend-only feature, backend continues storing UTC timestamps) (010-user-timezone-display)
-- Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (011-calendar-events)
-- TypeScript 5.9.3 + React 18.3.1 + Tailwind CSS 4.x, shadcn/ui, Radix UI, Lucide React icons (016-mobile-calendar-view)
-- N/A (frontend-only feature, uses existing event data from backend) (016-mobile-calendar-view)
-- Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React icons (018-event-deadline-calendar)
-- Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Authlib (OAuth), PyJWT, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (019-user-tenancy)
-- Python 3.10+ (Backend/CLI), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, React 18.3.1, Tailwind CSS 4.x, shadcn/ui (020-shuttersense-rebrand)
-- PostgreSQL 12+ (no schema changes needed for rebrand) (020-shuttersense-rebrand)
-- Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) (021-distributed-agent-architecture)
-- PostgreSQL 12+ (job queue persistence, agent records) (021-distributed-agent-architecture)
-- Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (022-storage-optimization)
-- Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, Recharts (106-fix-trend-aggregation)
-- PostgreSQL 12+ (JSONB columns for analysis results) (106-fix-trend-aggregation)
-- Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, boto3, google-cloud-storage, React 18.3.1, shadcn/ui, Tailwind CSS 4.x (107-bucket-inventory-import)
-- PostgreSQL 12+ (JSONB columns for FileInfo, InventoryConfig embedded in credentials) (107-bucket-inventory-import)
 
-### Core Stack
-- **Python 3.10+** - Backend and CLI tools (required for match/case syntax)
-- **TypeScript 5.x** - Frontend type safety
-- **React 18.3.1** - Frontend UI framework
-- **FastAPI** - Backend web framework with OpenAPI docs
-- **PostgreSQL 12+** - Primary database with JSONB columns
+### Backend
+- **Python 3.10+** - Backend, CLI tools, and Agent (required for match/case syntax)
+- **FastAPI** - Web framework with OpenAPI docs
+- **SQLAlchemy 2.0+** - ORM with async support
+- **Pydantic v2** - Data validation and serialization
+- **PostgreSQL 12+** - Primary database with JSONB columns (SQLite for tests)
+
+### Frontend
+- **TypeScript 5.9.3** - Type safety
+- **React 18.3.1** - UI framework
+- **Vite 6.0.5** - Build tooling
+- **Tailwind CSS 4.x** - Utility-first styling
+- **shadcn/ui** - Component library (Radix UI primitives)
+- **Lucide React** - Icon library
+- **Recharts** - Data visualization
+- **class-variance-authority (cva)** - Component variants
+- **Axios** - HTTP client
+
+### Cloud Storage (Issue #107)
+- **boto3** - AWS S3 and S3 Inventory
+- **google-cloud-storage** - GCS and Storage Insights
 
 ### CLI Dependencies
 - **PyYAML** (>=6.0) - Configuration file handling
@@ -531,9 +526,17 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
-- 107-bucket-inventory-import: Added Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, boto3, google-cloud-storage, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
-- 106-fix-trend-aggregation: Added Python 3.10+ (Backend), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, Recharts
-- 022-storage-optimization: Added Python 3.10+ (Backend/Agent), TypeScript 5.9.3 (Frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, React 18.3.1, shadcn/ui, Tailwind CSS 4.x
+
+### Issue #107: Cloud Storage Bucket Inventory Import (2026-01)
+- S3 Inventory and GCS Storage Insights integration
+- Connector-based AnalysisResult tracking
+- Standardized tool completion pattern
+
+### Issue #106: Fix Trend Aggregation (2026-01)
+- Recharts integration for data visualization
+
+### Issue #22: Storage Optimization (2026-01)
+- Result retention policies and cleanup
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 
