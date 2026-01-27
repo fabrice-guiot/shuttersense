@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react'
-import { Settings, Trash2, Play, RefreshCw, CheckCircle } from 'lucide-react'
+import { Settings, Trash2, Play, RefreshCw, CheckCircle, FolderTree as FolderTreeIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -29,7 +29,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { InventoryConfigForm } from './InventoryConfigForm'
 import { InventoryStatusDisplay } from './InventoryStatusDisplay'
-import { useInventoryConfig, useInventoryStatus, useInventoryImport, useInventoryValidation } from '@/hooks/useInventory'
+import { CreateCollectionsDialog } from './CreateCollectionsDialog'
+import { useInventoryConfig, useInventoryStatus, useInventoryImport, useInventoryValidation, useAllInventoryFolders } from '@/hooks/useInventory'
 import type { Connector } from '@/contracts/api/connector-api'
 import type { InventoryConfig, InventorySchedule } from '@/contracts/api/inventory-api'
 
@@ -57,6 +58,7 @@ export function InventoryConfigSection({
 }: InventoryConfigSectionProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   const { setConfig, clearConfig, loading: configLoading, error: configError } = useInventoryConfig()
   const { status, loading: statusLoading, refetch: refetchStatus } = useInventoryStatus(connector.guid, {
@@ -65,6 +67,9 @@ export function InventoryConfigSection({
   })
   const { triggerImport, loading: importLoading } = useInventoryImport()
   const { validate, loading: validateLoading } = useInventoryValidation()
+  const { folders, loading: foldersLoading, refetch: refetchFolders } = useAllInventoryFolders(connector.guid, {
+    autoFetch: false  // Only fetch when wizard opens
+  })
 
   // Only S3 and GCS connectors support inventory
   const supportsInventory = connector.type === 's3' || connector.type === 'gcs'
@@ -204,6 +209,22 @@ export function InventoryConfigSection({
               {importLoading ? 'Starting...' : 'Import Now'}
             </Button>
 
+            {/* Map Folders Button - shown when there are mappable folders */}
+            {status?.mappable_folder_count > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  refetchFolders()
+                  setWizardOpen(true)
+                }}
+                disabled={foldersLoading}
+                className="gap-2"
+              >
+                <FolderTreeIcon className="h-4 w-4" />
+                Map Folders ({status.mappable_folder_count} available)
+              </Button>
+            )}
+
             {/* Status messages */}
             {status?.validation_status === 'validating' && (
               <span className="self-center text-sm text-muted-foreground">
@@ -271,6 +292,21 @@ export function InventoryConfigSection({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Collections Wizard */}
+      <CreateCollectionsDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        connectorGuid={connector.guid}
+        folders={folders}
+        foldersLoading={foldersLoading}
+        onCreated={() => {
+          setWizardOpen(false)
+          refetchStatus()
+          refetchFolders()
+          onConfigChange?.()
+        }}
+      />
     </div>
   )
 }

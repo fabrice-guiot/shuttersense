@@ -41,6 +41,7 @@ import type {
   FolderToCollectionMapping,
   CreateCollectionsFromInventoryResponse
 } from '@/contracts/api/inventory-api'
+import { createCollectionsFromInventory } from '@/services/inventory'
 import { FolderTree } from './FolderTree'
 import { suggestCollectionName, formatPathForDisplay, validateCollectionName } from '@/utils/name-suggestion'
 
@@ -58,12 +59,16 @@ export interface CreateCollectionsDialogProps {
   /** Called when collections are created */
   onCreated?: (result: CreateCollectionsFromInventoryResponse) => void
   /** Function to create collections (injected for flexibility) */
-  createCollections: (
+  createCollections?: (
     connectorGuid: string,
     mappings: FolderToCollectionMapping[]
   ) => Promise<CreateCollectionsFromInventoryResponse>
   /** Trigger element (defaults to "Create Collections" button) */
   trigger?: React.ReactNode
+  /** Controlled mode: dialog open state */
+  open?: boolean
+  /** Controlled mode: callback when open state changes */
+  onOpenChange?: (open: boolean) => void
 }
 
 type WizardStep = 'select' | 'review'
@@ -84,10 +89,15 @@ export function CreateCollectionsDialog({
   foldersLoading = false,
   onCreated,
   createCollections,
-  trigger
+  trigger,
+  open: controlledOpen,
+  onOpenChange
 }: CreateCollectionsDialogProps) {
-  // Dialog state
-  const [open, setOpen] = useState(false)
+  // Dialog state - support both controlled and uncontrolled modes
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+  const setOpen = isControlled ? (onOpenChange ?? (() => {})) : setInternalOpen
   const [step, setStep] = useState<WizardStep>('select')
 
   // Selection state (preserved across steps)
@@ -134,7 +144,7 @@ export function CreateCollectionsDialog({
         newDrafts.push({
           folder_guid: folder.guid,
           folder_path: path,
-          name: folder.suggested_name || suggestCollectionName(path),
+          name: suggestCollectionName(path),
           state: 'live', // Default state
           pipeline_guid: null
         })
@@ -213,7 +223,8 @@ export function CreateCollectionsDialog({
         pipeline_guid: d.pipeline_guid
       }))
 
-      const response = await createCollections(connectorGuid, mappings)
+      const createFn = createCollections ?? createCollectionsFromInventory
+      const response = await createFn(connectorGuid, mappings)
       setResult(response)
 
       // If all succeeded, notify and close
@@ -251,14 +262,17 @@ export function CreateCollectionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Collections
-          </Button>
-        )}
-      </DialogTrigger>
+      {/* Only render trigger in uncontrolled mode (when parent doesn't control open state) */}
+      {!isControlled && (
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Collections
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
 
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>

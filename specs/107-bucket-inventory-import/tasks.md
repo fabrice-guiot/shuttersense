@@ -163,16 +163,16 @@
 
 ### Tests for US3
 
-- [ ] T046a [P] [US3] Unit tests for hierarchical selection constraint logic in `frontend/tests/utils/test_folder_selection.ts`
-- [ ] T049 [US3] Component tests for FolderTree in `frontend/tests/components/inventory/FolderTree.test.tsx`
-- [ ] T053a [P] [US3] Unit tests for name suggestion algorithm (URL decode, title case, path transformation) in `frontend/tests/utils/test_name_suggestion.ts`
-- [ ] T056 [US3] Component tests for wizard in `frontend/tests/components/inventory/CreateCollectionsDialog.test.tsx`
-- [ ] T056a [US3] Component test for wizard state preservation (back navigation) in `frontend/tests/components/inventory/CreateCollectionsDialog.test.tsx`
-- [ ] T058a [P] [US3] Unit tests for overlapping path validation in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T058b [P] [US3] Unit tests for state validation (required, valid enum values) in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T062 [US3] Integration tests for collection creation endpoint in `backend/tests/integration/api/test_inventory_api.py`
-- [ ] T062a [US3] Integration test for batch collection creation (multiple folders, mixed states) in `backend/tests/integration/api/test_inventory_api.py`
-- [ ] T062b [US3] Integration test for InventoryFolder.collection_guid update after mapping in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T046a [P] [US3] Unit tests for hierarchical selection constraint logic in `frontend/tests/utils/folder-selection.test.ts`
+- [x] T049 [US3] Component tests for FolderTree in `frontend/tests/components/inventory/FolderTree.test.tsx`
+- [x] T053a [P] [US3] Unit tests for name suggestion algorithm (URL decode, title case, path transformation) in `frontend/tests/utils/name-suggestion.test.ts`
+- [x] T056 [US3] Component tests for wizard in `frontend/tests/components/inventory/CreateCollectionsDialog.test.tsx`
+- [x] T056a [US3] Component test for wizard state preservation (back navigation) in `frontend/tests/components/inventory/CreateCollectionsDialog.test.tsx`
+- [x] T058a [P] [US3] Unit tests for overlapping path validation in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T058b [P] [US3] Unit tests for state validation (required, valid enum values) in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T062 [US3] Integration tests for collection creation endpoint in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T062a [US3] Integration test for batch collection creation (multiple folders, mixed states) in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T062b [US3] Integration test for InventoryFolder.collection_guid update after mapping in `backend/tests/integration/api/test_inventory_api.py`
 
 **Checkpoint**: Users can browse folders, select non-overlapping paths, configure draft Collections, and batch-create with states
 

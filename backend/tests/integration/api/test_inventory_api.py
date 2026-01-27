@@ -813,7 +813,7 @@ class TestFolderStorageEndpoint:
             }
         }
         response = test_client.post("/api/connectors", json=connector_data)
-        assert response.status_code == 201
+        assert response.status_code == 200
         return response.json()["guid"]
 
     def test_trigger_import_requires_validated_status(self, test_client, test_db_session):
@@ -909,7 +909,7 @@ class TestConcurrentImportPrevention:
             }
         }
         response = test_client.post("/api/connectors", json=connector_data)
-        assert response.status_code == 201
+        assert response.status_code == 200
         return response.json()["guid"]
 
     def test_concurrent_import_returns_409(self, test_client, test_db_session):
@@ -1075,3 +1075,319 @@ class TestConcurrentImportPrevention:
         assert response.status_code == 200
         second_job_guid = response.json()["job_guid"]
         assert second_job_guid != first_job_guid
+
+
+# ============================================================================
+# T062: Integration tests for collection creation from inventory
+# ============================================================================
+
+class TestCreateCollectionsFromInventory:
+    """Integration tests for POST /api/collections/from-inventory endpoint (T062)."""
+
+    def _create_s3_connector_with_folders(self, test_client, test_db_session):
+        """Helper to create an S3 connector with inventory folders."""
+        # Create S3 connector
+        connector_data = {
+            "name": "S3 Collection Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        assert response.status_code == 201
+        connector_guid = response.json()["guid"]
+
+        # Get internal connector
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+
+        # Add inventory folders
+        folders = [
+            InventoryFolder(
+                connector_id=connector.id,
+                path="2020/Events/",
+                object_count=100,
+                total_size_bytes=1000000
+            ),
+            InventoryFolder(
+                connector_id=connector.id,
+                path="2021/Photos/",
+                object_count=200,
+                total_size_bytes=2000000
+            ),
+            InventoryFolder(
+                connector_id=connector.id,
+                path="2022/Backups/",
+                object_count=50,
+                total_size_bytes=500000
+            ),
+        ]
+        test_db_session.add_all(folders)
+        test_db_session.commit()
+
+        return connector_guid, connector, folders
+
+    def test_create_single_collection_from_folder(self, test_client, test_db_session):
+        """Test creating a single collection from an inventory folder."""
+        connector_guid, connector, folders = self._create_s3_connector_with_folders(
+            test_client, test_db_session
+        )
+
+        # Create collection from first folder
+        request_data = {
+            "connector_guid": connector_guid,
+            "folders": [
+                {
+                    "folder_guid": folders[0].guid,
+                    "name": "2020 Events",
+                    "state": "live"
+                }
+            ]
+        }
+
+        response = test_client.post("/api/collections/from-inventory", json=request_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["created"]) == 1
+        assert len(data["created"]) == 1
+        assert data["created"][0]["name"] == "2020 Events"
+        assert data["created"][0]["folder_guid"] == folders[0].guid
+
+    def test_create_batch_collections_from_folders(self, test_client, test_db_session):
+        """Test creating multiple collections in a single request (T062a)."""
+        connector_guid, connector, folders = self._create_s3_connector_with_folders(
+            test_client, test_db_session
+        )
+
+        # Create collections from all three folders
+        request_data = {
+            "connector_guid": connector_guid,
+            "folders": [
+                {
+                    "folder_guid": folders[0].guid,
+                    "name": "2020 Events",
+                    "state": "live"
+                },
+                {
+                    "folder_guid": folders[1].guid,
+                    "name": "2021 Photos",
+                    "state": "archived"
+                },
+                {
+                    "folder_guid": folders[2].guid,
+                    "name": "2022 Backups",
+                    "state": "live"
+                }
+            ]
+        }
+
+        response = test_client.post("/api/collections/from-inventory", json=request_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["created"]) == 3
+        assert len(data["created"]) == 3
+
+        # Verify each collection
+        names = {c["name"] for c in data["created"]}
+        assert "2020 Events" in names
+        assert "2021 Photos" in names
+        assert "2022 Backups" in names
+
+    def test_folder_mapped_after_collection_creation(self, test_client, test_db_session):
+        """Test that InventoryFolder.collection_guid is updated after collection creation (T062b)."""
+        connector_guid, connector, folders = self._create_s3_connector_with_folders(
+            test_client, test_db_session
+        )
+
+        # Create collection from first folder
+        request_data = {
+            "connector_guid": connector_guid,
+            "folders": [
+                {
+                    "folder_guid": folders[0].guid,
+                    "name": "Test Collection",
+                    "state": "live"
+                }
+            ]
+        }
+
+        response = test_client.post("/api/collections/from-inventory", json=request_data)
+        assert response.status_code == 200
+
+        created_collection_guid = response.json()["created"][0]["collection_guid"]
+
+        # Refresh folder from database
+        test_db_session.refresh(folders[0])
+
+        # Verify folder is now mapped
+        assert folders[0].collection_guid == created_collection_guid
+        assert folders[0].is_mapped is True
+
+    def test_create_collection_rejects_overlapping_paths(self, test_client, test_db_session):
+        """Test that overlapping paths are rejected."""
+        # Create connector
+        connector_data = {
+            "name": "S3 Overlap Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+
+        # Add overlapping folders (parent and child)
+        parent_folder = InventoryFolder(
+            connector_id=connector.id,
+            path="2020/",
+            object_count=500,
+            total_size_bytes=5000000
+        )
+        child_folder = InventoryFolder(
+            connector_id=connector.id,
+            path="2020/Events/",
+            object_count=100,
+            total_size_bytes=1000000
+        )
+        test_db_session.add_all([parent_folder, child_folder])
+        test_db_session.commit()
+
+        # Try to create collections from both overlapping folders
+        request_data = {
+            "connector_guid": connector_guid,
+            "folders": [
+                {
+                    "folder_guid": parent_folder.guid,
+                    "name": "All 2020",
+                    "state": "live"
+                },
+                {
+                    "folder_guid": child_folder.guid,
+                    "name": "2020 Events",
+                    "state": "live"
+                }
+            ]
+        }
+
+        response = test_client.post("/api/collections/from-inventory", json=request_data)
+
+        # Should return 200 with errors in response body
+        assert response.status_code == 200
+        data = response.json()
+        # One folder should succeed, one should have overlap error
+        assert len(data["created"]) == 1
+        assert len(data["errors"]) == 1
+        assert "overlap" in data["errors"][0]["error"].lower()
+
+    def test_create_collection_rejects_already_mapped_folder(self, test_client, test_db_session):
+        """Test that already-mapped folders are rejected."""
+        # Create connector
+        connector_data = {
+            "name": "S3 Mapped Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+
+        # Add already-mapped folder
+        mapped_folder = InventoryFolder(
+            connector_id=connector.id,
+            path="2020/Events/",
+            object_count=100,
+            total_size_bytes=1000000,
+            collection_guid="col_01hgw2bbg0000000000000001"  # Already mapped
+        )
+        test_db_session.add(mapped_folder)
+        test_db_session.commit()
+
+        # Try to create collection from already-mapped folder
+        request_data = {
+            "connector_guid": connector_guid,
+            "folders": [
+                {
+                    "folder_guid": mapped_folder.guid,
+                    "name": "Duplicate Collection",
+                    "state": "live"
+                }
+            ]
+        }
+
+        response = test_client.post("/api/collections/from-inventory", json=request_data)
+
+        # Should return 200 with error in response body
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["created"]) == 0
+        assert len(data["errors"]) == 1
+        assert "already mapped" in data["errors"][0]["error"].lower()
+
+    def test_create_collection_requires_valid_connector(self, test_client):
+        """Test that invalid connector GUID returns error."""
+        request_data = {
+            "connector_guid": "con_invalid12345678901234",
+            "folders": [
+                {
+                    "folder_guid": "fld_test123456789012345",
+                    "name": "Test Collection",
+                    "state": "live"
+                }
+            ]
+        }
+
+        response = test_client.post("/api/collections/from-inventory", json=request_data)
+
+        assert response.status_code in [400, 404]
+
+    def test_create_collection_requires_valid_folder(self, test_client, test_db_session):
+        """Test that invalid folder GUID returns error."""
+        # Create valid connector
+        connector_data = {
+            "name": "S3 Valid Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        request_data = {
+            "connector_guid": connector_guid,
+            "folders": [
+                {
+                    "folder_guid": "fld_nonexistent12345678901",
+                    "name": "Test Collection",
+                    "state": "live"
+                }
+            ]
+        }
+
+        response = test_client.post("/api/collections/from-inventory", json=request_data)
+
+        # Should return 200 with error in response body (folder not found)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["created"]) == 0
+        assert len(data["errors"]) == 1
+        error_msg = data["errors"][0]["error"].lower()
+        assert "not found" in error_msg or "invalid" in error_msg

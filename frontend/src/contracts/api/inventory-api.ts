@@ -55,6 +55,8 @@ export interface InventoryFolder {
   discovered_at: string
   collection_guid: string | null
   suggested_name: string | null
+  /** Whether folder is eligible for mapping (false if ancestors/descendants are mapped) */
+  is_mappable: boolean
 }
 
 export interface InventoryFolderList {
@@ -91,6 +93,8 @@ export interface InventoryStatus {
   next_scheduled_at: string | null
   folder_count: number
   mapped_folder_count: number
+  /** Count of folders still eligible for mapping (excludes hierarchy-eliminated folders) */
+  mappable_folder_count: number
   current_job: JobSummary | null
 }
 

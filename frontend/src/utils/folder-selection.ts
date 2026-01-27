@@ -205,10 +205,22 @@ export function buildFolderTree(
   for (const path of allPaths) {
     const folder = folderMap.get(path)
     const parts = path.split('/').filter(Boolean)
-    const name = parts[parts.length - 1] || path
+    const rawName = parts[parts.length - 1] || path
+    // Decode URL-encoded characters (e.g., %2C -> comma, %20 -> space)
+    const name = decodeURIComponent(rawName)
 
     const isMapped = folder?.collection_guid !== null && folder?.collection_guid !== undefined
     const { canSelect, reason } = canSelectPath(path, selectionState)
+
+    // Determine if disabled - either from selection constraints or backend's is_mappable
+    // Backend marks folders as not mappable when ancestors or descendants are already mapped to collections
+    let isDisabled = !canSelect
+    let disabledReason = reason
+
+    if (folder && !folder.is_mappable && !isMapped) {
+      isDisabled = true
+      disabledReason = disabledReason || 'A parent or child folder is already mapped to a collection'
+    }
 
     const node: FolderTreeNode = {
       path,
@@ -219,8 +231,8 @@ export function buildFolderTree(
       isExpanded: false,
       isSelected: selectionState.selectedPaths.has(path),
       isMapped,
-      isDisabled: !canSelect,
-      disabledReason: reason
+      isDisabled,
+      disabledReason
     }
 
     nodeMap.set(path, node)

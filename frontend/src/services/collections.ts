@@ -71,7 +71,7 @@ export const deleteCollection = async (
   force = false
 ): Promise<CollectionDeleteResponse | void> => {
   const safeGuid = encodeURIComponent(validateGuid(guid, 'col'))
-  const params = force ? { force_delete: force } : {}
+  const params = force ? { force: true } : {}
   const response = await api.delete<CollectionDeleteResponse>(`/collections/${safeGuid}`, { params })
   // If status is 200, return the result/job info
   if (response.status === 200) {

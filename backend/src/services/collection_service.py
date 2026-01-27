@@ -564,9 +564,17 @@ class CollectionService:
         # Check for analysis results (cascade delete relationship exists)
         result_count = collection.analysis_results.count()
 
-        # Note: Job queue check would require dependency injection of JobQueue
-        # For now, we rely on cascade delete for results
-        job_count = 0
+        # Check for jobs (pending, scheduled, running)
+        from backend.src.models.job import Job, JobStatus
+        job_count = self.db.query(Job).filter(
+            Job.collection_id == collection_id,
+            Job.status.in_([
+                JobStatus.PENDING,
+                JobStatus.SCHEDULED,
+                JobStatus.ASSIGNED,
+                JobStatus.RUNNING
+            ])
+        ).count()
 
         if (result_count > 0 or job_count > 0) and not force:
             logger.warning(
@@ -584,12 +592,43 @@ class CollectionService:
             )
 
         try:
+            # Delete all jobs for this collection when force deleting
+            if force and job_count > 0:
+                deleted_jobs = self.db.query(Job).filter(
+                    Job.collection_id == collection_id
+                ).delete(synchronize_session='fetch')
+                logger.info(
+                    f"Force deleted {deleted_jobs} jobs for collection",
+                    extra={"collection_id": collection_id}
+                )
+
+            # Clear any inventory folder mappings that reference this collection
+            # and track which connectors need mappability recalculation
+            from backend.src.models.inventory_folder import InventoryFolder
+            affected_folders = self.db.query(InventoryFolder).filter(
+                InventoryFolder.collection_guid == collection.guid
+            ).all()
+
+            # Get unique connector IDs for recalculation
+            affected_connector_ids = {f.connector_id for f in affected_folders}
+
+            # Clear the mappings
+            for folder in affected_folders:
+                folder.collection_guid = None
+
             # Invalidate cache
             self.file_cache.invalidate(collection_id)
 
             # Delete collection (cascade will delete results if they exist)
             self.db.delete(collection)
             self.db.commit()
+
+            # Recalculate mappability for affected connectors
+            if affected_connector_ids:
+                from backend.src.services.inventory_service import InventoryService
+                inventory_service = InventoryService(self.db)
+                for connector_id in affected_connector_ids:
+                    inventory_service.recalculate_folder_mappability(connector_id)
 
             logger.info(
                 f"Deleted collection: {collection.name}",

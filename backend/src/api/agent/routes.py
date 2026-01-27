@@ -812,16 +812,27 @@ async def get_job_config(
         collection_path = job.collection.location
 
     # Get pipeline data if applicable
+    # If job has no pipeline assigned, use the default pipeline for pipeline_validation tool
     pipeline_guid = None
     pipeline_data = None
-    if job.pipeline:
-        pipeline_guid = job.pipeline.guid
+    pipeline = job.pipeline
+
+    # Resolve default pipeline if job has no explicit pipeline
+    if not pipeline and job.tool == "pipeline_validation":
+        from backend.src.models.pipeline import Pipeline
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.team_id == ctx.team_id,
+            Pipeline.is_default == True
+        ).first()
+
+    if pipeline:
+        pipeline_guid = pipeline.guid
         pipeline_data = PipelineData(
-            guid=job.pipeline.guid,
-            name=job.pipeline.name,
-            version=job.pipeline_version or job.pipeline.version,  # Use job's version or current
-            nodes=job.pipeline.nodes_json or [],
-            edges=job.pipeline.edges_json or [],
+            guid=pipeline.guid,
+            name=pipeline.name,
+            version=job.pipeline_version or pipeline.version,  # Use job's version or current
+            nodes=pipeline.nodes_json or [],
+            edges=pipeline.edges_json or [],
         )
 
     # Get connector data for ALL jobs with connectors (not just collection_test)

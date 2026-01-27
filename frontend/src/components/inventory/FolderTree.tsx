@@ -16,6 +16,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { Search, FolderTree as FolderTreeIcon, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { InventoryFolder, FolderTreeNode as TreeNodeType } from '@/contracts/api/inventory-api'
 import {
   buildFolderTree,
@@ -209,7 +210,8 @@ export function FolderTree({
   }, [selectedPaths, onSelectionChange])
 
   return (
-    <div className="flex flex-col gap-3">
+    <TooltipProvider>
+      <div className="flex flex-col gap-3">
       {/* Toolbar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         {/* Search */}
@@ -315,6 +317,7 @@ export function FolderTree({
           {mappedPaths.size} already mapped
         </span>
       </div>
-    </div>
+      </div>
+    </TooltipProvider>
   )
 }

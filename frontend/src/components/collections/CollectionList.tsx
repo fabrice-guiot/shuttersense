@@ -70,6 +70,9 @@ export function CollectionList({
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     collection: Collection | null
+    forceDelete?: boolean
+    resultCount?: number
+    jobCount?: number
   }>({ open: false, collection: null })
 
   // Filter collections by tab (client-side tab filtering only)
@@ -91,10 +94,29 @@ export function CollectionList({
     setDeleteDialog({ open: true, collection })
   }
 
-  const handleDeleteConfirm = () => {
-    if (deleteDialog.collection) {
-      onDelete(deleteDialog.collection)
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.collection) return
+
+    try {
+      // If force delete is already requested, pass true
+      await onDelete(deleteDialog.collection, deleteDialog.forceDelete)
       setDeleteDialog({ open: false, collection: null })
+    } catch (err: any) {
+      // Check if error is about existing results/jobs
+      const errorMessage = err?.userMessage || err?.message || ''
+      const resultMatch = errorMessage.match(/(\d+) analysis result\(s\)/)
+      const jobMatch = errorMessage.match(/(\d+) active job\(s\)/)
+
+      if (resultMatch || jobMatch) {
+        // Show force-delete confirmation dialog
+        setDeleteDialog({
+          ...deleteDialog,
+          forceDelete: true,
+          resultCount: resultMatch ? parseInt(resultMatch[1], 10) : 0,
+          jobCount: jobMatch ? parseInt(jobMatch[1], 10) : 0
+        })
+      }
+      // If it's a different error, the hook will show a toast
     }
   }
 
@@ -328,10 +350,34 @@ export function CollectionList({
       <Dialog open={deleteDialog.open} onOpenChange={handleDeleteCancel}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Collection</DialogTitle>
+            <DialogTitle>
+              {deleteDialog.forceDelete ? 'Confirm Deletion with Data' : 'Delete Collection'}
+            </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteDialog.collection?.name}"?
-              This action cannot be undone.
+              {deleteDialog.forceDelete ? (
+                <>
+                  <span className="font-medium text-destructive">
+                    "{deleteDialog.collection?.name}" has existing data:
+                  </span>
+                  <ul className="mt-2 list-disc list-inside text-sm">
+                    {(deleteDialog.resultCount ?? 0) > 0 && (
+                      <li>{deleteDialog.resultCount} analysis result(s)</li>
+                    )}
+                    {(deleteDialog.jobCount ?? 0) > 0 && (
+                      <li>{deleteDialog.jobCount} active job(s)</li>
+                    )}
+                  </ul>
+                  <p className="mt-2">
+                    Deleting this collection will permanently remove all associated data.
+                    This action cannot be undone.
+                  </p>
+                </>
+              ) : (
+                <>
+                  Are you sure you want to delete "{deleteDialog.collection?.name}"?
+                  This action cannot be undone.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -339,7 +385,7 @@ export function CollectionList({
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
+              {deleteDialog.forceDelete ? 'Delete Everything' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -18,47 +18,53 @@
  * Suggest a collection name from a folder path.
  *
  * Transformation steps:
- * 1. Extract the last path component (folder name)
- * 2. URL decode the name
+ * 1. Extract ALL path components
+ * 2. URL decode each component
  * 3. Replace underscores and hyphens with spaces
- * 4. Apply title case
- * 5. Clean up extra whitespace
+ * 4. Apply title case to each
+ * 5. Join with " - " separator
  *
- * @param path - Folder path (e.g., "2020/Summer_Vacation/")
- * @returns Suggested collection name (e.g., "Summer Vacation")
+ * @param path - Folder path (e.g., "2025/Spring%20Training/")
+ * @returns Suggested collection name (e.g., "2025 - Spring Training")
  *
  * @example
- * suggestCollectionName('2020/My%20Photos/') // 'My Photos'
- * suggestCollectionName('events/wedding_ceremony/') // 'Wedding Ceremony'
- * suggestCollectionName('2021-trip-to-paris/') // '2021 Trip To Paris'
+ * suggestCollectionName('2025/Spring%20Training/') // '2025 - Spring Training'
+ * suggestCollectionName('2025/Wildlife/February/') // '2025 - Wildlife - February'
+ * suggestCollectionName('events/wedding_ceremony/') // 'Events - Wedding Ceremony'
  */
 export function suggestCollectionName(path: string): string {
-  // Extract the last path component
   const parts = path.split('/').filter(Boolean)
   if (parts.length === 0) return 'Root'
 
-  let name = parts[parts.length - 1]
+  const transformedParts = parts.map(part => {
+    let name = part
 
-  // URL decode
-  try {
-    name = decodeURIComponent(name)
-  } catch {
-    // If decode fails, use as-is
-  }
+    // URL decode
+    try {
+      name = decodeURIComponent(name)
+    } catch {
+      // If decode fails, use as-is
+    }
 
-  // Replace separators with spaces
-  name = name.replace(/[-_]+/g, ' ')
+    // Replace separators with spaces
+    name = name.replace(/[-_]+/g, ' ')
 
-  // Remove any remaining special characters except spaces and alphanumeric
-  name = name.replace(/[^\w\s]/g, ' ')
+    // Remove any remaining special characters except spaces and alphanumeric
+    name = name.replace(/[^\w\s]/g, ' ')
 
-  // Apply title case
-  name = toTitleCase(name)
+    // Apply title case
+    name = toTitleCase(name)
 
-  // Clean up extra whitespace
-  name = name.replace(/\s+/g, ' ').trim()
+    // Clean up extra whitespace
+    name = name.replace(/\s+/g, ' ').trim()
 
-  return name || 'Unnamed Collection'
+    return name
+  })
+
+  // Filter out empty parts and join with " - "
+  const result = transformedParts.filter(Boolean).join(' - ')
+
+  return result || 'Unnamed Collection'
 }
 
 /**

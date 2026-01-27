@@ -568,3 +568,270 @@ class TestInventoryServiceMapFolderToCollection:
                 collection_guid="col_xxx",
                 team_id=test_team.id
             )
+
+
+# ============================================================================
+# T058a: Unit tests for overlapping path validation
+# ============================================================================
+
+class TestPathsOverlap:
+    """Tests for _paths_overlap private method (T058a).
+
+    These tests verify the path overlap detection used in folder mapping
+    validation to prevent ancestor/descendant collection paths.
+    """
+
+    def test_paths_overlap_ancestor_descendant(self, test_db_session):
+        """Test that ancestor is detected as overlapping with descendant."""
+        service = InventoryService(test_db_session)
+
+        # Ancestor/descendant relationship
+        assert service._paths_overlap("2020/", "2020/Events/") is True
+        assert service._paths_overlap("2020/Events/", "2020/Events/Wedding/") is True
+        assert service._paths_overlap("photos/", "photos/2020/summer/") is True
+
+    def test_paths_overlap_descendant_ancestor(self, test_db_session):
+        """Test that descendant is detected as overlapping with ancestor."""
+        service = InventoryService(test_db_session)
+
+        # Descendant/ancestor relationship (reversed order)
+        assert service._paths_overlap("2020/Events/", "2020/") is True
+        assert service._paths_overlap("2020/Events/Wedding/", "2020/Events/") is True
+
+    def test_paths_overlap_no_relation(self, test_db_session):
+        """Test that unrelated paths do not overlap."""
+        service = InventoryService(test_db_session)
+
+        # Sibling paths
+        assert service._paths_overlap("2020/Events/", "2020/Photos/") is False
+        assert service._paths_overlap("2020/", "2021/") is False
+
+        # Different root paths
+        assert service._paths_overlap("photos/2020/", "backups/2020/") is False
+
+    def test_paths_overlap_same_path(self, test_db_session):
+        """Test that same path overlaps with itself."""
+        service = InventoryService(test_db_session)
+
+        assert service._paths_overlap("2020/", "2020/") is True
+        assert service._paths_overlap("photos/summer/", "photos/summer/") is True
+
+    def test_paths_overlap_handles_missing_trailing_slash(self, test_db_session):
+        """Test that paths without trailing slash are handled correctly."""
+        service = InventoryService(test_db_session)
+
+        # Without trailing slashes
+        assert service._paths_overlap("2020", "2020/Events") is True
+        assert service._paths_overlap("2020/Events", "2020") is True
+
+        # Mixed trailing slashes
+        assert service._paths_overlap("2020/", "2020/Events") is True
+        assert service._paths_overlap("2020", "2020/Events/") is True
+
+    def test_paths_overlap_partial_name_match_not_overlap(self, test_db_session):
+        """Test that partial folder name matches are not considered overlaps."""
+        service = InventoryService(test_db_session)
+
+        # "photo" is not ancestor of "photos/"
+        assert service._paths_overlap("photo/", "photos/") is False
+
+        # "2020" is not ancestor of "2020-backup/"
+        assert service._paths_overlap("2020/", "2020-backup/") is False
+
+        # Similar prefixes that are not ancestors
+        assert service._paths_overlap("events/", "events-archive/") is False
+
+
+# ============================================================================
+# T058b: Unit tests for state validation in validate_folder_mappings
+# ============================================================================
+
+class TestValidateFolderMappings:
+    """Tests for validate_folder_mappings method (T058b).
+
+    These tests verify the validation logic for folder-to-collection mappings,
+    including checks for folder existence, already-mapped status, and path overlaps.
+    """
+
+    def test_validate_valid_mappings(self, test_db_session, test_team, test_connector):
+        """Test validation passes for valid non-overlapping folders."""
+        service = InventoryService(test_db_session)
+
+        # Create folders
+        folder1 = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/Events/",
+            object_count=100,
+            total_size_bytes=1000000
+        )
+        folder2 = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2021/Photos/",
+            object_count=200,
+            total_size_bytes=2000000
+        )
+        test_db_session.add_all([folder1, folder2])
+        test_db_session.commit()
+
+        valid_folders, errors = service.validate_folder_mappings(
+            connector_id=test_connector.id,
+            folder_guids=[folder1.guid, folder2.guid],
+            team_id=test_team.id
+        )
+
+        assert len(valid_folders) == 2
+        assert len(errors) == 0
+
+    def test_validate_nonexistent_folder(self, test_db_session, test_team, test_connector):
+        """Test validation fails for non-existent folder GUIDs."""
+        service = InventoryService(test_db_session)
+
+        valid_folders, errors = service.validate_folder_mappings(
+            connector_id=test_connector.id,
+            folder_guids=["fld_nonexistent12345678901"],
+            team_id=test_team.id
+        )
+
+        assert len(valid_folders) == 0
+        assert len(errors) == 1
+        assert "not found" in errors[0][1].lower() or "invalid" in errors[0][1].lower()
+
+    def test_validate_already_mapped_folder(self, test_db_session, test_team, test_connector):
+        """Test validation fails for folders already mapped to collections."""
+        service = InventoryService(test_db_session)
+
+        # Create folder that's already mapped
+        folder = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/Events/",
+            object_count=100,
+            total_size_bytes=1000000,
+            collection_guid="col_01hgw2bbg0000000000000001"
+        )
+        test_db_session.add(folder)
+        test_db_session.commit()
+
+        valid_folders, errors = service.validate_folder_mappings(
+            connector_id=test_connector.id,
+            folder_guids=[folder.guid],
+            team_id=test_team.id
+        )
+
+        assert len(valid_folders) == 0
+        assert len(errors) == 1
+        assert "already mapped" in errors[0][1].lower()
+
+    def test_validate_overlapping_paths_ancestor_descendant(self, test_db_session, test_team, test_connector):
+        """Test validation fails for overlapping ancestor/descendant paths."""
+        service = InventoryService(test_db_session)
+
+        # Create folders with overlapping paths
+        parent = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/",
+            object_count=100,
+            total_size_bytes=1000000
+        )
+        child = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/Events/",
+            object_count=50,
+            total_size_bytes=500000
+        )
+        test_db_session.add_all([parent, child])
+        test_db_session.commit()
+
+        valid_folders, errors = service.validate_folder_mappings(
+            connector_id=test_connector.id,
+            folder_guids=[parent.guid, child.guid],
+            team_id=test_team.id
+        )
+
+        # One folder should be valid, one should have overlap error
+        assert len(valid_folders) == 1
+        assert len(errors) == 1
+        assert "overlap" in errors[0][1].lower()
+
+    def test_validate_folder_wrong_connector(self, test_db_session, test_team, test_connector):
+        """Test validation fails for folder from different connector."""
+        service = InventoryService(test_db_session)
+
+        # Create another connector
+        other_connector = Connector(
+            name="Other Connector",
+            type=ConnectorType.S3,
+            team_id=test_team.id,
+            credential_location=CredentialLocation.SERVER,
+            credentials="encrypted_creds"
+        )
+        test_db_session.add(other_connector)
+        test_db_session.commit()
+
+        # Create folder on other connector
+        folder = InventoryFolder(
+            connector_id=other_connector.id,
+            path="2020/",
+            object_count=100,
+            total_size_bytes=1000000
+        )
+        test_db_session.add(folder)
+        test_db_session.commit()
+
+        # Try to validate with original connector
+        valid_folders, errors = service.validate_folder_mappings(
+            connector_id=test_connector.id,
+            folder_guids=[folder.guid],
+            team_id=test_team.id
+        )
+
+        assert len(valid_folders) == 0
+        assert len(errors) == 1
+        assert "connector" in errors[0][1].lower()
+
+    def test_validate_empty_folder_list(self, test_db_session, test_team, test_connector):
+        """Test validation with empty folder list returns empty results."""
+        service = InventoryService(test_db_session)
+
+        valid_folders, errors = service.validate_folder_mappings(
+            connector_id=test_connector.id,
+            folder_guids=[],
+            team_id=test_team.id
+        )
+
+        assert len(valid_folders) == 0
+        assert len(errors) == 0
+
+    def test_validate_sibling_paths_allowed(self, test_db_session, test_team, test_connector):
+        """Test validation passes for sibling paths (non-overlapping)."""
+        service = InventoryService(test_db_session)
+
+        # Create sibling folders (same parent, different names)
+        folder1 = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/Events/",
+            object_count=100,
+            total_size_bytes=1000000
+        )
+        folder2 = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/Photos/",
+            object_count=200,
+            total_size_bytes=2000000
+        )
+        folder3 = InventoryFolder(
+            connector_id=test_connector.id,
+            path="2020/Videos/",
+            object_count=50,
+            total_size_bytes=5000000
+        )
+        test_db_session.add_all([folder1, folder2, folder3])
+        test_db_session.commit()
+
+        valid_folders, errors = service.validate_folder_mappings(
+            connector_id=test_connector.id,
+            folder_guids=[folder1.guid, folder2.guid, folder3.guid],
+            team_id=test_team.id
+        )
+
+        assert len(valid_folders) == 3
+        assert len(errors) == 0

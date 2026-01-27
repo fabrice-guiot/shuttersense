@@ -35,8 +35,10 @@ export interface CollectionListProps {
 
   /**
    * Callback when delete button clicked
+   * @param collection - Collection to delete
+   * @param force - If true, force delete even with existing results/jobs
    */
-  onDelete: (collection: Collection) => void
+  onDelete: (collection: Collection, force?: boolean) => void | Promise<void>
 
   /**
    * Callback when refresh/test button clicked

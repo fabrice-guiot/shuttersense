@@ -1328,11 +1328,25 @@ async def create_collections_from_inventory(
                 # Map connector type to collection type (S3 -> S3, GCS -> GCS)
                 collection_type = CollectionType(connector.type.value)
 
+                # Build full location URI from connector's source bucket + folder path
+                # S3: s3://bucket/path/  GCS: gs://bucket/path/
+                # URL decode the path (inventory stores URL-encoded paths like "Spring%20Training")
+                from urllib.parse import unquote
+                decoded_path = unquote(folder.path)
+
+                source_bucket = connector.inventory_config.get("source_bucket", "")
+                if connector.type.value == "s3":
+                    location = f"s3://{source_bucket}/{decoded_path}"
+                elif connector.type.value == "gcs":
+                    location = f"gs://{source_bucket}/{decoded_path}"
+                else:
+                    location = decoded_path  # Fallback
+
                 # Create the collection
                 collection = collection_service.create_collection(
                     name=mapping.name,
                     type=collection_type,
-                    location=folder.path,
+                    location=location,
                     team_id=ctx.team_id,
                     state=state,
                     connector_id=connector.id,
@@ -1358,9 +1372,41 @@ async def create_collections_from_inventory(
                         "collection_guid": collection.guid,
                         "folder_guid": mapping.folder_guid,
                         "folder_path": folder.path,
-                        "name": mapping.name
+                        "collection_name": mapping.name
                     }
                 )
+
+                # Auto-trigger accessibility test for collections with agent-side credentials
+                # This follows the tool-implementation-pattern.md documented pattern
+                from backend.src.models.connector import CredentialLocation
+                from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+                if connector.credential_location == CredentialLocation.AGENT:
+                    # Create collection_test job requiring connector credentials
+                    test_job = Job(
+                        team_id=ctx.team_id,
+                        collection_id=collection.id,
+                        tool="collection_test",
+                        mode="collection",
+                        status=PersistentJobStatus.PENDING,
+                        bound_agent_id=None,  # Any agent with connector credentials
+                        required_capabilities=[f"connector:{connector.guid}"],
+                    )
+                    db.add(test_job)
+                    db.flush()  # Flush to persist job and generate GUID
+
+                    # Set collection accessibility to pending while job runs
+                    collection.is_accessible = None
+                    db.commit()
+
+                    logger.info(
+                        "Auto-created collection_test job for inventory collection",
+                        extra={
+                            "collection_guid": collection.guid,
+                            "job_guid": test_job.guid,
+                            "connector_guid": connector.guid
+                        }
+                    )
 
             except ValueError as e:
                 errors.append(CollectionCreationError(

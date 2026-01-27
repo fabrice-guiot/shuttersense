@@ -110,7 +110,7 @@ export function FolderTreeNode({
         {/* Selection Checkbox */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <div>
+            <div onClick={e => e.stopPropagation()}>
               <Checkbox
                 checked={node.isSelected}
                 onCheckedChange={handleCheckboxChange}
@@ -171,21 +171,6 @@ export function FolderTreeNode({
           )}
         </div>
       </div>
-
-      {/* Children */}
-      {node.isExpanded && hasChildren && (
-        <div>
-          {node.children.map(child => (
-            <FolderTreeNode
-              key={child.path}
-              node={child}
-              depth={depth + 1}
-              onSelect={onSelect}
-              onToggle={onToggle}
-            />
-          ))}
-        </div>
-      )}
     </>
   )
 }

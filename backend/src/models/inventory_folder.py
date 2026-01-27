@@ -105,6 +105,12 @@ class InventoryFolder(Base, GuidMixin):
     # Collection mapping (optional - set when folder is mapped to a Collection)
     collection_guid: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
+    # Mappability tracking - False if:
+    # 1. This folder is directly mapped (collection_guid is set), OR
+    # 2. An ancestor folder is mapped (parent/grandparent has collection_guid), OR
+    # 3. A descendant folder is mapped (child/grandchild has collection_guid)
+    is_mappable: Mapped[bool] = mapped_column(default=True, nullable=False, server_default="1")
+
     # Relationships
     connector: Mapped["Connector"] = relationship(
         "Connector", back_populates="inventory_folders"

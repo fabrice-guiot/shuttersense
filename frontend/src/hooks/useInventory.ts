@@ -442,6 +442,153 @@ export const useInventoryFolders = (
 }
 
 // ============================================================================
+// useAllInventoryFolders Hook
+// ============================================================================
+
+interface UseAllInventoryFoldersOptions {
+  /** Page size for each API call (default 100) */
+  pageSize?: number
+  /** Whether to fetch immediately */
+  autoFetch?: boolean
+}
+
+interface UseAllInventoryFoldersReturn {
+  /** Complete list of all folders */
+  folders: InventoryFolder[]
+  /** Total count of folders */
+  totalCount: number
+  /** Whether folders are being fetched */
+  loading: boolean
+  /** Loading progress (0-100) */
+  progress: number
+  /** Last error message, if any */
+  error: string | null
+  /** Manually fetch all folders */
+  refetch: () => Promise<void>
+}
+
+/**
+ * Hook for fetching ALL inventory folders (auto-paginated).
+ *
+ * Unlike useInventoryFolders which requires manual loadMore calls,
+ * this hook automatically fetches all pages until complete.
+ * Use this for the wizard where the complete folder list is needed.
+ *
+ * @param connectorGuid - Connector GUID to list folders for
+ * @param options - Configuration options
+ *
+ * @example
+ * ```tsx
+ * const { folders, loading, progress } = useAllInventoryFolders(connectorGuid, {
+ *   autoFetch: true
+ * })
+ *
+ * if (loading) {
+ *   return <Progress value={progress} />
+ * }
+ * return <FolderTree folders={folders} />
+ * ```
+ */
+export const useAllInventoryFolders = (
+  connectorGuid: string | null,
+  options: UseAllInventoryFoldersOptions = {}
+): UseAllInventoryFoldersReturn => {
+  const { pageSize = 100, autoFetch = false } = options
+
+  const [folders, setFolders] = useState<InventoryFolder[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+
+  // Track if a fetch is in progress to prevent duplicate calls
+  const fetchingRef = useRef(false)
+
+  const refetch = useCallback(async () => {
+    if (!connectorGuid || fetchingRef.current) return
+
+    fetchingRef.current = true
+    setLoading(true)
+    setError(null)
+    setProgress(0)
+    setFolders([])
+
+    try {
+      // Fetch first page to get total count
+      const firstPage = await inventoryService.listInventoryFolders(connectorGuid, {
+        limit: pageSize,
+        offset: 0
+      })
+
+      const total = firstPage.total_count
+      setTotalCount(total)
+
+      if (total === 0) {
+        setFolders([])
+        setProgress(100)
+        return
+      }
+
+      // Start with first page results
+      let allFolders = [...firstPage.folders]
+      setProgress(Math.round((allFolders.length / total) * 100))
+
+      // Calculate remaining pages needed
+      const remainingCount = total - firstPage.folders.length
+      if (remainingCount > 0) {
+        const pageCount = Math.ceil(remainingCount / pageSize)
+
+        // Fetch remaining pages sequentially to avoid overwhelming the server
+        for (let i = 1; i <= pageCount; i++) {
+          const offset = i * pageSize
+          const page = await inventoryService.listInventoryFolders(connectorGuid, {
+            limit: pageSize,
+            offset
+          })
+
+          allFolders = [...allFolders, ...page.folders]
+          setFolders(allFolders)
+          setProgress(Math.round((allFolders.length / total) * 100))
+
+          // Small delay between requests to be nice to the server
+          if (i < pageCount) {
+            await new Promise(resolve => setTimeout(resolve, 50))
+          }
+        }
+      }
+
+      setFolders(allFolders)
+      setProgress(100)
+    } catch (err: any) {
+      const errorMessage = err.userMessage || 'Failed to fetch inventory folders'
+      setError(errorMessage)
+      toast.error('Failed to fetch inventory folders', {
+        description: errorMessage
+      })
+    } finally {
+      setLoading(false)
+      fetchingRef.current = false
+    }
+  }, [connectorGuid, pageSize])
+
+  // Auto-fetch on mount if enabled
+  useEffect(() => {
+    if (autoFetch && connectorGuid) {
+      refetch()
+    }
+  }, [autoFetch, connectorGuid, refetch])
+
+  return {
+    folders,
+    totalCount,
+    loading,
+    progress,
+    error,
+    refetch
+  }
+}
+
+// ============================================================================
 // useInventoryImport Hook
 // ============================================================================
 

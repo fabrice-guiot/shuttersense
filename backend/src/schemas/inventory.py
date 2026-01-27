@@ -286,6 +286,7 @@ class InventoryFolderResponse(BaseModel):
     discovered_at: datetime = Field(..., description="Discovery timestamp")
     collection_guid: Optional[str] = Field(default=None, description="Mapped collection GUID")
     suggested_name: Optional[str] = Field(default=None, description="Suggested collection name")
+    is_mappable: bool = Field(default=True, description="Whether folder is eligible for mapping")
 
     @property
     def is_mapped(self) -> bool:
@@ -376,6 +377,7 @@ class InventoryStatusResponse(BaseModel):
     next_scheduled_at: Optional[datetime] = Field(default=None, description="Next scheduled import")
     folder_count: int = Field(default=0, ge=0, description="Total discovered folders")
     mapped_folder_count: int = Field(default=0, ge=0, description="Folders mapped to collections")
+    mappable_folder_count: int = Field(default=0, ge=0, description="Folders still eligible for mapping (excludes hierarchy-eliminated folders)")
     current_job: Optional[InventoryJobSummary] = Field(default=None, description="Current running job")
 
     model_config = {

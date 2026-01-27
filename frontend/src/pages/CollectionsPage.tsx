@@ -125,15 +125,10 @@ export default function CollectionsPage() {
     }
   }
 
-  const handleDelete = (collection: Collection) => {
-    deleteCollection(collection.guid, false)
-      .then(() => {
-        // Refresh KPI stats after deleting a collection
-        refetchStats()
-      })
-      .catch(() => {
-        // Error handled by hook
-      })
+  const handleDelete = async (collection: Collection, force = false) => {
+    await deleteCollection(collection.guid, force)
+    // Refresh KPI stats after deleting a collection
+    refetchStats()
   }
 
   const handleInfo = (collection: Collection) => {

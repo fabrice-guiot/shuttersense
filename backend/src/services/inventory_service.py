@@ -763,6 +763,12 @@ class InventoryService:
             InventoryFolder.collection_guid.isnot(None)
         ).scalar() or 0
 
+        # Count folders still eligible for mapping (not mapped and not eliminated by hierarchy)
+        mappable_folder_count = self.db.query(func.count(InventoryFolder.id)).filter(
+            InventoryFolder.connector_id == connector_id,
+            InventoryFolder.is_mappable == True  # noqa: E712
+        ).scalar() or 0
+
         # Get current active job (if any)
         current_job = self.db.query(Job).filter(
             Job.team_id == connector.team_id,
@@ -790,6 +796,7 @@ class InventoryService:
             "next_scheduled_at": None,  # TODO: Calculate from schedule
             "folder_count": folder_count,
             "mapped_folder_count": mapped_folder_count,
+            "mappable_folder_count": mappable_folder_count,
             "current_job": current_job_info
         }
 
@@ -964,6 +971,9 @@ class InventoryService:
         self.db.commit()
         self.db.refresh(folder)
 
+        # Recalculate mappability for all folders of this connector
+        self.recalculate_folder_mappability(folder.connector_id)
+
         logger.info(
             "Mapped inventory folder to collection",
             extra={
@@ -974,6 +984,75 @@ class InventoryService:
         )
 
         return folder
+
+    def recalculate_folder_mappability(self, connector_id: int) -> int:
+        """
+        Recalculate is_mappable for all folders of a connector.
+
+        A folder is NOT mappable if:
+        1. It is directly mapped (collection_guid is set), OR
+        2. An ancestor folder is mapped (parent path has collection_guid), OR
+        3. A descendant folder is mapped (child path has collection_guid)
+
+        Args:
+            connector_id: Connector ID to recalculate folders for
+
+        Returns:
+            Number of folders marked as not mappable
+        """
+        # Get all folders for this connector
+        folders = self.db.query(InventoryFolder).filter(
+            InventoryFolder.connector_id == connector_id
+        ).all()
+
+        # Get paths of all mapped folders
+        mapped_paths = {
+            f.path for f in folders if f.collection_guid is not None
+        }
+
+        not_mappable_count = 0
+
+        for folder in folders:
+            # Check if this folder is mappable
+            is_mappable = True
+
+            # Rule 1: Directly mapped
+            if folder.collection_guid is not None:
+                is_mappable = False
+            else:
+                # Rule 2: Check if any ancestor is mapped
+                # Ancestors have paths that are prefixes of this folder's path
+                for mapped_path in mapped_paths:
+                    if folder.path.startswith(mapped_path) and folder.path != mapped_path:
+                        # mapped_path is an ancestor of folder.path
+                        is_mappable = False
+                        break
+
+                # Rule 3: Check if any descendant is mapped
+                if is_mappable:
+                    for mapped_path in mapped_paths:
+                        if mapped_path.startswith(folder.path) and mapped_path != folder.path:
+                            # mapped_path is a descendant of folder.path
+                            is_mappable = False
+                            break
+
+            folder.is_mappable = is_mappable
+            if not is_mappable:
+                not_mappable_count += 1
+
+        self.db.commit()
+
+        logger.info(
+            "Recalculated folder mappability",
+            extra={
+                "connector_id": connector_id,
+                "total_folders": len(folders),
+                "not_mappable": not_mappable_count,
+                "mapped_folders": len(mapped_paths)
+            }
+        )
+
+        return not_mappable_count
 
     # =========================================================================
     # Helper Methods
