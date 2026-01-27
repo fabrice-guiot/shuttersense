@@ -169,11 +169,9 @@ class JobExecutor:
             # Execute the appropriate tool
             result = await self._execute_tool(job, config)
 
-            # inventory_validate jobs handle their own completion via the
-            # /inventory/validate endpoint, so skip the normal completion flow
-            if tool == "inventory_validate":
-                logger.info(f"Job {job_guid} (inventory_validate) completed via validation endpoint")
-                return
+            # All tools follow the same completion pattern:
+            # - Specialized endpoints (inventory/validate, inventory/folders) only store data
+            # - Job lifecycle is managed here through the standard completion flow
 
             if result.success:
                 # Sign results

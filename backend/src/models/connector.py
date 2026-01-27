@@ -165,6 +165,12 @@ class Connector(Base, GuidMixin):
         cascade="all, delete-orphan",
         lazy="dynamic"
     )
+    analysis_results = relationship(
+        "AnalysisResult",
+        back_populates="connector",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
 
     # Table-level constraints
     __table_args__ = (

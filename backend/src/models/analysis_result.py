@@ -32,34 +32,40 @@ class AnalysisResult(Base, GuidMixin):
     Analysis result model.
 
     Stores the results of tool executions (PhotoStats, Photo Pairing,
-    Pipeline Validation) with structured JSONB data and optional HTML reports.
+    Pipeline Validation, Inventory Validation, Inventory Import) with
+    structured JSONB data and optional HTML reports.
 
     Attributes:
         id: Primary key
         uuid: UUIDv7 for external identification (inherited from GuidMixin)
         guid: GUID string property (res_xxx, inherited from GuidMixin)
-        collection_id: Foreign key to Collection (CASCADE on delete, nullable for display-graph mode)
-        tool: Tool name ('photostats', 'photo_pairing', 'pipeline_validation')
-        pipeline_id: Foreign key to Pipeline (SET NULL on delete)
+        collection_id: Foreign key to Collection (CASCADE on delete, nullable)
+        pipeline_id: Foreign key to Pipeline (SET NULL on delete, nullable)
         pipeline_version: Pipeline version used at execution time (nullable)
+        connector_id: Foreign key to Connector (CASCADE on delete, nullable, Issue #107)
+        tool: Tool name ('photostats', 'photo_pairing', 'pipeline_validation',
+              'inventory_validate', 'inventory_import')
         status: Result status (COMPLETED, FAILED, CANCELLED)
         started_at: Execution start timestamp
         completed_at: Execution end timestamp
         duration_seconds: Execution duration
         results_json: Tool-specific structured results (JSONB)
-        report_html: Pre-rendered HTML report for download
+        report_html: Pre-rendered HTML report for download (optional)
         error_message: Error details if failed
         files_scanned: Number of files processed
         issues_found: Number of issues detected
         created_at: Record creation timestamp
         collection: Related collection (many-to-one, nullable)
         pipeline: Related pipeline (many-to-one, nullable)
+        connector: Related connector (many-to-one, nullable, Issue #107)
+
+    Tool-Specific FK Requirements:
+        - PhotoStats/PhotoPairing: collection_id required
+        - Pipeline Validation (collection mode): collection_id required, pipeline_id from collection
+        - Pipeline Validation (display-graph mode): pipeline_id required, no collection
+        - Inventory Validate/Import: connector_id required (Issue #107)
 
     Constraints:
-        - collection_id optional (NULL for pipeline-only display-graph mode)
-        - tool must be one of: 'photostats', 'photo_pairing', 'pipeline_validation'
-        - PhotoStats/PhotoPairing require collection_id
-        - Pipeline Validation display-graph mode: collection_id NULL, pipeline_id required
         - completed_at must be >= started_at
         - duration_seconds must be >= 0
         - results_json must be valid JSON
@@ -72,6 +78,7 @@ class AnalysisResult(Base, GuidMixin):
         - idx_results_tool: tool
         - idx_results_created: created_at DESC
         - idx_results_collection_tool_date: (collection_id, tool, created_at DESC)
+        - idx_results_connector: connector_id (Issue #107)
     """
 
     __tablename__ = "analysis_results"
@@ -89,7 +96,7 @@ class AnalysisResult(Base, GuidMixin):
     collection_id = Column(
         Integer,
         ForeignKey("collections.id", ondelete="CASCADE"),
-        nullable=True,  # Nullable for pipeline-only validation (display-graph mode)
+        nullable=True,  # Nullable for pipeline-only validation (display-graph mode) or inventory tools
         index=True
     )
     pipeline_id = Column(
@@ -99,6 +106,14 @@ class AnalysisResult(Base, GuidMixin):
         index=True
     )
     pipeline_version = Column(Integer, nullable=True)
+
+    # Connector FK for inventory tools (Issue #107)
+    connector_id = Column(
+        Integer,
+        ForeignKey("connectors.id", ondelete="CASCADE"),
+        nullable=True,  # Nullable - only used by inventory_validate/inventory_import tools
+        index=True
+    )
 
     # Core fields
     tool = Column(String(50), nullable=False, index=True)
@@ -151,6 +166,7 @@ class AnalysisResult(Base, GuidMixin):
     # Relationships
     collection = relationship("Collection", back_populates="analysis_results")
     pipeline = relationship("Pipeline", back_populates="analysis_results")
+    connector = relationship("Connector", back_populates="analysis_results")
 
     # Indexes and Constraints
     __table_args__ = (
@@ -158,6 +174,8 @@ class AnalysisResult(Base, GuidMixin):
         Index("idx_results_tool", "tool"),
         Index("idx_results_created", "created_at"),
         Index("idx_results_collection_tool_date", "collection_id", "tool", "created_at"),
+        # Connector index for inventory tools (Issue #107)
+        Index("idx_results_connector", "connector_id"),
         # Storage Optimization Indexes (Issue #92)
         Index("idx_results_cleanup", "team_id", "status", "created_at"),
         # Storage Optimization Constraints (Issue #92)

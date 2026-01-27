@@ -718,8 +718,15 @@ class JobCoordinatorService:
         """
         job = self._get_job_for_agent(job_guid, agent_id, team_id)
 
-        # Update progress
-        job.progress = progress
+        # Merge progress, preserving metadata fields set at job creation
+        # (Issue #107: connector_id, connector_guid for inventory tools)
+        existing_progress = job.progress or {}
+        preserved_fields = ["connector_id", "connector_guid", "config"]
+        merged_progress = {**progress}
+        for field in preserved_fields:
+            if field in existing_progress and field not in progress:
+                merged_progress[field] = existing_progress[field]
+        job.progress = merged_progress
 
         # If job is still ASSIGNED, mark as RUNNING
         if job.status == JobStatus.ASSIGNED:
@@ -1338,11 +1345,19 @@ class JobCoordinatorService:
             f"Creating AnalysisResult for job {job.guid}: input_state_hash={hash_preview}"
         )
 
+        # Extract connector_id for inventory tools (Issue #107)
+        # Inventory jobs store connector_id in their progress data
+        connector_id = None
+        if job.tool in ("inventory_validate", "inventory_import"):
+            progress = job.progress or {}
+            connector_id = progress.get("connector_id")
+
         result = AnalysisResult(
             team_id=job.team_id,
             collection_id=job.collection_id,
             pipeline_id=job.pipeline_id,
             pipeline_version=job.pipeline_version,
+            connector_id=connector_id,  # Issue #107: For inventory tools
             tool=job.tool,
             status=ResultStatus.COMPLETED,
             started_at=started_at,

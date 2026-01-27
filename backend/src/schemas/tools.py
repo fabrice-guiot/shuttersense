@@ -27,6 +27,7 @@ class ToolType(str, Enum):
     PIPELINE_VALIDATION = "pipeline_validation"
     COLLECTION_TEST = "collection_test"  # Accessibility test for LOCAL collections
     INVENTORY_VALIDATE = "inventory_validate"  # Validate inventory configuration
+    INVENTORY_IMPORT = "inventory_import"  # Import folders from bucket inventory
 
 
 class ToolMode(str, Enum):
@@ -34,6 +35,7 @@ class ToolMode(str, Enum):
     COLLECTION = "collection"      # Validate files in a collection against pipeline
     DISPLAY_GRAPH = "display_graph"  # Validate pipeline definition only (no collection)
     VALIDATION = "validation"      # Validate inventory configuration (no collection)
+    IMPORT = "import"              # Import inventory folders from manifest
 
 
 class JobStatus(str, Enum):

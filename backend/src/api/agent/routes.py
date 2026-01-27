@@ -829,8 +829,8 @@ async def get_job_config(
     connector_data = None
     inventory_config = None
 
-    # For inventory_validate jobs, get connector from job.progress
-    if job.tool == "inventory_validate" and job.progress:
+    # For inventory_validate and inventory_import jobs, get connector from job.progress
+    if job.tool in ("inventory_validate", "inventory_import") and job.progress:
         connector_guid = job.progress.get("connector_guid")
         inventory_config = job.progress.get("config")
         if connector_guid:
@@ -2043,37 +2043,13 @@ async def report_inventory_validation(
             detail="Connector not found"
         )
 
-    # Complete the job
-    coordinator = JobCoordinatorService(db)
-    try:
-        if data.success:
-            # Complete job successfully
-            job.status = JobStatus.COMPLETED
-            job.completed_at = datetime.utcnow()
-        else:
-            # Mark job as failed
-            job.status = JobStatus.FAILED
-            job.error_message = data.error_message
-            job.completed_at = datetime.utcnow()
+    db.commit()
 
-        db.commit()
-
-        # Broadcast pool status update
-        pool_status = service.get_pool_status(ctx.team_id)
-        manager = get_connection_manager()
-        asyncio.create_task(
-            manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
-        )
-
-        # Broadcast job update
-        job_response = _db_job_to_response(job)
-        asyncio.create_task(
-            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
-        )
-
-    except Exception as e:
-        logger.error(f"Error completing validation job: {str(e)}", exc_info=True)
-        # Continue - validation status is already updated
+    # NOTE: Job completion is NOT done here.
+    # The agent should call the standard /jobs/{guid}/complete endpoint after
+    # reporting validation results. This follows the standard tool pattern where
+    # specialized data endpoints only store intermediate results, and job lifecycle
+    # is managed by the standard completion flow.
 
     status_str = "validated" if data.success else "failed"
     message = "Inventory configuration validated successfully" if data.success else f"Validation failed: {data.error_message}"
@@ -2209,34 +2185,13 @@ async def report_inventory_folders(
             detail=f"Failed to store folders: {str(e)}"
         )
 
-    # Complete the job successfully
-    coordinator = JobCoordinatorService(db)
-    try:
-        job.status = JobStatus.COMPLETED
-        job.completed_at = datetime.utcnow()
-        job.results = {
-            "folders_count": len(data.folders),
-            "total_files": data.total_files,
-            "total_size": data.total_size
-        }
-        db.commit()
+    db.commit()
 
-        # Broadcast pool status update
-        pool_status = service.get_pool_status(ctx.team_id)
-        manager = get_connection_manager()
-        asyncio.create_task(
-            manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
-        )
-
-        # Broadcast job update
-        job_response = _db_job_to_response(job)
-        asyncio.create_task(
-            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
-        )
-
-    except Exception as e:
-        logger.error(f"Error completing import job: {str(e)}", exc_info=True)
-        # Continue - folders are already stored
+    # NOTE: Job completion is NOT done here.
+    # The agent should call the standard /jobs/{guid}/complete endpoint after
+    # reporting folders. This follows the standard tool pattern where specialized
+    # data endpoints only store intermediate results, and job lifecycle is managed
+    # by the standard completion flow.
 
     logger.info(
         f"Inventory import completed",

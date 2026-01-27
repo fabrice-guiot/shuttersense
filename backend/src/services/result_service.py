@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, asc
 
 from backend.src.models import AnalysisResult, Collection, Pipeline, ResultStatus
+from backend.src.models.connector import Connector
 from backend.src.schemas.results import (
     SortField, SortOrder, AnalysisResultSummary, AnalysisResultResponse,
     ResultStatsResponse, ResultListResponse
@@ -223,7 +224,7 @@ class ResultService:
         # Apply pagination
         results = query.offset(offset).limit(limit).all()
 
-        # Convert to summaries with collection and pipeline names
+        # Convert to summaries with collection, pipeline, and connector names
         summaries = []
         for result in results:
             collection = self.db.query(Collection).filter(
@@ -237,6 +238,13 @@ class ResultService:
                     Pipeline.id == result.pipeline_id
                 ).first()
 
+            # Get connector info for inventory tools (Issue #107)
+            connector = None
+            if result.connector_id:
+                connector = self.db.query(Connector).filter(
+                    Connector.id == result.connector_id
+                ).first()
+
             summaries.append(AnalysisResultSummary(
                 guid=result.guid,
                 collection_guid=collection.guid if collection else None,
@@ -245,6 +253,9 @@ class ResultService:
                 pipeline_guid=pipeline.guid if pipeline else None,
                 pipeline_version=result.pipeline_version,
                 pipeline_name=pipeline.name if pipeline else None,
+                # Connector fields for inventory tools (Issue #107)
+                connector_guid=connector.guid if connector else None,
+                connector_name=connector.name if connector else None,
                 status=result.status.value if result.status else "UNKNOWN",
                 started_at=result.started_at,
                 completed_at=result.completed_at,
@@ -316,6 +327,13 @@ class ResultService:
                 Pipeline.id == result.pipeline_id
             ).first()
 
+        # Get connector info for inventory tools (Issue #107)
+        connector = None
+        if result.connector_id:
+            connector = self.db.query(Connector).filter(
+                Connector.id == result.connector_id
+            ).first()
+
         # Process results: truncate large arrays and remove internal IDs
         processed_results = truncate_results(result.results_json or {})
         processed_results = sanitize_results(processed_results)
@@ -352,6 +370,9 @@ class ResultService:
             pipeline_guid=pipeline.guid if pipeline else None,
             pipeline_version=result.pipeline_version,
             pipeline_name=pipeline.name if pipeline else None,
+            # Connector fields for inventory tools (Issue #107)
+            connector_guid=connector.guid if connector else None,
+            connector_name=connector.name if connector else None,
             status=result.status.value if result.status else "UNKNOWN",
             started_at=result.started_at,
             completed_at=result.completed_at,

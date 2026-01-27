@@ -11,7 +11,7 @@
 
 export type ResultStatus = 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'NO_CHANGE'
 
-export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation' | 'collection_test' | 'inventory_validate'
+export type ToolType = 'photostats' | 'photo_pairing' | 'pipeline_validation' | 'collection_test' | 'inventory_validate' | 'inventory_import'
 
 export type SortField = 'created_at' | 'duration_seconds' | 'files_scanned'
 
@@ -109,14 +109,19 @@ export type ToolResults = (PhotoStatsResults | PhotoPairingResults | PipelineVal
 
 export interface AnalysisResultSummary {
   guid: string  // External identifier (res_xxx)
-  /** Collection GUID (null for display_graph mode) */
+  /** Collection GUID (null for display_graph mode or inventory tools) */
   collection_guid: string | null
-  /** Collection name (null for display_graph mode) */
+  /** Collection name (null for display_graph mode or inventory tools) */
   collection_name: string | null
   tool: ToolType
   pipeline_guid: string | null  // null for PhotoStats/PhotoPairing
   pipeline_version: number | null  // version used at execution time
   pipeline_name: string | null  // name of pipeline used
+  // Connector fields for inventory tools (Issue #107)
+  /** Connector GUID (null except for inventory tools) */
+  connector_guid: string | null
+  /** Connector name (null except for inventory tools) */
+  connector_name: string | null
   status: ResultStatus
   started_at: string // ISO 8601 timestamp
   completed_at: string // ISO 8601 timestamp
@@ -135,14 +140,19 @@ export interface AnalysisResult {
   guid: string  // External identifier (res_xxx)
   /** External ID (res_xxx format) for URL access */
   external_id: string
-  /** Collection GUID (null for display_graph mode) */
+  /** Collection GUID (null for display_graph mode or inventory tools) */
   collection_guid: string | null
-  /** Collection name (null for display_graph mode) */
+  /** Collection name (null for display_graph mode or inventory tools) */
   collection_name: string | null
   tool: ToolType
   pipeline_guid: string | null  // null for PhotoStats/PhotoPairing
   pipeline_version: number | null  // version used at execution time
   pipeline_name: string | null  // name of pipeline used
+  // Connector fields for inventory tools (Issue #107)
+  /** Connector GUID (null except for inventory tools) */
+  connector_guid: string | null
+  /** Connector name (null except for inventory tools) */
+  connector_name: string | null
   status: ResultStatus
   started_at: string // ISO 8601 timestamp
   completed_at: string // ISO 8601 timestamp

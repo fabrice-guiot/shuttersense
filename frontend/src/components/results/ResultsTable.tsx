@@ -90,7 +90,8 @@ const TOOL_LABELS: Record<ToolType, string> = {
   photo_pairing: 'Photo Pairing',
   pipeline_validation: 'Pipeline Validation',
   collection_test: 'Collection Test',
-  inventory_validate: 'Inventory Validation'
+  inventory_validate: 'Inventory Validation',
+  inventory_import: 'Inventory Import'
 }
 
 // ============================================================================
@@ -218,6 +219,7 @@ export function ResultsTable({
             <TableHeader>
               <TableRow>
                 <TableHead>Collection</TableHead>
+                <TableHead>Connector</TableHead>
                 <TableHead>Tool</TableHead>
                 <TableHead>Pipeline</TableHead>
                 <TableHead>Status</TableHead>
@@ -233,6 +235,11 @@ export function ResultsTable({
                 <TableRow key={result.guid}>
                   <TableCell className="font-medium">
                     {result.collection_name ?? (
+                      <span className="text-muted-foreground text-sm">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {result.connector_name ?? (
                       <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>

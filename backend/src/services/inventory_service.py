@@ -675,10 +675,10 @@ class InventoryService:
         connector = self._get_connector(connector_id, team_id)
 
         # Get existing folders for this connector
+        # Note: team isolation is enforced via connector_id (connector belongs to team)
         existing_folders = {
             f.path: f for f in self.db.query(InventoryFolder).filter(
-                InventoryFolder.connector_id == connector_id,
-                InventoryFolder.team_id == team_id
+                InventoryFolder.connector_id == connector_id
             ).all()
         }
 
@@ -698,8 +698,8 @@ class InventoryService:
                 folder.discovered_at = now
             else:
                 # Create new folder
+                # Note: team isolation is enforced via connector_id (connector belongs to team)
                 folder = InventoryFolder(
-                    team_id=team_id,
                     connector_id=connector_id,
                     path=path,
                     object_count=file_count,
