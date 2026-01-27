@@ -104,14 +104,14 @@
 ### Backend Job Trigger
 
 - [x] T038 [US2] Create POST endpoint `/api/connectors/{guid}/inventory/import` to trigger import job
-- [ ] T039 [US2] Add concurrent import prevention (409 if job already running for connector)
-- [ ] T040 [US2] Extend JobCoordinatorService for inventory job handling
+- [x] T039 [US2] Add concurrent import prevention (409 if job already running for connector)
+- [x] T040 [US2] Extend JobCoordinatorService for inventory job handling
 
 ### Frontend Import UI
 
-- [ ] T041 [P] [US2] Add "Import Inventory" button to connector inventory section (disabled if not validated)
-- [ ] T042 [US2] Implement job status polling and progress display during import
-- [ ] T043 [US2] Display folder count after import completes
+- [x] T041 [P] [US2] Add "Import Inventory" button to connector inventory section (disabled if not validated)
+- [x] T042 [US2] Implement job status polling and progress display during import
+- [x] T043 [US2] Display folder count after import completes
 
 ### Tests for US2
 
@@ -119,12 +119,12 @@
 - [x] T033a [P] [US2] Unit tests for GCS manifest parser (report_shards_file_names array) in `agent/tests/unit/test_inventory_parser.py`
 - [x] T033b [P] [US2] Unit tests for folder extraction algorithm (edge cases: deep nesting, URL-encoded paths, trailing slashes) in `agent/tests/unit/test_inventory_parser.py`
 - [x] T033c [P] [US2] Unit tests for streaming CSV parser (chunked processing, memory efficiency) in `agent/tests/unit/test_inventory_parser.py`
-- [ ] T033d [P] [US2] Unit tests for streaming Parquet parser (chunked processing, memory efficiency, same record stream output as CSV) in `agent/tests/unit/test_inventory_parser.py`
-- [ ] T033e [P] [US2] Unit tests for InventoryImportTool Parquet format detection and routing in `agent/tests/unit/test_inventory_import_tool.py`
+- [x] T033d [P] [US2] Unit tests for streaming Parquet parser (chunked processing, memory efficiency, same record stream output as CSV) in `agent/tests/unit/test_inventory_parser.py`
+- [x] T033e [P] [US2] Unit tests for InventoryImportTool Parquet format detection and routing in `agent/tests/unit/test_inventory_parser.py`
 - [ ] T034 [US2] Integration tests for InventoryImportTool in `agent/tests/integration/test_inventory_import_tool.py`
 - [ ] T034a [US2] Integration tests for InventoryImportTool with Parquet manifests in `agent/tests/integration/test_inventory_import_tool.py`
-- [ ] T040a [US2] Integration test for folder storage endpoint (upsert behavior, duplicate handling) in `backend/tests/integration/api/test_inventory_api.py`
-- [ ] T040b [US2] Integration test for concurrent import prevention (409 response) in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T040a [US2] Integration test for folder storage endpoint (upsert behavior, duplicate handling) in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T040b [US2] Integration test for concurrent import prevention (409 response) in `backend/tests/integration/api/test_inventory_api.py`
 
 **Checkpoint**: Users can trigger inventory imports, agents process data, folders are discovered and stored
 
