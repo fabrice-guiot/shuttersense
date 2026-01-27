@@ -1,6 +1,6 @@
 """Add inventory_latest_manifest column to connectors.
 
-Revision ID: 054_add_inventory_latest_manifest
+Revision ID: 054_add_latest_manifest
 Revises: 053_inventory_import_tables
 Create Date: 2026-01-27
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '054_add_inventory_latest_manifest'
+revision = '054_add_latest_manifest'
 down_revision = '053_inventory_import_tables'
 branch_labels = None
 depends_on = None
