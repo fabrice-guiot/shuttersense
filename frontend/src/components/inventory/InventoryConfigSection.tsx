@@ -118,10 +118,12 @@ export function InventoryConfigSection({
     status?.validation_status === 'validated' &&
     !status?.current_job
 
-  // Show validate button when validation failed (for retry) or is pending
+  // Show validate button when validation failed (retry), pending, or validated (refresh)
   const canValidate =
     hasConfig &&
-    (status?.validation_status === 'failed' || status?.validation_status === 'pending') &&
+    (status?.validation_status === 'failed' ||
+      status?.validation_status === 'pending' ||
+      status?.validation_status === 'validated') &&
     !status?.current_job
 
   return (
@@ -173,7 +175,7 @@ export function InventoryConfigSection({
         {/* Actions */}
         {hasConfig && (
           <div className="flex flex-wrap gap-2">
-            {/* Validate/Retry Button - shown when validation failed or pending */}
+            {/* Validate/Retry/Refresh Button - shown when validation failed, pending, or validated */}
             {canValidate && (
               <Button
                 variant="outline"
@@ -186,7 +188,9 @@ export function InventoryConfigSection({
                   ? 'Validating...'
                   : status?.validation_status === 'failed'
                     ? 'Retry Validation'
-                    : 'Validate'}
+                    : status?.validation_status === 'validated'
+                      ? 'Refresh Status'
+                      : 'Validate'}
               </Button>
             )}
 

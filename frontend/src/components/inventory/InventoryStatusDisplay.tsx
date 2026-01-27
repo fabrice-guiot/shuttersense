@@ -7,7 +7,7 @@
  * Issue #107: Cloud Storage Bucket Inventory Import
  */
 
-import { CheckCircle, XCircle, Loader2, Clock, FolderOpen, AlertCircle, Archive } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Clock, FolderOpen, AlertCircle, Archive, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
@@ -107,6 +107,14 @@ export function InventoryStatusDisplay({
           {validationConfig.label}
         </Badge>
       </div>
+
+      {/* Latest Manifest - shown when validated */}
+      {status.validation_status === 'validated' && status.latest_manifest && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <FileText className="h-4 w-4" />
+          <span>Latest manifest: <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{status.latest_manifest}</code></span>
+        </div>
+      )}
 
       {/* Validation Error */}
       {status.validation_status === 'failed' && status.validation_error && (
