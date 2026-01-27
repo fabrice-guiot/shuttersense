@@ -32,6 +32,13 @@ from backend.src.schemas.collection import (
     CollectionRefreshResponse,
     CollectionStatsResponse,
 )
+from backend.src.schemas.inventory import (
+    CreateCollectionsFromInventoryRequest,
+    CreateCollectionsFromInventoryResponse,
+    CollectionCreatedSummary,
+    CollectionCreationError,
+)
+from backend.src.services.inventory_service import InventoryService
 from backend.src.services.collection_service import CollectionService
 from backend.src.services.config_service import ConfigService
 from backend.src.services.connector_service import ConnectorService
@@ -1220,4 +1227,171 @@ async def clear_pipeline(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clear pipeline: {str(e)}"
+        )
+
+
+# ============================================================================
+# Inventory-based Collection Creation (Issue #107)
+# ============================================================================
+
+@router.post(
+    "/from-inventory",
+    response_model=CreateCollectionsFromInventoryResponse,
+    summary="Create collections from inventory folders",
+    description="Batch create collections from selected inventory folders"
+)
+async def create_collections_from_inventory(
+    request: CreateCollectionsFromInventoryRequest,
+    ctx: TenantContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+    collection_service: CollectionService = Depends(get_collection_service)
+) -> CreateCollectionsFromInventoryResponse:
+    """
+    Create multiple collections from inventory folders.
+
+    This endpoint supports the two-step wizard for mapping folders to collections:
+    1. User selects folders from the folder tree (enforced in frontend)
+    2. User configures name/state for each and submits here
+
+    Request Body:
+        connector_guid: GUID of the connector
+        folders: List of folder mappings with name, state, and optional pipeline
+
+    Returns:
+        CreateCollectionsFromInventoryResponse with created list and errors list
+
+    Example:
+        POST /api/collections/from-inventory
+        {
+            "connector_guid": "con_01hgw...",
+            "folders": [
+                {"folder_guid": "fld_01hgw...", "name": "Vacation 2020", "state": "archived"}
+            ]
+        }
+    """
+    inventory_service = InventoryService(db)
+    created: list[CollectionCreatedSummary] = []
+    errors: list[CollectionCreationError] = []
+
+    try:
+        # Resolve connector
+        connector = inventory_service.get_connector_by_guid(
+            request.connector_guid, team_id=ctx.team_id
+        )
+
+        # Validate all folder mappings first
+        folder_guids = [m.folder_guid for m in request.folders]
+        valid_folders, validation_errors = inventory_service.validate_folder_mappings(
+            connector_id=connector.id,
+            folder_guids=folder_guids,
+            team_id=ctx.team_id
+        )
+
+        # Add validation errors
+        for folder_guid, error_msg in validation_errors:
+            errors.append(CollectionCreationError(
+                folder_guid=folder_guid,
+                error=error_msg
+            ))
+
+        # Map folder GUIDs to folder objects for easy lookup
+        folder_map = {f.guid: f for f in valid_folders}
+
+        # Create collections for valid folders
+        for mapping in request.folders:
+            if mapping.folder_guid not in folder_map:
+                continue  # Already reported in validation errors
+
+            folder = folder_map[mapping.folder_guid]
+
+            try:
+                # Resolve pipeline if provided
+                pipeline_id = None
+                if mapping.pipeline_guid:
+                    pipeline_uuid = GuidService.parse_identifier(
+                        mapping.pipeline_guid, expected_prefix="pip"
+                    )
+                    pipeline = db.query(Pipeline).filter(
+                        Pipeline.uuid == pipeline_uuid
+                    ).first()
+                    if not pipeline:
+                        errors.append(CollectionCreationError(
+                            folder_guid=mapping.folder_guid,
+                            error=f"Pipeline not found: {mapping.pipeline_guid}"
+                        ))
+                        continue
+                    pipeline_id = pipeline.id
+
+                # Map state string to enum
+                state = CollectionState[mapping.state.upper()]
+
+                # Map connector type to collection type (S3 -> S3, GCS -> GCS)
+                collection_type = CollectionType(connector.type.value)
+
+                # Create the collection
+                collection = collection_service.create_collection(
+                    name=mapping.name,
+                    type=collection_type,
+                    location=folder.path,
+                    team_id=ctx.team_id,
+                    state=state,
+                    connector_id=connector.id,
+                    pipeline_id=pipeline_id
+                )
+
+                # Map folder to collection
+                inventory_service.map_folder_to_collection(
+                    folder_id=folder.id,
+                    collection_guid=collection.guid,
+                    team_id=ctx.team_id
+                )
+
+                created.append(CollectionCreatedSummary(
+                    collection_guid=collection.guid,
+                    folder_guid=mapping.folder_guid,
+                    name=mapping.name
+                ))
+
+                logger.info(
+                    "Created collection from inventory folder",
+                    extra={
+                        "collection_guid": collection.guid,
+                        "folder_guid": mapping.folder_guid,
+                        "folder_path": folder.path,
+                        "name": mapping.name
+                    }
+                )
+
+            except ValueError as e:
+                errors.append(CollectionCreationError(
+                    folder_guid=mapping.folder_guid,
+                    error=str(e)
+                ))
+            except Exception as e:
+                logger.error(
+                    f"Error creating collection from folder: {str(e)}",
+                    extra={"folder_guid": mapping.folder_guid}
+                )
+                errors.append(CollectionCreationError(
+                    folder_guid=mapping.folder_guid,
+                    error=f"Internal error: {str(e)}"
+                ))
+
+        return CreateCollectionsFromInventoryResponse(
+            created=created,
+            errors=errors
+        )
+
+    except ValueError as e:
+        logger.warning(f"Invalid request: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating collections from inventory: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create collections: {str(e)}"
         )

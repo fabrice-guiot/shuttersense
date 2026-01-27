@@ -1040,3 +1040,116 @@ class InventoryService:
             raise NotFoundError("Connector", guid)
 
         return connector
+
+    def get_folder_by_guid(
+        self,
+        guid: str,
+        team_id: Optional[int] = None
+    ) -> InventoryFolder:
+        """
+        Get inventory folder by GUID with optional team filtering.
+
+        Args:
+            guid: Folder GUID (fld_xxx)
+            team_id: Team ID for tenant isolation (via connector)
+
+        Returns:
+            InventoryFolder instance
+
+        Raises:
+            NotFoundError: If folder not found
+            ValueError: If GUID format is invalid
+        """
+        uuid_value = GuidService.parse_identifier(guid, expected_prefix="fld")
+        query = self.db.query(InventoryFolder).filter(InventoryFolder.uuid == uuid_value)
+
+        folder = query.first()
+
+        if not folder:
+            raise NotFoundError("InventoryFolder", guid)
+
+        # Verify connector belongs to team if team_id provided
+        if team_id is not None:
+            connector = self.db.query(Connector).filter(
+                Connector.id == folder.connector_id,
+                Connector.team_id == team_id
+            ).first()
+            if not connector:
+                raise NotFoundError("InventoryFolder", guid)
+
+        return folder
+
+    # =========================================================================
+    # Collection Creation from Inventory
+    # =========================================================================
+
+    def validate_folder_mappings(
+        self,
+        connector_id: int,
+        folder_guids: List[str],
+        team_id: Optional[int] = None
+    ) -> Tuple[List[InventoryFolder], List[Tuple[str, str]]]:
+        """
+        Validate folder mappings for collection creation.
+
+        Checks:
+        - All folders exist and belong to connector
+        - No folders are already mapped to collections
+        - No overlapping paths (ancestor/descendant relations)
+
+        Args:
+            connector_id: Internal connector ID
+            folder_guids: List of folder GUIDs to validate
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Tuple of (valid_folders, errors) where errors is list of (folder_guid, error_message)
+        """
+        connector = self._get_connector(connector_id, team_id)
+        valid_folders: List[InventoryFolder] = []
+        errors: List[Tuple[str, str]] = []
+
+        # Parse all GUIDs and fetch folders
+        folder_map: Dict[str, InventoryFolder] = {}
+        for guid in folder_guids:
+            try:
+                folder = self.get_folder_by_guid(guid, team_id)
+
+                # Check folder belongs to this connector
+                if folder.connector_id != connector_id:
+                    errors.append((guid, "Folder does not belong to this connector"))
+                    continue
+
+                # Check folder is not already mapped
+                if folder.collection_guid is not None:
+                    errors.append((guid, "Folder is already mapped to a collection"))
+                    continue
+
+                folder_map[guid] = folder
+            except NotFoundError:
+                errors.append((guid, "Folder not found"))
+            except ValueError as e:
+                errors.append((guid, str(e)))
+
+        # Check for overlapping paths
+        paths = [(guid, folder.path) for guid, folder in folder_map.items()]
+
+        for i, (guid1, path1) in enumerate(paths):
+            for guid2, path2 in paths[i + 1:]:
+                if self._paths_overlap(path1, path2):
+                    errors.append((guid1, f"Path overlaps with another selected folder: {path2}"))
+                    # Remove from valid
+                    if guid1 in folder_map:
+                        del folder_map[guid1]
+                    break
+
+        valid_folders = list(folder_map.values())
+        return valid_folders, errors
+
+    def _paths_overlap(self, path1: str, path2: str) -> bool:
+        """Check if two paths have an ancestor/descendant relationship."""
+        # Normalize paths to end with /
+        p1 = path1 if path1.endswith('/') else path1 + '/'
+        p2 = path2 if path2.endswith('/') else path2 + '/'
+
+        return p1.startswith(p2) or p2.startswith(p1)

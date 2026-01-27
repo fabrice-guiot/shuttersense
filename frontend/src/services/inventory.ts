@@ -158,3 +158,39 @@ export const triggerInventoryImport = async (
   )
   return response.data
 }
+
+// ============================================================================
+// Collection Creation from Inventory API
+// ============================================================================
+
+import type {
+  FolderToCollectionMapping,
+  CreateCollectionsFromInventoryResponse
+} from '@/contracts/api/inventory-api'
+
+export interface CreateCollectionsRequest {
+  connector_guid: string
+  folders: FolderToCollectionMapping[]
+}
+
+/**
+ * Create collections from inventory folders
+ * @param connectorGuid - Connector GUID (con_xxx format)
+ * @param folders - List of folder-to-collection mappings
+ */
+export const createCollectionsFromInventory = async (
+  connectorGuid: string,
+  folders: FolderToCollectionMapping[]
+): Promise<CreateCollectionsFromInventoryResponse> => {
+  // Validate connector GUID format
+  validateGuid(connectorGuid, 'con')
+
+  const response = await api.post<CreateCollectionsFromInventoryResponse>(
+    '/collections/from-inventory',
+    {
+      connector_guid: connectorGuid,
+      folders
+    }
+  )
+  return response.data
+}

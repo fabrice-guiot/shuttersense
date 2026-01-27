@@ -138,28 +138,28 @@
 
 ### Frontend Folder Tree Components
 
-- [ ] T044 [US3] Create `frontend/src/components/inventory/FolderTreeNode.tsx` (expand/collapse, selection, mapping indicator)
-- [ ] T045 [US3] Create `frontend/src/components/inventory/FolderTree.tsx` with virtualization (tanstack-virtual)
-- [ ] T046 [US3] Implement hierarchical selection constraint logic (disable ancestors/descendants when selected)
-- [ ] T047 [US3] Add visual indicators for mapped folders (linked icon, disabled state)
-- [ ] T048 [US3] Implement folder search/filter functionality
+- [x] T044 [US3] Create `frontend/src/components/inventory/FolderTreeNode.tsx` (expand/collapse, selection, mapping indicator)
+- [x] T045 [US3] Create `frontend/src/components/inventory/FolderTree.tsx` with virtualization (tanstack-virtual)
+- [x] T046 [US3] Implement hierarchical selection constraint logic (disable ancestors/descendants when selected)
+- [x] T047 [US3] Add visual indicators for mapped folders (linked icon, disabled state)
+- [x] T048 [US3] Implement folder search/filter functionality
 
 ### Frontend Create Collections Wizard
 
-- [ ] T050 [US3] Create `frontend/src/components/inventory/CreateCollectionsDialog.tsx` (two-step wizard container)
-- [ ] T051 [US3] Implement Step 1: Folder Selection UI (tree + continue button)
-- [ ] T052 [US3] Implement Step 2: Review & Configure UI (draft list, name/state editors)
-- [ ] T053 [US3] Implement name suggestion algorithm (path transformation, URL decode, title case)
-- [ ] T054 [US3] Add batch "Set all states" action in review step
-- [ ] T055 [US3] Add "Back to Selection" navigation with state preservation
+- [x] T050 [US3] Create `frontend/src/components/inventory/CreateCollectionsDialog.tsx` (two-step wizard container)
+- [x] T051 [US3] Implement Step 1: Folder Selection UI (tree + continue button)
+- [x] T052 [US3] Implement Step 2: Review & Configure UI (draft list, name/state editors)
+- [x] T053 [US3] Implement name suggestion algorithm (path transformation, URL decode, title case)
+- [x] T054 [US3] Add batch "Set all states" action in review step
+- [x] T055 [US3] Add "Back to Selection" navigation with state preservation
 
 ### Backend Collection Creation
 
-- [ ] T057 [US3] Create POST endpoint `/api/collections/from-inventory` for batch collection creation
-- [ ] T058 [US3] Implement FolderToCollectionMapping validation (no overlapping paths, valid states)
-- [ ] T059 [US3] Link created Collections to Connector with folder path as location
-- [ ] T060 [US3] Update InventoryFolder.collection_guid when mapped
-- [ ] T061 [US3] Add unmapped_only filter to GET folders endpoint
+- [x] T057 [US3] Create POST endpoint `/api/collections/from-inventory` for batch collection creation
+- [x] T058 [US3] Implement FolderToCollectionMapping validation (no overlapping paths, valid states)
+- [x] T059 [US3] Link created Collections to Connector with folder path as location
+- [x] T060 [US3] Update InventoryFolder.collection_guid when mapped
+- [x] T061 [US3] Add unmapped_only filter to GET folders endpoint
 
 ### Tests for US3
 

@@ -14,3 +14,12 @@ export type { InventoryStatusDisplayProps } from './InventoryStatusDisplay'
 
 export { InventoryConfigSection } from './InventoryConfigSection'
 export type { InventoryConfigSectionProps } from './InventoryConfigSection'
+
+export { FolderTreeNode } from './FolderTreeNode'
+export type { FolderTreeNodeProps } from './FolderTreeNode'
+
+export { FolderTree } from './FolderTree'
+export type { FolderTreeProps } from './FolderTree'
+
+export { CreateCollectionsDialog } from './CreateCollectionsDialog'
+export type { CreateCollectionsDialogProps } from './CreateCollectionsDialog'
