@@ -69,20 +69,20 @@ describe('toTitleCase', () => {
 describe('suggestCollectionName', () => {
   it('should extract folder name from path', () => {
     expect(suggestCollectionName('2020/')).toBe('2020')
-    expect(suggestCollectionName('2020/Events/')).toBe('Events')
-    expect(suggestCollectionName('photos/2020/summer/')).toBe('Summer')
+    expect(suggestCollectionName('2020/Events/')).toBe('2020 - Events')
+    expect(suggestCollectionName('photos/2020/summer/')).toBe('Photos - 2020 - Summer')
   })
 
   it('should URL decode path components', () => {
-    expect(suggestCollectionName('2020/My%20Photos/')).toBe('My Photos')
+    expect(suggestCollectionName('2020/My%20Photos/')).toBe('2020 - My Photos')
     // Note: Non-ASCII characters are removed by the implementation
     // %C3%89t%C3%A9 decodes to "Été", but accented chars are removed
-    expect(suggestCollectionName('events/summer%202020/')).toBe('Summer 2020')
+    expect(suggestCollectionName('events/summer%202020/')).toBe('Events - Summer 2020')
   })
 
   it('should replace underscores with spaces', () => {
     expect(suggestCollectionName('summer_vacation/')).toBe('Summer Vacation')
-    expect(suggestCollectionName('events/wedding_ceremony/')).toBe('Wedding Ceremony')
+    expect(suggestCollectionName('events/wedding_ceremony/')).toBe('Events - Wedding Ceremony')
   })
 
   it('should replace hyphens with spaces', () => {
@@ -96,7 +96,7 @@ describe('suggestCollectionName', () => {
   })
 
   it('should handle paths without trailing slash', () => {
-    expect(suggestCollectionName('2020/Events')).toBe('Events')
+    expect(suggestCollectionName('2020/Events')).toBe('2020 - Events')
     expect(suggestCollectionName('summer_vacation')).toBe('Summer Vacation')
   })
 
@@ -116,8 +116,8 @@ describe('suggestCollectionName', () => {
   })
 
   it('should handle complex real-world paths', () => {
-    expect(suggestCollectionName('2020/Events/Smith-Wedding_Reception/')).toBe('Smith Wedding Reception')
-    expect(suggestCollectionName('Photos%20Archive/2019_Trips/Japan%20Tour/')).toBe('Japan Tour')
+    expect(suggestCollectionName('2020/Events/Smith-Wedding_Reception/')).toBe('2020 - Events - Smith Wedding Reception')
+    expect(suggestCollectionName('Photos%20Archive/2019_Trips/Japan%20Tour/')).toBe('Photos Archive - 2019 Trips - Japan Tour')
   })
 })
 
@@ -232,18 +232,18 @@ describe('suggestBatchNames', () => {
     const paths = ['2020/Events/', '2021/Events/', '2022/Events/']
     const names = suggestBatchNames(paths)
 
-    expect(names.get('2020/Events/')).toBe('Events')
-    expect(names.get('2021/Events/')).toBe('Events (2)')
-    expect(names.get('2022/Events/')).toBe('Events (3)')
+    expect(names.get('2020/Events/')).toBe('2020 - Events')
+    expect(names.get('2021/Events/')).toBe('2021 - Events')
+    expect(names.get('2022/Events/')).toBe('2022 - Events')
   })
 
   it('should handle paths with different names', () => {
     const paths = ['2020/Summer/', '2020/Winter/', '2021/Spring/']
     const names = suggestBatchNames(paths)
 
-    expect(names.get('2020/Summer/')).toBe('Summer')
-    expect(names.get('2020/Winter/')).toBe('Winter')
-    expect(names.get('2021/Spring/')).toBe('Spring')
+    expect(names.get('2020/Summer/')).toBe('2020 - Summer')
+    expect(names.get('2020/Winter/')).toBe('2020 - Winter')
+    expect(names.get('2021/Spring/')).toBe('2021 - Spring')
   })
 
   it('should handle empty array', () => {

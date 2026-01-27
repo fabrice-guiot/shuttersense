@@ -309,6 +309,7 @@ let collections: Collection[] = [
     accessibility_message: null,
     last_scanned_at: null,
     bound_agent: null,
+    file_info: null,
     created_at: '2025-01-01T09:00:00Z',
     updated_at: '2025-01-01T09:00:00Z',
   },
@@ -327,6 +328,12 @@ let collections: Collection[] = [
     bound_agent: null,
     accessibility_message: null,
     last_scanned_at: null,
+    file_info: {
+      count: 1234,
+      source: 'inventory',
+      updated_at: '2025-01-15T10:00:00Z',
+      delta: null,
+    },
     created_at: '2025-01-01T09:00:00Z',
     updated_at: '2025-01-01T09:00:00Z',
   },
@@ -821,6 +828,7 @@ export const handlers = [
       accessibility_message: null,
       last_scanned_at: null,
       bound_agent: null,
+      file_info: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -844,7 +852,7 @@ export const handlers = [
 
   http.delete(`${BASE_URL}/collections/:guid`, ({ params, request }) => {
     const url = new URL(request.url)
-    const forceDelete = url.searchParams.get('force_delete') === 'true'
+    const forceDelete = url.searchParams.get('force') === 'true'
     const guid = params.guid as string
 
     const index = collections.findIndex((c) => c.guid === guid)
