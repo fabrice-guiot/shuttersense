@@ -121,8 +121,8 @@
 - [x] T033c [P] [US2] Unit tests for streaming CSV parser (chunked processing, memory efficiency) in `agent/tests/unit/test_inventory_parser.py`
 - [x] T033d [P] [US2] Unit tests for streaming Parquet parser (chunked processing, memory efficiency, same record stream output as CSV) in `agent/tests/unit/test_inventory_parser.py`
 - [x] T033e [P] [US2] Unit tests for InventoryImportTool Parquet format detection and routing in `agent/tests/unit/test_inventory_parser.py`
-- [ ] T034 [US2] Integration tests for InventoryImportTool in `agent/tests/integration/test_inventory_import_tool.py`
-- [ ] T034a [US2] Integration tests for InventoryImportTool with Parquet manifests in `agent/tests/integration/test_inventory_import_tool.py`
+- [x] T034 [US2] Integration tests for InventoryImportTool in `agent/tests/integration/test_inventory_import_tool.py`
+- [x] T034a [US2] Integration tests for InventoryImportTool with Parquet manifests in `agent/tests/integration/test_inventory_import_tool.py`
 - [x] T040a [US2] Integration test for folder storage endpoint (upsert behavior, duplicate handling) in `backend/tests/integration/api/test_inventory_api.py`
 - [x] T040b [US2] Integration test for concurrent import prevention (409 response) in `backend/tests/integration/api/test_inventory_api.py`
 

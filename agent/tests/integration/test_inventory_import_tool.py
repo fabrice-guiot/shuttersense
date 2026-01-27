@@ -8,16 +8,15 @@ Issue #107: Cloud Storage Bucket Inventory Import
 Tasks: T034, T034a
 """
 
-import asyncio
 import gzip
 import io
 import json
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.tools.inventory_import_tool import InventoryImportTool, InventoryImportResult
+from src.tools.inventory_import_tool import InventoryImportTool
 
 
 # ============================================================================
@@ -358,6 +357,7 @@ class TestS3InventoryImportIntegration:
         result = await tool.execute()
 
         assert result.success is False
+        assert result.error_message is not None
         assert "No manifest.json found" in result.error_message
         assert result.total_files == 0
         assert len(result.folders) == 0
@@ -377,6 +377,7 @@ class TestS3InventoryImportIntegration:
         result = await tool.execute()
 
         assert result.success is False
+        assert result.error_message is not None
         assert "Missing required" in result.error_message
 
     @pytest.mark.asyncio
@@ -499,6 +500,7 @@ class TestGCSInventoryImportIntegration:
         result = await tool.execute()
 
         assert result.success is False
+        assert result.error_message is not None
         assert "Missing required" in result.error_message
 
     @pytest.mark.asyncio
@@ -515,6 +517,7 @@ class TestGCSInventoryImportIntegration:
         result = await tool.execute()
 
         assert result.success is False
+        assert result.error_message is not None
         assert "No manifest.json found" in result.error_message
 
 
@@ -531,6 +534,7 @@ class TestInventoryImportErrorHandling:
         result = await tool.execute()
 
         assert result.success is False
+        assert result.error_message is not None
         assert "Unsupported connector type" in result.error_message
 
     @pytest.mark.asyncio
