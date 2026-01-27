@@ -12,7 +12,7 @@ Issue #107: Cloud Storage Bucket Inventory Import
 
 import json
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import Dict, Any, List, Optional, Set, Tuple, Union
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -1370,13 +1370,19 @@ class InventoryService:
     def store_file_info_batch(
         self,
         collections_data: List[Dict[str, Any]],
+        connector_id: Optional[int] = None,
         team_id: Optional[int] = None
     ) -> int:
         """
         Store FileInfo for multiple collections from inventory import.
 
+        Only updates collections that are mapped to the specified connector
+        via InventoryFolder mappings. This provides defense-in-depth against
+        agents attempting to update arbitrary collections.
+
         Args:
             collections_data: List of dicts with collection_guid and file_info
+            connector_id: Connector ID to validate mapping (required for security)
             team_id: Team ID for tenant isolation
 
         Returns:
@@ -1386,13 +1392,35 @@ class InventoryService:
         from backend.src.services.guid import GuidService
 
         updated_count = 0
+        skipped_count = 0
         now = datetime.utcnow()
+
+        # Build set of allowed collection GUIDs (collections mapped to this connector)
+        allowed_guids: Optional[Set[str]] = None
+        if connector_id is not None:
+            mapped_folders = self.db.query(InventoryFolder).filter(
+                InventoryFolder.connector_id == connector_id,
+                InventoryFolder.collection_guid.isnot(None)
+            ).all()
+            allowed_guids = {f.collection_guid for f in mapped_folders if f.collection_guid}
 
         for data in collections_data:
             collection_guid = data.get("collection_guid")
             file_info = data.get("file_info", [])
 
             if not collection_guid:
+                continue
+
+            # Defensive check: ensure collection is mapped to the connector
+            if allowed_guids is not None and collection_guid not in allowed_guids:
+                logger.warning(
+                    "Skipping collection not mapped to connector",
+                    extra={
+                        "collection_guid": collection_guid,
+                        "connector_id": connector_id
+                    }
+                )
+                skipped_count += 1
                 continue
 
             try:
@@ -1405,6 +1433,24 @@ class InventoryService:
                 collection = query.first()
 
                 if collection:
+                    # Additional check: verify mapping exists for this specific collection
+                    if connector_id is not None:
+                        mapping_exists = self.db.query(InventoryFolder).filter(
+                            InventoryFolder.connector_id == connector_id,
+                            InventoryFolder.collection_guid == collection_guid
+                        ).first() is not None
+
+                        if not mapping_exists:
+                            logger.warning(
+                                "Skipping collection with no folder mapping",
+                                extra={
+                                    "collection_guid": collection_guid,
+                                    "connector_id": connector_id
+                                }
+                            )
+                            skipped_count += 1
+                            continue
+
                     collection.file_info = file_info
                     collection.file_info_updated_at = now
                     collection.file_info_source = "inventory"
@@ -1419,6 +1465,8 @@ class InventoryService:
             "Stored FileInfo batch",
             extra={
                 "collections_updated": updated_count,
+                "collections_skipped": skipped_count,
+                "connector_id": connector_id,
                 "source": "inventory"
             }
         )

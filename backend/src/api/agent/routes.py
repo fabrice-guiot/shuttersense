@@ -2352,6 +2352,24 @@ async def report_inventory_file_info(
 
     # Store FileInfo for each collection
     inventory_service = InventoryService(db)
+
+    # Validate that all collection GUIDs are actually mapped to this connector
+    # This prevents agents from updating arbitrary collections
+    allowed_collections = inventory_service.get_collections_for_connector(
+        connector_id=connector_id,
+        team_id=ctx.team_id
+    )
+    allowed_guids = {c["collection_guid"] for c in allowed_collections}
+
+    submitted_guids = {c.collection_guid for c in data.collections}
+    invalid_guids = submitted_guids - allowed_guids
+
+    if invalid_guids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUIDs not mapped to this connector: {', '.join(sorted(invalid_guids))}"
+        )
+
     try:
         collections_data = [
             {
@@ -2362,6 +2380,7 @@ async def report_inventory_file_info(
         ]
         collections_updated = inventory_service.store_file_info_batch(
             collections_data=collections_data,
+            connector_id=connector_id,
             team_id=ctx.team_id
         )
     except Exception as e:
