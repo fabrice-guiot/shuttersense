@@ -82,6 +82,23 @@ const PIPELINE_VALIDATION_MODES: Array<{ key: ToolMode; label: string; descripti
   }
 ]
 
+// Set of supported mode keys for fast lookup
+const SUPPORTED_PIPELINE_MODES = new Set(PIPELINE_VALIDATION_MODES.map((m) => m.key))
+
+// Default mode when an unsupported mode is provided
+const DEFAULT_PIPELINE_MODE: ToolMode = PIPELINE_VALIDATION_MODES[0].key
+
+/**
+ * Normalize a ToolMode to a supported Pipeline Validation mode.
+ * Returns the mode if supported, otherwise returns the default mode.
+ */
+function normalizePipelineMode(mode: ToolMode | null | undefined): ToolMode {
+  if (mode && SUPPORTED_PIPELINE_MODES.has(mode)) {
+    return mode
+  }
+  return DEFAULT_PIPELINE_MODE
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -107,10 +124,11 @@ export function RunToolDialog({
   // Reset state when dialog opens with pre-selected values
   useEffect(() => {
     if (open) {
-      // If pipeline is pre-selected, default to pipeline_validation with display_graph mode
+      // If pipeline is pre-selected, default to pipeline_validation with normalized mode
       if (preSelectedPipelineId) {
         setSelectedTool('pipeline_validation')
-        setSelectedMode(preSelectedMode ?? 'display_graph')
+        // Normalize preSelectedMode to a supported Pipeline Validation mode
+        setSelectedMode(normalizePipelineMode(preSelectedMode))
         setSelectedPipelineGuid(preSelectedPipelineId?.toString() ?? null)
         setSelectedCollectionGuid(null)
       } else if (preSelectedCollectionId) {
@@ -134,8 +152,8 @@ export function RunToolDialog({
     setError(null)
 
     if (tool === 'pipeline_validation') {
-      // Default to display_graph mode for pipeline validation
-      setSelectedMode('display_graph')
+      // Default to the first supported Pipeline Validation mode
+      setSelectedMode(DEFAULT_PIPELINE_MODE)
     } else {
       setSelectedMode(null)
     }
@@ -143,10 +161,12 @@ export function RunToolDialog({
 
   // When mode changes, clear the appropriate selector
   const handleModeChange = (mode: ToolMode) => {
-    setSelectedMode(mode)
+    // Normalize the mode to ensure only supported values are used
+    const normalizedMode = normalizePipelineMode(mode)
+    setSelectedMode(normalizedMode)
     setError(null)
 
-    if (mode === 'display_graph') {
+    if (normalizedMode === 'display_graph') {
       setSelectedCollectionGuid(null)
     } else {
       setSelectedPipelineGuid(null)
@@ -159,9 +179,14 @@ export function RunToolDialog({
       return
     }
 
+    // Normalize mode for Pipeline Validation to ensure only supported values are used
+    const normalizedMode = selectedTool === 'pipeline_validation'
+      ? normalizePipelineMode(selectedMode)
+      : selectedMode
+
     // Validate based on tool and mode
     if (selectedTool === 'pipeline_validation') {
-      if (selectedMode === 'display_graph') {
+      if (normalizedMode === 'display_graph') {
         if (!selectedPipelineGuid) {
           setError('Please select a pipeline')
           return
@@ -189,7 +214,7 @@ export function RunToolDialog({
         tool: selectedTool
       }
 
-      if (selectedTool === 'pipeline_validation' && selectedMode === 'display_graph') {
+      if (selectedTool === 'pipeline_validation' && normalizedMode === 'display_graph') {
         request.mode = 'display_graph'
         request.pipeline_guid = selectedPipelineGuid!
       } else {
