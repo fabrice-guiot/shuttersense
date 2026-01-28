@@ -40,7 +40,7 @@ class TestToolServiceJobManagement:
         """Create mock collection."""
         collection = Mock(spec=Collection)
         collection.id = 1
-        collection.guid = "col_01hgw2bbg0000000000000001"  # GUID for API responses
+        collection.guid = "col_01hgw2bbg00000000000000001"  # GUID for API responses
         collection.name = "Test Collection"
         collection.location = "/path/to/photos"
         collection.type = CollectionType.LOCAL
@@ -305,7 +305,7 @@ class TestToolServiceQueueStatus:
         """Create mock collection."""
         collection = Mock(spec=Collection)
         collection.id = 1
-        collection.guid = "col_01hgw2bbg0000000000000002"  # GUID for API responses
+        collection.guid = "col_01hgw2bbg00000000000000002"  # GUID for API responses
         collection.name = "Test"
         collection.location = "/test"
         collection.is_accessible = True
@@ -384,7 +384,7 @@ class TestJobAdapter:
         from backend.src.utils.job_queue import create_job_id
 
         job_id = create_job_id()
-        collection_guid = "col_01hgw2bbg0000000000000001"
+        collection_guid = "col_01hgw2bbg00000000000000001"
         job = AnalysisJob(
             id=job_id,
             collection_id=1,
@@ -429,7 +429,7 @@ class TestInMemoryJobExecution:
         """Create mock collection."""
         collection = Mock(spec=Collection)
         collection.id = 1
-        collection.guid = "col_01hgw2bbg0000000000000001"
+        collection.guid = "col_01hgw2bbg00000000000000001"
         collection.name = "Test Collection"
         collection.location = "/path/to/photos"
         collection.type = CollectionType.LOCAL
@@ -541,7 +541,7 @@ class TestInMemoryJobExecution:
         # Create a second mock collection for a different job
         mock_collection2 = Mock(spec=Collection)
         mock_collection2.id = 2
-        mock_collection2.guid = "col_01hgw2bbg0000000000000002"
+        mock_collection2.guid = "col_01hgw2bbg00000000000000002"
         mock_collection2.name = "Test Collection 2"
         mock_collection2.location = "/path/to/photos2"
         mock_collection2.type = CollectionType.LOCAL

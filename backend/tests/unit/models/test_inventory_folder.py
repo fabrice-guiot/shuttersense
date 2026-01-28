@@ -60,7 +60,7 @@ class TestInventoryFolderIsMapped:
         folder = InventoryFolder(
             connector_id=1,
             path="2020/Vacation/",
-            collection_guid="col_01hgw2bbg0000000000000001"
+            collection_guid="col_01hgw2bbg00000000000000001"
         )
         assert folder.is_mapped is True
 

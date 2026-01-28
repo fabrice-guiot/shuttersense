@@ -724,7 +724,7 @@ class TestValidateFolderMappings:
             path="2020/Events/",
             object_count=100,
             total_size_bytes=1000000,
-            collection_guid="col_01hgw2bbg0000000000000001"
+            collection_guid="col_01hgw2bbg00000000000000001"
         )
         test_db_session.add(folder)
         test_db_session.commit()
@@ -1148,7 +1148,7 @@ class TestFileInfoStorage:
 
         collections_data = [
             {
-                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "collection_guid": "col_01hgw2bbg00000000000000001",
                 "file_info": [{"key": "a.jpg", "size": 1000, "last_modified": "2020-01-01T00:00:00Z"}]
             },
         ]

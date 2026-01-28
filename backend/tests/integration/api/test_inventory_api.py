@@ -391,7 +391,7 @@ class TestInventoryStatusEndpoint:
             path="2021/",
             object_count=200,
             total_size_bytes=2000,
-            collection_guid="col_01hgw2bbg0000000000000001"  # mapped
+            collection_guid="col_01hgw2bbg00000000000000001"  # mapped
         )
         test_db_session.add_all([folder1, folder2])
         test_db_session.commit()
@@ -549,7 +549,7 @@ class TestInventoryFoldersEndpoint:
                 path="2021/",
                 object_count=200,
                 total_size_bytes=2000,
-                collection_guid="col_01hgw2bbg0000000000000001"
+                collection_guid="col_01hgw2bbg00000000000000001"
             ),
             InventoryFolder(connector_id=connector.id, path="2022/", object_count=300, total_size_bytes=3000),
         ]
@@ -1333,7 +1333,7 @@ class TestCreateCollectionsFromInventory:
             path="2020/Events/",
             object_count=100,
             total_size_bytes=1000000,
-            collection_guid="col_01hgw2bbg0000000000000001"  # Already mapped
+            collection_guid="col_01hgw2bbg00000000000000001"  # Already mapped
         )
         test_db_session.add(mapped_folder)
         test_db_session.commit()
