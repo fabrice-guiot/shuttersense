@@ -1,11 +1,13 @@
 """
 Unit tests for the collection CLI commands.
 
-Tests collection create subcommand: cache lookup, auto-test, name prompt,
-skip-test flag, analyze flag, server errors, and success output.
+Tests collection subcommands: create, list, sync, test.
+Covers cache lookup, auto-test, name prompt, skip-test flag, analyze flag,
+server errors, success output, online/offline modes, type filters, and
+collection accessibility testing.
 
 Issue #108 - Remove CLI Direct Usage
-Task: T018
+Tasks: T018, T029
 """
 
 import sys
@@ -19,7 +21,13 @@ from click.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cli.collection import collection
-from src.cache import TEST_CACHE_TTL_HOURS, TestCacheEntry
+from src.cache import (
+    TEST_CACHE_TTL_HOURS,
+    COLLECTION_CACHE_TTL_DAYS,
+    CachedCollection,
+    CollectionCache,
+    TestCacheEntry,
+)
 from src.cache.test_cache import _hash_path
 
 
@@ -337,3 +345,385 @@ class TestTestResultsPassthrough:
         assert result.exit_code == 0
         call_args = mock_create.call_args
         assert call_args.kwargs["test_results"] is None
+
+
+# ============================================================================
+# Shared Fixtures for list/sync/test subcommands (T029)
+# ============================================================================
+
+
+@pytest.fixture
+def mock_list_response():
+    """Mock successful API response for collection listing."""
+    return {
+        "collections": [
+            {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "name": "Vacation 2024",
+                "type": "LOCAL",
+                "location": "/photos/2024",
+                "bound_agent_guid": "agt_test",
+                "connector_guid": None,
+                "connector_name": None,
+                "is_accessible": True,
+                "last_analysis_at": None,
+                "supports_offline": True,
+            },
+            {
+                "guid": "col_01hgw2bbg0000000000000002",
+                "name": "Wedding Photos",
+                "type": "LOCAL",
+                "location": "/photos/wedding",
+                "bound_agent_guid": "agt_test",
+                "connector_guid": None,
+                "connector_name": None,
+                "is_accessible": False,
+                "last_analysis_at": None,
+                "supports_offline": True,
+            },
+        ],
+        "total_count": 2,
+    }
+
+
+@pytest.fixture
+def sample_collection_cache():
+    """A valid collection cache with two entries."""
+    now = datetime.now(timezone.utc)
+    return CollectionCache(
+        agent_guid="agt_test",
+        synced_at=now,
+        expires_at=now + timedelta(days=COLLECTION_CACHE_TTL_DAYS),
+        collections=[
+            CachedCollection(
+                guid="col_01hgw2bbg0000000000000001",
+                name="Vacation 2024",
+                type="LOCAL",
+                location="/photos/2024",
+                bound_agent_guid="agt_test",
+                is_accessible=True,
+                supports_offline=True,
+            ),
+            CachedCollection(
+                guid="col_01hgw2bbg0000000000000002",
+                name="Wedding Photos",
+                type="LOCAL",
+                location="/photos/wedding",
+                bound_agent_guid="agt_test",
+                is_accessible=False,
+                supports_offline=True,
+            ),
+        ],
+    )
+
+
+@pytest.fixture
+def expired_collection_cache():
+    """An expired collection cache."""
+    past = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    return CollectionCache(
+        agent_guid="agt_test",
+        synced_at=past,
+        expires_at=past + timedelta(days=COLLECTION_CACHE_TTL_DAYS),
+        collections=[
+            CachedCollection(
+                guid="col_01hgw2bbg0000000000000001",
+                name="Old Photos",
+                type="LOCAL",
+                location="/photos/old",
+                bound_agent_guid="agt_test",
+                is_accessible=True,
+                supports_offline=True,
+            ),
+        ],
+    )
+
+
+# ============================================================================
+# List Command Tests (T029)
+# ============================================================================
+
+
+class TestListCommand:
+    """Tests for collection list subcommand."""
+
+    def test_list_online_success(self, runner, mock_config, mock_list_response):
+        """Online mode fetches from server and displays collections."""
+        with patch("cli.collection._list_collections_async", new_callable=AsyncMock, return_value=mock_list_response), \
+             patch("cli.collection.col_cache"):
+            result = runner.invoke(collection, ["list"])
+        assert result.exit_code == 0
+        assert "2 collection(s)" in result.output
+        assert "col_01hgw2bbg0000000000000001" in result.output
+        assert "Vacation 2024" in result.output
+
+    def test_list_offline_with_cache(self, runner, mock_config, sample_collection_cache):
+        """Offline mode displays cached data."""
+        with patch("cli.collection.col_cache") as mock_cache:
+            mock_cache.load.return_value = sample_collection_cache
+            result = runner.invoke(collection, ["list", "--offline"])
+        assert result.exit_code == 0
+        assert "Cached data from:" in result.output
+        assert "2 collection(s)" in result.output
+
+    def test_list_offline_no_cache(self, runner, mock_config):
+        """Offline mode with no cache shows error."""
+        with patch("cli.collection.col_cache") as mock_cache:
+            mock_cache.load.return_value = None
+            result = runner.invoke(collection, ["list", "--offline"])
+        assert result.exit_code == 1
+        assert "No cached collection data" in result.output
+
+    def test_list_offline_expired_cache_warns(self, runner, mock_config, expired_collection_cache):
+        """Offline mode with expired cache shows warning."""
+        with patch("cli.collection.col_cache") as mock_cache:
+            mock_cache.load.return_value = expired_collection_cache
+            result = runner.invoke(collection, ["list", "--offline"])
+        assert result.exit_code == 0
+        assert "Warning:" in result.output or "expired" in result.output.lower()
+
+    def test_list_type_filter(self, runner, mock_config, mock_list_response):
+        """Type filter is passed to API."""
+        with patch("cli.collection._list_collections_async", new_callable=AsyncMock, return_value=mock_list_response) as mock_fn, \
+             patch("cli.collection.col_cache"):
+            result = runner.invoke(collection, ["list", "--type", "LOCAL"])
+        assert result.exit_code == 0
+        call_args = mock_fn.call_args
+        assert call_args.kwargs["type_filter"] == "LOCAL"
+
+    def test_list_connection_error(self, runner, mock_config):
+        """Connection error produces exit code 2."""
+        from src.api_client import ConnectionError as AgentConnectionError
+
+        with patch("cli.collection._list_collections_async", new_callable=AsyncMock,
+                   side_effect=AgentConnectionError("Connection refused")):
+            result = runner.invoke(collection, ["list"])
+        assert result.exit_code == 2
+        assert "Connection failed" in result.output
+
+    def test_list_unregistered_agent(self, runner, mock_config_unregistered):
+        """Unregistered agent fails for list."""
+        result = runner.invoke(collection, ["list"])
+        assert result.exit_code == 1
+        assert "not registered" in result.output
+
+    def test_list_empty_collections(self, runner, mock_config):
+        """Empty collection list shows appropriate message."""
+        with patch("cli.collection._list_collections_async", new_callable=AsyncMock,
+                   return_value={"collections": [], "total_count": 0}), \
+             patch("cli.collection.col_cache"):
+            result = runner.invoke(collection, ["list"])
+        assert result.exit_code == 0
+        assert "No collections found" in result.output
+
+
+# ============================================================================
+# Sync Command Tests (T029)
+# ============================================================================
+
+
+class TestSyncCommand:
+    """Tests for collection sync subcommand."""
+
+    def test_sync_success(self, runner, mock_config, mock_list_response):
+        """Sync fetches collections and saves cache."""
+        with patch("cli.collection._list_collections_async", new_callable=AsyncMock, return_value=mock_list_response), \
+             patch("cli.collection.col_cache") as mock_cache:
+            mock_cache.make_cache.return_value = MagicMock(
+                synced_at=datetime.now(timezone.utc),
+                expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            )
+            mock_cache.save.return_value = Path("/tmp/collection-cache.json")
+            result = runner.invoke(collection, ["sync"])
+        assert result.exit_code == 0
+        assert "Sync complete!" in result.output
+        assert "Collections: 2" in result.output
+        mock_cache.save.assert_called_once()
+
+    def test_sync_connection_error(self, runner, mock_config):
+        """Connection error during sync produces exit code 2."""
+        from src.api_client import ConnectionError as AgentConnectionError
+
+        with patch("cli.collection._list_collections_async", new_callable=AsyncMock,
+                   side_effect=AgentConnectionError("Connection refused")):
+            result = runner.invoke(collection, ["sync"])
+        assert result.exit_code == 2
+        assert "Connection failed" in result.output
+
+    def test_sync_auth_error(self, runner, mock_config):
+        """Auth error during sync produces exit code 2."""
+        from src.api_client import AuthenticationError
+
+        with patch("cli.collection._list_collections_async", new_callable=AsyncMock,
+                   side_effect=AuthenticationError("Invalid API key", status_code=401)):
+            result = runner.invoke(collection, ["sync"])
+        assert result.exit_code == 2
+        assert "Authentication failed" in result.output
+
+    def test_sync_unregistered_agent(self, runner, mock_config_unregistered):
+        """Unregistered agent fails for sync."""
+        result = runner.invoke(collection, ["sync"])
+        assert result.exit_code == 1
+        assert "not registered" in result.output
+
+
+# ============================================================================
+# Test Command Tests (T029)
+# ============================================================================
+
+
+class TestTestCommand:
+    """Tests for collection test subcommand."""
+
+    def test_test_accessible_path(self, runner, mock_config, sample_collection_cache, tmp_path):
+        """Test reports accessible path to server."""
+        # Create a temp directory with files
+        test_dir = tmp_path / "photos"
+        test_dir.mkdir()
+        (test_dir / "file1.jpg").write_text("x")
+        (test_dir / "file2.cr3").write_text("x")
+
+        # Patch the cache to return collection with test_dir as location
+        cache = CollectionCache(
+            agent_guid="agt_test",
+            synced_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            collections=[
+                CachedCollection(
+                    guid="col_test123",
+                    name="Test Collection",
+                    type="LOCAL",
+                    location=str(test_dir),
+                    bound_agent_guid="agt_test",
+                    is_accessible=True,
+                    supports_offline=True,
+                ),
+            ],
+        )
+
+        mock_test_response = {
+            "guid": "col_test123",
+            "is_accessible": True,
+            "updated_at": "2026-01-28T12:00:00.000Z",
+        }
+
+        with patch("cli.collection.col_cache") as mock_cache, \
+             patch("cli.collection._test_collection_async", new_callable=AsyncMock, return_value=mock_test_response):
+            mock_cache.load.return_value = cache
+            result = runner.invoke(collection, ["test", "col_test123"])
+        assert result.exit_code == 0
+        assert "Accessible:" in result.output
+        assert "yes" in result.output
+        assert "Server updated" in result.output
+
+    def test_test_inaccessible_path(self, runner, mock_config):
+        """Test reports inaccessible path to server."""
+        cache = CollectionCache(
+            agent_guid="agt_test",
+            synced_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            collections=[
+                CachedCollection(
+                    guid="col_missing",
+                    name="Missing Collection",
+                    type="LOCAL",
+                    location="/nonexistent/path/to/photos",
+                    bound_agent_guid="agt_test",
+                    is_accessible=True,
+                    supports_offline=True,
+                ),
+            ],
+        )
+
+        mock_test_response = {
+            "guid": "col_missing",
+            "is_accessible": False,
+            "updated_at": "2026-01-28T12:00:00.000Z",
+        }
+
+        with patch("cli.collection.col_cache") as mock_cache, \
+             patch("cli.collection._test_collection_async", new_callable=AsyncMock, return_value=mock_test_response):
+            mock_cache.load.return_value = cache
+            result = runner.invoke(collection, ["test", "col_missing"])
+        assert result.exit_code == 0
+        assert "no" in result.output
+        assert "does not exist" in result.output
+
+    def test_test_guid_not_in_cache(self, runner, mock_config, sample_collection_cache):
+        """Unknown GUID shows error."""
+        with patch("cli.collection.col_cache") as mock_cache:
+            mock_cache.load.return_value = sample_collection_cache
+            result = runner.invoke(collection, ["test", "col_unknown"])
+        assert result.exit_code == 1
+        assert "not found in local cache" in result.output
+
+    def test_test_no_cache(self, runner, mock_config):
+        """No cache shows error."""
+        with patch("cli.collection.col_cache") as mock_cache:
+            mock_cache.load.return_value = None
+            result = runner.invoke(collection, ["test", "col_test123"])
+        assert result.exit_code == 1
+        assert "not found in local cache" in result.output
+
+    def test_test_remote_collection_rejected(self, runner, mock_config):
+        """Remote (non-LOCAL) collections cannot be tested."""
+        cache = CollectionCache(
+            agent_guid="agt_test",
+            synced_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            collections=[
+                CachedCollection(
+                    guid="col_s3bucket",
+                    name="S3 Bucket",
+                    type="S3",
+                    location="s3://bucket/prefix",
+                    connector_guid="con_test",
+                    is_accessible=True,
+                    supports_offline=False,
+                ),
+            ],
+        )
+
+        with patch("cli.collection.col_cache") as mock_cache:
+            mock_cache.load.return_value = cache
+            result = runner.invoke(collection, ["test", "col_s3bucket"])
+        assert result.exit_code == 1
+        assert "Only LOCAL collections" in result.output
+
+    def test_test_connection_error(self, runner, mock_config, tmp_path):
+        """Connection error during test report."""
+        from src.api_client import ConnectionError as AgentConnectionError
+
+        test_dir = tmp_path / "photos"
+        test_dir.mkdir()
+
+        cache = CollectionCache(
+            agent_guid="agt_test",
+            synced_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            collections=[
+                CachedCollection(
+                    guid="col_test123",
+                    name="Test Collection",
+                    type="LOCAL",
+                    location=str(test_dir),
+                    bound_agent_guid="agt_test",
+                    is_accessible=True,
+                    supports_offline=True,
+                ),
+            ],
+        )
+
+        with patch("cli.collection.col_cache") as mock_cache, \
+             patch("cli.collection._test_collection_async", new_callable=AsyncMock,
+                   side_effect=AgentConnectionError("Connection refused")):
+            mock_cache.load.return_value = cache
+            result = runner.invoke(collection, ["test", "col_test123"])
+        assert result.exit_code == 2
+        assert "Connection failed" in result.output
+
+    def test_test_unregistered_agent(self, runner, mock_config_unregistered):
+        """Unregistered agent fails for test."""
+        result = runner.invoke(collection, ["test", "col_test123"])
+        assert result.exit_code == 1
+        assert "not registered" in result.output

@@ -94,16 +94,16 @@
 
 ### Implementation for User Story 4
 
-- [ ] T020 [US4] Implement CollectionCache save/load/is_valid/is_expired methods in agent/src/cache/collection_cache.py using Pydantic models from cache __init__ and JSON file storage at {data_dir}/collection-cache.json with 7-day TTL
-- [ ] T021 [US4] Add GET /api/agent/v1/collections endpoint in backend/src/api/agent/routes.py. Authenticate agent, return all Collections where bound_agent_id matches or agent has connector credentials. Support ?type and ?status query filters
-- [ ] T022 [US4] Add POST /api/agent/v1/collections/{guid}/test endpoint in backend/src/api/agent/routes.py. Authenticate agent, verify Collection is bound to this agent, update is_accessible and last_error fields
-- [ ] T023 [US4] Implement list_collections() method body in agent/src/api_client.py to call GET /api/agent/v1/collections with optional type/status filters
-- [ ] T024 [US4] Implement test_collection() method body in agent/src/api_client.py to call POST /api/agent/v1/collections/{guid}/test with accessibility result
-- [ ] T025 [US4] Add `list` subcommand to collection group in agent/cli/collection.py with --type, --status, --offline options. Online mode: fetch from server and update cache. Offline mode: load from cache, show sync timestamp, warn if expired. Display tabular output with GUID, type, name, location, status, last analysis, offline capability
-- [ ] T026 [US4] Add `sync` subcommand to collection group in agent/cli/collection.py. Fetch all bound Collections from server, update local cache, display summary
-- [ ] T027 [US4] Add `test` subcommand to collection group in agent/cli/collection.py with <guid> argument. Check path accessibility via LocalAdapter, update status on server via API client, display result
-- [ ] T028 [P] [US4] Write unit tests for collection_cache save/load/expiry/warning in agent/tests/unit/test_collection_cache.py
-- [ ] T029 [P] [US4] Write unit tests for collection list/sync/test CLI commands (online mode, offline mode, type filter, stale cache warning) in agent/tests/unit/test_collection_command.py (extend existing file from US2)
+- [x] T020 [US4] Implement CollectionCache save/load/is_valid/is_expired methods in agent/src/cache/collection_cache.py using Pydantic models from cache __init__ and JSON file storage at {data_dir}/collection-cache.json with 7-day TTL
+- [x] T021 [US4] Add GET /api/agent/v1/collections endpoint in backend/src/api/agent/routes.py. Authenticate agent, return all Collections where bound_agent_id matches or agent has connector credentials. Support ?type and ?status query filters
+- [x] T022 [US4] Add POST /api/agent/v1/collections/{guid}/test endpoint in backend/src/api/agent/routes.py. Authenticate agent, verify Collection is bound to this agent, update is_accessible and last_error fields
+- [x] T023 [US4] Implement list_collections() method body in agent/src/api_client.py to call GET /api/agent/v1/collections with optional type/status filters
+- [x] T024 [US4] Implement test_collection() method body in agent/src/api_client.py to call POST /api/agent/v1/collections/{guid}/test with accessibility result
+- [x] T025 [US4] Add `list` subcommand to collection group in agent/cli/collection.py with --type, --status, --offline options. Online mode: fetch from server and update cache. Offline mode: load from cache, show sync timestamp, warn if expired. Display tabular output with GUID, type, name, location, status, last analysis, offline capability
+- [x] T026 [US4] Add `sync` subcommand to collection group in agent/cli/collection.py. Fetch all bound Collections from server, update local cache, display summary
+- [x] T027 [US4] Add `test` subcommand to collection group in agent/cli/collection.py with <guid> argument. Check path accessibility via LocalAdapter, update status on server via API client, display result
+- [x] T028 [P] [US4] Write unit tests for collection_cache save/load/expiry/warning in agent/tests/unit/test_collection_cache.py
+- [x] T029 [P] [US4] Write unit tests for collection list/sync/test CLI commands (online mode, offline mode, type filter, stale cache warning) in agent/tests/unit/test_collection_command.py (extend existing file from US2)
 
 **Checkpoint**: `shuttersense-agent collection list` shows all bound Collections. Cache sync and offline listing work. Accessibility re-test updates server status.
 

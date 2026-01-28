@@ -1220,7 +1220,31 @@ class AgentApiClient:
             AuthenticationError: If API key is invalid
             ConnectionError: If connection to server fails
         """
-        raise NotImplementedError("Implemented in US4 (Phase 5)")
+        params: dict[str, str] = {}
+        if type_filter is not None:
+            params["type"] = type_filter
+        if status_filter is not None:
+            params["status"] = status_filter
+
+        try:
+            response = await self._client.get(
+                f"{API_BASE_PATH}/collections",
+                params=params,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        else:
+            raise ApiError(
+                f"List collections failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
 
     async def test_collection(
         self,
@@ -1246,7 +1270,35 @@ class AgentApiClient:
             ApiError: If collection not found (404)
             ConnectionError: If connection to server fails
         """
-        raise NotImplementedError("Implemented in US4 (Phase 5)")
+        payload: dict[str, Any] = {"is_accessible": is_accessible}
+        if error_message is not None:
+            payload["error_message"] = error_message
+        if file_count is not None:
+            payload["file_count"] = file_count
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/collections/{collection_guid}/test",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Collection not found", status_code=404)
+        elif response.status_code == 403:
+            raise ApiError("Collection not bound to this agent", status_code=403)
+        else:
+            raise ApiError(
+                f"Collection test failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
 
     async def upload_result(
         self,

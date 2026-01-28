@@ -96,6 +96,10 @@ from backend.src.api.agent.schemas import (
     # Agent collection management (Issue #108)
     AgentCreateCollectionRequest,
     AgentCreateCollectionResponse,
+    AgentCollectionItem,
+    AgentCollectionListResponse,
+    AgentCollectionTestRequest,
+    AgentCollectionTestResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -2908,4 +2912,153 @@ async def agent_create_collection(
         bound_agent_guid=ctx.agent_guid,
         web_url=web_url,
         created_at=collection.created_at,
+    )
+
+
+@router.get(
+    "/collections",
+    response_model=AgentCollectionListResponse,
+    summary="List agent-bound collections",
+    description="List all Collections bound to the authenticated agent. "
+                "Supports optional type and status filters.",
+)
+async def agent_list_collections(
+    type: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    List all Collections bound to this agent.
+
+    Returns LOCAL collections bound to this agent, plus remote collections
+    accessible via the agent's connectors.
+    """
+    from backend.src.models.collection import Collection, CollectionType
+
+    query = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.bound_agent_id == ctx.agent_id,
+    )
+
+    # Apply type filter
+    if type:
+        type_upper = type.upper()
+        try:
+            collection_type = CollectionType(type_upper.lower())
+            query = query.filter(Collection.type == collection_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid type filter: {type}. Must be one of: LOCAL, S3, GCS, SMB",
+            )
+
+    # Apply status filter
+    if status_filter:
+        sf = status_filter.lower()
+        if sf == "accessible":
+            query = query.filter(Collection.is_accessible == True)  # noqa: E712
+        elif sf == "inaccessible":
+            query = query.filter(Collection.is_accessible == False)  # noqa: E712
+        elif sf == "pending":
+            query = query.filter(Collection.is_accessible == None)  # noqa: E711
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status filter: {status_filter}. Must be: accessible, inaccessible, pending",
+            )
+
+    collections = query.order_by(Collection.name).all()
+
+    items = []
+    for col in collections:
+        items.append(AgentCollectionItem(
+            guid=col.guid,
+            name=col.name,
+            type=col.type.value.upper(),
+            location=col.location,
+            bound_agent_guid=ctx.agent_guid if col.bound_agent_id == ctx.agent_id else None,
+            connector_guid=col.connector.guid if col.connector else None,
+            connector_name=col.connector.name if col.connector else None,
+            is_accessible=col.is_accessible,
+            last_analysis_at=col.last_refresh_at,
+            supports_offline=col.type.value.lower() == "local",
+        ))
+
+    return AgentCollectionListResponse(
+        collections=items,
+        total_count=len(items),
+    )
+
+
+@router.post(
+    "/collections/{guid}/test",
+    response_model=AgentCollectionTestResponse,
+    summary="Report collection accessibility test",
+    description="Update a Collection's accessibility status from agent test results.",
+)
+async def agent_test_collection(
+    guid: str,
+    data: AgentCollectionTestRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Update collection accessibility status.
+
+    The agent tests the local path and reports whether it's accessible.
+    Only collections bound to this agent can be updated.
+    """
+    from backend.src.models.collection import Collection
+
+    collection = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.bound_agent_id == ctx.agent_id,
+    ).first()
+
+    # Find collection by GUID within agent's scope
+    # Need to match on the guid property which is derived from uuid
+    all_agent_collections = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.bound_agent_id == ctx.agent_id,
+    ).all()
+
+    collection = None
+    for col in all_agent_collections:
+        if col.guid == guid:
+            collection = col
+            break
+
+    if not collection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {guid} not found or not bound to this agent",
+        )
+
+    # Update accessibility status
+    collection.is_accessible = data.is_accessible
+    if data.error_message:
+        collection.last_error = data.error_message
+    elif data.is_accessible:
+        collection.last_error = None
+
+    if data.file_count is not None:
+        collection.file_count = data.file_count
+
+    db.commit()
+    db.refresh(collection)
+
+    logger.info(
+        "Collection accessibility updated",
+        extra={
+            "collection_guid": guid,
+            "is_accessible": data.is_accessible,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentCollectionTestResponse(
+        guid=collection.guid,
+        is_accessible=collection.is_accessible,
+        updated_at=collection.updated_at or datetime.utcnow(),
     )
