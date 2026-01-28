@@ -294,6 +294,7 @@ export const EventCard = ({
                 travel_status: event.travel_status,
                 travel_booking_date: null,
                 deadline_date: null,
+                deadline_time: null,
               }}
               size="sm"
               className="mt-1"

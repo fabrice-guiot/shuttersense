@@ -331,7 +331,7 @@ describe('Tool Execution Integration', () => {
           collection_guid: 'col_01hgw2bbg00000000000000001',
           tool: 'photostats'
         })
-        expect(job.collection_id).toBeDefined()
+        expect(job.collection_guid).toBeDefined()
       })
 
       // Run PhotoStats on collection 2 (same tool, different collection - should succeed)
@@ -340,7 +340,7 @@ describe('Tool Execution Integration', () => {
           collection_guid: 'col_01hgw2bbg00000000000000002',
           tool: 'photostats'
         })
-        expect(job.collection_id).toBeDefined()
+        expect(job.collection_guid).toBeDefined()
       })
 
       // Should have 2 jobs

@@ -228,6 +228,8 @@ export const EventForm = ({
           travel_required_default: false,
           notes: null,
           is_known: true,
+          instagram_handle: null,
+          instagram_url: null,
           created_at: '',
           updated_at: '',
         })
@@ -247,6 +249,8 @@ export const EventForm = ({
           rating: null,
           ticket_required_default: false,
           notes: null,
+          instagram_handle: null,
+          instagram_url: null,
           created_at: '',
           updated_at: '',
         })

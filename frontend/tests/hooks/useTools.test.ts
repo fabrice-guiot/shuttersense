@@ -43,7 +43,7 @@ describe('useTools', () => {
       })
 
       expect(job.id).toBeDefined()
-      expect(job.collection_id).toBeDefined()
+      expect(job.collection_guid).toBeDefined()
       expect(job.tool).toBe('photostats')
       expect(job.status).toBe('queued')
     })

@@ -47,6 +47,7 @@ describe('AgentsPage', () => {
       created_at: '2026-01-15T10:00:00Z',
       team_guid: 'tea_01hgw2bbg00000000000000001',
       current_job_guid: null,
+      running_jobs_count: 0,
     },
     {
       guid: 'agt_01hgw2bbg00000000000000002',
@@ -62,6 +63,7 @@ describe('AgentsPage', () => {
       created_at: '2026-01-10T08:00:00Z',
       team_guid: 'tea_01hgw2bbg00000000000000001',
       current_job_guid: null,
+      running_jobs_count: 0,
     },
   ]
 

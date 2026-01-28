@@ -21,7 +21,11 @@ describe('ResultsTable', () => {
       duration_seconds: 300,
       files_scanned: 1000,
       issues_found: 5,
-      has_report: true
+      has_report: true,
+      input_state_hash: null,
+      no_change_copy: false,
+      connector_guid: null,
+      connector_name: null
     },
     {
       guid: 'res_01hgw2bbg0000000000000002',
@@ -37,7 +41,11 @@ describe('ResultsTable', () => {
       duration_seconds: 180,
       files_scanned: 800,
       issues_found: 2,
-      has_report: true
+      has_report: true,
+      input_state_hash: null,
+      no_change_copy: false,
+      connector_guid: null,
+      connector_name: null
     },
     {
       guid: 'res_01hgw2bbg0000000000000003',
@@ -53,7 +61,11 @@ describe('ResultsTable', () => {
       duration_seconds: 30,
       files_scanned: 0,
       issues_found: 0,
-      has_report: false
+      has_report: false,
+      input_state_hash: null,
+      no_change_copy: false,
+      connector_guid: null,
+      connector_name: null
     }
   ]
 

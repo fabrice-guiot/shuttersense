@@ -75,6 +75,14 @@ const MODE_INFO: Record<ToolMode, { label: string; description: string }> = {
   display_graph: {
     label: 'Validate Pipeline Graph',
     description: 'Analyze pipeline definition and enumerate all paths (no collection needed)'
+  },
+  validation: {
+    label: 'Validate Inventory',
+    description: 'Validate that bucket inventory matches cloud storage contents'
+  },
+  import: {
+    label: 'Import Inventory',
+    description: 'Import file information from bucket inventory manifest'
   }
 }
 

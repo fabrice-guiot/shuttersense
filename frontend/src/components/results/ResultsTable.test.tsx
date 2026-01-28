@@ -36,7 +36,9 @@ const mockResults: AnalysisResultSummary[] = [
     issues_found: 5,
     has_report: true,
     input_state_hash: 'abc123',
-    no_change_copy: false
+    no_change_copy: false,
+    connector_guid: null,
+    connector_name: null
   },
   {
     guid: 'res_01hgw2bbg00000000000000002',
@@ -54,7 +56,9 @@ const mockResults: AnalysisResultSummary[] = [
     issues_found: 5,
     has_report: true,
     input_state_hash: 'abc123',
-    no_change_copy: true
+    no_change_copy: true,
+    connector_guid: null,
+    connector_name: null
   },
   {
     guid: 'res_01hgw2bbg00000000000000003',
@@ -72,7 +76,9 @@ const mockResults: AnalysisResultSummary[] = [
     issues_found: 0,
     has_report: false,
     input_state_hash: null,
-    no_change_copy: false
+    no_change_copy: false,
+    connector_guid: null,
+    connector_name: null
   }
 ]
 
