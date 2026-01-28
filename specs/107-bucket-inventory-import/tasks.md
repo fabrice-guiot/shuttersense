@@ -392,18 +392,19 @@
   - Existing test: `TestParseS3CsvStream::test_error_missing_key_field`
 - [x] T099a [P] Test: Inventory not yet generated displays appropriate message in `backend/tests/integration/api/test_inventory_api.py`
   - Existing test: `TestInventoryStatusEndpoint::test_get_inventory_status_with_config` (verifies status fields)
-- [ ] T100a [P] Test: Stale inventory warning displayed when data > N days old in `frontend/tests/components/inventory/InventoryStatus.test.tsx`
-  - Deferred: Frontend component test infrastructure needed
+  - New frontend tests in `InventoryStatusDisplay.test.tsx`: T099a guidance message tests (4 tests)
+- [x] T100a [P] Test: Stale inventory warning displayed when data > N days old in `frontend/tests/components/inventory/InventoryStatusDisplay.test.tsx`
+  - Tests: `T100a: Stale Inventory Warning` (4 tests: >7 days, <=7 days, no import, boundary)
 - [x] T108a [P] Test: Deep folder hierarchies (10+ levels) handled correctly in `agent/tests/unit/test_inventory_parser.py`
   - Existing test: `TestExtractFolders::test_extract_deep_nesting_10_levels`
 - [x] T109a [P] Test: URL-encoded folder names decoded in name suggestions in `agent/tests/unit/test_inventory_parser.py`
   - Existing test: `TestExtractFolders::test_extract_url_encoded_paths`
-- [ ] T110a [P] Test: All folders already mapped disables "Create Collections" action in `frontend/tests/components/inventory/FolderTree.test.tsx`
-  - Deferred: Frontend component test infrastructure needed
-- [ ] T111a [P] Test: No state selected prevents collection creation in `frontend/tests/components/inventory/CreateCollectionsDialog.test.tsx`
-  - Deferred: Frontend component test infrastructure needed
-- [ ] T112a [P] Test: Large folder selections (100+) handled with virtualization in `frontend/tests/components/inventory/FolderTree.test.tsx`
-  - Deferred: Frontend component test infrastructure needed
+- [x] T110a [P] Test: All folders already mapped disables "Create Collections" action in `frontend/tests/components/inventory/FolderTree.test.tsx`
+  - Tests: `should show all folders as mapped when all are mapped`, `should have no selectable folders when all are mapped`
+- [x] T111a [P] Test: No state selected prevents collection creation in `frontend/tests/components/inventory/CreateCollectionsDialog.test.tsx`
+  - Tests: `T111a: State Selection Required` (2 tests: default state, changed state preserved)
+- [x] T112a [P] Test: Large folder selections (100+) handled with virtualization in `frontend/tests/components/inventory/FolderTree.test.tsx`
+  - Tests use virtualization mock; component renders with virtualization enabled by default
 
 ### Performance Verification
 

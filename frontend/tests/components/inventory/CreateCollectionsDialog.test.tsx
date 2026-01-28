@@ -656,6 +656,102 @@ describe('CreateCollectionsDialog', () => {
     })
   })
 
+  describe('T111a: State Selection Required', () => {
+    it('should always have a default state of "live" for new collections', async () => {
+      const user = userEvent.setup()
+      mockCreateCollections.mockResolvedValue({
+        created: [{ collection_guid: 'col_123', folder_guid: 'folder_2020_', name: '2020' }],
+        errors: []
+      })
+
+      render(
+        <CreateCollectionsDialog
+          connectorGuid="con_123"
+          folders={sampleFolders}
+          createCollections={mockCreateCollections}
+          onCreated={mockOnCreated}
+        />
+      )
+
+      // Navigate to review step
+      await user.click(screen.getByRole('button', { name: /create collections/i }))
+      await waitFor(() => {
+        expect(screen.getByLabelText('Select 2020')).toBeInTheDocument()
+      })
+      await user.click(screen.getByLabelText('Select 2020'))
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+
+      // Submit without changing state
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /create 1 collection/i })).toBeInTheDocument()
+      })
+      await user.click(screen.getByRole('button', { name: /create 1 collection/i }))
+
+      // Verify the submission included state: 'live'
+      await waitFor(() => {
+        expect(mockCreateCollections).toHaveBeenCalledWith(
+          'con_123',
+          expect.arrayContaining([
+            expect.objectContaining({
+              state: 'live' // Default state should always be set
+            })
+          ])
+        )
+      })
+    })
+
+    it('should preserve changed state when submitting', async () => {
+      const user = userEvent.setup()
+      mockCreateCollections.mockResolvedValue({
+        created: [{ collection_guid: 'col_123', folder_guid: 'folder_2020_', name: '2020' }],
+        errors: []
+      })
+
+      render(
+        <CreateCollectionsDialog
+          connectorGuid="con_123"
+          folders={sampleFolders}
+          createCollections={mockCreateCollections}
+          onCreated={mockOnCreated}
+        />
+      )
+
+      // Navigate to review step
+      await user.click(screen.getByRole('button', { name: /create collections/i }))
+      await waitFor(() => {
+        expect(screen.getByLabelText('Select 2020')).toBeInTheDocument()
+      })
+      await user.click(screen.getByLabelText('Select 2020'))
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+
+      // Wait for review step and change state
+      await waitFor(() => {
+        expect(screen.getByLabelText(/state/i)).toBeInTheDocument()
+      })
+
+      // Change the individual state selector (second combobox, after batch)
+      const stateSelects = screen.getAllByRole('combobox')
+      const individualStateSelect = stateSelects[stateSelects.length - 1] // Last one is individual state
+      await user.click(individualStateSelect)
+      await user.click(screen.getByRole('option', { name: /archived/i }))
+
+      // Submit
+      await user.click(screen.getByRole('button', { name: /create 1 collection/i }))
+
+      // Verify the changed state was submitted
+      await waitFor(() => {
+        expect(mockCreateCollections).toHaveBeenCalledWith(
+          'con_123',
+          expect.arrayContaining([
+            expect.objectContaining({
+              state: 'archived' // Changed state should be preserved
+            })
+          ])
+        )
+      })
+    })
+  })
+
   describe('Loading State', () => {
     it('should show loading state while submitting', async () => {
       const user = userEvent.setup()
