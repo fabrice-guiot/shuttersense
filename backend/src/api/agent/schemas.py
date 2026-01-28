@@ -1094,7 +1094,7 @@ class InitiateUploadRequest(BaseModel):
 
     upload_type: str = Field(
         ...,
-        description="Type of content: 'results_json' or 'report_html'"
+        description="Type of content: 'results_json', 'report_html', or 'file_info'"
     )
     expected_size: int = Field(
         ...,
@@ -1536,34 +1536,73 @@ class CollectionFileInfo(BaseModel):
 
 
 class InventoryFileInfoRequest(BaseModel):
-    """Request schema for reporting FileInfo from inventory import Phase B."""
+    """Request schema for reporting FileInfo from inventory import Phase B.
 
-    connector_guid: str = Field(
-        ...,
-        description="Connector GUID (con_xxx)"
+    Supports two modes:
+    1. Inline: Provide connector_guid and collections directly (for small FileInfo)
+    2. Chunked: Provide file_info_upload_id (for large FileInfo > 1MB)
+
+    Issue #107: Added chunked upload support for large collections.
+    """
+
+    connector_guid: Optional[str] = Field(
+        None,
+        description="Connector GUID (con_xxx) - required for inline mode"
     )
-    collections: List[CollectionFileInfo] = Field(
-        ...,
-        description="List of collections with their FileInfo"
+    collections: Optional[List[CollectionFileInfo]] = Field(
+        None,
+        description="List of collections with their FileInfo - required for inline mode"
     )
+    file_info_upload_id: Optional[str] = Field(
+        None,
+        description="Upload session ID from chunked upload (for large FileInfo > 1MB)"
+    )
+
+    @model_validator(mode="after")
+    def validate_mode(self) -> "InventoryFileInfoRequest":
+        """Validate that either inline or chunked mode is used, not both or neither."""
+        has_inline = self.connector_guid is not None and self.collections is not None
+        has_chunked = self.file_info_upload_id is not None
+
+        if has_inline and has_chunked:
+            raise ValueError("Cannot provide both inline (connector_guid/collections) and chunked (file_info_upload_id) data")
+        if not has_inline and not has_chunked:
+            raise ValueError("Must provide either inline (connector_guid and collections) or chunked (file_info_upload_id) data")
+        if self.connector_guid is not None and self.collections is None:
+            raise ValueError("connector_guid requires collections")
+        if self.collections is not None and self.connector_guid is None:
+            raise ValueError("collections requires connector_guid")
+
+        return self
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "connector_guid": "con_01hgw2bbg0000000000000001",
-                "collections": [
-                    {
-                        "collection_guid": "col_01hgw2bbg0000000000000001",
-                        "file_info": [
+            "examples": [
+                {
+                    "description": "Inline mode (small FileInfo)",
+                    "value": {
+                        "connector_guid": "con_01hgw2bbg0000000000000001",
+                        "collections": [
                             {
-                                "key": "2020/vacation/IMG_001.CR3",
-                                "size": 25000000,
-                                "last_modified": "2022-11-25T13:30:49.000Z"
+                                "collection_guid": "col_01hgw2bbg0000000000000001",
+                                "file_info": [
+                                    {
+                                        "key": "2020/vacation/IMG_001.CR3",
+                                        "size": 25000000,
+                                        "last_modified": "2022-11-25T13:30:49.000Z"
+                                    }
+                                ]
                             }
                         ]
                     }
-                ]
-            }
+                },
+                {
+                    "description": "Chunked mode (large FileInfo)",
+                    "value": {
+                        "file_info_upload_id": "abc123def456..."
+                    }
+                }
+            ]
         }
     }
 
@@ -1601,7 +1640,7 @@ class InventoryFileInfoResponse(BaseModel):
 # ============================================================================
 
 class ConnectorCollectionInfo(BaseModel):
-    """Collection info for inventory FileInfo population."""
+    """Collection info for inventory FileInfo population and delta detection."""
 
     collection_guid: str = Field(
         ...,
@@ -1611,12 +1650,17 @@ class ConnectorCollectionInfo(BaseModel):
         ...,
         description="Inventory folder path prefix for this collection"
     )
+    file_info: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Stored FileInfo for delta detection (Phase C). None if first import."
+    )
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "collection_guid": "col_01hgw2bbg0000000000000001",
-                "folder_path": "2020/vacation/"
+                "folder_path": "2020/vacation/",
+                "file_info": [{"key": "2020/vacation/IMG_001.CR3", "size": 25000000}]
             }
         }
     }
@@ -1648,6 +1692,181 @@ class ConnectorCollectionsResponse(BaseModel):
                         "folder_path": "2021/wedding/"
                     }
                 ]
+            }
+        }
+    }
+
+
+# ============================================================================
+# Inventory Delta Reporting (Issue #107 - Phase C / Phase 8)
+# Tasks: T091, T092
+# ============================================================================
+
+class DeltaSummary(BaseModel):
+    """Summary of changes detected for a collection."""
+
+    new_count: int = Field(..., ge=0, description="Number of new files")
+    modified_count: int = Field(..., ge=0, description="Number of modified files")
+    deleted_count: int = Field(..., ge=0, description="Number of deleted files")
+    new_size_bytes: int = Field(default=0, ge=0, description="Total size of new files")
+    modified_size_change_bytes: int = Field(default=0, description="Net size change from modifications")
+    deleted_size_bytes: int = Field(default=0, ge=0, description="Total size of deleted files")
+    total_changes: int = Field(..., ge=0, description="Total number of changes")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "new_count": 10,
+                "modified_count": 5,
+                "deleted_count": 2,
+                "new_size_bytes": 250000000,
+                "modified_size_change_bytes": 50000000,
+                "deleted_size_bytes": 10000000,
+                "total_changes": 17
+            }
+        }
+    }
+
+
+class FileDeltaItem(BaseModel):
+    """Individual file change item."""
+
+    key: str = Field(..., description="File path/key")
+    change_type: str = Field(..., description="Type of change: new, modified, deleted")
+    size: int = Field(..., ge=0, description="File size")
+    previous_size: Optional[int] = Field(None, description="Previous size (for modified files)")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "key": "2020/vacation/IMG_001.CR3",
+                "change_type": "new",
+                "size": 25000000
+            }
+        }
+    }
+
+
+class CollectionDeltaItem(BaseModel):
+    """Delta result for a single collection."""
+
+    collection_guid: str = Field(..., description="Collection GUID (col_xxx)")
+    summary: DeltaSummary = Field(..., description="Summary of changes")
+    is_first_import: bool = Field(default=False, description="True if no previous FileInfo existed")
+    changes: List[FileDeltaItem] = Field(default_factory=list, description="List of individual changes (may be truncated)")
+    changes_truncated: bool = Field(default=False, description="True if changes list was truncated")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "summary": {
+                    "new_count": 10,
+                    "modified_count": 5,
+                    "deleted_count": 2,
+                    "new_size_bytes": 250000000,
+                    "modified_size_change_bytes": 50000000,
+                    "deleted_size_bytes": 10000000,
+                    "total_changes": 17
+                },
+                "is_first_import": False,
+                "changes": [],
+                "changes_truncated": True
+            }
+        }
+    }
+
+
+class InventoryDeltaRequest(BaseModel):
+    """Request schema for reporting delta detection results from Phase C.
+
+    Supports two modes:
+    1. Inline: Provide connector_guid and deltas directly (for small payloads)
+    2. Chunked: Provide delta_upload_id (for large payloads > 1MB)
+
+    Issue #107 Phase 8: Delta Detection Between Inventories
+    """
+
+    connector_guid: Optional[str] = Field(
+        None,
+        description="Connector GUID (con_xxx) - required for inline mode"
+    )
+    deltas: Optional[List[CollectionDeltaItem]] = Field(
+        None,
+        description="List of collection deltas - required for inline mode"
+    )
+    delta_upload_id: Optional[str] = Field(
+        None,
+        description="Upload session ID from chunked upload (for large deltas > 1MB)"
+    )
+
+    @model_validator(mode="after")
+    def validate_mode(self) -> "InventoryDeltaRequest":
+        """Validate that either inline or chunked mode is used."""
+        has_inline = self.connector_guid is not None and self.deltas is not None
+        has_chunked = self.delta_upload_id is not None
+
+        if has_inline and has_chunked:
+            raise ValueError("Cannot provide both inline (connector_guid/deltas) and chunked (delta_upload_id) data")
+        if not has_inline and not has_chunked:
+            raise ValueError("Must provide either inline (connector_guid and deltas) or chunked (delta_upload_id) data")
+        if self.connector_guid is not None and self.deltas is None:
+            raise ValueError("connector_guid requires deltas")
+        if self.deltas is not None and self.connector_guid is None:
+            raise ValueError("deltas requires connector_guid")
+
+        return self
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Inline mode (small deltas)",
+                    "value": {
+                        "connector_guid": "con_01hgw2bbg0000000000000001",
+                        "deltas": [
+                            {
+                                "collection_guid": "col_01hgw2bbg0000000000000001",
+                                "summary": {
+                                    "new_count": 10,
+                                    "modified_count": 5,
+                                    "deleted_count": 2,
+                                    "new_size_bytes": 250000000,
+                                    "modified_size_change_bytes": 50000000,
+                                    "deleted_size_bytes": 10000000,
+                                    "total_changes": 17
+                                },
+                                "is_first_import": False,
+                                "changes": [],
+                                "changes_truncated": True
+                            }
+                        ]
+                    }
+                },
+                {
+                    "description": "Chunked mode (large deltas)",
+                    "value": {
+                        "delta_upload_id": "abc123def456..."
+                    }
+                }
+            ]
+        }
+    }
+
+
+class InventoryDeltaResponse(BaseModel):
+    """Response schema for delta submission."""
+
+    status: str = Field(..., description="Processing status (success/error)")
+    message: str = Field(..., description="Status message")
+    collections_updated: int = Field(..., ge=0, description="Number of collections with delta stored")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "success",
+                "message": "Stored delta for 5 collections",
+                "collections_updated": 5
             }
         }
     }

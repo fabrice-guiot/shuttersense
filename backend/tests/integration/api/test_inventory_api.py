@@ -1828,3 +1828,455 @@ class TestScheduledInventoryImport:
         assert result["inventory_config"] is None
         assert result["inventory_schedule"] == "manual"
         assert result["inventory_validation_status"] is None
+
+
+class TestInventoryDeltaEndpoint:
+    """Integration tests for delta reporting endpoint (T093a).
+
+    Issue #107 Phase 8: Delta Detection Between Inventories
+    """
+
+    def _create_connector_with_collection_and_file_info(
+        self, test_client, test_db_session
+    ):
+        """Helper to create a connector with a collection that has existing FileInfo."""
+        from datetime import datetime
+        from backend.src.models import Collection, CollectionType, CollectionState
+
+        # Create connector
+        connector_data = {
+            "name": "S3 Delta Test Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        assert response.status_code == 201
+        connector_guid = response.json()["guid"]
+
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(Connector.uuid == connector_uuid).first()
+
+        # Create a collection with existing FileInfo
+        collection_uuid = GuidService.generate_uuid()
+        collection = Collection(
+            uuid=collection_uuid,
+            name="Test Collection for Delta",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="2020/vacation/",
+            team_id=connector.team_id,
+            connector_id=connector.id,
+            is_accessible=True,
+            file_info=[
+                {
+                    "key": "2020/vacation/IMG_001.CR3",
+                    "size": 25000000,
+                    "last_modified": "2020-07-15T10:30:00Z",
+                    "etag": "abc123",
+                },
+                {
+                    "key": "2020/vacation/IMG_002.CR3",
+                    "size": 24000000,
+                    "last_modified": "2020-07-15T11:00:00Z",
+                    "etag": "def456",
+                },
+            ],
+            file_info_source="inventory",
+            file_info_updated_at=datetime.utcnow(),
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Create inventory folder mapped to collection
+        folder = InventoryFolder(
+            connector_id=connector.id,
+            path="2020/vacation/",
+            object_count=2,
+            total_size_bytes=49000000,
+            collection_guid=collection.guid
+        )
+        test_db_session.add(folder)
+        test_db_session.commit()
+
+        return connector_guid, connector, collection
+
+    def _create_agent_with_api_key(self, test_db_session, test_team, test_user):
+        """Create an agent and return the agent with api_key."""
+        from backend.src.services.agent_service import AgentService
+
+        service = AgentService(test_db_session)
+
+        # Create token
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Register agent
+        result = service.register_agent(
+            plaintext_token=token_result.plaintext_token,
+            name="Test Delta Agent",
+            version="1.0.0",
+            capabilities=["local_filesystem"],
+        )
+        test_db_session.commit()
+
+        return result.agent, result.api_key
+
+    def _create_job_for_connector(self, test_db_session, connector, agent):
+        """Create a job for inventory import and assign to agent."""
+        from backend.src.models import Job, JobStatus
+
+        job = Job(
+            team_id=connector.team_id,
+            collection_id=None,
+            tool="inventory_import",
+            mode="import",
+            status=JobStatus.RUNNING,
+            agent_id=agent.id,
+            progress={
+                "connector_id": connector.id,
+                "connector_guid": connector.guid,
+            }
+        )
+        test_db_session.add(job)
+        test_db_session.commit()
+        return job
+
+    def test_report_delta_inline_success(
+        self, test_client, test_db_session, test_team, test_user
+    ):
+        """Test reporting delta via inline mode."""
+        # Create agent
+        agent, api_key = self._create_agent_with_api_key(
+            test_db_session, test_team, test_user
+        )
+
+        # Create connector with collection
+        connector_guid, connector, collection = (
+            self._create_connector_with_collection_and_file_info(
+                test_client, test_db_session
+            )
+        )
+
+        # Create job
+        job = self._create_job_for_connector(test_db_session, connector, agent)
+
+        # Create agent-authenticated client
+        from starlette.testclient import TestClient
+        from backend.src.main import app as fastapi_app
+        agent_client = TestClient(fastapi_app)
+        agent_client.headers["Authorization"] = f"Bearer {api_key}"
+
+        # Report delta - one new file, one modified
+        delta_data = {
+            "connector_guid": connector_guid,
+            "deltas": [
+                {
+                    "collection_guid": collection.guid,
+                    "summary": {
+                        "new_count": 1,
+                        "modified_count": 1,
+                        "deleted_count": 0,
+                        "new_size_bytes": 26000000,
+                        "modified_size_change_bytes": 500000,
+                        "deleted_size_bytes": 0,
+                        "total_changes": 2,
+                    },
+                    "is_first_import": False,
+                    "changes": [
+                        {
+                            "key": "2020/vacation/IMG_003.CR3",
+                            "change_type": "new",
+                            "size": 26000000,
+                        },
+                        {
+                            "key": "2020/vacation/IMG_001.CR3",
+                            "change_type": "modified",
+                            "size": 25500000,
+                            "previous_size": 25000000,
+                        },
+                    ],
+                    "changes_truncated": False,
+                }
+            ]
+        }
+
+        response = agent_client.post(
+            f"/api/agent/v1/jobs/{job.guid}/inventory/delta",
+            json=delta_data
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["collections_updated"] == 1
+
+        # Verify delta stored on collection
+        test_db_session.refresh(collection)
+        assert collection.file_info_delta is not None
+        assert collection.file_info_delta["new_count"] == 1
+        assert collection.file_info_delta["modified_count"] == 1
+        assert collection.file_info_delta["deleted_count"] == 0
+        assert "computed_at" in collection.file_info_delta
+
+    def test_report_delta_first_import(
+        self, test_client, test_db_session, test_team, test_user
+    ):
+        """Test reporting delta for first import (all files new)."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+
+        # Create agent
+        agent, api_key = self._create_agent_with_api_key(
+            test_db_session, test_team, test_user
+        )
+
+        # Create connector
+        connector_data = {
+            "name": "S3 First Import Test",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(
+            Connector.uuid == connector_uuid
+        ).first()
+
+        # Create collection WITHOUT existing FileInfo (first import)
+        collection_uuid = GuidService.generate_uuid()
+        collection = Collection(
+            uuid=collection_uuid,
+            name="First Import Collection",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="2021/birthday/",
+            team_id=connector.team_id,
+            connector_id=connector.id,
+            is_accessible=True,
+            file_info=None,
+            file_info_source=None,
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Create job
+        job = self._create_job_for_connector(test_db_session, connector, agent)
+
+        # Create agent client
+        from starlette.testclient import TestClient
+        from backend.src.main import app as fastapi_app
+        agent_client = TestClient(fastapi_app)
+        agent_client.headers["Authorization"] = f"Bearer {api_key}"
+
+        # Report first import delta - all files new
+        delta_data = {
+            "connector_guid": connector_guid,
+            "deltas": [
+                {
+                    "collection_guid": collection.guid,
+                    "summary": {
+                        "new_count": 3,
+                        "modified_count": 0,
+                        "deleted_count": 0,
+                        "new_size_bytes": 75000000,
+                        "modified_size_change_bytes": 0,
+                        "deleted_size_bytes": 0,
+                        "total_changes": 3,
+                    },
+                    "is_first_import": True,
+                    "changes": [],  # Truncated for first import
+                    "changes_truncated": True,
+                }
+            ]
+        }
+
+        response = agent_client.post(
+            f"/api/agent/v1/jobs/{job.guid}/inventory/delta",
+            json=delta_data
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["collections_updated"] == 1
+
+        # Verify delta stored
+        test_db_session.refresh(collection)
+        assert collection.file_info_delta is not None
+        assert collection.file_info_delta["new_count"] == 3
+        assert collection.file_info_delta["is_first_import"] is True
+
+    def test_report_delta_multiple_collections(
+        self, test_client, test_db_session, test_team, test_user
+    ):
+        """Test reporting deltas for multiple collections."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+
+        # Create agent
+        agent, api_key = self._create_agent_with_api_key(
+            test_db_session, test_team, test_user
+        )
+
+        # Create connector
+        connector_data = {
+            "name": "S3 Multi Collection Test",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(
+            Connector.uuid == connector_uuid
+        ).first()
+
+        # Create two collections
+        collection1 = Collection(
+            uuid=GuidService.generate_uuid(),
+            name="Collection 1",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="2020/vacation/",
+            team_id=connector.team_id,
+            connector_id=connector.id,
+            is_accessible=True,
+        )
+        collection2 = Collection(
+            uuid=GuidService.generate_uuid(),
+            name="Collection 2",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="2020/wedding/",
+            team_id=connector.team_id,
+            connector_id=connector.id,
+            is_accessible=True,
+        )
+        test_db_session.add_all([collection1, collection2])
+        test_db_session.commit()
+
+        # Create job
+        job = self._create_job_for_connector(test_db_session, connector, agent)
+
+        # Create agent client
+        from starlette.testclient import TestClient
+        from backend.src.main import app as fastapi_app
+        agent_client = TestClient(fastapi_app)
+        agent_client.headers["Authorization"] = f"Bearer {api_key}"
+
+        # Report deltas for both collections
+        delta_data = {
+            "connector_guid": connector_guid,
+            "deltas": [
+                {
+                    "collection_guid": collection1.guid,
+                    "summary": {
+                        "new_count": 2,
+                        "modified_count": 0,
+                        "deleted_count": 1,
+                        "new_size_bytes": 50000000,
+                        "modified_size_change_bytes": 0,
+                        "deleted_size_bytes": 25000000,
+                        "total_changes": 3,
+                    },
+                    "is_first_import": False,
+                    "changes": [],
+                    "changes_truncated": False,
+                },
+                {
+                    "collection_guid": collection2.guid,
+                    "summary": {
+                        "new_count": 5,
+                        "modified_count": 0,
+                        "deleted_count": 0,
+                        "new_size_bytes": 150000000,
+                        "modified_size_change_bytes": 0,
+                        "deleted_size_bytes": 0,
+                        "total_changes": 5,
+                    },
+                    "is_first_import": True,
+                    "changes": [],
+                    "changes_truncated": True,
+                },
+            ]
+        }
+
+        response = agent_client.post(
+            f"/api/agent/v1/jobs/{job.guid}/inventory/delta",
+            json=delta_data
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["collections_updated"] == 2
+
+        # Verify both collections have deltas
+        test_db_session.refresh(collection1)
+        test_db_session.refresh(collection2)
+
+        assert collection1.file_info_delta["new_count"] == 2
+        assert collection1.file_info_delta["deleted_count"] == 1
+        assert collection2.file_info_delta["new_count"] == 5
+        assert collection2.file_info_delta["is_first_import"] is True
+
+    def test_report_delta_invalid_job(
+        self, test_client, test_db_session, test_team, test_user
+    ):
+        """Test reporting delta with invalid job GUID returns error.
+
+        The endpoint validates the GUID format first (returns 400 for invalid format),
+        then checks for job existence (returns 404 for not found).
+        """
+        # Create agent
+        _, api_key = self._create_agent_with_api_key(
+            test_db_session, test_team, test_user
+        )
+
+        # Create agent client
+        from starlette.testclient import TestClient
+        from backend.src.main import app as fastapi_app
+        agent_client = TestClient(fastapi_app)
+        agent_client.headers["Authorization"] = f"Bearer {api_key}"
+
+        # Report delta with non-existent job - GUID validation fails first with 400
+        delta_data = {
+            "connector_guid": "con_0123456789abcdefghijklm",
+            "deltas": [
+                {
+                    "collection_guid": "col_0123456789abcdefghijklm",
+                    "summary": {
+                        "new_count": 0,
+                        "modified_count": 0,
+                        "deleted_count": 0,
+                        "new_size_bytes": 0,
+                        "modified_size_change_bytes": 0,
+                        "deleted_size_bytes": 0,
+                        "total_changes": 0,
+                    },
+                    "is_first_import": False,
+                    "changes": [],
+                    "changes_truncated": False,
+                }
+            ]
+        }
+
+        response = agent_client.post(
+            "/api/agent/v1/jobs/job_0123456789abcdefghijklm/inventory/delta",
+            json=delta_data
+        )
+
+        # GUID validation happens before job lookup, returns 400 for invalid format
+        assert response.status_code == 400

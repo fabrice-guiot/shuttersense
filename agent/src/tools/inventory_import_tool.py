@@ -6,7 +6,7 @@ extracts unique folder paths, and populates FileInfo on collections
 without making expensive cloud API calls.
 
 Issue #107: Cloud Storage Bucket Inventory Import
-Tasks: T028, T028a, T029, T032, T063, T064, T065, T066
+Tasks: T028, T028a, T029, T032, T063, T064, T065, T066, T085, T086, T087, T088, T089
 
 Architecture:
     Phase A: Folder Extraction
@@ -21,7 +21,13 @@ Architecture:
         3. Extract FileInfo (key, size, last_modified, etag, storage_class)
         4. Report FileInfo to server per collection
 
-    Phase C (future): Delta Detection
+    Phase C: Delta Detection (Issue #107 Phase 8)
+        1. Get stored FileInfo from server for each Collection
+        2. Compare current inventory entries against stored FileInfo
+        3. Detect new files (in current, not in previous)
+        4. Detect modified files (different ETag or size)
+        5. Detect deleted files (in previous, not in current)
+        6. Report delta summary to server per collection
 """
 
 import asyncio
@@ -129,6 +135,128 @@ class PhaseBResult:
     success: bool
     collections_processed: int
     collection_file_info: Dict[str, List[FileInfoData]]
+    error_message: Optional[str] = None
+
+
+# =============================================================================
+# Phase C: Delta Detection (Issue #107 Phase 8)
+# Tasks: T085, T086, T087, T088, T089
+# =============================================================================
+
+@dataclass
+class FileDelta:
+    """
+    Information about a changed file.
+
+    Attributes:
+        key: File path/key
+        change_type: Type of change (new, modified, deleted)
+        size: Current size (for new/modified) or previous size (for deleted)
+        previous_size: Previous size (for modified files)
+        etag: Current ETag (for new/modified)
+        previous_etag: Previous ETag (for modified files)
+    """
+    key: str
+    change_type: str  # "new", "modified", "deleted"
+    size: int
+    previous_size: Optional[int] = None
+    etag: Optional[str] = None
+    previous_etag: Optional[str] = None
+
+
+@dataclass
+class DeltaSummary:
+    """
+    Summary of changes for a collection.
+
+    Attributes:
+        new_count: Number of new files
+        modified_count: Number of modified files
+        deleted_count: Number of deleted files
+        new_size_bytes: Total size of new files
+        modified_size_change_bytes: Net size change from modifications
+        deleted_size_bytes: Total size of deleted files
+    """
+    new_count: int = 0
+    modified_count: int = 0
+    deleted_count: int = 0
+    new_size_bytes: int = 0
+    modified_size_change_bytes: int = 0  # Can be positive or negative
+    deleted_size_bytes: int = 0
+
+    @property
+    def total_changes(self) -> int:
+        """Total number of changed files."""
+        return self.new_count + self.modified_count + self.deleted_count
+
+    @property
+    def has_changes(self) -> bool:
+        """Whether there are any changes."""
+        return self.total_changes > 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API submission."""
+        return {
+            "new_count": self.new_count,
+            "modified_count": self.modified_count,
+            "deleted_count": self.deleted_count,
+            "new_size_bytes": self.new_size_bytes,
+            "modified_size_change_bytes": self.modified_size_change_bytes,
+            "deleted_size_bytes": self.deleted_size_bytes,
+            "total_changes": self.total_changes,
+        }
+
+
+@dataclass
+class CollectionDelta:
+    """
+    Delta detection result for a single collection.
+
+    Attributes:
+        collection_guid: Collection GUID (col_xxx)
+        summary: Summary of changes
+        changes: List of individual file changes (limited for large deltas)
+        is_first_import: True if no previous FileInfo existed
+    """
+    collection_guid: str
+    summary: DeltaSummary
+    changes: List[FileDelta]
+    is_first_import: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API submission."""
+        return {
+            "collection_guid": self.collection_guid,
+            "summary": self.summary.to_dict(),
+            "is_first_import": self.is_first_import,
+            # Limit changes to first 1000 for API payload size
+            "changes": [
+                {
+                    "key": c.key,
+                    "change_type": c.change_type,
+                    "size": c.size,
+                    "previous_size": c.previous_size,
+                }
+                for c in self.changes[:1000]
+            ],
+            "changes_truncated": len(self.changes) > 1000,
+        }
+
+
+@dataclass
+class PhaseCResult:
+    """
+    Result of Phase C delta detection.
+
+    Attributes:
+        success: Whether Phase C completed successfully
+        collections_processed: Number of collections with deltas computed
+        collection_deltas: Dict mapping collection_guid to CollectionDelta
+        error_message: Error message if Phase C failed
+    """
+    success: bool
+    collections_processed: int
+    collection_deltas: Dict[str, CollectionDelta]
     error_message: Optional[str] = None
 
 
@@ -717,3 +845,232 @@ class InventoryImportTool:
             file_info_list.append(file_info)
 
         return file_info_list
+
+    # =========================================================================
+    # Phase C: Delta Detection (Issue #107 Phase 8)
+    # Tasks: T085, T086, T087, T088, T089
+    # =========================================================================
+
+    def execute_phase_c(
+        self,
+        phase_b_result: PhaseBResult,
+        collections_data: List[Dict[str, Any]]
+    ) -> PhaseCResult:
+        """
+        Execute Phase C: Delta Detection.
+
+        Compares current inventory FileInfo against stored FileInfo from server
+        to detect new, modified, and deleted files.
+
+        Args:
+            phase_b_result: Result from Phase B containing current FileInfo
+            collections_data: Collection data from server including stored file_info
+
+        Returns:
+            PhaseCResult with per-collection deltas
+
+        Example:
+            >>> # After Phase B completes
+            >>> phase_c_result = tool.execute_phase_c(phase_b_result, collections_data)
+            >>> for guid, delta in phase_c_result.collection_deltas.items():
+            ...     print(f"{guid}: {delta.summary.total_changes} changes")
+        """
+        if not phase_b_result.success:
+            return PhaseCResult(
+                success=False,
+                collections_processed=0,
+                collection_deltas={},
+                error_message="Phase B did not complete successfully"
+            )
+
+        if not phase_b_result.collection_file_info:
+            logger.info("No collections to compute deltas for")
+            return PhaseCResult(
+                success=True,
+                collections_processed=0,
+                collection_deltas={},
+                error_message=None
+            )
+
+        self._report_progress("phase_c_start", 0, "Starting delta detection...")
+
+        collection_deltas: Dict[str, CollectionDelta] = {}
+        total_collections = len(collections_data)
+
+        for idx, coll in enumerate(collections_data):
+            collection_guid = coll.get("collection_guid", "")
+            stored_file_info = coll.get("file_info")  # May be None for first import
+
+            # Skip if we don't have current FileInfo for this collection
+            if collection_guid not in phase_b_result.collection_file_info:
+                continue
+
+            current_file_info = phase_b_result.collection_file_info[collection_guid]
+
+            # Compute delta
+            delta = self._compute_collection_delta(
+                collection_guid=collection_guid,
+                current_file_info=current_file_info,
+                stored_file_info=stored_file_info
+            )
+            collection_deltas[collection_guid] = delta
+
+            # Report progress
+            progress = int((idx + 1) / total_collections * 100)
+            self._report_progress(
+                "phase_c_progress",
+                progress,
+                f"Computed delta for collection {idx + 1}/{total_collections}"
+            )
+
+            logger.info(
+                f"Collection {collection_guid}: "
+                f"{delta.summary.new_count} new, "
+                f"{delta.summary.modified_count} modified, "
+                f"{delta.summary.deleted_count} deleted"
+                f"{' (first import)' if delta.is_first_import else ''}"
+            )
+
+        self._report_progress(
+            "phase_c_complete",
+            100,
+            f"Computed deltas for {len(collection_deltas)} collections"
+        )
+
+        logger.info(
+            f"Phase C complete: {len(collection_deltas)} collections processed"
+        )
+
+        return PhaseCResult(
+            success=True,
+            collections_processed=len(collection_deltas),
+            collection_deltas=collection_deltas,
+            error_message=None
+        )
+
+    def _compute_collection_delta(
+        self,
+        collection_guid: str,
+        current_file_info: List[FileInfoData],
+        stored_file_info: Optional[List[Dict[str, Any]]]
+    ) -> CollectionDelta:
+        """
+        Compute delta between current and stored FileInfo for a collection.
+
+        Args:
+            collection_guid: Collection GUID
+            current_file_info: Current FileInfo from inventory (Phase B)
+            stored_file_info: Previously stored FileInfo from server (may be None)
+
+        Returns:
+            CollectionDelta with summary and individual changes
+        """
+        # Handle first import case (no stored FileInfo)
+        if not stored_file_info:
+            # All files are "new" for first import
+            changes = [
+                FileDelta(
+                    key=fi.key,
+                    change_type="new",
+                    size=fi.size,
+                    etag=fi.etag
+                )
+                for fi in current_file_info
+            ]
+            summary = DeltaSummary(
+                new_count=len(current_file_info),
+                new_size_bytes=sum(fi.size for fi in current_file_info)
+            )
+            return CollectionDelta(
+                collection_guid=collection_guid,
+                summary=summary,
+                changes=changes,
+                is_first_import=True
+            )
+
+        # Build lookup maps for efficient comparison
+        # Key: file key (path), Value: FileInfoData or dict
+        current_map: Dict[str, FileInfoData] = {fi.key: fi for fi in current_file_info}
+        stored_map: Dict[str, Dict[str, Any]] = {fi["key"]: fi for fi in stored_file_info}
+
+        changes: List[FileDelta] = []
+        summary = DeltaSummary()
+
+        # Detect new and modified files (T087, T088)
+        for key, current in current_map.items():
+            if key not in stored_map:
+                # New file (T087)
+                changes.append(FileDelta(
+                    key=key,
+                    change_type="new",
+                    size=current.size,
+                    etag=current.etag
+                ))
+                summary.new_count += 1
+                summary.new_size_bytes += current.size
+            else:
+                # File exists in both - check for modifications (T088)
+                stored = stored_map[key]
+                is_modified = self._is_file_modified(current, stored)
+                if is_modified:
+                    changes.append(FileDelta(
+                        key=key,
+                        change_type="modified",
+                        size=current.size,
+                        previous_size=stored.get("size", 0),
+                        etag=current.etag,
+                        previous_etag=stored.get("etag")
+                    ))
+                    summary.modified_count += 1
+                    summary.modified_size_change_bytes += (
+                        current.size - stored.get("size", 0)
+                    )
+
+        # Detect deleted files (T089)
+        for key, stored in stored_map.items():
+            if key not in current_map:
+                changes.append(FileDelta(
+                    key=key,
+                    change_type="deleted",
+                    size=stored.get("size", 0),
+                    etag=stored.get("etag")
+                ))
+                summary.deleted_count += 1
+                summary.deleted_size_bytes += stored.get("size", 0)
+
+        return CollectionDelta(
+            collection_guid=collection_guid,
+            summary=summary,
+            changes=changes,
+            is_first_import=False
+        )
+
+    def _is_file_modified(
+        self,
+        current: FileInfoData,
+        stored: Dict[str, Any]
+    ) -> bool:
+        """
+        Check if a file has been modified based on ETag or size.
+
+        Modification is detected when:
+        - ETag has changed (if available in both)
+        - Size has changed
+
+        Args:
+            current: Current FileInfo from inventory
+            stored: Stored FileInfo from server
+
+        Returns:
+            True if file appears modified
+        """
+        # Compare ETag if available in both
+        current_etag = current.etag
+        stored_etag = stored.get("etag")
+
+        if current_etag and stored_etag:
+            # ETag comparison is most reliable
+            return current_etag != stored_etag
+
+        # Fall back to size comparison
+        return current.size != stored.get("size", 0)

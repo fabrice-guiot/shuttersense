@@ -57,6 +57,8 @@ class UploadType(str, Enum):
     """Type of content being uploaded."""
     RESULTS_JSON = "results_json"
     REPORT_HTML = "report_html"
+    FILE_INFO = "file_info"  # Issue #107: Inventory FileInfo for collections
+    DELTA = "delta"  # Issue #107 Phase 8: Inventory delta results
 
 
 @dataclass
@@ -677,6 +679,10 @@ class ChunkedUploadService:
             return self._validate_json_results(content)
         elif upload_type == UploadType.REPORT_HTML:
             return self._validate_html_report(content)
+        elif upload_type == UploadType.FILE_INFO:
+            return self._validate_file_info(content)
+        elif upload_type == UploadType.DELTA:
+            return self._validate_delta(content)
         return None
 
     def _validate_json_results(self, content: bytes) -> Optional[str]:
@@ -697,6 +703,114 @@ class ChunkedUploadService:
             # Must be a dictionary
             if not isinstance(data, dict):
                 return "Results must be a JSON object"
+
+            return None
+
+        except UnicodeDecodeError as e:
+            return f"Invalid UTF-8 encoding: {e}"
+        except json.JSONDecodeError as e:
+            return f"Invalid JSON: {e}"
+
+    def _validate_file_info(self, content: bytes) -> Optional[str]:
+        """
+        Validate FileInfo content from inventory import.
+
+        FileInfo is a JSON object with:
+        - connector_guid: str (con_xxx format)
+        - collections: list of {collection_guid, file_info}
+
+        Issue #107: Chunked upload support for large FileInfo
+
+        Args:
+            content: JSON bytes
+
+        Returns:
+            Error message if invalid, None if valid
+        """
+        try:
+            # Parse JSON
+            decoded = content.decode('utf-8')
+            data = json.loads(decoded)
+
+            # Must be a dictionary
+            if not isinstance(data, dict):
+                return "FileInfo must be a JSON object"
+
+            # Must have connector_guid
+            if "connector_guid" not in data:
+                return "FileInfo missing 'connector_guid' field"
+
+            # Must have collections array
+            if "collections" not in data:
+                return "FileInfo missing 'collections' field"
+
+            if not isinstance(data["collections"], list):
+                return "FileInfo 'collections' must be an array"
+
+            # Validate each collection entry has required fields
+            for i, entry in enumerate(data["collections"]):
+                if not isinstance(entry, dict):
+                    return f"FileInfo collections[{i}] must be an object"
+                if "collection_guid" not in entry:
+                    return f"FileInfo collections[{i}] missing 'collection_guid'"
+                if "file_info" not in entry:
+                    return f"FileInfo collections[{i}] missing 'file_info'"
+                if not isinstance(entry["file_info"], list):
+                    return f"FileInfo collections[{i}].file_info must be an array"
+
+            return None
+
+        except UnicodeDecodeError as e:
+            return f"Invalid UTF-8 encoding: {e}"
+        except json.JSONDecodeError as e:
+            return f"Invalid JSON: {e}"
+
+    def _validate_delta(self, content: bytes) -> Optional[str]:
+        """
+        Validate delta content from inventory import Phase C.
+
+        Delta is a JSON object with:
+        - connector_guid: str (con_xxx format)
+        - deltas: list of {collection_guid, summary, is_first_import, changes}
+
+        Issue #107 Phase 8: Chunked upload support for large deltas
+
+        Args:
+            content: JSON bytes
+
+        Returns:
+            Error message if invalid, None if valid
+        """
+        try:
+            # Parse JSON
+            decoded = content.decode('utf-8')
+            data = json.loads(decoded)
+
+            # Must be a dictionary
+            if not isinstance(data, dict):
+                return "Delta must be a JSON object"
+
+            # Must have connector_guid
+            if "connector_guid" not in data:
+                return "Delta missing 'connector_guid' field"
+
+            # Must have deltas array
+            if "deltas" not in data:
+                return "Delta missing 'deltas' field"
+
+            if not isinstance(data["deltas"], list):
+                return "Delta 'deltas' must be an array"
+
+            # Validate each delta entry has required fields
+            for i, entry in enumerate(data["deltas"]):
+                if not isinstance(entry, dict):
+                    return f"Delta deltas[{i}] must be an object"
+                if "collection_guid" not in entry:
+                    return f"Delta deltas[{i}] missing 'collection_guid'"
+                if "summary" not in entry:
+                    return f"Delta deltas[{i}] missing 'summary'"
+                if not isinstance(entry["summary"], dict):
+                    return f"Delta deltas[{i}].summary must be an object"
 
             return None
 

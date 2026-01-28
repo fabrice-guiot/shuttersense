@@ -880,14 +880,20 @@ class AgentApiClient:
         job_guid: str,
         connector_guid: str,
         collections_file_info: list[dict[str, Any]],
+        chunked_upload_client: Any = None,
     ) -> dict[str, Any]:
         """
         Report FileInfo for collections from inventory import Phase B.
+
+        Automatically uses chunked upload for large FileInfo (> 1MB).
+
+        Issue #107: Added chunked upload support for large collections.
 
         Args:
             job_guid: GUID of the import job
             connector_guid: GUID of the connector
             collections_file_info: List of dicts with collection_guid and file_info
+            chunked_upload_client: Optional ChunkedUploadClient for large uploads
 
         Returns:
             Response with collections_updated count
@@ -897,15 +903,56 @@ class AgentApiClient:
             ConnectionError: If connection to server fails
             ApiError: If the request fails
         """
+        import json
+
+        # Check payload size to determine upload mode
         payload: dict[str, Any] = {
             "connector_guid": connector_guid,
             "collections": collections_file_info,
         }
+        payload_json = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+        payload_size = len(payload_json.encode('utf-8'))
+
+        # Use chunked upload for large payloads (> 1MB)
+        INLINE_THRESHOLD = 1 * 1024 * 1024  # 1MB
+        use_chunked = payload_size > INLINE_THRESHOLD
+
+        if use_chunked:
+            if chunked_upload_client is None:
+                # Import here to avoid circular dependency
+                from src.chunked_upload import ChunkedUploadClient
+                chunked_upload_client = ChunkedUploadClient(api_client=self)
+
+            logger.info(
+                f"Using chunked upload for large FileInfo ({payload_size / 1024 / 1024:.2f} MB)",
+                extra={"job_guid": job_guid, "payload_size": payload_size}
+            )
+
+            # Upload via chunked protocol
+            upload_result = await chunked_upload_client.upload_file_info(
+                job_guid=job_guid,
+                connector_guid=connector_guid,
+                collections_file_info=collections_file_info,
+            )
+
+            if not upload_result.success:
+                raise ApiError(
+                    f"Chunked FileInfo upload failed: {upload_result.error}",
+                    status_code=500,
+                )
+
+            # Submit request with upload_id reference
+            request_payload: dict[str, Any] = {
+                "file_info_upload_id": upload_result.upload_id,
+            }
+        else:
+            # Inline mode for small payloads
+            request_payload = payload
 
         try:
             response = await self._client.post(
                 f"{API_BASE_PATH}/jobs/{job_guid}/inventory/file-info",
-                json=payload,
+                json=request_payload,
             )
         except httpx.ConnectError as e:
             raise ConnectionError(f"Failed to connect to server: {e}")
@@ -926,6 +973,107 @@ class AgentApiClient:
         else:
             raise ApiError(
                 f"Inventory file-info report failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def report_inventory_delta(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        deltas: list[dict[str, Any]],
+        chunked_upload_client: Any = None,
+    ) -> dict[str, Any]:
+        """
+        Report delta detection results from inventory import Phase C.
+
+        Automatically uses chunked upload for large payloads (> 1MB).
+
+        Issue #107 Phase 8: Delta Detection Between Inventories
+
+        Args:
+            job_guid: GUID of the import job
+            connector_guid: GUID of the connector
+            deltas: List of {collection_guid, summary, ...} dicts
+            chunked_upload_client: Optional ChunkedUploadClient for large uploads
+
+        Returns:
+            Response with collections_updated count
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+            ApiError: If the request fails
+        """
+        import json
+
+        # Check payload size to determine upload mode
+        payload: dict[str, Any] = {
+            "connector_guid": connector_guid,
+            "deltas": deltas,
+        }
+        payload_json = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+        payload_size = len(payload_json.encode('utf-8'))
+
+        # Use chunked upload for large payloads (> 1MB)
+        INLINE_THRESHOLD = 1 * 1024 * 1024  # 1MB
+        use_chunked = payload_size > INLINE_THRESHOLD
+
+        if use_chunked:
+            if chunked_upload_client is None:
+                # Import here to avoid circular dependency
+                from src.chunked_upload import ChunkedUploadClient
+                chunked_upload_client = ChunkedUploadClient(api_client=self)
+
+            logger.info(
+                f"Using chunked upload for large delta ({payload_size / 1024 / 1024:.2f} MB)",
+                extra={"job_guid": job_guid, "payload_size": payload_size}
+            )
+
+            # Upload via chunked protocol
+            upload_result = await chunked_upload_client.upload_delta(
+                job_guid=job_guid,
+                connector_guid=connector_guid,
+                deltas=deltas,
+            )
+
+            if not upload_result.success:
+                raise ApiError(
+                    f"Chunked delta upload failed: {upload_result.error}",
+                    status_code=500,
+                )
+
+            # Submit request with upload_id reference
+            request_payload: dict[str, Any] = {
+                "delta_upload_id": upload_result.upload_id,
+            }
+        else:
+            # Inline mode for small payloads
+            request_payload = payload
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/jobs/{job_guid}/inventory/delta",
+                json=request_payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            raise ApiError("Job not found", status_code=404)
+        elif response.status_code == 403:
+            raise ApiError("Job not assigned to this agent", status_code=403)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Inventory delta report failed with status {response.status_code}",
                 status_code=response.status_code,
             )
 

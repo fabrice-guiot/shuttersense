@@ -7,8 +7,9 @@
  * Issue #107: Cloud Storage Bucket Inventory Import
  */
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Settings, Trash2, Play, RefreshCw, CheckCircle, FolderTree as FolderTreeIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -70,6 +71,36 @@ export function InventoryConfigSection({
   const { folders, loading: foldersLoading, refetch: refetchFolders } = useAllInventoryFolders(connector.guid, {
     autoFetch: false  // Only fetch when wizard opens
   })
+
+  // T095: Track previous job state to detect completion
+  const prevJobRef = useRef<{ guid: string; status: string } | null>(null)
+
+  // T095: Detect job completion and show notification
+  useEffect(() => {
+    const prevJob = prevJobRef.current
+    const currentJob = status?.current_job
+
+    // Check if job just completed (was running, now null or completed)
+    if (prevJob && !currentJob) {
+      // Job completed - show notification
+      toast.success('Inventory import completed', {
+        description: 'Check the Collections list for change details.'
+      })
+    } else if (prevJob && currentJob?.status === 'completed' && prevJob.status !== 'completed') {
+      // Job status changed to completed
+      toast.success('Inventory import completed', {
+        description: 'Check the Collections list for change details.'
+      })
+    } else if (prevJob && currentJob?.status === 'failed' && prevJob.status !== 'failed') {
+      // Job failed
+      toast.error('Inventory import failed', {
+        description: 'Check the job details for more information.'
+      })
+    }
+
+    // Update ref for next comparison
+    prevJobRef.current = currentJob ?? null
+  }, [status?.current_job])
 
   // Only S3 and GCS connectors support inventory
   const supportsInventory = connector.type === 's3' || connector.type === 'gcs'

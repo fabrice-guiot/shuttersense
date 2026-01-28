@@ -1386,7 +1386,9 @@ class InventoryService:
                     collections_data.append({
                         "collection_guid": folder.collection_guid,
                         "collection_id": collection.id,
-                        "folder_path": folder.path
+                        "folder_path": folder.path,
+                        # Include stored file_info for Phase C delta detection
+                        "file_info": collection.file_info
                     })
             except ValueError:
                 # Skip invalid GUIDs

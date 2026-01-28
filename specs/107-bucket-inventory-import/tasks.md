@@ -194,6 +194,7 @@
 ### Backend FileInfo Storage
 
 - [x] T068 [US4] Add POST endpoint `/api/agent/v1/jobs/{guid}/inventory/file-info` for FileInfo results
+  - **Enhancement (pre-Phase 8)**: Added chunked upload support for large FileInfo (> 1MB). Endpoint accepts either inline `connector_guid + collections` or `file_info_upload_id` from chunked upload session.
 - [x] T069 [US4] Implement FileInfo storage on Collection (file_info JSONB, file_info_updated_at, file_info_source)
 - [x] T070 [US4] Add GET endpoint for Collection FileInfo status (last updated, source) - included in Collection response
 
@@ -298,30 +299,53 @@
 
 ### Agent Phase C Implementation
 
-- [ ] T085 [US6] Implement Phase C (Delta Detection) in `agent/src/tools/inventory_import_tool.py`
-- [ ] T086 [US6] Compare current inventory against stored FileInfo per Collection
-- [ ] T087 [US6] Detect new files (in current, not in previous)
-- [ ] T088 [US6] Detect modified files (different ETag or size)
-- [ ] T089 [US6] Detect deleted files (in previous, not in current)
+- [x] T085 [US6] Implement Phase C (Delta Detection) in `agent/src/tools/inventory_import_tool.py`
+  - Added `execute_phase_c()` method and supporting dataclasses (FileDelta, DeltaSummary, CollectionDelta, PhaseCResult)
+- [x] T086 [US6] Compare current inventory against stored FileInfo per Collection
+  - Implemented in `_compute_collection_delta()` with efficient key-based lookup maps
+- [x] T087 [US6] Detect new files (in current, not in previous)
+  - Files in current map but not stored map are marked as "new"
+- [x] T088 [US6] Detect modified files (different ETag or size)
+  - Implemented in `_is_file_modified()` - compares ETag first, falls back to size
+- [x] T089 [US6] Detect deleted files (in previous, not in current)
+  - Files in stored map but not current map are marked as "deleted"
 
 ### Backend Delta Storage
 
-- [ ] T091 [US6] Add POST endpoint `/api/agent/v1/jobs/{guid}/inventory/delta` for delta results
-- [ ] T092 [US6] Store delta summary on Collection (file_info_delta JSONB)
-- [ ] T093 [US6] Handle first import case (all files reported as new)
+- [x] T091 [US6] Add POST endpoint `/api/agent/v1/jobs/{guid}/inventory/delta` for delta results
+  - Supports both inline and chunked upload modes (following T068 pattern)
+  - Added DELTA upload type to ChunkedUploadService with validation
+- [x] T092 [US6] Store delta summary on Collection (file_info_delta JSONB)
+  - Uses existing `file_info_delta` column, stores summary with computed_at timestamp
+- [x] T093 [US6] Handle first import case (all files reported as new)
+  - Agent sets `is_first_import=True` when no stored FileInfo exists
+  - All files marked as "new" for first import
 
 ### Frontend Delta Display
 
-- [ ] T094 [P] [US6] Display change statistics on Collection view (X new, Y modified, Z deleted)
-- [ ] T095 [US6] Add delta summary to import completion notification
+- [x] T094 [P] [US6] Display change statistics on Collection view (X new, Y modified, Z deleted)
+  - Updated `FileInfoSummary` type with properly typed `FileInfoDelta` interface in `collection-api.ts`
+  - Added trend indicator icons on Inventory column: TrendingUp (↗ green=growth), ArrowRight (→ blue=stable), TrendingDown (↘ yellow=shrinkage)
+  - Enhanced `CollectionList.tsx` tooltip to always show delta info:
+    - "First import (X files)" for initial import
+    - Color-coded change counts: +X new (green), ~X modified (yellow), -X deleted (red)
+    - "No changes detected" when delta exists but no changes
+- [x] T095 [US6] Add delta summary to import completion notification
+  - Added job completion detection in `InventoryConfigSection.tsx` using useRef/useEffect
+  - Shows toast notification when import completes/fails with link to Collections list for details
 
 ### Tests for US6
 
-- [ ] T086a [P] [US6] Unit tests for new file detection in `agent/tests/unit/test_inventory_import_tool.py`
-- [ ] T088a [P] [US6] Unit tests for modified file detection (ETag change, size change) in `agent/tests/unit/test_inventory_import_tool.py`
-- [ ] T089a [P] [US6] Unit tests for deleted file detection in `agent/tests/unit/test_inventory_import_tool.py`
-- [ ] T090 [US6] Unit tests for Phase C pipeline in `agent/tests/unit/test_inventory_import_tool.py`
-- [ ] T093a [US6] Integration test for delta endpoint and storage in `backend/tests/integration/api/test_inventory_api.py`
+- [x] T086a [P] [US6] Unit tests for new file detection in `agent/tests/unit/test_inventory_import_phase_c.py`
+  - Tests: TestNewFileDetection (4 tests: single new, multiple new, first import, empty stored list)
+- [x] T088a [P] [US6] Unit tests for modified file detection (ETag change, size change) in `agent/tests/unit/test_inventory_import_phase_c.py`
+  - Tests: TestModifiedFileDetection (5 tests: ETag change, size change, size decrease, multiple modified, unchanged)
+- [x] T089a [P] [US6] Unit tests for deleted file detection in `agent/tests/unit/test_inventory_import_phase_c.py`
+  - Tests: TestDeletedFileDetection (3 tests: single deleted, multiple deleted, all deleted)
+- [x] T090 [US6] Unit tests for Phase C pipeline in `agent/tests/unit/test_inventory_import_phase_c.py`
+  - Tests: TestPhaseCPipeline (5 tests), TestCombinedChangeDetection, TestDeltaSummaryDataclass, TestCollectionDeltaDataclass
+- [x] T093a [US6] Integration test for delta endpoint and storage in `backend/tests/integration/api/test_inventory_api.py`
+  - Tests: TestInventoryDeltaEndpoint (4 tests: inline success, first import, multiple collections, invalid job)
 
 **Checkpoint**: Users see what changed between inventory imports with per-Collection delta summaries
 
