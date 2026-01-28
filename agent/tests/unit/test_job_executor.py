@@ -649,3 +649,124 @@ class TestCachedFileInfo:
             # The 4th argument (cached_file_info) should be a list of FileInfo
             assert call_args[0][3] is not None
             assert len(call_args[0][3]) == 1
+
+
+# =============================================================================
+# T117: SC-007 - Zero Cloud API Calls with Cached FileInfo
+# =============================================================================
+
+
+class TestZeroCloudAPICalls:
+    """T117: Verify zero cloud API calls when using cached FileInfo (SC-007).
+
+    These tests verify that when cached FileInfo is provided in the job,
+    the analysis tools use that data instead of making cloud API calls.
+    """
+
+    def test_cached_file_info_bypasses_adapter_creation(self, mock_api_client):
+        """SC-007: Verify _should_use_cached_file_info returns True when valid cache exists."""
+        executor = JobExecutor(mock_api_client)
+
+        # Job with cached file_info from inventory
+        job_with_cache = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "collection_path": "2020/vacation",
+            "file_info": [
+                {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+                {"key": "2020/vacation/IMG_002.CR3", "size": 24000000, "last_modified": "2022-01-02T00:00:00Z"},
+            ],
+            "file_info_source": "inventory",
+        }
+
+        # Should use cached file info (no adapter needed)
+        assert executor._should_use_cached_file_info(job_with_cache) is True
+
+    def test_no_cached_file_info_requires_adapter(self, mock_api_client):
+        """SC-007: Verify _should_use_cached_file_info returns False when no cache."""
+        executor = JobExecutor(mock_api_client)
+
+        # Job without cached file_info
+        job_without_cache = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "collection_path": "2020/vacation",
+            # No file_info - adapter would be needed
+        }
+
+        # Should NOT use cached file info (adapter needed)
+        assert executor._should_use_cached_file_info(job_without_cache) is False
+
+    def test_force_refresh_ignores_cache(self, mock_api_client):
+        """SC-007: Verify force_cloud_refresh bypasses cached FileInfo."""
+        executor = JobExecutor(mock_api_client)
+
+        # Job with cached file_info BUT force refresh requested
+        job_force_refresh = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "collection_path": "2020/vacation",
+            "file_info": [
+                {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            ],
+            "file_info_source": "inventory",
+            "parameters": {"force_cloud_refresh": True},
+        }
+
+        # Should NOT use cached file info due to force refresh
+        assert executor._should_use_cached_file_info(job_force_refresh) is False
+
+    def test_cached_file_info_converted_correctly(self, mock_api_client):
+        """SC-007: Verify cached FileInfo is converted to tool format correctly."""
+        executor = JobExecutor(mock_api_client)
+
+        cached_file_info = [
+            {"key": "2020/vacation/IMG_001.CR3", "size": 25165824, "last_modified": "2022-01-01T10:30:00Z"},
+            {"key": "2020/vacation/IMG_002.CR3", "size": 24117248, "last_modified": "2022-01-02T11:00:00Z"},
+        ]
+
+        # Convert cached file info to tool format
+        result = executor._convert_cached_file_info(cached_file_info, "2020/vacation")
+
+        # Verify conversion preserves data accurately
+        assert len(result) == 2
+        assert result[0].path == "IMG_001.CR3"
+        assert result[0].size == 25165824  # Exact size preserved
+        assert result[1].path == "IMG_002.CR3"
+        assert result[1].size == 24117248  # Exact size preserved
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_uses_cached_file_info(self, mock_api_client):
+        """SC-007: Verify _execute_tool passes cached FileInfo to tool methods."""
+        executor = JobExecutor(mock_api_client)
+
+        job = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "collection_path": "2020/vacation",
+            "file_info": [
+                {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            ],
+            "file_info_source": "inventory",
+        }
+        config = {
+            "connector": {"guid": "con_test", "type": "s3", "name": "Test S3"},
+            "photo_extensions": [".cr3"],
+            "metadata_extensions": [".xmp"],
+            "require_sidecar": [],
+        }
+
+        # Mock _run_photostats to capture arguments
+        with patch.object(executor, '_run_photostats', new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = JobResult(success=True, results={})
+            await executor._execute_tool(job, config)
+
+            # Verify cached_file_info was passed (argument 4)
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args[0]
+            cached_file_info_arg = call_args[3]  # 4th positional argument
+
+            # Should have converted FileInfo, not None
+            assert cached_file_info_arg is not None
+            assert len(cached_file_info_arg) == 1
+            assert cached_file_info_arg[0].size == 25000000

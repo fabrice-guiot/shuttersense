@@ -386,6 +386,56 @@ describe('FolderTree', () => {
       const checkbox = screen.getByLabelText('Select 2020')
       expect(checkbox).toBeDisabled()
     })
+
+    // T110a: Test that all folders mapped shows correct count
+    it('should show all folders as mapped when all are mapped', () => {
+      // Map all folders
+      const allMappedFolders = sampleFolders.map(f => ({
+        ...f,
+        collection_guid: `col_${f.path.replace(/\//g, '_')}`
+      }))
+      const allMappedPaths = new Set(sampleFolders.map(f => f.path))
+
+      render(
+        <FolderTree
+          folders={allMappedFolders}
+          mappedPaths={allMappedPaths}
+          onSelectionChange={mockOnSelectionChange}
+        />
+      )
+
+      // Should show all 8 folders as already mapped
+      expect(screen.getByText(/8 already mapped/i)).toBeInTheDocument()
+    })
+
+    // T110a: When all folders are mapped, no selectable folders should exist
+    it('should have no selectable folders when all are mapped', async () => {
+      // Map all folders
+      const allMappedFolders = sampleFolders.map(f => ({
+        ...f,
+        collection_guid: `col_${f.path.replace(/\//g, '_')}`
+      }))
+      const allMappedPaths = new Set(sampleFolders.map(f => f.path))
+
+      render(
+        <FolderTree
+          folders={allMappedFolders}
+          mappedPaths={allMappedPaths}
+          onSelectionChange={mockOnSelectionChange}
+        />
+      )
+
+      // Wait for tree to render
+      await waitFor(() => {
+        expect(screen.getByText('2020')).toBeInTheDocument()
+      })
+
+      // All checkboxes should be disabled
+      const checkboxes = screen.getAllByRole('checkbox')
+      checkboxes.forEach(checkbox => {
+        expect(checkbox).toBeDisabled()
+      })
+    })
   })
 
   describe('Search', () => {

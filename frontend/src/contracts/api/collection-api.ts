@@ -22,6 +22,30 @@ export interface BoundAgentSummary {
 }
 
 /**
+ * Delta summary from last inventory import (Issue #107 Phase 8)
+ */
+export interface FileInfoDelta {
+  /** Number of new files detected */
+  new_count: number
+  /** Number of modified files detected */
+  modified_count: number
+  /** Number of deleted files detected */
+  deleted_count: number
+  /** Total size of new files in bytes */
+  new_size_bytes: number
+  /** Net size change from modifications (can be negative) */
+  modified_size_change_bytes: number
+  /** Total size of deleted files in bytes */
+  deleted_size_bytes: number
+  /** Total number of changes */
+  total_changes: number
+  /** Whether this was the first import (all files counted as new) */
+  is_first_import?: boolean
+  /** When the delta was computed (ISO 8601 timestamp) */
+  computed_at: string
+}
+
+/**
  * FileInfo summary for cached inventory data (Issue #107)
  */
 export interface FileInfoSummary {
@@ -31,8 +55,8 @@ export interface FileInfoSummary {
   source: 'api' | 'inventory' | null
   /** When FileInfo was last updated (ISO 8601 timestamp) */
   updated_at: string | null
-  /** Delta summary from last inventory import */
-  delta: Record<string, unknown> | null
+  /** Delta summary from last inventory import (Issue #107 Phase 8) */
+  delta: FileInfoDelta | null
 }
 
 export interface Collection {

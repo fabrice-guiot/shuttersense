@@ -410,3 +410,345 @@ class TestAgentBackendConsistency:
         expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
         assert hash1 == expected_hash
+
+
+# ============================================================================
+# Test: Phase 7 - Server-Side No-Change Detection (Issue #107)
+# ============================================================================
+
+class TestParseISO8601ToTimestamp:
+    """Tests for InputStateService._parse_iso8601_to_timestamp."""
+
+    def test_parses_z_suffix(self, service):
+        """Should parse ISO8601 with Z suffix."""
+        result = service._parse_iso8601_to_timestamp("2022-11-25T13:30:49Z")
+        assert result is not None
+        # 2022-11-25 13:30:49 UTC
+        assert abs(result - 1669383049) < 1
+
+    def test_parses_milliseconds_z_suffix(self, service):
+        """Should parse ISO8601 with milliseconds and Z suffix."""
+        result = service._parse_iso8601_to_timestamp("2022-11-25T13:30:49.000Z")
+        assert result is not None
+        assert abs(result - 1669383049) < 1
+
+    def test_parses_timezone_offset(self, service):
+        """Should parse ISO8601 with timezone offset."""
+        result = service._parse_iso8601_to_timestamp("2022-11-25T13:30:49+00:00")
+        assert result is not None
+        assert abs(result - 1669383049) < 1
+
+    def test_returns_none_for_empty_string(self, service):
+        """Should return None for empty string."""
+        assert service._parse_iso8601_to_timestamp("") is None
+
+    def test_returns_none_for_invalid_format(self, service):
+        """Should return None for invalid format."""
+        assert service._parse_iso8601_to_timestamp("not-a-date") is None
+        assert service._parse_iso8601_to_timestamp("2022/11/25") is None
+
+
+class TestComputeInventoryFileHash:
+    """Tests for InputStateService.compute_inventory_file_hash."""
+
+    @pytest.fixture
+    def sample_file_info(self):
+        """Sample inventory FileInfo for testing."""
+        return [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+            {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+            {"key": "2020/subfolder/IMG_002.dng", "size": 26000000, "last_modified": "2022-11-26T13:30:49.000Z"},
+        ]
+
+    def test_produces_64_char_hex_hash(self, service, sample_file_info):
+        """Should produce a 64-character hex string (SHA-256)."""
+        hash_value = service.compute_inventory_file_hash(sample_file_info)
+
+        assert len(hash_value) == 64
+        assert all(c in "0123456789abcdef" for c in hash_value)
+
+    def test_deterministic_for_same_input(self, service, sample_file_info):
+        """Should produce the same hash for the same input."""
+        hash1 = service.compute_inventory_file_hash(sample_file_info)
+        hash2 = service.compute_inventory_file_hash(sample_file_info)
+
+        assert hash1 == hash2
+
+    def test_order_independent(self, service, sample_file_info):
+        """Should produce the same hash regardless of input order."""
+        reversed_info = list(reversed(sample_file_info))
+
+        hash_original = service.compute_inventory_file_hash(sample_file_info)
+        hash_reversed = service.compute_inventory_file_hash(reversed_info)
+
+        assert hash_original == hash_reversed
+
+    def test_different_files_produce_different_hash(self, service, sample_file_info):
+        """Should produce different hash when files differ."""
+        different_info = [
+            {"key": "2020/IMG_999.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+
+        hash1 = service.compute_inventory_file_hash(sample_file_info)
+        hash2 = service.compute_inventory_file_hash(different_info)
+
+        assert hash1 != hash2
+
+    def test_size_change_produces_different_hash(self, service, sample_file_info):
+        """Should detect when file size changes."""
+        modified_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000001, "last_modified": "2022-11-25T13:30:49.000Z"},
+            {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+            {"key": "2020/subfolder/IMG_002.dng", "size": 26000000, "last_modified": "2022-11-26T13:30:49.000Z"},
+        ]
+
+        hash1 = service.compute_inventory_file_hash(sample_file_info)
+        hash2 = service.compute_inventory_file_hash(modified_info)
+
+        assert hash1 != hash2
+
+    def test_mtime_change_produces_different_hash(self, service, sample_file_info):
+        """Should detect when file last_modified changes."""
+        modified_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T14:30:49.000Z"},  # Changed
+            {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+            {"key": "2020/subfolder/IMG_002.dng", "size": 26000000, "last_modified": "2022-11-26T13:30:49.000Z"},
+        ]
+
+        hash1 = service.compute_inventory_file_hash(sample_file_info)
+        hash2 = service.compute_inventory_file_hash(modified_info)
+
+        assert hash1 != hash2
+
+    def test_empty_file_info(self, service):
+        """Should handle empty file info list."""
+        hash_value = service.compute_inventory_file_hash([])
+
+        assert len(hash_value) == 64
+
+    def test_skips_entries_with_invalid_timestamps(self, service):
+        """Should skip entries with invalid/missing timestamps."""
+        file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+            {"key": "2020/IMG_002.dng", "size": 25000000, "last_modified": "invalid-date"},
+            {"key": "2020/IMG_003.dng", "size": 25000000, "last_modified": ""},
+        ]
+
+        # Should not raise, should skip invalid entries
+        hash_value = service.compute_inventory_file_hash(file_info)
+        assert len(hash_value) == 64
+
+        # Should match hash of only the valid entry
+        valid_only = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+        hash_valid = service.compute_inventory_file_hash(valid_only)
+        assert hash_value == hash_valid
+
+    def test_matches_file_list_hash_format(self, service):
+        """Should produce same hash as compute_file_list_hash for equivalent data."""
+        # Inventory FileInfo
+        file_info = [
+            {"key": "photos/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49Z"},
+        ]
+
+        # Equivalent tuple format (path, size, mtime)
+        # 2022-11-25T13:30:49Z = 1669383049
+        files_tuples = [
+            ("photos/IMG_001.dng", 25000000, 1669383049.0),
+        ]
+
+        hash_inventory = service.compute_inventory_file_hash(file_info)
+        hash_tuples = service.compute_file_list_hash(files_tuples)
+
+        assert hash_inventory == hash_tuples
+
+    def test_url_encoded_paths_are_decoded(self, service):
+        """Should URL-decode paths to match agent-side behavior.
+
+        S3/GCS inventory keys are URL-encoded (e.g., spaces become %20).
+        The agent URL-decodes these before hashing, so we must too.
+        """
+        # URL-encoded FileInfo (as stored in S3/GCS inventory)
+        encoded_file_info = [
+            {"key": "2025/Spring%20Training/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49Z"},
+            {"key": "2025/Event%20%26%20Session/IMG_002.dng", "size": 26000000, "last_modified": "2022-11-25T13:30:50Z"},
+        ]
+
+        # Equivalent with decoded paths (what agent uses)
+        decoded_file_info = [
+            {"key": "2025/Spring Training/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49Z"},
+            {"key": "2025/Event & Session/IMG_002.dng", "size": 26000000, "last_modified": "2022-11-25T13:30:50Z"},
+        ]
+
+        # Both should produce the same hash (decoded internally)
+        hash_encoded = service.compute_inventory_file_hash(encoded_file_info)
+        hash_decoded = service.compute_inventory_file_hash(decoded_file_info)
+
+        assert hash_encoded == hash_decoded
+
+        # Verify against direct file_list_hash with decoded paths
+        files_tuples = [
+            ("2025/Spring Training/IMG_001.dng", 25000000, 1669383049.0),
+            ("2025/Event & Session/IMG_002.dng", 26000000, 1669383050.0),
+        ]
+        hash_tuples = service.compute_file_list_hash(files_tuples)
+
+        assert hash_encoded == hash_tuples
+
+
+class TestCanComputeServerSideHash:
+    """Tests for InputStateService.can_compute_server_side_hash."""
+
+    def test_returns_false_for_none_collection(self, service):
+        """Should return False when collection is None."""
+        assert service.can_compute_server_side_hash(None) is False
+
+    def test_returns_false_for_empty_file_info(self, service):
+        """Should return False when file_info is empty."""
+        from unittest.mock import MagicMock
+
+        collection = MagicMock()
+        collection.file_info = None
+
+        assert service.can_compute_server_side_hash(collection) is False
+
+        collection.file_info = []
+        assert service.can_compute_server_side_hash(collection) is False
+
+    def test_returns_false_for_api_source(self, service):
+        """Should return False when file_info_source is 'api'."""
+        from unittest.mock import MagicMock
+
+        collection = MagicMock()
+        collection.file_info = [{"key": "test.dng", "size": 100}]
+        collection.file_info_source = "api"
+
+        assert service.can_compute_server_side_hash(collection) is False
+
+    def test_returns_false_for_null_source(self, service):
+        """Should return False when file_info_source is None."""
+        from unittest.mock import MagicMock
+
+        collection = MagicMock()
+        collection.file_info = [{"key": "test.dng", "size": 100}]
+        collection.file_info_source = None
+
+        assert service.can_compute_server_side_hash(collection) is False
+
+    def test_returns_true_for_inventory_source(self, service):
+        """Should return True when file_info_source is 'inventory'."""
+        from unittest.mock import MagicMock
+
+        collection = MagicMock()
+        collection.file_info = [{"key": "test.dng", "size": 100}]
+        collection.file_info_source = "inventory"
+
+        assert service.can_compute_server_side_hash(collection) is True
+
+
+class TestComputeCollectionInputStateHash:
+    """Tests for InputStateService.compute_collection_input_state_hash."""
+
+    @pytest.fixture
+    def inventory_collection(self):
+        """Create a mock collection with inventory file info."""
+        from unittest.mock import MagicMock
+
+        collection = MagicMock()
+        collection.file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+            {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+        ]
+        collection.file_info_source = "inventory"
+        return collection
+
+    @pytest.fixture
+    def api_collection(self):
+        """Create a mock collection with API-sourced file info."""
+        from unittest.mock import MagicMock
+
+        collection = MagicMock()
+        collection.file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+        collection.file_info_source = "api"
+        return collection
+
+    def test_returns_none_for_api_source(self, service, api_collection, sample_config):
+        """Should return None when collection uses API source."""
+        result = service.compute_collection_input_state_hash(
+            api_collection, sample_config, "photostats"
+        )
+        assert result is None
+
+    def test_returns_hash_for_inventory_source(self, service, inventory_collection, sample_config):
+        """Should return hash when collection uses inventory source."""
+        result = service.compute_collection_input_state_hash(
+            inventory_collection, sample_config, "photostats"
+        )
+
+        assert result is not None
+        assert len(result) == 64
+        assert all(c in "0123456789abcdef" for c in result)
+
+    def test_deterministic_for_same_input(self, service, inventory_collection, sample_config):
+        """Should produce the same hash for the same input."""
+        hash1 = service.compute_collection_input_state_hash(
+            inventory_collection, sample_config, "photostats"
+        )
+        hash2 = service.compute_collection_input_state_hash(
+            inventory_collection, sample_config, "photostats"
+        )
+
+        assert hash1 == hash2
+
+    def test_different_tool_produces_different_hash(self, service, inventory_collection, sample_config):
+        """Should produce different hash for different tools."""
+        hash1 = service.compute_collection_input_state_hash(
+            inventory_collection, sample_config, "photostats"
+        )
+        hash2 = service.compute_collection_input_state_hash(
+            inventory_collection, sample_config, "photo_pairing"
+        )
+
+        assert hash1 != hash2
+
+    def test_different_config_produces_different_hash(self, service, inventory_collection, sample_config):
+        """Should produce different hash for different config."""
+        modified_config = dict(sample_config)
+        modified_config["photo_extensions"] = [".dng"]
+
+        hash1 = service.compute_collection_input_state_hash(
+            inventory_collection, sample_config, "photostats"
+        )
+        hash2 = service.compute_collection_input_state_hash(
+            inventory_collection, modified_config, "photostats"
+        )
+
+        assert hash1 != hash2
+
+    def test_different_files_produce_different_hash(self, service, sample_config):
+        """Should produce different hash when file info differs."""
+        from unittest.mock import MagicMock
+
+        collection1 = MagicMock()
+        collection1.file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+        collection1.file_info_source = "inventory"
+
+        collection2 = MagicMock()
+        collection2.file_info = [
+            {"key": "2020/IMG_002.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+        collection2.file_info_source = "inventory"
+
+        hash1 = service.compute_collection_input_state_hash(
+            collection1, sample_config, "photostats"
+        )
+        hash2 = service.compute_collection_input_state_hash(
+            collection2, sample_config, "photostats"
+        )
+
+        assert hash1 != hash2

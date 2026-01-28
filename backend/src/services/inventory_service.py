@@ -11,8 +11,8 @@ Issue #107: Cloud Storage Bucket Inventory Import
 """
 
 import json
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Set, Tuple, Union
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Literal, Optional, Set, Tuple, Union
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -119,6 +119,21 @@ class InventoryService:
                 f"connector type '{connector.type.value}'"
             )
 
+        # Check if schedule is changing
+        old_schedule = connector.inventory_schedule or "manual"
+
+        # Cancel scheduled jobs if schedule is changing to manual
+        if schedule == "manual" and old_schedule != "manual":
+            cancelled = self.cancel_scheduled_import_jobs(connector_id, team_id or connector.team_id)
+            if cancelled > 0:
+                logger.info(
+                    "Cancelled scheduled jobs due to schedule change to manual",
+                    extra={
+                        "connector_id": connector_id,
+                        "cancelled_count": cancelled
+                    }
+                )
+
         # Store config as JSONB
         connector.inventory_config = config.model_dump()
         connector.inventory_schedule = schedule
@@ -127,6 +142,10 @@ class InventoryService:
 
         self.db.commit()
         self.db.refresh(connector)
+
+        # Note: Initial scheduled job creation happens after validation completes
+        # (in update_validation_status or validate_inventory_config_server_side)
+        # since we can't schedule imports until config is validated
 
         logger.info(
             "Set inventory configuration on connector",
@@ -162,6 +181,9 @@ class InventoryService:
         """
         connector = self._get_connector(connector_id, team_id)
 
+        # Cancel any scheduled import jobs
+        cancelled_jobs = self.cancel_scheduled_import_jobs(connector_id, team_id or connector.team_id)
+
         # Clear inventory config and status
         connector.inventory_config = None
         connector.inventory_schedule = "manual"
@@ -182,7 +204,8 @@ class InventoryService:
             extra={
                 "connector_id": connector_id,
                 "connector_guid": connector.guid,
-                "deleted_folders": deleted_count
+                "deleted_folders": deleted_count,
+                "cancelled_jobs": cancelled_jobs
             }
         )
 
@@ -256,13 +279,27 @@ class InventoryService:
 
             self.db.commit()
 
+            # If validation succeeded and schedule is not manual, create initial scheduled job
+            scheduled_job = None
+            if success:
+                schedule = connector.inventory_schedule or "manual"
+                if schedule != "manual":
+                    next_scheduled = self.calculate_next_scheduled_at(schedule)
+                    if next_scheduled:
+                        scheduled_job = self.create_scheduled_import_job(
+                            connector_id=connector_id,
+                            team_id=team_id or connector.team_id,
+                            scheduled_for=next_scheduled
+                        )
+
             logger.info(
                 "Completed inventory config validation (server-side)",
                 extra={
                     "connector_id": connector_id,
                     "success": success,
                     "result_message": message,
-                    "latest_manifest": latest_manifest
+                    "latest_manifest": latest_manifest,
+                    "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
                 }
             )
 
@@ -509,6 +546,19 @@ class InventoryService:
         self.db.commit()
         self.db.refresh(connector)
 
+        # If validation succeeded and schedule is not manual, create initial scheduled job
+        scheduled_job = None
+        if success:
+            schedule = connector.inventory_schedule or "manual"
+            if schedule != "manual":
+                next_scheduled = self.calculate_next_scheduled_at(schedule)
+                if next_scheduled:
+                    scheduled_job = self.create_scheduled_import_job(
+                        connector_id=connector_id,
+                        team_id=team_id or connector.team_id,
+                        scheduled_for=next_scheduled
+                    )
+
         logger.info(
             "Updated inventory validation status from agent",
             extra={
@@ -516,7 +566,8 @@ class InventoryService:
                 "connector_guid": connector.guid,
                 "success": success,
                 "error": error_message,
-                "latest_manifest": latest_manifest
+                "latest_manifest": latest_manifest,
+                "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
             }
         )
 
@@ -793,12 +844,15 @@ class InventoryService:
                 }
                 break
 
+        # Calculate next scheduled import time
+        next_scheduled = self.get_next_scheduled_import(connector_id, team_id)
+
         return {
             "validation_status": connector.inventory_validation_status,
             "validation_error": connector.inventory_validation_error,
             "latest_manifest": connector.inventory_latest_manifest,
             "last_import_at": connector.inventory_last_import_at.isoformat() if connector.inventory_last_import_at else None,
-            "next_scheduled_at": None,  # TODO: Calculate from schedule
+            "next_scheduled_at": next_scheduled.isoformat() if next_scheduled else None,
             "folder_count": folder_count,
             "mapped_folder_count": mapped_folder_count,
             "mappable_folder_count": mappable_folder_count,
@@ -1331,7 +1385,9 @@ class InventoryService:
                     collections_data.append({
                         "collection_guid": folder.collection_guid,
                         "collection_id": collection.id,
-                        "folder_path": folder.path
+                        "folder_path": folder.path,
+                        # Include stored file_info for Phase C delta detection
+                        "file_info": collection.file_info
                     })
             except ValueError:
                 # Skip invalid GUIDs
@@ -1510,3 +1566,257 @@ class InventoryService:
         )
 
         return updated_count
+
+    # =========================================================================
+    # Scheduled Import (Phase 6 - Issue #107)
+    # =========================================================================
+
+    def calculate_next_scheduled_at(
+        self,
+        schedule: Literal["manual", "daily", "weekly"],
+        reference_time: Optional[datetime] = None
+    ) -> Optional[datetime]:
+        """
+        Calculate the next scheduled import time.
+
+        For daily: Next 00:00 UTC after reference_time
+        For weekly: Same weekday as reference_time at 00:00 UTC
+
+        Args:
+            schedule: The schedule type (manual, daily, weekly)
+            reference_time: Base time for calculation (defaults to now)
+
+        Returns:
+            Next scheduled datetime in UTC, or None for manual schedule
+        """
+        if schedule == "manual":
+            return None
+
+        now = reference_time or datetime.utcnow()
+
+        if schedule == "daily":
+            # Next 00:00 UTC (tomorrow if already past midnight)
+            next_day = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            return next_day
+
+        elif schedule == "weekly":
+            # Same weekday next week at 00:00 UTC
+            next_week = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(weeks=1)
+            return next_week
+
+        return None
+
+    def get_next_scheduled_import(
+        self,
+        connector_id: int,
+        team_id: Optional[int] = None
+    ) -> Optional[datetime]:
+        """
+        Get the next scheduled import time for a connector.
+
+        Checks for existing SCHEDULED jobs first, then calculates
+        based on schedule and last import time.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Next scheduled datetime or None if not scheduled
+        """
+        connector = self._get_connector(connector_id, team_id)
+
+        # Check for existing scheduled job
+        scheduled_job = self.db.query(Job).filter(
+            Job.team_id == connector.team_id,
+            Job.tool == "inventory_import",
+            Job.status == JobStatus.SCHEDULED
+        ).all()
+
+        # Find job for this specific connector
+        for job in scheduled_job:
+            progress = job.progress or {}
+            if progress.get("connector_id") == connector_id or progress.get("connector_guid") == connector.guid:
+                return job.scheduled_for
+
+        # No scheduled job - calculate based on schedule
+        schedule = connector.inventory_schedule or "manual"
+        if schedule == "manual":
+            return None
+
+        # Use last import time or now as reference
+        reference = connector.inventory_last_import_at or datetime.utcnow()
+        return self.calculate_next_scheduled_at(schedule, reference)
+
+    def create_scheduled_import_job(
+        self,
+        connector_id: int,
+        team_id: int,
+        scheduled_for: datetime
+    ) -> Job:
+        """
+        Create a scheduled inventory import job.
+
+        Called by chain scheduling after an import completes.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID
+            scheduled_for: When the job should run
+
+        Returns:
+            Created scheduled Job
+
+        Raises:
+            NotFoundError: If connector not found
+            ValidationError: If connector has no inventory config
+        """
+        connector = self._get_connector(connector_id, team_id)
+
+        if not connector.has_inventory_config:
+            raise ValidationError("Connector has no inventory configuration")
+
+        # Check for existing scheduled job and cancel it
+        self.cancel_scheduled_import_jobs(connector_id, team_id)
+
+        # Create scheduled import job
+        job = Job(
+            team_id=team_id,
+            collection_id=None,  # No collection for import jobs
+            tool="inventory_import",
+            mode="import",
+            status=JobStatus.SCHEDULED,
+            scheduled_for=scheduled_for,
+            priority=3,  # Normal priority
+        )
+
+        # Store connector info in job metadata for agent to use
+        job.progress = {
+            "connector_id": connector_id,
+            "connector_guid": connector.guid,
+            "config": connector.inventory_config
+        }
+
+        # If connector uses agent credentials, job requires that agent
+        if connector.requires_agent_credentials:
+            job.required_capabilities = [f"connector:{connector.guid}"]
+        else:
+            # For server credentials, job needs the cloud capability (s3/gcs)
+            job.required_capabilities = [connector.type.value if hasattr(connector.type, 'value') else str(connector.type)]
+
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+
+        logger.info(
+            "Created scheduled inventory import job",
+            extra={
+                "job_guid": job.guid,
+                "connector_id": connector_id,
+                "connector_guid": connector.guid,
+                "scheduled_for": scheduled_for.isoformat()
+            }
+        )
+
+        return job
+
+    def cancel_scheduled_import_jobs(
+        self,
+        connector_id: int,
+        team_id: int
+    ) -> int:
+        """
+        Cancel scheduled inventory import jobs for a connector.
+
+        Called when:
+        - Schedule is changed to 'manual'
+        - Inventory config is cleared
+        - A new scheduled job is being created (replaces old one)
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID
+
+        Returns:
+            Number of jobs cancelled
+        """
+        connector = self._get_connector(connector_id, team_id)
+
+        # Find scheduled jobs for this connector
+        scheduled_jobs = self.db.query(Job).filter(
+            Job.team_id == team_id,
+            Job.tool == "inventory_import",
+            Job.status == JobStatus.SCHEDULED
+        ).all()
+
+        cancelled_count = 0
+        for job in scheduled_jobs:
+            progress = job.progress or {}
+            if progress.get("connector_id") == connector_id or progress.get("connector_guid") == connector.guid:
+                job.cancel()
+                cancelled_count += 1
+                logger.info(
+                    "Cancelled scheduled inventory import job",
+                    extra={
+                        "job_guid": job.guid,
+                        "connector_id": connector_id
+                    }
+                )
+
+        if cancelled_count > 0:
+            self.db.commit()
+
+        return cancelled_count
+
+    def on_import_completed(
+        self,
+        connector_id: int,
+        team_id: int
+    ) -> Optional[Job]:
+        """
+        Handle inventory import completion - create next scheduled job if needed.
+
+        This implements chain scheduling: when an import completes successfully,
+        create the next scheduled job if schedule is not 'manual'.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID
+
+        Returns:
+            Created scheduled job, or None if schedule is manual
+        """
+        connector = self._get_connector(connector_id, team_id)
+
+        schedule = connector.inventory_schedule or "manual"
+        if schedule == "manual":
+            logger.debug(
+                "Skipping chain scheduling - manual schedule",
+                extra={"connector_id": connector_id}
+            )
+            return None
+
+        # Calculate next scheduled time
+        next_scheduled = self.calculate_next_scheduled_at(schedule)
+        if not next_scheduled:
+            return None
+
+        # Create the next scheduled job
+        job = self.create_scheduled_import_job(
+            connector_id=connector_id,
+            team_id=team_id,
+            scheduled_for=next_scheduled
+        )
+
+        logger.info(
+            "Chain scheduled next inventory import",
+            extra={
+                "connector_id": connector_id,
+                "connector_guid": connector.guid,
+                "schedule": schedule,
+                "next_job_guid": job.guid,
+                "scheduled_for": next_scheduled.isoformat()
+            }
+        )
+
+        return job

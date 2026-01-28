@@ -72,10 +72,12 @@ class JobClaimResult:
         job: The claimed job
         signing_secret: Base64-encoded plaintext signing secret (only returned once)
         previous_result: Previous result info for Input State comparison (Issue #92)
+        server_completed: True if job was auto-completed server-side (Phase 7)
     """
     job: Job
     signing_secret: str
     previous_result: Optional[PreviousResultInfo] = None
+    server_completed: bool = False
 
 
 @dataclass
@@ -456,6 +458,10 @@ class JobCoordinatorService:
         """
         Assign a job to an agent and generate signing secret.
 
+        Phase 7 (Issue #107): Before assigning, check if server-side no-change
+        detection is possible. If the job can be auto-completed, do so and
+        return the result with server_completed=True.
+
         Args:
             job: Job to assign
             agent_id: Agent ID to assign to
@@ -463,7 +469,32 @@ class JobCoordinatorService:
         Returns:
             JobClaimResult with job and signing secret
         """
-        # Generate signing secret
+        # Look up previous result for Input State comparison (Issue #92)
+        previous_result = self._find_previous_result(job)
+
+        # Phase 7: Try server-side no-change detection for inventory-sourced FileInfo
+        if previous_result and job.collection:
+            server_result = self._try_server_side_no_change(job, previous_result)
+            if server_result:
+                # Job was auto-completed server-side
+                logger.info(
+                    "Job auto-completed via server-side no-change detection",
+                    extra={
+                        "job_guid": job.guid,
+                        "result_guid": server_result.guid,
+                        "agent_id": agent_id,
+                        "tool": job.tool
+                    }
+                )
+                # Return with server_completed=True so caller knows to claim next job
+                return JobClaimResult(
+                    job=job,
+                    signing_secret="",  # No signing secret needed - job already complete
+                    previous_result=previous_result,
+                    server_completed=True
+                )
+
+        # Normal path: Generate signing secret and assign to agent
         signing_secret, secret_hash = self._generate_signing_secret()
 
         # Assign job to agent
@@ -471,9 +502,6 @@ class JobCoordinatorService:
         job.signing_secret_hash = secret_hash
 
         self.db.commit()
-
-        # Look up previous result for Input State comparison (Issue #92)
-        previous_result = self._find_previous_result(job)
 
         logger.info(
             "Job claimed by agent",
@@ -489,7 +517,8 @@ class JobCoordinatorService:
         return JobClaimResult(
             job=job,
             signing_secret=signing_secret,
-            previous_result=previous_result
+            previous_result=previous_result,
+            server_completed=False
         )
 
     def _find_previous_result(self, job: Job) -> Optional[PreviousResultInfo]:
@@ -546,6 +575,317 @@ class JobCoordinatorService:
             guid=previous.guid,
             input_state_hash=previous.input_state_hash,
             completed_at=previous.completed_at
+        )
+
+    # =========================================================================
+    # Server-Side No-Change Detection (Issue #107 Phase 7)
+    # =========================================================================
+
+    def _try_server_side_no_change(
+        self,
+        job: Job,
+        previous_result: Optional[PreviousResultInfo],
+        config: Optional[Dict[str, Any]] = None
+    ) -> Optional[AnalysisResult]:
+        """
+        Attempt server-side no-change detection for inventory-sourced FileInfo.
+
+        This is called during job claim for jobs with collection-based FileInfo
+        from inventory imports. If the computed hash matches the previous result,
+        the job is auto-completed without sending to an agent.
+
+        Conditions for server-side detection:
+        1. Job has a collection with file_info (not null)
+        2. Collection's file_info_source is "inventory"
+        3. Previous result exists with input_state_hash
+        4. Computed hash matches previous hash
+
+        Args:
+            job: Job being claimed
+            previous_result: Previous result info (if exists)
+            config: Tool configuration (will fetch from team if not provided)
+
+        Returns:
+            AnalysisResult if no-change detected, None otherwise
+        """
+        # Skip for non-collection jobs or jobs without previous result
+        if not job.collection or not previous_result:
+            return None
+
+        # Skip if previous result has no hash (legacy data)
+        if not previous_result.input_state_hash:
+            return None
+
+        # Check if collection has inventory-sourced FileInfo
+        collection = job.collection
+        if not collection.file_info:
+            return None
+        if collection.file_info_source != "inventory":
+            return None
+
+        # Get configuration for hash computation
+        if config is None:
+            config = self._get_tool_config(job)
+
+        # Import InputStateService here to avoid circular imports
+        from backend.src.services.input_state_service import get_input_state_service
+        input_state_service = get_input_state_service()
+
+        # Compute hash from inventory FileInfo
+        computed_hash = input_state_service.compute_collection_input_state_hash(
+            collection=collection,
+            configuration=config or {},
+            tool=job.tool
+        )
+
+        if computed_hash is None:
+            # Could not compute hash (unexpected, but handle gracefully)
+            logger.warning(
+                "Could not compute server-side hash",
+                extra={"job_guid": job.guid, "collection_guid": collection.guid}
+            )
+            return None
+
+        # Compare hashes
+        if computed_hash != previous_result.input_state_hash:
+            # Hashes differ - files or config changed, need agent execution
+            logger.debug(
+                "Server-side detection: hash mismatch",
+                extra={
+                    "job_guid": job.guid,
+                    "computed_hash": computed_hash[:16] + "...",
+                    "previous_hash": previous_result.input_state_hash[:16] + "..."
+                }
+            )
+            return None
+
+        # Hash matches! Auto-complete the job with NO_CHANGE
+        logger.info(
+            "Server-side no-change detection: hash match, auto-completing job",
+            extra={
+                "job_guid": job.guid,
+                "collection_guid": collection.guid,
+                "input_state_hash": computed_hash[:16] + "...",
+                "source_result_guid": previous_result.guid
+            }
+        )
+
+        return self._create_server_side_no_change_result(
+            job=job,
+            previous_result=previous_result,
+            input_state_hash=computed_hash
+        )
+
+    def _create_server_side_no_change_result(
+        self,
+        job: Job,
+        previous_result: PreviousResultInfo,
+        input_state_hash: str
+    ) -> AnalysisResult:
+        """
+        Create a NO_CHANGE result from server-side detection.
+
+        Similar to complete_job_no_change but without agent involvement.
+
+        Args:
+            job: Job being auto-completed
+            previous_result: Previous result info
+            input_state_hash: Computed hash that matched
+
+        Returns:
+            Created AnalysisResult
+        """
+        # Fetch full source result
+        try:
+            source_uuid = AnalysisResult.parse_guid(previous_result.guid)
+        except ValueError:
+            raise NotFoundError("AnalysisResult", previous_result.guid)
+
+        source_result = self.db.query(AnalysisResult).filter(
+            AnalysisResult.uuid == source_uuid,
+            AnalysisResult.team_id == job.team_id
+        ).first()
+
+        if not source_result:
+            raise NotFoundError("AnalysisResult", previous_result.guid)
+
+        now = datetime.utcnow()
+
+        # Determine which result has the actual report
+        download_from_guid = previous_result.guid
+        if source_result.download_report_from:
+            download_from_guid = source_result.download_report_from
+
+        # Merge source results with server-side detection metadata
+        results_with_metadata = dict(source_result.results_json or {})
+        results_with_metadata["_server_side_no_change"] = True
+        results_with_metadata["_detection_timestamp"] = now.isoformat()
+
+        # Create NO_CHANGE result with server-side metadata
+        result = AnalysisResult(
+            team_id=job.team_id,
+            collection_id=job.collection_id,
+            pipeline_id=job.pipeline_id,
+            pipeline_version=job.pipeline_version,
+            tool=job.tool,
+            status=ResultStatus.NO_CHANGE,
+            started_at=now,
+            completed_at=now,
+            duration_seconds=0.0,  # Instant completion
+            # Copy from source result with metadata
+            results_json=results_with_metadata,
+            files_scanned=source_result.files_scanned,
+            issues_found=source_result.issues_found,
+            # NO report_html - reference source's report
+            report_html=None,
+            # Storage optimization fields
+            input_state_hash=input_state_hash,
+            no_change_copy=True,
+            download_report_from=download_from_guid,
+        )
+
+        self.db.add(result)
+        self.db.flush()
+
+        # Complete the job
+        job.complete(result_id=result.id)
+        job.progress = {"server_side_no_change": True}
+
+        # Cleanup intermediate copies
+        cleanup_count = self._cleanup_intermediate_copies(
+            collection_id=job.collection_id,
+            pipeline_id=job.pipeline_id,
+            tool=job.tool,
+            new_result_id=result.id,
+            source_result_guid=download_from_guid,
+            team_id=job.team_id
+        )
+
+        # Increment storage metrics
+        self._increment_storage_metrics_on_completion(job.team_id)
+
+        self.db.commit()
+
+        logger.info(
+            "Server-side NO_CHANGE result created",
+            extra={
+                "job_guid": job.guid,
+                "result_guid": result.guid,
+                "source_result_guid": previous_result.guid,
+                "intermediate_copies_cleaned": cleanup_count
+            }
+        )
+
+        return result
+
+    def _get_tool_config(
+        self,
+        job: Job
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get tool configuration for a job.
+
+        Builds the same config dict structure that the agent receives from
+        the /api/agent/v1/jobs/{job_guid}/config endpoint. This ensures
+        server-side hash computation matches agent-side computation.
+
+        Args:
+            job: Job to get configuration for
+
+        Returns:
+            Configuration dict matching agent's format, or None on error
+        """
+        try:
+            from backend.src.services.config_loader import DatabaseConfigLoader
+
+            loader = DatabaseConfigLoader(team_id=job.team_id, db=self.db)
+
+            # Build config dict matching JobConfigData structure
+            config: Dict[str, Any] = {
+                "photo_extensions": loader.photo_extensions,
+                "metadata_extensions": loader.metadata_extensions,
+                "cameras": loader.camera_mappings,
+                "processing_methods": loader.processing_methods,
+                "require_sidecar": loader.require_sidecar,
+            }
+
+            # Add pipeline if job has one (agent includes this in hash)
+            if job.pipeline:
+                config["pipeline"] = {
+                    "guid": job.pipeline.guid,
+                    "name": job.pipeline.name,
+                    "version": job.pipeline_version or job.pipeline.version,
+                    "nodes": job.pipeline.nodes_json or [],
+                    "edges": job.pipeline.edges_json or [],
+                }
+
+            return config
+        except Exception as e:
+            logger.warning(f"Failed to get tool config: {e}")
+        return None
+
+    def _warn_if_inventory_no_change_mismatch(
+        self,
+        job: Job,
+        agent_hash: str,
+        input_state_json: Optional[str] = None
+    ) -> None:
+        """
+        Log warning if agent reports NO_CHANGE for an inventory-sourced collection.
+
+        This indicates a hash mismatch - server-side detection should have
+        auto-completed this job. Logs both hashes to help debug the mismatch.
+
+        Args:
+            job: The job being completed
+            agent_hash: Input state hash reported by agent
+            input_state_json: Optional input state JSON from agent (for debugging)
+        """
+        if not job.collection:
+            return
+
+        collection = job.collection
+        if collection.file_info_source != "inventory":
+            return
+
+        # This is unexpected - server should have auto-completed this job
+        # Recalculate server-side hash to compare
+        server_hash = None
+        try:
+            config = self._get_tool_config(job)
+            if config:
+                from backend.src.services.input_state_service import get_input_state_service
+                input_state_service = get_input_state_service()
+                server_hash = input_state_service.compute_collection_input_state_hash(
+                    collection=collection,
+                    configuration=config,
+                    tool=job.tool
+                )
+        except Exception as e:
+            logger.warning(f"Failed to compute server hash for debugging: {e}")
+
+        # Log warning with both hashes
+        extra = {
+            "job_guid": job.guid,
+            "collection_guid": collection.guid,
+            "file_info_source": collection.file_info_source,
+            "agent_hash": agent_hash,
+            "server_hash": server_hash,
+            "hash_match": agent_hash == server_hash if server_hash else None,
+        }
+
+        if input_state_json:
+            # Truncate if too long for logging
+            if len(input_state_json) > 2000:
+                extra["agent_input_state_json"] = input_state_json[:2000] + "... (truncated)"
+            else:
+                extra["agent_input_state_json"] = input_state_json
+
+        logger.warning(
+            "Agent reported NO_CHANGE for inventory-sourced collection - "
+            "server-side detection should have auto-completed this job. "
+            "Hash mismatch indicates config or file_info inconsistency.",
+            extra=extra
         )
 
     # =========================================================================
@@ -863,10 +1203,15 @@ class JobCoordinatorService:
 
         # Complete the job
         job.complete(result_id=result.id)
-        job.progress = None  # Clear progress
 
         # Create scheduled follow-up job if TTL is configured
         scheduled_job = self._maybe_create_scheduled_job(job)
+
+        # Chain scheduling for inventory_import jobs (Issue #107 - Phase 6)
+        if job.tool == "inventory_import":
+            scheduled_job = self._maybe_create_scheduled_inventory_import(job)
+
+        job.progress = None  # Clear progress after scheduling reads it
 
         # Increment storage metrics counter (Issue #92: T057)
         self._increment_storage_metrics_on_completion(team_id)
@@ -935,6 +1280,10 @@ class JobCoordinatorService:
         # Verify signature (basic validation)
         if not self.verify_signature(job, {"hash": input_state_hash}, signature):
             raise ValidationError("Invalid result signature")
+
+        # Debug: Warn if agent reports NO_CHANGE for inventory-sourced collection
+        # This shouldn't happen - server-side detection should have auto-completed it
+        self._warn_if_inventory_no_change_mismatch(job, input_state_hash, input_state_json)
 
         # Look up source result
         try:
@@ -1700,6 +2049,69 @@ class JobCoordinatorService:
         )
 
         return scheduled_job
+
+    def _maybe_create_scheduled_inventory_import(self, completed_job: Job) -> Optional[Job]:
+        """
+        Create a scheduled inventory import job if schedule is configured.
+
+        Chain scheduling for inventory_import jobs: when an import completes
+        successfully and schedule is not 'manual', create the next scheduled job.
+
+        Args:
+            completed_job: The inventory_import job that just completed
+
+        Returns:
+            The created scheduled job, or None if schedule is 'manual'
+        """
+        if completed_job.tool != "inventory_import":
+            return None
+
+        # Get connector info from job progress
+        progress = completed_job.progress or {}
+        connector_id = progress.get("connector_id")
+        connector_guid = progress.get("connector_guid")
+
+        if not connector_id:
+            logger.warning(
+                "Cannot schedule inventory import - no connector_id in job progress",
+                extra={"job_guid": completed_job.guid}
+            )
+            return None
+
+        # Use InventoryService to handle scheduling
+        from backend.src.services.inventory_service import InventoryService
+        inventory_service = InventoryService(self.db)
+
+        try:
+            scheduled_job = inventory_service.on_import_completed(
+                connector_id=connector_id,
+                team_id=completed_job.team_id
+            )
+
+            if scheduled_job:
+                logger.info(
+                    "Chain scheduled inventory import",
+                    extra={
+                        "parent_job_guid": completed_job.guid,
+                        "scheduled_job_guid": scheduled_job.guid,
+                        "connector_id": connector_id,
+                        "connector_guid": connector_guid
+                    }
+                )
+
+            return scheduled_job
+
+        except Exception as e:
+            logger.error(
+                "Failed to create scheduled inventory import",
+                extra={
+                    "job_guid": completed_job.guid,
+                    "connector_id": connector_id,
+                    "error": str(e)
+                },
+                exc_info=True
+            )
+            return None
 
     def cancel_scheduled_jobs_for_collection(
         self,

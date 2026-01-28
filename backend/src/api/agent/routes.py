@@ -90,6 +90,9 @@ from backend.src.api.agent.schemas import (
     # Connector collections query (Issue #107 - Phase B)
     ConnectorCollectionInfo,
     ConnectorCollectionsResponse,
+    # Inventory delta schemas (Issue #107 - Phase C)
+    InventoryDeltaRequest,
+    InventoryDeltaResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -374,18 +377,42 @@ async def claim_job(
             detail="Agent not found"
         )
 
-    # Try to claim a job
-    result = coordinator.claim_job(
-        agent_id=ctx.agent_id,
-        team_id=ctx.team_id,
-        agent_capabilities=agent.capabilities,
-    )
+    # Try to claim jobs - loop to handle server-side auto-completion
+    # When a job is auto-completed server-side, we try to claim the next one
+    max_server_completions = 5  # Safety limit to prevent infinite loops
+    server_completions = 0
 
-    if not result:
-        # No jobs available - return 204
+    job = None
+    while server_completions < max_server_completions:
+        result = coordinator.claim_job(
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            agent_capabilities=agent.capabilities,
+        )
+
+        if not result:
+            # No jobs available - return 204
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+        job = result.job
+
+        # Phase 7 (Issue #107): Check if job was auto-completed server-side
+        if result.server_completed:
+            server_completions += 1
+            # Broadcast the completion
+            manager = get_connection_manager()
+            job_response = _db_job_to_response(job)
+            asyncio.create_task(
+                manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+            )
+            # Continue to claim next job
+            continue
+
+        # Normal job claim - break out of loop to return to agent
+        break
+    else:
+        # Loop exhausted max_server_completions without finding a non-server-completed job
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    job = result.job
 
     # Build response with collection path if applicable
     collection_guid = None
@@ -928,7 +955,7 @@ async def get_job_config(
         config=JobConfigData(
             photo_extensions=loader.photo_extensions,
             metadata_extensions=loader.metadata_extensions,
-            camera_mappings=loader.camera_mappings,
+            cameras=loader.camera_mappings,
             processing_methods=loader.processing_methods,
             require_sidecar=loader.require_sidecar,
         ),
@@ -1011,7 +1038,7 @@ async def initiate_upload(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid upload_type: {data.upload_type}. Must be 'results_json' or 'report_html'"
+            detail=f"Invalid upload_type: {data.upload_type}. Must be 'results_json', 'report_html', 'file_info', or 'delta'"
         )
 
     # Initiate upload
@@ -2256,7 +2283,7 @@ async def report_inventory_folders(
     "/jobs/{job_guid}/inventory/file-info",
     response_model=InventoryFileInfoResponse,
     summary="Report inventory FileInfo",
-    description="Submit FileInfo for collections from inventory import Phase B."
+    description="Submit FileInfo for collections from inventory import Phase B. Supports inline (small) or chunked (large) uploads."
 )
 async def report_inventory_file_info(
     job_guid: str,
@@ -2271,12 +2298,21 @@ async def report_inventory_file_info(
     Called by agents during inventory import Phase B (FileInfo Population)
     to submit the extracted FileInfo for each mapped collection.
 
+    Supports two modes:
+    1. Inline mode: connector_guid + collections (for small FileInfo < 1MB)
+    2. Chunked mode: file_info_upload_id (for large FileInfo > 1MB)
+
+    Issue #107: Added chunked upload support for large collections.
+
     Path Parameters:
         job_guid: GUID of the import job (job_xxx format)
 
-    Request Body:
+    Request Body (inline mode):
         connector_guid: Connector GUID (con_xxx)
         collections: List of collection FileInfo data
+
+    Request Body (chunked mode):
+        file_info_upload_id: Upload session ID from chunked upload
 
     Returns:
         InventoryFileInfoResponse with update count
@@ -2286,9 +2322,11 @@ async def report_inventory_file_info(
         400: If job is not an inventory import job
         403: If job is not assigned to this agent
     """
+    import json
     from backend.src.models.job import Job, JobStatus
     from backend.src.services.job_coordinator_service import JobCoordinatorService
     from backend.src.services.inventory_service import InventoryService
+    from backend.src.services.chunked_upload_service import ChunkedUploadService, UploadType
 
     # Parse job GUID
     try:
@@ -2343,8 +2381,58 @@ async def report_inventory_file_info(
             detail="Job does not have connector information"
         )
 
+    # Determine mode and extract data
+    connector_guid: str
+    collections_data: list
+
+    if data.file_info_upload_id:
+        # Chunked mode: retrieve finalized content
+        upload_service = ChunkedUploadService()
+        content = upload_service.get_finalized_content(
+            upload_id=data.file_info_upload_id,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+        )
+
+        if content is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Upload session not found or already consumed"
+            )
+
+        # Parse the JSON content
+        try:
+            parsed = json.loads(content.decode('utf-8'))
+            connector_guid = parsed["connector_guid"]
+            collections_data = parsed["collections"]
+        except (json.JSONDecodeError, KeyError, UnicodeDecodeError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid chunked FileInfo content: {e}"
+            )
+
+        logger.info(
+            "Processing chunked FileInfo upload",
+            extra={
+                "job_guid": job_guid,
+                "upload_id": data.file_info_upload_id,
+                "content_size": len(content),
+                "collections_count": len(collections_data),
+            }
+        )
+    else:
+        # Inline mode: use data directly
+        connector_guid = data.connector_guid  # type: ignore  # validated by model
+        collections_data = [
+            {
+                "collection_guid": c.collection_guid,
+                "file_info": [fi.model_dump() for fi in c.file_info]
+            }
+            for c in data.collections  # type: ignore  # validated by model
+        ]
+
     # Verify connector GUID matches
-    if connector_guid_from_job and connector_guid_from_job != data.connector_guid:
+    if connector_guid_from_job and connector_guid_from_job != connector_guid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Connector GUID does not match job's connector"
@@ -2361,7 +2449,7 @@ async def report_inventory_file_info(
     )
     allowed_guids = {c["collection_guid"] for c in allowed_collections}
 
-    submitted_guids = {c.collection_guid for c in data.collections}
+    submitted_guids = {c["collection_guid"] for c in collections_data}
     invalid_guids = submitted_guids - allowed_guids
 
     if invalid_guids:
@@ -2371,13 +2459,6 @@ async def report_inventory_file_info(
         )
 
     try:
-        collections_data = [
-            {
-                "collection_guid": c.collection_guid,
-                "file_info": [fi.model_dump() for fi in c.file_info]
-            }
-            for c in data.collections
-        ]
         collections_updated = inventory_service.store_file_info_batch(
             collections_data=collections_data,
             team_id=ctx.team_id,
@@ -2401,8 +2482,9 @@ async def report_inventory_file_info(
         f"Inventory FileInfo stored",
         extra={
             "job_guid": job_guid,
-            "connector_guid": data.connector_guid,
-            "collections_updated": collections_updated
+            "connector_guid": connector_guid,
+            "collections_updated": collections_updated,
+            "mode": "chunked" if data.file_info_upload_id else "inline",
         }
     )
 
@@ -2478,8 +2560,261 @@ async def get_connector_collections(
         collections=[
             ConnectorCollectionInfo(
                 collection_guid=c["collection_guid"],
-                folder_path=c["folder_path"]
+                folder_path=c["folder_path"],
+                file_info=c.get("file_info")  # Include for Phase C delta detection
             )
             for c in collections_data
         ]
+    )
+
+
+# ============================================================================
+# Inventory Delta Reporting (Issue #107 - Phase C / Phase 8)
+# Tasks: T091, T092, T093
+# ============================================================================
+
+@router.post(
+    "/jobs/{job_guid}/inventory/delta",
+    response_model=InventoryDeltaResponse,
+    summary="Report inventory delta",
+    description="Submit delta detection results from inventory import Phase C. Supports inline (small) or chunked (large) uploads."
+)
+async def report_inventory_delta(
+    job_guid: str,
+    data: InventoryDeltaRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    agent_service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Report delta detection results from inventory import Phase C.
+
+    Called by agents after comparing current inventory against stored FileInfo
+    to report new, modified, and deleted files per collection.
+
+    Supports two modes:
+    1. Inline mode: connector_guid + deltas (for small payloads < 1MB)
+    2. Chunked mode: delta_upload_id (for large payloads > 1MB)
+
+    Issue #107 Phase 8: Delta Detection Between Inventories
+
+    Path Parameters:
+        job_guid: GUID of the import job (job_xxx format)
+
+    Request Body (inline mode):
+        connector_guid: Connector GUID (con_xxx)
+        deltas: List of collection delta results
+
+    Request Body (chunked mode):
+        delta_upload_id: Upload session ID from chunked upload
+
+    Returns:
+        InventoryDeltaResponse with update count
+
+    Raises:
+        404: If job or connector not found
+        400: If job is not an inventory import job
+        403: If job is not assigned to this agent
+    """
+    import json
+    from datetime import datetime
+    from backend.src.models.job import Job, JobStatus
+    from backend.src.models import Collection
+    from backend.src.services.chunked_upload_service import ChunkedUploadService
+    from backend.src.services.guid import GuidService
+
+    # Parse job GUID
+    try:
+        job_uuid = GuidService.parse_identifier(job_guid, expected_prefix="job")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    # Get job (with team_id filter to prevent cross-tenant access)
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id
+    ).first()
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job type is inventory_import
+    if job.tool != "inventory_import":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not an inventory import job (tool: {job.tool})"
+        )
+
+    # Verify job is assigned to this agent
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Verify job is in running status
+    if job.status != JobStatus.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not in running status (status: {job.status.value})"
+        )
+
+    # Get connector ID from job progress
+    progress = job.progress or {}
+    connector_id = progress.get("connector_id")
+    connector_guid_from_job = progress.get("connector_guid")
+
+    if not connector_id and not connector_guid_from_job:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job does not have connector information"
+        )
+
+    # Determine mode and extract data
+    connector_guid: str
+    deltas_data: list
+
+    if data.delta_upload_id:
+        # Chunked mode: retrieve finalized content
+        upload_service = ChunkedUploadService()
+        content = upload_service.get_finalized_content(
+            upload_id=data.delta_upload_id,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+        )
+
+        if content is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Upload session not found or already consumed"
+            )
+
+        # Parse the JSON content
+        try:
+            parsed = json.loads(content.decode('utf-8'))
+            connector_guid = parsed["connector_guid"]
+            deltas_data = parsed["deltas"]
+        except (json.JSONDecodeError, KeyError, UnicodeDecodeError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid chunked delta content: {e}"
+            )
+
+        logger.info(
+            "Processing chunked delta upload",
+            extra={
+                "job_guid": job_guid,
+                "upload_id": data.delta_upload_id,
+                "content_size": len(content),
+                "deltas_count": len(deltas_data),
+            }
+        )
+    else:
+        # Inline mode: use data directly
+        connector_guid = data.connector_guid  # type: ignore  # validated by model
+        deltas_data = [d.model_dump() for d in data.deltas]  # type: ignore  # validated by model
+
+    # Verify connector GUID matches
+    if connector_guid_from_job and connector_guid_from_job != connector_guid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connector GUID does not match job's connector"
+        )
+
+    # Validate that all collection GUIDs belong to this connector
+    from backend.src.services.inventory_service import InventoryService
+    inventory_service = InventoryService(db)
+    allowed_collections = inventory_service.get_collections_for_connector(
+        connector_id=connector_id,
+        team_id=ctx.team_id
+    )
+    allowed_collection_guids = {c["collection_guid"] for c in allowed_collections}
+
+    # Store delta summary on each collection
+    collections_updated = 0
+    now = datetime.utcnow()
+
+    for delta in deltas_data:
+        collection_guid = delta.get("collection_guid", "")
+        summary = delta.get("summary", {})
+        is_first_import = delta.get("is_first_import", False)
+
+        # Parse collection GUID
+        try:
+            collection_uuid = GuidService.parse_identifier(collection_guid, expected_prefix="col")
+        except ValueError:
+            logger.warning(f"Invalid collection GUID in delta: {collection_guid}")
+            continue
+
+        # Verify collection belongs to this connector
+        if collection_guid not in allowed_collection_guids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Collection {collection_guid} is not mapped to this connector"
+            )
+
+        # Get collection (with team_id filter)
+        collection = db.query(Collection).filter(
+            Collection.uuid == collection_uuid,
+            Collection.team_id == ctx.team_id
+        ).first()
+
+        if not collection:
+            logger.warning(f"Collection not found for delta: {collection_guid}")
+            continue
+
+        # Build delta summary for storage (T092)
+        delta_summary = {
+            "new_count": summary.get("new_count", 0),
+            "modified_count": summary.get("modified_count", 0),
+            "deleted_count": summary.get("deleted_count", 0),
+            "new_size_bytes": summary.get("new_size_bytes", 0),
+            "modified_size_change_bytes": summary.get("modified_size_change_bytes", 0),
+            "deleted_size_bytes": summary.get("deleted_size_bytes", 0),
+            "total_changes": summary.get("total_changes", 0),
+            "is_first_import": is_first_import,
+            "computed_at": now.isoformat(),
+        }
+
+        # Store delta on collection
+        collection.file_info_delta = delta_summary
+        collections_updated += 1
+
+        logger.debug(
+            f"Stored delta for collection {collection_guid}",
+            extra={
+                "collection_guid": collection_guid,
+                "new_count": delta_summary["new_count"],
+                "modified_count": delta_summary["modified_count"],
+                "deleted_count": delta_summary["deleted_count"],
+            }
+        )
+
+    # Update job progress to indicate Phase C complete
+    if not job.progress:
+        job.progress = {}
+    job.progress["phase_c_complete"] = True
+    job.progress["collections_with_delta"] = collections_updated
+
+    db.commit()
+
+    logger.info(
+        f"Inventory delta stored",
+        extra={
+            "job_guid": job_guid,
+            "connector_guid": connector_guid,
+            "collections_updated": collections_updated,
+            "mode": "chunked" if data.delta_upload_id else "inline",
+        }
+    )
+
+    return InventoryDeltaResponse(
+        status="success",
+        message=f"Stored delta for {collections_updated} collections",
+        collections_updated=collections_updated
     )

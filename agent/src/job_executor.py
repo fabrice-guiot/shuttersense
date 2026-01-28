@@ -493,7 +493,7 @@ class JobExecutor:
                 file_count = 0
 
                 logger.debug(
-                    f"Display graph mode - using pipeline identity for hash",
+                    "Display graph mode - using pipeline identity for hash",
                     extra={
                         "pipeline_guid": pipeline_guid,
                         "pipeline_version": pipeline_version,
@@ -560,6 +560,20 @@ class JobExecutor:
                 return False, current_hash
 
             # Collection unchanged - complete with NO_CHANGE
+            file_info_source = job.get("file_info_source")
+
+            # Warn if server should have auto-completed this (inventory collection)
+            if file_info_source == "inventory":
+                logger.warning(
+                    "Agent completing NO_CHANGE for inventory-sourced collection - "
+                    "server should have auto-completed this job. Possible hash mismatch.",
+                    extra={
+                        "job_guid": job_guid,
+                        "file_info_source": file_info_source,
+                        "input_state_hash": current_hash[:16] + "...",
+                    }
+                )
+
             logger.info(
                 f"Collection unchanged for job {job_guid} - completing with NO_CHANGE",
                 extra={
@@ -578,12 +592,69 @@ class JobExecutor:
             # Sign the request
             signature = self._result_signer.sign({"hash": current_hash})
 
+            # For inventory collections, force upload input_state_json for debugging
+            # (server should have auto-completed, so this helps diagnose hash mismatch)
+            input_state_json = None
+            if file_info_source == "inventory":
+                try:
+                    from urllib.parse import unquote
+
+                    # Build files list from cached FileInfo for debugging
+                    # IMPORTANT: Must normalize paths exactly like _convert_cached_file_info
+                    # to match what's actually hashed (URL-decode, strip collection prefix)
+                    cached_file_info = job.get("file_info", [])
+                    files_for_json = []
+
+                    # Normalize collection prefix (same as _convert_cached_file_info)
+                    prefix = unquote(collection_path.rstrip("/") + "/") if collection_path else ""
+
+                    for info in cached_file_info:
+                        # URL-decode the key (same as _convert_cached_file_info)
+                        decoded_key = unquote(info.get("key", ""))
+                        if not decoded_key:
+                            continue
+
+                        # Strip collection prefix to get relative path
+                        if prefix and decoded_key.startswith(prefix):
+                            relative_path = decoded_key[len(prefix):]
+                        else:
+                            relative_path = decoded_key
+
+                        if not relative_path:
+                            continue
+
+                        # Convert to (path, size, mtime) tuple
+                        mtime = 0
+                        if info.get("last_modified"):
+                            try:
+                                from datetime import datetime
+                                dt = datetime.fromisoformat(
+                                    info["last_modified"].replace("Z", "+00:00")
+                                )
+                                mtime = int(dt.timestamp())
+                            except (ValueError, AttributeError):
+                                pass
+                        files_for_json.append((relative_path, info["size"], mtime))
+
+                    input_state_json = computer.compute_input_state_json(
+                        files=files_for_json,
+                        configuration=config,
+                        tool=tool
+                    )
+                    logger.info(
+                        "Including input_state_json for debugging inventory hash mismatch",
+                        extra={"job_guid": job_guid, "json_size": len(input_state_json)}
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to compute input_state_json for debugging: {e}")
+
             # Submit NO_CHANGE completion
             await self._api_client.complete_job_no_change(
                 job_guid=job_guid,
                 input_state_hash=current_hash,
                 source_result_guid=previous_result["guid"],
                 signature=signature,
+                input_state_json=input_state_json,
             )
 
             return True, current_hash
@@ -2034,7 +2105,7 @@ class JobExecutor:
                 latest_manifest=latest_manifest if success else None
             )
             logger.info(
-                f"Reported inventory validation result",
+                "Reported inventory validation result",
                 extra={
                     "job_guid": job_guid,
                     "connector_guid": connector_guid,
@@ -2128,7 +2199,7 @@ class JobExecutor:
                 )
 
                 logger.info(
-                    f"Phase A completed: Folder extraction",
+                    "Phase A completed: Folder extraction",
                     extra={
                         "job_guid": job_guid,
                         "folders_found": len(result.folders),
@@ -2138,21 +2209,31 @@ class JobExecutor:
                 )
 
                 # Phase B: FileInfo Population
-                collections_updated = await self._execute_phase_b(
+                collections_updated, phase_b_result, collections_data = await self._execute_phase_b(
                     job_guid=job_guid,
                     connector_guid=connector_guid,
                     tool=tool,
                     phase_a_result=result
                 )
 
+                # Phase C: Delta Detection (Issue #107 Phase 8)
+                collections_with_deltas = await self._execute_phase_c(
+                    job_guid=job_guid,
+                    connector_guid=connector_guid,
+                    tool=tool,
+                    phase_b_result=phase_b_result,
+                    collections_data=collections_data
+                )
+
                 logger.info(
-                    f"Inventory import completed successfully",
+                    "Inventory import completed successfully",
                     extra={
                         "job_guid": job_guid,
                         "folders_found": len(result.folders),
                         "total_files": result.total_files,
                         "total_size": result.total_size,
-                        "collections_with_file_info": collections_updated
+                        "collections_with_file_info": collections_updated,
+                        "collections_with_deltas": collections_with_deltas
                     }
                 )
 
@@ -2163,7 +2244,8 @@ class JobExecutor:
                         "folders_count": len(result.folders),
                         "total_files": result.total_files,
                         "total_size": result.total_size,
-                        "collections_with_file_info": collections_updated
+                        "collections_with_file_info": collections_updated,
+                        "collections_with_deltas": collections_with_deltas
                     }
                 )
             else:
@@ -2233,7 +2315,7 @@ class JobExecutor:
         connector_guid: str,
         tool: Any,  # InventoryImportTool
         phase_a_result: Any,  # InventoryImportResult
-    ) -> int:
+    ) -> tuple[int, Any, list[dict[str, Any]]]:
         """
         Execute Phase B: FileInfo Population.
 
@@ -2248,7 +2330,7 @@ class JobExecutor:
             phase_a_result: Result from Phase A (with all_entries)
 
         Returns:
-            Number of collections updated with FileInfo
+            Tuple of (collections_updated_count, phase_b_result, collections_data)
         """
         try:
             # Query server for collections mapped to this connector
@@ -2258,13 +2340,13 @@ class JobExecutor:
 
             if not collections_data:
                 logger.info(
-                    f"No collections mapped to connector, skipping Phase B",
+                    "No collections mapped to connector, skipping Phase B",
                     extra={
                         "job_guid": job_guid,
                         "connector_guid": connector_guid
                     }
                 )
-                return 0
+                return 0, None, []
 
             logger.info(
                 f"Found {len(collections_data)} collections for Phase B",
@@ -2289,17 +2371,17 @@ class JobExecutor:
                         "connector_guid": connector_guid
                     }
                 )
-                return 0
+                return 0, None, collections_data
 
             if phase_b_result.collections_processed == 0:
                 logger.info(
-                    f"Phase B: No collections to update",
+                    "Phase B: No collections to update",
                     extra={
                         "job_guid": job_guid,
                         "connector_guid": connector_guid
                     }
                 )
-                return 0
+                return 0, phase_b_result, collections_data
 
             # Convert FileInfo to API format and report to server
             collections_file_info = []
@@ -2324,7 +2406,7 @@ class JobExecutor:
                 }
             )
 
-            return len(collections_file_info)
+            return len(collections_file_info), phase_b_result, collections_data
 
         except Exception as e:
             logger.error(
@@ -2333,6 +2415,90 @@ class JobExecutor:
             )
             # Phase B failures should not fail the entire job
             # The folders have already been reported successfully
+            return 0, None, []
+
+    async def _execute_phase_c(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        tool: Any,  # InventoryImportTool
+        phase_b_result: Any,  # PhaseBResult
+        collections_data: list[dict[str, Any]],
+    ) -> int:
+        """
+        Execute Phase C: Delta Detection.
+
+        Compares current FileInfo with previously stored FileInfo to detect
+        changes (new, modified, deleted files) and reports deltas to the server.
+
+        Issue #107 Phase 8: Delta Detection Between Inventories
+
+        Args:
+            job_guid: Job GUID
+            connector_guid: Connector GUID
+            tool: InventoryImportTool instance (for execute_phase_c method)
+            phase_b_result: Result from Phase B (with collection_file_info)
+            collections_data: Collections data from server (with stored file_info)
+
+        Returns:
+            Number of collections with deltas reported
+        """
+        try:
+            if not phase_b_result or not phase_b_result.success:
+                logger.info(
+                    "Skipping Phase C: Phase B did not complete successfully",
+                    extra={"job_guid": job_guid, "connector_guid": connector_guid}
+                )
+                return 0
+
+            # Execute Phase C using the tool
+            phase_c_result = tool.execute_phase_c(phase_b_result, collections_data)
+
+            if not phase_c_result.success:
+                logger.warning(
+                    f"Phase C failed: {phase_c_result.error_message}",
+                    extra={"job_guid": job_guid, "connector_guid": connector_guid}
+                )
+                return 0
+
+            if phase_c_result.collections_processed == 0:
+                logger.info(
+                    "Phase C: No collections to report deltas for",
+                    extra={"job_guid": job_guid, "connector_guid": connector_guid}
+                )
+                return 0
+
+            # Convert deltas to API format
+            deltas = [delta.to_dict() for delta in phase_c_result.collection_deltas.values()]
+
+            # Report deltas to server
+            await self._api_client.report_inventory_delta(
+                job_guid=job_guid,
+                connector_guid=connector_guid,
+                deltas=deltas
+            )
+
+            logger.info(
+                f"Phase C complete: Reported deltas for {len(deltas)} collections",
+                extra={
+                    "job_guid": job_guid,
+                    "connector_guid": connector_guid,
+                    "collections_with_deltas": len(deltas),
+                    "total_changes": sum(
+                        d.summary.total_changes
+                        for d in phase_c_result.collection_deltas.values()
+                    )
+                }
+            )
+
+            return len(deltas)
+
+        except Exception as e:
+            logger.error(
+                f"Phase C error: {str(e)}",
+                exc_info=True
+            )
+            # Phase C failures should not fail the entire job
             return 0
 
     def _sync_progress_callback(

@@ -187,6 +187,74 @@ class ChunkedUploadClient:
             upload_type="report_html",
         )
 
+    async def upload_file_info(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        collections_file_info: list[dict[str, Any]],
+    ) -> ChunkedUploadResult:
+        """
+        Upload FileInfo using chunked upload.
+
+        Issue #107: Chunked upload support for large inventory FileInfo.
+
+        Args:
+            job_guid: GUID of the job
+            connector_guid: Connector GUID (con_xxx)
+            collections_file_info: List of {collection_guid, file_info} dicts
+
+        Returns:
+            ChunkedUploadResult with upload details
+        """
+        # Build the same structure as inline request
+        payload = {
+            "connector_guid": connector_guid,
+            "collections": collections_file_info,
+        }
+
+        # Serialize to JSON bytes
+        content = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+        return await self._upload_content(
+            job_guid=job_guid,
+            content=content,
+            upload_type="file_info",
+        )
+
+    async def upload_delta(
+        self,
+        job_guid: str,
+        connector_guid: str,
+        deltas: list[dict[str, Any]],
+    ) -> ChunkedUploadResult:
+        """
+        Upload delta results using chunked upload.
+
+        Issue #107 Phase 8: Chunked upload support for large delta results.
+
+        Args:
+            job_guid: GUID of the job
+            connector_guid: Connector GUID (con_xxx)
+            deltas: List of {collection_guid, summary, changes, ...} dicts
+
+        Returns:
+            ChunkedUploadResult with upload details
+        """
+        # Build the same structure as inline request
+        payload = {
+            "connector_guid": connector_guid,
+            "deltas": deltas,
+        }
+
+        # Serialize to JSON bytes
+        content = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+        return await self._upload_content(
+            job_guid=job_guid,
+            content=content,
+            upload_type="delta",
+        )
+
     async def _upload_content(
         self,
         job_guid: str,
@@ -199,7 +267,7 @@ class ChunkedUploadClient:
         Args:
             job_guid: GUID of the job
             content: Content bytes to upload
-            upload_type: Type of content (results_json or report_html)
+            upload_type: Type of content (results_json, report_html, file_info, or delta)
 
         Returns:
             ChunkedUploadResult with upload details

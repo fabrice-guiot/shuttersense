@@ -90,7 +90,10 @@ const STATUS_CONFIG: Record<
 const TOOL_LABELS: Record<string, string> = {
   photostats: 'PhotoStats',
   photo_pairing: 'Photo Pairing',
-  pipeline_validation: 'Pipeline Validation'
+  pipeline_validation: 'Pipeline Validation',
+  collection_test: 'Collection Test',
+  inventory_validate: 'Inventory Validation',
+  inventory_import: 'Inventory Import'
 }
 
 // ============================================================================

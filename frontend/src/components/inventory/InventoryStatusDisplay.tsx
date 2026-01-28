@@ -7,12 +7,20 @@
  * Issue #107: Cloud Storage Bucket Inventory Import
  */
 
-import { CheckCircle, XCircle, Loader2, Clock, FolderOpen, AlertCircle, Archive, FileText } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Clock, FolderOpen, AlertCircle, Archive, FileText, AlertTriangle, Info } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
 import { formatDateTime, formatRelativeTime } from '@/utils/dateFormat'
 import type { InventoryStatus, InventoryValidationStatus } from '@/contracts/api/inventory-api'
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Number of days after which inventory data is considered stale */
+const STALE_INVENTORY_DAYS = 7
 
 // ============================================================================
 // Component Props
@@ -30,6 +38,17 @@ export interface InventoryStatusDisplayProps {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * T100: Check if inventory data is stale (older than threshold)
+ */
+function isInventoryStale(lastImportAt: string | null): boolean {
+  if (!lastImportAt) return false
+  const lastImport = new Date(lastImportAt)
+  const now = new Date()
+  const diffDays = (now.getTime() - lastImport.getTime()) / (1000 * 60 * 60 * 24)
+  return diffDays > STALE_INVENTORY_DAYS
+}
 
 function getValidationStatusConfig(status: InventoryValidationStatus | null): {
   label: string
@@ -163,6 +182,26 @@ export function InventoryStatusDisplay({
             </div>
           </div>
         </div>
+      )}
+
+      {/* T099: Guidance when validated but no import yet */}
+      {status.validation_status === 'validated' && !status.last_import_at && !status.current_job && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Configuration validated. Click "Import Now" to fetch inventory data and discover folders.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* T100: Stale inventory warning */}
+      {status.last_import_at && isInventoryStale(status.last_import_at) && (
+        <Alert variant="default" className="border-yellow-500/50 bg-yellow-500/10">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-700 dark:text-yellow-400">
+            Inventory data is more than {STALE_INVENTORY_DAYS} days old. Consider running a new import to refresh folder and file information.
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Timestamps */}

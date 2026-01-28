@@ -795,6 +795,350 @@ class TestHTMLSecurityValidation:
             )
 
 
+class TestFileInfoValidation:
+    """Tests for FileInfo validation (Issue #107)."""
+
+    def test_valid_file_info(self):
+        """Accept valid FileInfo content."""
+        service = ChunkedUploadService()
+
+        file_info = {
+            "connector_guid": "con_01hgw2bbg0000000000000001",
+            "collections": [
+                {
+                    "collection_guid": "col_01hgw2bbg0000000000000001",
+                    "file_info": [
+                        {
+                            "key": "2020/vacation/IMG_001.CR3",
+                            "size": 25000000,
+                            "last_modified": "2022-11-25T13:30:49.000Z"
+                        }
+                    ]
+                }
+            ]
+        }
+        content = json.dumps(file_info).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.FILE_INFO,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        finalize_result = service.finalize_upload(
+            upload_id=result.upload_id,
+            expected_checksum=checksum,
+            agent_id=1,
+            team_id=1,
+        )
+
+        assert finalize_result.success is True
+        assert finalize_result.content_type == UploadType.FILE_INFO
+
+    def test_file_info_missing_connector_guid(self):
+        """Reject FileInfo missing connector_guid."""
+        service = ChunkedUploadService()
+
+        file_info = {
+            # Missing connector_guid
+            "collections": [
+                {
+                    "collection_guid": "col_01hgw2bbg0000000000000001",
+                    "file_info": []
+                }
+            ]
+        }
+        content = json.dumps(file_info).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.FILE_INFO,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        with pytest.raises(ValidationError, match="missing 'connector_guid'"):
+            service.finalize_upload(
+                upload_id=result.upload_id,
+                expected_checksum=checksum,
+                agent_id=1,
+                team_id=1,
+            )
+
+    def test_file_info_missing_collections(self):
+        """Reject FileInfo missing collections array."""
+        service = ChunkedUploadService()
+
+        file_info = {
+            "connector_guid": "con_01hgw2bbg0000000000000001",
+            # Missing collections
+        }
+        content = json.dumps(file_info).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.FILE_INFO,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        with pytest.raises(ValidationError, match="missing 'collections'"):
+            service.finalize_upload(
+                upload_id=result.upload_id,
+                expected_checksum=checksum,
+                agent_id=1,
+                team_id=1,
+            )
+
+    def test_file_info_collection_missing_file_info(self):
+        """Reject FileInfo collection entry missing file_info array."""
+        service = ChunkedUploadService()
+
+        file_info = {
+            "connector_guid": "con_01hgw2bbg0000000000000001",
+            "collections": [
+                {
+                    "collection_guid": "col_01hgw2bbg0000000000000001",
+                    # Missing file_info
+                }
+            ]
+        }
+        content = json.dumps(file_info).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.FILE_INFO,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        with pytest.raises(ValidationError, match="collections\\[0\\] missing 'file_info'"):
+            service.finalize_upload(
+                upload_id=result.upload_id,
+                expected_checksum=checksum,
+                agent_id=1,
+                team_id=1,
+            )
+
+
+class TestDeltaValidation:
+    """Tests for Delta validation (Issue #107 Phase 8)."""
+
+    def test_valid_delta(self):
+        """Accept valid delta content."""
+        service = ChunkedUploadService()
+
+        delta = {
+            "connector_guid": "con_01hgw2bbg0000000000000001",
+            "deltas": [
+                {
+                    "collection_guid": "col_01hgw2bbg0000000000000001",
+                    "summary": {
+                        "new_count": 10,
+                        "modified_count": 5,
+                        "deleted_count": 2,
+                        "total_changes": 17
+                    },
+                    "is_first_import": False,
+                    "changes": [],
+                    "changes_truncated": False
+                }
+            ]
+        }
+        content = json.dumps(delta).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.DELTA,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        finalize_result = service.finalize_upload(
+            upload_id=result.upload_id,
+            expected_checksum=checksum,
+            agent_id=1,
+            team_id=1,
+        )
+
+        assert finalize_result.success is True
+        assert finalize_result.content_type == UploadType.DELTA
+
+    def test_delta_missing_connector_guid(self):
+        """Reject delta missing connector_guid."""
+        service = ChunkedUploadService()
+
+        delta = {
+            # Missing connector_guid
+            "deltas": [
+                {
+                    "collection_guid": "col_01hgw2bbg0000000000000001",
+                    "summary": {"new_count": 0, "modified_count": 0, "deleted_count": 0, "total_changes": 0}
+                }
+            ]
+        }
+        content = json.dumps(delta).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.DELTA,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        with pytest.raises(ValidationError, match="missing 'connector_guid'"):
+            service.finalize_upload(
+                upload_id=result.upload_id,
+                expected_checksum=checksum,
+                agent_id=1,
+                team_id=1,
+            )
+
+    def test_delta_missing_deltas(self):
+        """Reject delta missing deltas array."""
+        service = ChunkedUploadService()
+
+        delta = {
+            "connector_guid": "con_01hgw2bbg0000000000000001",
+            # Missing deltas
+        }
+        content = json.dumps(delta).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.DELTA,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        with pytest.raises(ValidationError, match="missing 'deltas'"):
+            service.finalize_upload(
+                upload_id=result.upload_id,
+                expected_checksum=checksum,
+                agent_id=1,
+                team_id=1,
+            )
+
+    def test_delta_entry_missing_summary(self):
+        """Reject delta entry missing summary."""
+        service = ChunkedUploadService()
+
+        delta = {
+            "connector_guid": "con_01hgw2bbg0000000000000001",
+            "deltas": [
+                {
+                    "collection_guid": "col_01hgw2bbg0000000000000001",
+                    # Missing summary
+                }
+            ]
+        }
+        content = json.dumps(delta).encode('utf-8')
+        checksum = hashlib.sha256(content).hexdigest()
+
+        result = service.initiate_upload(
+            job_guid="job_test123",
+            agent_id=1,
+            team_id=1,
+            upload_type=UploadType.DELTA,
+            expected_size=len(content),
+            chunk_size=len(content),
+        )
+
+        service.upload_chunk(
+            upload_id=result.upload_id,
+            chunk_index=0,
+            chunk_data=content,
+            agent_id=1,
+            team_id=1,
+        )
+
+        with pytest.raises(ValidationError, match="deltas\\[0\\] missing 'summary'"):
+            service.finalize_upload(
+                upload_id=result.upload_id,
+                expected_checksum=checksum,
+                agent_id=1,
+                team_id=1,
+            )
+
+
 class TestSessionCleanup:
     """Tests for session cleanup functionality."""
 

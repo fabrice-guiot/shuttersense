@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { FolderCheck, FolderSync, Edit, Trash2, Search, Bot, CloudDownload } from 'lucide-react'
+import { FolderCheck, FolderSync, Edit, Trash2, Search, Bot, CloudDownload, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -246,24 +246,73 @@ export function CollectionList({
                 </TableCell>
                 <TableCell>
                   {/* T074: Display inventory timestamp for remote collections */}
+                  {/* T094: Display change statistics with trend indicator and tooltip */}
                   {collection.type === 'local' ? (
                     <span className="text-muted-foreground text-sm">-</span>
                   ) : collection.file_info?.updated_at ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="text-sm cursor-default">
+                          <span className="text-sm cursor-default inline-flex items-center gap-1">
                             {formatRelativeTime(collection.file_info.updated_at)}
+                            {/* T094: Trend indicator based on delta */}
+                            {collection.file_info.delta && (
+                              (() => {
+                                const delta = collection.file_info.delta
+                                const netChange = delta.new_count - delta.deleted_count
+                                if (delta.is_first_import || netChange > 0) {
+                                  // Growth - positive trending up
+                                  return <TrendingUp className="h-3.5 w-3.5 text-success" />
+                                } else if (netChange < 0) {
+                                  // Shrinkage - attention trending down (worth attention)
+                                  return <TrendingDown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                } else {
+                                  // Stable - neutral horizontal arrow (no net change)
+                                  return <ArrowRight className="h-3.5 w-3.5 text-info" />
+                                }
+                              })()
+                            )}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <div className="text-xs">
+                          <div className="text-xs space-y-1">
                             <div>
                               {collection.file_info.count.toLocaleString()} files cached
                             </div>
                             <div className="text-muted-foreground">
                               Source: {collection.file_info.source === 'inventory' ? 'Bucket Inventory' : 'Cloud API'}
                             </div>
+                            {/* T094: Always display delta statistics from last import */}
+                            {collection.file_info.delta && (
+                              <div className="border-t border-border pt-1 mt-1">
+                                <div className="font-medium">Last import changes:</div>
+                                {collection.file_info.delta.is_first_import ? (
+                                  <div className="text-success">
+                                    First import ({collection.file_info.delta.new_count.toLocaleString()} files)
+                                  </div>
+                                ) : collection.file_info.delta.total_changes > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {collection.file_info.delta.new_count > 0 && (
+                                      <div className="text-success">
+                                        +{collection.file_info.delta.new_count.toLocaleString()} new
+                                      </div>
+                                    )}
+                                    {collection.file_info.delta.modified_count > 0 && (
+                                      <div className="text-amber-600 dark:text-amber-400">
+                                        ~{collection.file_info.delta.modified_count.toLocaleString()} modified
+                                      </div>
+                                    )}
+                                    {collection.file_info.delta.deleted_count > 0 && (
+                                      <div className="text-destructive">
+                                        -{collection.file_info.delta.deleted_count.toLocaleString()} deleted
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-muted-foreground">No changes detected</div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </TooltipContent>
                       </Tooltip>
