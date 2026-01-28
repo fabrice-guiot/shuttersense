@@ -25,9 +25,9 @@
 
 **Purpose**: Create cache module directory structure and extend agent config with cache paths.
 
-- [ ] T001 Create cache module directory and init file at agent/src/cache/__init__.py
-- [ ] T002 Add cache directory path constants (data_dir, test-cache, collection-cache, results) to agent/src/config.py using platformdirs.user_data_dir()
-- [ ] T003 [P] Add Pydantic models for TestCacheEntry, CachedCollection, CollectionCache, and OfflineResult in agent/src/cache/__init__.py (shared types used across cache modules)
+- [x] T001 Create cache module directory and init file at agent/src/cache/__init__.py
+- [x] T002 Add cache directory path constants (data_dir, test-cache, collection-cache, results) to agent/src/config.py using platformdirs.user_data_dir()
+- [x] T003 [P] Add Pydantic models for TestCacheEntry, CachedCollection, CollectionCache, and OfflineResult in agent/src/cache/__init__.py (shared types used across cache modules)
 
 ---
 
