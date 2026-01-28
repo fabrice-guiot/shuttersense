@@ -868,6 +868,10 @@ class JobCoordinatorService:
         # Create scheduled follow-up job if TTL is configured
         scheduled_job = self._maybe_create_scheduled_job(job)
 
+        # Chain scheduling for inventory_import jobs (Issue #107 - Phase 6)
+        if job.tool == "inventory_import":
+            scheduled_job = self._maybe_create_scheduled_inventory_import(job)
+
         # Increment storage metrics counter (Issue #92: T057)
         self._increment_storage_metrics_on_completion(team_id)
 
@@ -1700,6 +1704,69 @@ class JobCoordinatorService:
         )
 
         return scheduled_job
+
+    def _maybe_create_scheduled_inventory_import(self, completed_job: Job) -> Optional[Job]:
+        """
+        Create a scheduled inventory import job if schedule is configured.
+
+        Chain scheduling for inventory_import jobs: when an import completes
+        successfully and schedule is not 'manual', create the next scheduled job.
+
+        Args:
+            completed_job: The inventory_import job that just completed
+
+        Returns:
+            The created scheduled job, or None if schedule is 'manual'
+        """
+        if completed_job.tool != "inventory_import":
+            return None
+
+        # Get connector info from job progress
+        progress = completed_job.progress or {}
+        connector_id = progress.get("connector_id")
+        connector_guid = progress.get("connector_guid")
+
+        if not connector_id:
+            logger.warning(
+                "Cannot schedule inventory import - no connector_id in job progress",
+                extra={"job_guid": completed_job.guid}
+            )
+            return None
+
+        # Use InventoryService to handle scheduling
+        from backend.src.services.inventory_service import InventoryService
+        inventory_service = InventoryService(self.db)
+
+        try:
+            scheduled_job = inventory_service.on_import_completed(
+                connector_id=connector_id,
+                team_id=completed_job.team_id
+            )
+
+            if scheduled_job:
+                logger.info(
+                    "Chain scheduled inventory import",
+                    extra={
+                        "parent_job_guid": completed_job.guid,
+                        "scheduled_job_guid": scheduled_job.guid,
+                        "connector_id": connector_id,
+                        "connector_guid": connector_guid
+                    }
+                )
+
+            return scheduled_job
+
+        except Exception as e:
+            logger.error(
+                "Failed to create scheduled inventory import",
+                extra={
+                    "job_guid": completed_job.guid,
+                    "connector_id": connector_id,
+                    "error": str(e)
+                },
+                exc_info=True
+            )
+            return None
 
     def cancel_scheduled_jobs_for_collection(
         self,

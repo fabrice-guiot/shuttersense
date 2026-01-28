@@ -1606,3 +1606,225 @@ class TestInventoryFileInfoEndpoint:
         assert data["file_info"]["count"] == 2
         assert data["file_info"]["source"] == "inventory"
         assert data["file_info"]["updated_at"] is not None
+
+
+# ============================================================================
+# Scheduled Import Tests (Phase 6 - Issue #107)
+# ============================================================================
+
+class TestScheduledInventoryImport:
+    """Integration tests for scheduled inventory import - T084a."""
+
+    def test_schedule_setting_stored_and_returned(
+        self, test_client, test_db_session, test_team, test_encryptor
+    ):
+        """Test that schedule setting is stored and returned correctly."""
+        # Create connector
+        credentials = {
+            'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+            'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            'region': 'us-east-1'
+        }
+        connector_data = {
+            "name": "S3 Schedule Test Connector",
+            "type": "s3",
+            "credentials": credentials
+        }
+
+        response = test_client.post("/api/connectors", json=connector_data)
+        assert response.status_code == 201
+        connector_guid = response.json()["guid"]
+
+        # Set config with daily schedule
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inv-bucket",
+                "source_bucket": "photo-bucket",
+                "config_name": "daily-inv",
+                "format": "CSV"
+            },
+            "schedule": "daily"
+        }
+
+        response = test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["inventory_schedule"] == "daily"
+
+    def test_schedule_change_to_manual_updates_connector(
+        self, test_client, test_db_session, test_team
+    ):
+        """Test changing schedule from weekly to manual."""
+        from backend.src.models import Connector
+        from backend.src.services.guid import GuidService
+
+        # Create connector
+        connector_data = {
+            "name": "S3 Schedule Change Connector",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        # Set config with weekly schedule
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inv-bucket",
+                "source_bucket": "photo-bucket",
+                "config_name": "weekly-inv",
+                "format": "CSV"
+            },
+            "schedule": "weekly"
+        }
+        test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+
+        # Change to manual
+        config_data["schedule"] = "manual"
+        response = test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["inventory_schedule"] == "manual"
+
+        # Verify in DB
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(
+            Connector.uuid == connector_uuid
+        ).first()
+        test_db_session.refresh(connector)
+        assert connector.inventory_schedule == "manual"
+
+    def test_next_scheduled_at_in_status(
+        self, test_client, test_db_session, test_team
+    ):
+        """Test that next_scheduled_at is returned in inventory status."""
+        from datetime import datetime
+        from backend.src.models import Connector
+        from backend.src.models.job import Job, JobStatus
+        from backend.src.services.guid import GuidService
+
+        # Create connector
+        connector_data = {
+            "name": "S3 Next Scheduled Test",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        # Set config with daily schedule
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inv-bucket",
+                "source_bucket": "photo-bucket",
+                "config_name": "daily-inv",
+                "format": "CSV"
+            },
+            "schedule": "daily"
+        }
+        test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+
+        # Get connector internal ID
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+        connector = test_db_session.query(Connector).filter(
+            Connector.uuid == connector_uuid
+        ).first()
+
+        # Create a scheduled job manually
+        scheduled_time = datetime(2026, 2, 1, 0, 0, 0)
+        job = Job(
+            team_id=connector.team_id,
+            collection_id=None,
+            tool="inventory_import",
+            mode="import",
+            status=JobStatus.SCHEDULED,
+            scheduled_for=scheduled_time,
+            progress={
+                "connector_id": connector.id,
+                "connector_guid": connector_guid
+            }
+        )
+        test_db_session.add(job)
+        test_db_session.commit()
+
+        # Get inventory status
+        response = test_client.get(f"/api/connectors/{connector_guid}/inventory/status")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["next_scheduled_at"] is not None
+        # Parse and check - should be the scheduled job's time
+        assert "2026-02-01" in result["next_scheduled_at"]
+
+    def test_clear_config_returns_null_schedule(
+        self, test_client, test_db_session, test_team
+    ):
+        """Test clearing config returns null schedule and validation status."""
+        # Create connector
+        connector_data = {
+            "name": "S3 Clear Config Test",
+            "type": "s3",
+            "credentials": {
+                'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+                'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                'region': 'us-east-1'
+            }
+        }
+
+        response = test_client.post("/api/connectors", json=connector_data)
+        connector_guid = response.json()["guid"]
+
+        # Set config
+        config_data = {
+            "config": {
+                "provider": "s3",
+                "destination_bucket": "inv-bucket",
+                "source_bucket": "photo-bucket",
+                "config_name": "daily-inv",
+                "format": "CSV"
+            },
+            "schedule": "weekly"
+        }
+        test_client.put(
+            f"/api/connectors/{connector_guid}/inventory/config",
+            json=config_data
+        )
+
+        # Clear config
+        response = test_client.delete(f"/api/connectors/{connector_guid}/inventory/config")
+        assert response.status_code == 204
+
+        # Get connector to verify cleared state
+        response = test_client.get(f"/api/connectors/{connector_guid}")
+        assert response.status_code == 200
+        result = response.json()
+        assert result["inventory_config"] is None
+        assert result["inventory_schedule"] == "manual"
+        assert result["inventory_validation_status"] is None

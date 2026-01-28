@@ -156,6 +156,7 @@ describe('CollectionForm', () => {
       accessibility_message: null,
       last_scanned_at: null,
       bound_agent: null,
+      file_info: null,
       created_at: '2025-01-01T09:00:00Z',
       updated_at: '2025-01-01T09:00:00Z',
     }
@@ -270,6 +271,7 @@ describe('CollectionForm', () => {
           name: 'Studio Mac',
           status: 'online',
         },
+        file_info: null,
         created_at: '2025-01-01T09:00:00Z',
         updated_at: '2025-01-01T09:00:00Z',
       }
@@ -323,6 +325,7 @@ describe('CollectionForm', () => {
         accessibility_message: null,
         last_scanned_at: null,
         bound_agent: null,
+        file_info: null,
         created_at: '2025-01-01T09:00:00Z',
         updated_at: '2025-01-01T09:00:00Z',
       }
@@ -356,6 +359,7 @@ describe('CollectionForm', () => {
         accessibility_message: null,
         last_scanned_at: '2025-01-15T10:00:00Z',
         bound_agent: null,
+        file_info: null,
         created_at: '2025-01-01T09:00:00Z',
         updated_at: '2025-01-01T09:00:00Z',
       }
@@ -393,6 +397,7 @@ describe('CollectionForm', () => {
         accessibility_message: null,
         last_scanned_at: pastDate.toISOString(),
         bound_agent: null,
+        file_info: null,
         created_at: '2025-01-01T09:00:00Z',
         updated_at: '2025-01-01T09:00:00Z',
       }
@@ -426,6 +431,7 @@ describe('CollectionForm', () => {
         accessibility_message: null,
         last_scanned_at: '2025-01-15T10:00:00Z',
         bound_agent: null,
+        file_info: null,
         created_at: '2025-01-01T09:00:00Z',
         updated_at: '2025-01-01T09:00:00Z',
       }
@@ -462,6 +468,7 @@ describe('CollectionForm', () => {
         accessibility_message: null,
         last_scanned_at: recentDate.toISOString(),
         bound_agent: null,
+        file_info: null,
         created_at: '2025-01-01T09:00:00Z',
         updated_at: '2025-01-01T09:00:00Z',
       }
