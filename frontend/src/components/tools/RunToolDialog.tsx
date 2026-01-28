@@ -66,25 +66,21 @@ const TOOL_INFO: Record<ToolType, { label: string; description: string }> = {
   }
 }
 
-// Mode display information
-const MODE_INFO: Record<ToolMode, { label: string; description: string }> = {
-  collection: {
-    label: 'Validate Collection',
-    description: 'Validate files in a collection against the pipeline'
-  },
-  display_graph: {
+// Mode display information for Pipeline Validation tool
+// Note: Only 'collection' and 'display_graph' are supported modes for Pipeline Validation.
+// Other ToolMode values (validation, import) are used by inventory operations, not this dialog.
+const PIPELINE_VALIDATION_MODES: Array<{ key: ToolMode; label: string; description: string }> = [
+  {
+    key: 'display_graph',
     label: 'Validate Pipeline Graph',
     description: 'Analyze pipeline definition and enumerate all paths (no collection needed)'
   },
-  validation: {
-    label: 'Validate Inventory',
-    description: 'Validate that bucket inventory matches cloud storage contents'
-  },
-  import: {
-    label: 'Import Inventory',
-    description: 'Import file information from bucket inventory manifest'
+  {
+    key: 'collection',
+    label: 'Validate Collection',
+    description: 'Validate files in a collection against the pipeline'
   }
-}
+]
 
 // ============================================================================
 // Component
@@ -213,7 +209,9 @@ export function RunToolDialog({
   }
 
   const selectedToolInfo = selectedTool ? TOOL_INFO[selectedTool] : null
-  const selectedModeInfo = selectedMode ? MODE_INFO[selectedMode] : null
+  const selectedModeInfo = selectedMode
+    ? PIPELINE_VALIDATION_MODES.find((m) => m.key === selectedMode)
+    : null
 
   // Only show accessible collections - tools can only run on accessible collections
   const accessibleCollections = collections.filter((c) => c.is_accessible)
@@ -290,9 +288,9 @@ export function RunToolDialog({
                   <SelectValue placeholder="Select a mode" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(MODE_INFO).map(([key, info]) => (
-                    <SelectItem key={key} value={key}>
-                      {info.label}
+                  {PIPELINE_VALIDATION_MODES.map((mode) => (
+                    <SelectItem key={mode.key} value={mode.key}>
+                      {mode.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
