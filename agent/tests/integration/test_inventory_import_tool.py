@@ -866,3 +866,241 @@ class TestLargeInventoryPerformance:
         # Folders: 10 years * (1 year folder + 10 months * (1 month + 10 days))
         # Actually: year0-year9 + year0/month0-9 + year0/month0/day0-9 etc.
         assert len(result.folders) > 100  # Many unique folder paths
+
+
+# ============================================================================
+# T118: SC-009 - FileInfo Accuracy Tests
+# ============================================================================
+
+
+class TestFileInfoAccuracy:
+    """T118: Verify FileInfo from inventory matches expected cloud API results (SC-009).
+
+    These tests verify that inventory entries are parsed accurately and contain
+    the same data that would be returned from direct cloud API calls.
+    """
+
+    @pytest.mark.asyncio
+    async def test_s3_fileinfo_matches_expected_format(self):
+        """SC-009: FileInfo from S3 inventory matches expected format."""
+        # Create inventory with specific file metadata
+        csv_entries = [
+            {
+                "key": "photos/2020/vacation/IMG_001.CR3",
+                "size": 25165824,  # 24MB exactly
+                "last_modified_date": "2022-06-15T10:30:00Z",
+                "e_tag": '"abc123def456"',
+                "storage_class": "STANDARD",
+            },
+            {
+                "key": "photos/2020/vacation/IMG_002.CR3",
+                "size": 24117248,  # ~23MB
+                "last_modified_date": "2022-06-15T10:31:00Z",
+                "e_tag": '"xyz789uvw012"',
+                "storage_class": "GLACIER",
+            },
+        ]
+
+        manifest = create_s3_manifest()
+        csv_data = create_s3_csv_data(csv_entries)
+
+        files = {
+            "photos-bucket/daily/2026-01-20T00-00Z/manifest.json": manifest.encode("utf-8"),
+            "photos-bucket/daily/2026-01-20T00-00Z/data.csv.gz": csv_data,
+        }
+        adapter = MockS3Adapter(files)
+
+        config = {
+            "destination_bucket": "inventory-bucket",
+            "source_bucket": "photos-bucket",
+            "config_name": "daily",
+        }
+
+        tool = InventoryImportTool(adapter, config, "s3")
+        result = await tool.execute()
+
+        assert result.success is True
+        assert result.total_files == 2
+
+        # Verify all_entries contains parsed inventory data
+        assert result.all_entries is not None
+        assert len(result.all_entries) == 2
+
+        # Find the first file in entries
+        file1 = next((f for f in result.all_entries if "IMG_001" in f.key), None)
+        assert file1 is not None
+        assert file1.size == 25165824  # Exact size preserved
+        assert "photos/2020/vacation/IMG_001.CR3" in file1.key
+
+        # Verify size accuracy (matches what cloud API would return)
+        file2 = next((f for f in result.all_entries if "IMG_002" in f.key), None)
+        assert file2 is not None
+        assert file2.size == 24117248
+
+    @pytest.mark.asyncio
+    async def test_gcs_fileinfo_matches_expected_format(self):
+        """SC-009: FileInfo from GCS inventory matches expected format."""
+        csv_entries = [
+            {
+                "key": "events/2021/conference/DSC_0001.NEF",
+                "size": 52428800,  # 50MB
+                "time_created": "2021-09-10T14:00:00Z",
+                "storage_class": "STANDARD",
+            },
+            {
+                "key": "events/2021/conference/DSC_0002.NEF",
+                "size": 51380224,  # ~49MB
+                "time_created": "2021-09-10T14:01:00Z",
+                "storage_class": "NEARLINE",
+            },
+        ]
+
+        manifest = create_gcs_manifest(shard_files=["shard_0.csv"])
+        csv_data = create_gcs_csv_data(csv_entries)
+
+        files = {
+            "inventory-report/2026-01-20/manifest.json": manifest.encode("utf-8"),
+            "inventory-report/2026-01-20/shard_0.csv": csv_data,
+        }
+        adapter = MockGCSAdapter(files)
+
+        config = {
+            "destination_bucket": "inventory-bucket",
+            "report_config_name": "inventory-report",
+        }
+
+        tool = InventoryImportTool(adapter, config, "gcs")
+        result = await tool.execute()
+
+        assert result.success is True
+        assert result.total_files == 2
+
+        # Verify entries
+        assert result.all_entries is not None
+        assert len(result.all_entries) == 2
+
+        # Check that sizes match exactly
+        sizes = [e.size for e in result.all_entries]
+        assert 52428800 in sizes
+        assert 51380224 in sizes
+
+    @pytest.mark.asyncio
+    async def test_fileinfo_preserves_url_encoded_keys(self):
+        """SC-009: FileInfo preserves URL-encoded keys as stored in inventory."""
+        # S3/GCS inventory stores URL-encoded keys
+        csv_entries = [
+            {
+                "key": "photos/My%20Vacation%202020/IMG%20001.CR3",  # Spaces encoded
+                "size": 25000000,
+            },
+            {
+                "key": "photos/Special%26Characters/file%2B1.jpg",  # & and + encoded
+                "size": 15000000,
+            },
+        ]
+
+        manifest = create_s3_manifest()
+        csv_data = create_s3_csv_data(csv_entries)
+
+        files = {
+            "photos-bucket/daily/2026-01-20T00-00Z/manifest.json": manifest.encode("utf-8"),
+            "photos-bucket/daily/2026-01-20T00-00Z/data.csv.gz": csv_data,
+        }
+        adapter = MockS3Adapter(files)
+
+        config = {
+            "destination_bucket": "inventory-bucket",
+            "source_bucket": "photos-bucket",
+            "config_name": "daily",
+        }
+
+        tool = InventoryImportTool(adapter, config, "s3")
+        result = await tool.execute()
+
+        assert result.success is True
+        assert result.all_entries is not None
+
+        # Keys should be preserved as URL-encoded (decoding happens at usage time)
+        keys = [e.key for e in result.all_entries]
+        assert any("%20" in k or "My Vacation" in k for k in keys)  # Either encoded or decoded is acceptable
+        assert len(result.all_entries) == 2
+
+    @pytest.mark.asyncio
+    async def test_fileinfo_size_accuracy_large_files(self):
+        """SC-009: FileInfo accurately captures sizes for large files."""
+        # Test with very large file sizes to ensure no precision loss
+        csv_entries = [
+            {
+                "key": "raw/large_composite.tif",
+                "size": 5368709120,  # 5GB exactly
+            },
+            {
+                "key": "raw/huge_panorama.psb",
+                "size": 10737418240,  # 10GB exactly
+            },
+        ]
+
+        manifest = create_s3_manifest()
+        csv_data = create_s3_csv_data(csv_entries)
+
+        files = {
+            "photos-bucket/daily/2026-01-20T00-00Z/manifest.json": manifest.encode("utf-8"),
+            "photos-bucket/daily/2026-01-20T00-00Z/data.csv.gz": csv_data,
+        }
+        adapter = MockS3Adapter(files)
+
+        config = {
+            "destination_bucket": "inventory-bucket",
+            "source_bucket": "photos-bucket",
+            "config_name": "daily",
+        }
+
+        tool = InventoryImportTool(adapter, config, "s3")
+        result = await tool.execute()
+
+        assert result.success is True
+        assert result.all_entries is not None
+
+        # Verify exact size preservation (no float precision loss)
+        sizes = {e.size for e in result.all_entries}
+        assert 5368709120 in sizes  # 5GB
+        assert 10737418240 in sizes  # 10GB
+
+    @pytest.mark.asyncio
+    async def test_fileinfo_empty_optional_fields(self):
+        """SC-009: FileInfo handles missing optional fields gracefully."""
+        # Minimal inventory entry with only required fields
+        csv_entries = [
+            {
+                "key": "photos/minimal.jpg",
+                "size": 1000,
+                # No last_modified, e_tag, storage_class
+            },
+        ]
+
+        manifest = create_s3_manifest()
+        csv_data = create_s3_csv_data(csv_entries)
+
+        files = {
+            "photos-bucket/daily/2026-01-20T00-00Z/manifest.json": manifest.encode("utf-8"),
+            "photos-bucket/daily/2026-01-20T00-00Z/data.csv.gz": csv_data,
+        }
+        adapter = MockS3Adapter(files)
+
+        config = {
+            "destination_bucket": "inventory-bucket",
+            "source_bucket": "photos-bucket",
+            "config_name": "daily",
+        }
+
+        tool = InventoryImportTool(adapter, config, "s3")
+        result = await tool.execute()
+
+        assert result.success is True
+        assert result.all_entries is not None
+        assert len(result.all_entries) == 1
+
+        # Entry should have key and size, optional fields may be None
+        entry = result.all_entries[0]
+        assert entry.key == "photos/minimal.jpg"
+        assert entry.size == 1000

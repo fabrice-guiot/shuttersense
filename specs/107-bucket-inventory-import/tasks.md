@@ -418,8 +418,10 @@
 - [ ] T114 Performance test: SC-003 - Manifest fetch/parse <10 seconds in `agent/tests/performance/test_inventory_performance.py`
 - [ ] T115 Performance test: SC-004 - Folder tree renders 10k folders <2 seconds in `frontend/tests/performance/test_folder_tree_performance.ts`
 - [ ] T116 Performance test: SC-005 - Agent memory <1GB for 5M objects in `agent/tests/performance/test_inventory_performance.py`
-- [ ] T117 [P] Test: SC-007 - Zero cloud API calls with cached FileInfo in `backend/tests/integration/tools/test_fileinfo_integration.py`
-- [ ] T118 [P] Test: SC-009 - FileInfo accuracy matches direct cloud API results in `agent/tests/integration/test_inventory_import_tool.py`
+- [x] T117 [P] Test: SC-007 - Zero cloud API calls with cached FileInfo in `agent/tests/unit/test_job_executor.py`
+  - Tests: `TestZeroCloudAPICalls` (5 tests: cache bypass, no cache requires adapter, force refresh, conversion, execute passes cache)
+- [x] T118 [P] Test: SC-009 - FileInfo accuracy matches direct cloud API results in `agent/tests/integration/test_inventory_import_tool.py`
+  - Tests: `TestFileInfoAccuracy` (5 tests: S3 format, GCS format, URL encoding, large files, empty fields)
 
 ### Documentation & Validation
 
