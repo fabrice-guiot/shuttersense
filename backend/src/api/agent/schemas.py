@@ -2093,8 +2093,65 @@ class AgentCollectionTestResponse(BaseModel):
 # Task: T006
 # ============================================================================
 
+class AgentPrepareResultUploadRequest(BaseModel):
+    """Request schema for preparing a chunked offline result upload.
+
+    Creates a placeholder Job so the agent can use the existing chunked
+    upload infrastructure (POST /jobs/{guid}/uploads/initiate) before
+    submitting the final result via POST /results/upload.
+    """
+
+    result_id: str = Field(
+        ...,
+        min_length=1,
+        description="Locally generated UUID for idempotent upload"
+    )
+    collection_guid: str = Field(
+        ...,
+        min_length=1,
+        description="GUID of the collection analyzed (col_xxx)"
+    )
+    tool: str = Field(
+        ...,
+        min_length=1,
+        description="Tool used: photostats, photo_pairing, pipeline_validation"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "result_id": "550e8400-e29b-41d4-a716-446655440000",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "tool": "photostats",
+            }
+        }
+    }
+
+
+class AgentPrepareResultUploadResponse(BaseModel):
+    """Response schema for prepare result upload (returns job_guid for chunked uploads)."""
+
+    job_guid: str = Field(
+        ..., description="GUID of the placeholder Job (job_xxx) — use for chunked uploads"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "job_guid": "job_01hgw2bbg0000000000000001",
+            }
+        }
+    }
+
+
 class AgentUploadResultRequest(BaseModel):
-    """Request schema for uploading an offline analysis result."""
+    """Request schema for uploading an offline analysis result.
+
+    Supports two modes:
+    1. Inline: Provide analysis_data and optional html_report directly.
+    2. Chunked: Provide analysis_data_upload_id and/or report_upload_id
+       from pre-uploaded chunked content (requires prior /results/upload/prepare).
+    """
 
     result_id: str = Field(
         ...,
@@ -2115,14 +2172,45 @@ class AgentUploadResultRequest(BaseModel):
         ...,
         description="When the analysis was executed on the agent"
     )
-    analysis_data: Dict[str, Any] = Field(
-        ...,
-        description="Full analysis output (tool-specific JSON)"
+    # Inline mode fields
+    analysis_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Full analysis output (inline mode)"
     )
     html_report: Optional[str] = Field(
         None,
-        description="Base64-encoded HTML report"
+        description="HTML report string (inline mode)"
     )
+    # Chunked mode fields
+    analysis_data_upload_id: Optional[str] = Field(
+        None,
+        description="Upload ID for chunked analysis data (from chunked upload)"
+    )
+    report_upload_id: Optional[str] = Field(
+        None,
+        description="Upload ID for chunked HTML report (from chunked upload)"
+    )
+
+    @model_validator(mode='after')
+    def validate_data_source(self) -> 'AgentUploadResultRequest':
+        """Ensure analysis_data is provided either inline or via upload_id."""
+        has_inline = self.analysis_data is not None
+        has_upload = self.analysis_data_upload_id is not None
+        if not has_inline and not has_upload:
+            raise ValueError(
+                "Must provide either 'analysis_data' (inline) or "
+                "'analysis_data_upload_id' (chunked upload)"
+            )
+        if has_inline and has_upload:
+            raise ValueError(
+                "Cannot provide both 'analysis_data' and 'analysis_data_upload_id'"
+            )
+        # html_report and report_upload_id are mutually exclusive
+        if self.html_report is not None and self.report_upload_id is not None:
+            raise ValueError(
+                "Cannot provide both 'html_report' and 'report_upload_id'"
+            )
+        return self
 
     model_config = {
         "json_schema_extra": {

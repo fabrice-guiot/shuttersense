@@ -101,6 +101,8 @@ from backend.src.api.agent.schemas import (
     AgentCollectionTestRequest,
     AgentCollectionTestResponse,
     # Agent offline result upload (Issue #108)
+    AgentPrepareResultUploadRequest,
+    AgentPrepareResultUploadResponse,
     AgentUploadResultRequest,
     AgentUploadResultResponse,
 )
@@ -3073,13 +3075,108 @@ async def agent_test_collection(
 
 
 @router.post(
+    "/results/upload/prepare",
+    response_model=AgentPrepareResultUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Prepare chunked offline result upload",
+    description="Create a placeholder Job for chunked upload of large offline results. "
+                "Returns a job_guid that can be used with the chunked upload endpoints "
+                "(POST /jobs/{guid}/uploads/initiate) before calling POST /results/upload.",
+)
+async def agent_prepare_result_upload(
+    data: AgentPrepareResultUploadRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Create a placeholder Job for chunked offline result upload."""
+    import json as json_module
+    from backend.src.models.collection import Collection
+    from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+    # Validate collection_guid belongs to this agent's team
+    collection = None
+    collections = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+    ).all()
+    for col in collections:
+        if col.guid == data.collection_guid:
+            collection = col
+            break
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {data.collection_guid} not found",
+        )
+
+    # Verify collection is bound to this agent (for LOCAL collections)
+    if collection.bound_agent_id and collection.bound_agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Collection is bound to a different agent",
+        )
+
+    # Check for idempotent prepare: look for existing placeholder with same result_id
+    existing_jobs = db.query(Job).filter(
+        Job.team_id == ctx.team_id,
+        Job.collection_id == collection.id,
+    ).all()
+    for ej in existing_jobs:
+        if ej.progress and isinstance(ej.progress, dict):
+            if ej.progress.get("offline_result_id") == data.result_id:
+                # Already prepared or uploaded — return existing job_guid
+                return AgentPrepareResultUploadResponse(job_guid=ej.guid)
+
+    # Validate tool name
+    valid_tools = {"photostats", "photo_pairing", "pipeline_validation"}
+    if data.tool not in valid_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool '{data.tool}'. Must be one of: {sorted(valid_tools)}",
+        )
+
+    # Create placeholder Job with ASSIGNED status (agent is uploading data)
+    from datetime import datetime
+    now = datetime.utcnow()
+    job = Job(
+        team_id=ctx.team_id,
+        collection_id=collection.id,
+        tool=data.tool,
+        status=PersistentJobStatus.ASSIGNED,
+        agent_id=ctx.agent_id,
+        assigned_at=now,
+        priority=0,
+        required_capabilities_json=json_module.dumps([data.tool]),
+        progress_json=json_module.dumps({"offline_result_id": data.result_id}),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    logger.info(
+        "Prepared placeholder job for chunked offline result upload",
+        extra={
+            "result_id": data.result_id,
+            "job_guid": job.guid,
+            "collection_guid": data.collection_guid,
+            "tool": data.tool,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentPrepareResultUploadResponse(job_guid=job.guid)
+
+
+@router.post(
     "/results/upload",
     response_model=AgentUploadResultResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload offline analysis result",
     description="Upload an analysis result from offline agent execution. "
                 "Creates both a Job (COMPLETED) and AnalysisResult in a single transaction. "
-                "Supports idempotent upload via result_id (returns 409 if already uploaded).",
+                "Supports idempotent upload via result_id (returns 409 if already uploaded). "
+                "Supports chunked mode: provide analysis_data_upload_id and/or report_upload_id "
+                "from pre-uploaded content via /results/upload/prepare + chunked upload endpoints.",
 )
 async def agent_upload_result(
     data: AgentUploadResultRequest,
@@ -3114,20 +3211,21 @@ async def agent_upload_result(
             detail="Collection is bound to a different agent",
         )
 
-    # Check for idempotent upload: look for existing result with same result_id
-    # We store result_id in the job's progress_json for tracking
-    from backend.src.models.job import Job
-    existing_job = db.query(Job).filter(
+    # Check for idempotent upload: look for existing COMPLETED result with same result_id
+    from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+    existing_jobs = db.query(Job).filter(
         Job.team_id == ctx.team_id,
         Job.collection_id == collection.id,
     ).all()
-    for ej in existing_job:
+    for ej in existing_jobs:
         if ej.progress and isinstance(ej.progress, dict):
             if ej.progress.get("offline_result_id") == data.result_id:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Result {data.result_id} has already been uploaded",
-                )
+                if ej.status == PersistentJobStatus.COMPLETED:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Result {data.result_id} has already been uploaded",
+                    )
+                # ASSIGNED placeholder from prepare — will be reused below
 
     # Validate tool name
     valid_tools = {"photostats", "photo_pairing", "pipeline_validation"}
@@ -3137,7 +3235,56 @@ async def agent_upload_result(
             detail=f"Invalid tool '{data.tool}'. Must be one of: {sorted(valid_tools)}",
         )
 
+    # --- Resolve chunked uploads if present ---
+    analysis_data = data.analysis_data
+    html_report = data.html_report
+
+    if data.analysis_data_upload_id or data.report_upload_id:
+        from backend.src.services.chunked_upload_service import ChunkedUploadService
+        upload_service = ChunkedUploadService()
+
+        if data.analysis_data_upload_id:
+            import json as json_mod
+            content = upload_service.get_finalized_content(
+                upload_id=data.analysis_data_upload_id,
+                agent_id=ctx.agent_id,
+                team_id=ctx.team_id,
+            )
+            if content is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Analysis data upload not found or not finalized: "
+                           f"{data.analysis_data_upload_id}",
+                )
+            analysis_data = json_mod.loads(content.decode('utf-8'))
+
+        if data.report_upload_id:
+            content = upload_service.get_finalized_content(
+                upload_id=data.report_upload_id,
+                agent_id=ctx.agent_id,
+                team_id=ctx.team_id,
+            )
+            if content is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Report upload not found or not finalized: "
+                           f"{data.report_upload_id}",
+                )
+            html_report = content.decode('utf-8')
+
     try:
+        # Delete any ASSIGNED placeholder job from prepare step
+        placeholder_job = None
+        for ej in existing_jobs:
+            if ej.progress and isinstance(ej.progress, dict):
+                if (ej.progress.get("offline_result_id") == data.result_id
+                        and ej.status == PersistentJobStatus.ASSIGNED):
+                    placeholder_job = ej
+                    break
+        if placeholder_job:
+            db.delete(placeholder_job)
+            db.flush()
+
         job, result = agent_upload_offline_result(
             db=db,
             agent_id=ctx.agent_id,
@@ -3145,8 +3292,8 @@ async def agent_upload_result(
             collection_id=collection.id,
             tool=data.tool,
             executed_at=data.executed_at,
-            analysis_data=data.analysis_data,
-            html_report=data.html_report,
+            analysis_data=analysis_data,
+            html_report=html_report,
             result_id=data.result_id,
         )
 

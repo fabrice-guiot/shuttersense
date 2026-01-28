@@ -1312,13 +1312,17 @@ class AgentApiClient:
         """
         Upload an offline analysis result.
 
+        Automatically uses chunked upload for large payloads:
+        - HTML reports are always uploaded via chunked upload
+        - JSON analysis data > 1MB is uploaded via chunked upload
+
         Args:
             result_id: Locally generated UUID for idempotent upload
             collection_guid: GUID of the collection analyzed
             tool: Tool used (photostats, photo_pairing, pipeline_validation)
             executed_at: ISO8601 timestamp of when analysis was executed
             analysis_data: Full analysis output (tool-specific JSON)
-            html_report: Optional base64-encoded HTML report
+            html_report: Optional HTML report string
 
         Returns:
             Response containing job GUID, result GUID, and status
@@ -1328,14 +1332,83 @@ class AgentApiClient:
             ApiError: If validation fails (400) or already uploaded (409)
             ConnectionError: If connection to server fails
         """
+        from src.chunked_upload import (
+            ChunkedUploadClient,
+            should_use_chunked_upload,
+        )
+
+        # Check if chunked upload is needed
+        results_chunked, html_chunked = should_use_chunked_upload(
+            results=analysis_data,
+            report_html=html_report,
+        )
+
+        analysis_data_upload_id = None
+        report_upload_id = None
+
+        if results_chunked or html_chunked:
+            # Step 1: Prepare — create placeholder Job for chunked uploads
+            job_guid = await self._prepare_result_upload(
+                result_id=result_id,
+                collection_guid=collection_guid,
+                tool=tool,
+            )
+
+            # Step 2: Upload large content via chunked protocol
+            upload_client = ChunkedUploadClient(api_client=self)
+
+            if results_chunked:
+                logger.info(
+                    f"Using chunked upload for large analysis data "
+                    f"(result {result_id})"
+                )
+                upload_result = await upload_client.upload_results(
+                    job_guid=job_guid,
+                    results=analysis_data,
+                )
+                if not upload_result.success:
+                    raise ApiError(
+                        f"Chunked analysis data upload failed: "
+                        f"{upload_result.error}",
+                        status_code=500,
+                    )
+                analysis_data_upload_id = upload_result.upload_id
+
+            if html_chunked and html_report:
+                logger.info(
+                    f"Using chunked upload for HTML report "
+                    f"(result {result_id})"
+                )
+                upload_result = await upload_client.upload_report_html(
+                    job_guid=job_guid,
+                    report_html=html_report,
+                )
+                if not upload_result.success:
+                    raise ApiError(
+                        f"Chunked HTML report upload failed: "
+                        f"{upload_result.error}",
+                        status_code=500,
+                    )
+                report_upload_id = upload_result.upload_id
+
+        # Step 3: Submit result (inline or with upload_ids)
         payload: dict[str, Any] = {
             "result_id": result_id,
             "collection_guid": collection_guid,
             "tool": tool,
             "executed_at": executed_at,
-            "analysis_data": analysis_data,
         }
-        if html_report is not None:
+
+        # Either inline or upload_id for analysis data
+        if analysis_data_upload_id:
+            payload["analysis_data_upload_id"] = analysis_data_upload_id
+        else:
+            payload["analysis_data"] = analysis_data
+
+        # Either inline or upload_id for HTML report
+        if report_upload_id:
+            payload["report_upload_id"] = report_upload_id
+        elif html_report is not None:
             payload["html_report"] = html_report
 
         try:
@@ -1358,10 +1431,66 @@ class AgentApiClient:
             detail = response.json().get("detail", "Validation error")
             raise ApiError(detail, status_code=400)
         elif response.status_code == 404:
-            raise ApiError("Collection not found", status_code=404)
+            detail = response.json().get("detail", "Collection not found")
+            raise ApiError(detail, status_code=404)
         else:
             raise ApiError(
                 f"Upload failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    async def _prepare_result_upload(
+        self,
+        result_id: str,
+        collection_guid: str,
+        tool: str,
+    ) -> str:
+        """
+        Prepare a chunked result upload by creating a placeholder Job.
+
+        Args:
+            result_id: Locally generated UUID
+            collection_guid: GUID of the collection
+            tool: Tool name
+
+        Returns:
+            job_guid for use with chunked upload endpoints
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ApiError: If preparation fails
+            ConnectionError: If connection fails
+        """
+        payload = {
+            "result_id": result_id,
+            "collection_guid": collection_guid,
+            "tool": tool,
+        }
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/results/upload/prepare",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 201:
+            data = response.json()
+            return data["job_guid"]
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 404:
+            detail = response.json().get("detail", "Collection not found")
+            raise ApiError(detail, status_code=404)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Validation error")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Prepare upload failed with status {response.status_code}",
                 status_code=response.status_code,
             )
 
