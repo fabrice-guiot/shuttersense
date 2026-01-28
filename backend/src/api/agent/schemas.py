@@ -5,6 +5,8 @@ Defines request and response models for:
 - Agent registration
 - Heartbeat updates
 - Agent status and metadata
+- Agent collection management (Issue #108)
+- Agent offline result upload (Issue #108)
 """
 
 from datetime import datetime
@@ -1867,6 +1869,302 @@ class InventoryDeltaResponse(BaseModel):
                 "status": "success",
                 "message": "Stored delta for 5 collections",
                 "collections_updated": 5
+            }
+        }
+    }
+
+
+# ============================================================================
+# Agent Collection Schemas (Issue #108)
+# Tasks: T004, T005
+# ============================================================================
+
+class TestResultSummary(BaseModel):
+    """Optional test results from the agent's local test cache."""
+
+    tested_at: datetime = Field(..., description="When the test was executed")
+    file_count: int = Field(..., ge=0, description="Total files found")
+    photo_count: int = Field(..., ge=0, description="Files matching photo extensions")
+    sidecar_count: int = Field(..., ge=0, description="Files matching metadata extensions")
+    tools_tested: List[str] = Field(
+        default_factory=list,
+        description="Tools that were run"
+    )
+    issues_found: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Summary of issues per tool"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "tested_at": "2026-01-28T12:00:00.000Z",
+                "file_count": 5000,
+                "photo_count": 4500,
+                "sidecar_count": 450,
+                "tools_tested": ["photostats", "photo_pairing"],
+                "issues_found": {"photostats": {"orphaned_files": 3}}
+            }
+        }
+    }
+
+
+class AgentCreateCollectionRequest(BaseModel):
+    """Request schema for agent-initiated collection creation."""
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Collection display name"
+    )
+    location: str = Field(
+        ...,
+        min_length=1,
+        description="Absolute path to the local directory"
+    )
+    test_results: Optional[TestResultSummary] = Field(
+        None,
+        description="Optional test results from the local test cache"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "name": "Vacation Photos 2024",
+                "location": "/photos/2024",
+                "test_results": {
+                    "tested_at": "2026-01-28T12:00:00.000Z",
+                    "file_count": 5000,
+                    "photo_count": 4500,
+                    "sidecar_count": 450,
+                    "tools_tested": ["photostats"],
+                    "issues_found": None
+                }
+            }
+        }
+    }
+
+
+class AgentCreateCollectionResponse(BaseModel):
+    """Response schema for successful agent collection creation."""
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    name: str = Field(..., description="Collection display name")
+    type: str = Field(..., description="Collection type (always LOCAL)")
+    location: str = Field(..., description="Absolute path")
+    bound_agent_guid: str = Field(..., description="Agent GUID (agt_xxx)")
+    web_url: str = Field(
+        ...,
+        description="URL to view this collection in the web UI"
+    )
+    created_at: datetime = Field(..., description="Creation timestamp")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "name": "Vacation Photos 2024",
+                "type": "LOCAL",
+                "location": "/photos/2024",
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
+                "web_url": "https://app.shuttersense.ai/collections/col_01hgw2bbg0000000000000001",
+                "created_at": "2026-01-28T12:00:00.000Z"
+            }
+        }
+    }
+
+
+class AgentCollectionItem(BaseModel):
+    """Item in the agent collection list response."""
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    name: str = Field(..., description="Collection display name")
+    type: str = Field(..., description="Collection type: LOCAL, S3, GCS, SMB")
+    location: str = Field(..., description="Path or bucket/prefix")
+    bound_agent_guid: Optional[str] = Field(
+        None, description="Agent GUID for LOCAL collections"
+    )
+    connector_guid: Optional[str] = Field(
+        None, description="Connector GUID for remote collections"
+    )
+    connector_name: Optional[str] = Field(
+        None, description="Connector display name"
+    )
+    is_accessible: Optional[bool] = Field(
+        None, description="Last known accessibility status"
+    )
+    last_analysis_at: Optional[datetime] = Field(
+        None, description="When last analysis completed"
+    )
+    supports_offline: bool = Field(
+        ..., description="True only for LOCAL collections"
+    )
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "name": "Vacation Photos 2024",
+                "type": "LOCAL",
+                "location": "/photos/2024",
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
+                "connector_guid": None,
+                "connector_name": None,
+                "is_accessible": True,
+                "last_analysis_at": "2026-01-28T12:00:00.000Z",
+                "supports_offline": True
+            }
+        }
+    }
+
+
+class AgentCollectionListResponse(BaseModel):
+    """Response schema for listing agent-bound collections."""
+
+    collections: List[AgentCollectionItem] = Field(
+        default_factory=list,
+        description="List of bound collections"
+    )
+    total_count: int = Field(..., description="Total number of bound collections")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collections": [],
+                "total_count": 0
+            }
+        }
+    }
+
+
+class AgentCollectionTestRequest(BaseModel):
+    """Request schema for reporting collection accessibility test results."""
+
+    is_accessible: bool = Field(
+        ...,
+        description="Whether the path is currently accessible"
+    )
+    error_message: Optional[str] = Field(
+        None,
+        max_length=1000,
+        description="Error details if not accessible"
+    )
+    file_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Number of files found (if accessible)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "is_accessible": True,
+                "error_message": None,
+                "file_count": 5000
+            }
+        }
+    }
+
+
+class AgentCollectionTestResponse(BaseModel):
+    """Response schema for collection accessibility test update."""
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    is_accessible: bool = Field(
+        ..., description="Updated accessibility status"
+    )
+    updated_at: datetime = Field(..., description="When status was updated")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "is_accessible": True,
+                "updated_at": "2026-01-28T12:00:00.000Z"
+            }
+        }
+    }
+
+
+# ============================================================================
+# Agent Offline Result Upload Schemas (Issue #108)
+# Task: T006
+# ============================================================================
+
+class AgentUploadResultRequest(BaseModel):
+    """Request schema for uploading an offline analysis result."""
+
+    result_id: str = Field(
+        ...,
+        min_length=1,
+        description="Locally generated UUID for idempotent upload"
+    )
+    collection_guid: str = Field(
+        ...,
+        min_length=1,
+        description="GUID of the collection analyzed (col_xxx)"
+    )
+    tool: str = Field(
+        ...,
+        min_length=1,
+        description="Tool used: photostats, photo_pairing, pipeline_validation"
+    )
+    executed_at: datetime = Field(
+        ...,
+        description="When the analysis was executed on the agent"
+    )
+    analysis_data: Dict[str, Any] = Field(
+        ...,
+        description="Full analysis output (tool-specific JSON)"
+    )
+    html_report: Optional[str] = Field(
+        None,
+        description="Base64-encoded HTML report"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "result_id": "550e8400-e29b-41d4-a716-446655440000",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "tool": "photostats",
+                "executed_at": "2026-01-28T10:00:00.000Z",
+                "analysis_data": {
+                    "total_files": 5000,
+                    "orphaned_files": 12,
+                    "missing_sidecars": 5
+                },
+                "html_report": None
+            }
+        }
+    }
+
+
+class AgentUploadResultResponse(BaseModel):
+    """Response schema for successful offline result upload."""
+
+    job_guid: str = Field(
+        ..., description="GUID of the created Job record (job_xxx)"
+    )
+    result_guid: str = Field(
+        ..., description="GUID of the created AnalysisResult (res_xxx)"
+    )
+    collection_guid: str = Field(
+        ..., description="Collection GUID (col_xxx)"
+    )
+    status: str = Field(
+        ..., description="Upload status (uploaded)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "job_guid": "job_01hgw2bbg0000000000000001",
+                "result_guid": "res_01hgw2bbg0000000000000001",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "status": "uploaded"
             }
         }
     }

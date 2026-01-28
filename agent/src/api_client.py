@@ -1143,6 +1143,111 @@ class AgentApiClient:
             raise ConnectionError(f"Connection timed out: {e}")
 
     # -------------------------------------------------------------------------
+    # Collection Management (Issue #108, Task T007)
+    # -------------------------------------------------------------------------
+
+    async def create_collection(
+        self,
+        name: str,
+        location: str,
+        test_results: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """
+        Create a new LOCAL Collection bound to this agent.
+
+        Args:
+            name: Collection display name
+            location: Absolute path to the local directory
+            test_results: Optional test results from the local test cache
+
+        Returns:
+            Response containing collection GUID, web URL, and metadata
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ApiError: If creation fails (400 validation, 409 duplicate)
+            ConnectionError: If connection to server fails
+        """
+        raise NotImplementedError("Implemented in US2 (Phase 4)")
+
+    async def list_collections(
+        self,
+        type_filter: Optional[str] = None,
+        status_filter: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        List Collections bound to this agent.
+
+        Args:
+            type_filter: Optional filter by collection type (LOCAL, S3, GCS, SMB)
+            status_filter: Optional filter by accessibility status
+
+        Returns:
+            Response containing list of collections and total count
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        raise NotImplementedError("Implemented in US4 (Phase 5)")
+
+    async def test_collection(
+        self,
+        collection_guid: str,
+        is_accessible: bool,
+        error_message: Optional[str] = None,
+        file_count: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Report collection accessibility test results.
+
+        Args:
+            collection_guid: GUID of the collection to update
+            is_accessible: Whether the path is currently accessible
+            error_message: Error details if not accessible
+            file_count: Number of files found (if accessible)
+
+        Returns:
+            Response containing updated accessibility status
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ApiError: If collection not found (404)
+            ConnectionError: If connection to server fails
+        """
+        raise NotImplementedError("Implemented in US4 (Phase 5)")
+
+    async def upload_result(
+        self,
+        result_id: str,
+        collection_guid: str,
+        tool: str,
+        executed_at: str,
+        analysis_data: dict[str, Any],
+        html_report: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Upload an offline analysis result.
+
+        Args:
+            result_id: Locally generated UUID for idempotent upload
+            collection_guid: GUID of the collection analyzed
+            tool: Tool used (photostats, photo_pairing, pipeline_validation)
+            executed_at: ISO8601 timestamp of when analysis was executed
+            analysis_data: Full analysis output (tool-specific JSON)
+            html_report: Optional base64-encoded HTML report
+
+        Returns:
+            Response containing job GUID, result GUID, and status
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ApiError: If validation fails (400) or already uploaded (409)
+            ConnectionError: If connection to server fails
+        """
+        raise NotImplementedError("Implemented in US3 (Phase 6)")
+
+    # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
 

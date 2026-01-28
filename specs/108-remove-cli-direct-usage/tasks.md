@@ -37,10 +37,10 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Add AgentCreateCollectionRequest, AgentCreateCollectionResponse, AgentCollectionItem, AgentCollectionListResponse schemas to backend/src/api/agent/schemas.py
-- [ ] T005 [P] Add AgentCollectionTestRequest, AgentCollectionTestResponse schemas to backend/src/api/agent/schemas.py
-- [ ] T006 [P] Add AgentUploadResultRequest, AgentUploadResultResponse schemas to backend/src/api/agent/schemas.py
-- [ ] T007 Add create_collection(), list_collections(), test_collection(), upload_result() method stubs to agent/src/api_client.py (raise NotImplementedError, filled in per story)
+- [x] T004 Add AgentCreateCollectionRequest, AgentCreateCollectionResponse, AgentCollectionItem, AgentCollectionListResponse schemas to backend/src/api/agent/schemas.py
+- [x] T005 [P] Add AgentCollectionTestRequest, AgentCollectionTestResponse schemas to backend/src/api/agent/schemas.py
+- [x] T006 [P] Add AgentUploadResultRequest, AgentUploadResultResponse schemas to backend/src/api/agent/schemas.py
+- [x] T007 Add create_collection(), list_collections(), test_collection(), upload_result() method stubs to agent/src/api_client.py (raise NotImplementedError, filled in per story)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin.
 
