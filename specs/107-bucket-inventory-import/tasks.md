@@ -229,24 +229,24 @@
 
 ### Backend Scheduling
 
-- [ ] T076 [US5] Add schedule field to inventory config schema (manual, daily, weekly)
-- [ ] T077 [US5] Implement chain scheduling in job completion handler (create next job on completion)
-- [ ] T078 [US5] Calculate next scheduled_at (next fixed schedule occurrence: daily at 00:00 UTC, weekly same weekday at 00:00 UTC)
-- [ ] T079 [US5] Add schedule cancellation when schedule disabled (cancel pending jobs)
-- [ ] T080 [US5] Handle "Import Now" as immediate job independent of schedule
+- [x] T076 [US5] Add schedule field to inventory config schema (manual, daily, weekly)
+- [x] T077 [US5] Implement chain scheduling in job completion handler (create next job on completion)
+- [x] T078 [US5] Calculate next scheduled_at (next fixed schedule occurrence: daily at 00:00 UTC, weekly same weekday at 00:00 UTC)
+- [x] T079 [US5] Add schedule cancellation when schedule disabled (cancel pending jobs)
+- [x] T080 [US5] Handle "Import Now" as immediate job independent of schedule
 
 ### Frontend Schedule UI
 
-- [ ] T082 [P] [US5] Add schedule options to InventoryConfigForm (manual, daily, weekly)
-- [ ] T083 [US5] Display next scheduled import timestamp in connector inventory section
-- [ ] T084 [US5] Update status display to show scheduled vs in-progress states
+- [x] T082 [P] [US5] Add schedule options to InventoryConfigForm (manual, daily, weekly)
+- [x] T083 [US5] Display next scheduled import timestamp in connector inventory section
+- [x] T084 [US5] Update status display to show scheduled vs in-progress states
 
 ### Tests for US5
 
-- [ ] T081 [P] [US5] Unit tests for chain scheduling logic in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T081a [P] [US5] Unit tests for next scheduled_at calculation (fixed schedule occurrences: daily at 00:00 UTC, weekly same weekday at 00:00 UTC) in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T081b [P] [US5] Unit tests for schedule cancellation (pending job cleanup) in `backend/tests/unit/services/test_inventory_service.py`
-- [ ] T084a [US5] Integration test for complete scheduling workflow (enable → complete → next job created) in `backend/tests/integration/api/test_inventory_scheduling.py`
+- [x] T081 [P] [US5] Unit tests for chain scheduling logic in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T081a [P] [US5] Unit tests for next scheduled_at calculation (fixed schedule occurrences: daily at 00:00 UTC, weekly same weekday at 00:00 UTC) in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T081b [P] [US5] Unit tests for schedule cancellation (pending job cleanup) in `backend/tests/unit/services/test_inventory_service.py`
+- [x] T084a [US5] Integration test for complete scheduling workflow (enable → complete → next job created) in `backend/tests/integration/api/test_inventory_api.py`
 
 **Checkpoint**: Users can configure automatic import schedules, system creates chain of scheduled jobs
 

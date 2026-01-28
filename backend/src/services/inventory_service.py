@@ -119,8 +119,11 @@ class InventoryService:
                 f"connector type '{connector.type.value}'"
             )
 
-        # Check if schedule is changing to manual - cancel scheduled jobs
+        # Check if schedule is changing
         old_schedule = connector.inventory_schedule or "manual"
+        was_validated = connector.inventory_validation_status == InventoryValidationStatus.VALIDATED
+
+        # Cancel scheduled jobs if schedule is changing to manual
         if schedule == "manual" and old_schedule != "manual":
             cancelled = self.cancel_scheduled_import_jobs(connector_id, team_id or connector.team_id)
             if cancelled > 0:
@@ -140,6 +143,10 @@ class InventoryService:
 
         self.db.commit()
         self.db.refresh(connector)
+
+        # Note: Initial scheduled job creation happens after validation completes
+        # (in update_validation_status or validate_inventory_config_server_side)
+        # since we can't schedule imports until config is validated
 
         logger.info(
             "Set inventory configuration on connector",
@@ -273,13 +280,27 @@ class InventoryService:
 
             self.db.commit()
 
+            # If validation succeeded and schedule is not manual, create initial scheduled job
+            scheduled_job = None
+            if success:
+                schedule = connector.inventory_schedule or "manual"
+                if schedule != "manual":
+                    next_scheduled = self.calculate_next_scheduled_at(schedule)
+                    if next_scheduled:
+                        scheduled_job = self.create_scheduled_import_job(
+                            connector_id=connector_id,
+                            team_id=team_id or connector.team_id,
+                            scheduled_for=next_scheduled
+                        )
+
             logger.info(
                 "Completed inventory config validation (server-side)",
                 extra={
                     "connector_id": connector_id,
                     "success": success,
                     "result_message": message,
-                    "latest_manifest": latest_manifest
+                    "latest_manifest": latest_manifest,
+                    "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
                 }
             )
 
@@ -526,6 +547,19 @@ class InventoryService:
         self.db.commit()
         self.db.refresh(connector)
 
+        # If validation succeeded and schedule is not manual, create initial scheduled job
+        scheduled_job = None
+        if success:
+            schedule = connector.inventory_schedule or "manual"
+            if schedule != "manual":
+                next_scheduled = self.calculate_next_scheduled_at(schedule)
+                if next_scheduled:
+                    scheduled_job = self.create_scheduled_import_job(
+                        connector_id=connector_id,
+                        team_id=team_id or connector.team_id,
+                        scheduled_for=next_scheduled
+                    )
+
         logger.info(
             "Updated inventory validation status from agent",
             extra={
@@ -533,7 +567,8 @@ class InventoryService:
                 "connector_guid": connector.guid,
                 "success": success,
                 "error": error_message,
-                "latest_manifest": latest_manifest
+                "latest_manifest": latest_manifest,
+                "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
             }
         )
 

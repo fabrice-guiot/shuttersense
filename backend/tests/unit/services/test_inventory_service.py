@@ -1410,7 +1410,7 @@ class TestInventoryServiceScheduling:
         """Test that creating a new scheduled job cancels the old one."""
         service = InventoryService(test_db_session)
 
-        # Set inventory config
+        # Set inventory config with manual schedule first (to avoid auto-creation)
         config = S3InventoryConfig(
             destination_bucket="bucket",
             source_bucket="source",
@@ -1419,16 +1419,20 @@ class TestInventoryServiceScheduling:
         service.set_inventory_config(
             connector_id=test_connector.id,
             config=config,
-            schedule="daily",
+            schedule="manual",  # Use manual to avoid auto-job creation
             team_id=test_team.id
         )
 
-        # Validate
+        # Validate (won't create job since schedule is manual)
         service.update_validation_status(
             connector_id=test_connector.id,
             team_id=test_team.id,
             success=True
         )
+
+        # Now update to daily schedule for testing
+        test_connector.inventory_schedule = "daily"
+        test_db_session.commit()
 
         # Create first scheduled job
         first_job = service.create_scheduled_import_job(
@@ -1450,3 +1454,110 @@ class TestInventoryServiceScheduling:
 
         # Verify second job is scheduled
         assert second_job.status == JobStatus.SCHEDULED
+
+    def test_update_validation_status_creates_scheduled_job(
+        self, test_db_session, test_team, test_connector
+    ):
+        """Test that validation success with non-manual schedule creates initial scheduled job."""
+        service = InventoryService(test_db_session)
+
+        # Set inventory config with daily schedule
+        config = S3InventoryConfig(
+            destination_bucket="bucket",
+            source_bucket="source",
+            config_name="config"
+        )
+        service.set_inventory_config(
+            connector_id=test_connector.id,
+            config=config,
+            schedule="daily",
+            team_id=test_team.id
+        )
+
+        # Validate - this should now automatically create a scheduled job
+        service.update_validation_status(
+            connector_id=test_connector.id,
+            team_id=test_team.id,
+            success=True
+        )
+
+        # Check that a scheduled job was created
+        scheduled_jobs = test_db_session.query(Job).filter(
+            Job.team_id == test_team.id,
+            Job.tool == "inventory_import",
+            Job.status == JobStatus.SCHEDULED
+        ).all()
+
+        assert len(scheduled_jobs) == 1
+        assert scheduled_jobs[0].scheduled_for is not None
+
+    def test_update_validation_status_manual_no_scheduled_job(
+        self, test_db_session, test_team, test_connector
+    ):
+        """Test that validation success with manual schedule does not create scheduled job."""
+        service = InventoryService(test_db_session)
+
+        # Set inventory config with manual schedule
+        config = S3InventoryConfig(
+            destination_bucket="bucket",
+            source_bucket="source",
+            config_name="config"
+        )
+        service.set_inventory_config(
+            connector_id=test_connector.id,
+            config=config,
+            schedule="manual",
+            team_id=test_team.id
+        )
+
+        # Validate
+        service.update_validation_status(
+            connector_id=test_connector.id,
+            team_id=test_team.id,
+            success=True
+        )
+
+        # Check that no scheduled job was created
+        scheduled_jobs = test_db_session.query(Job).filter(
+            Job.team_id == test_team.id,
+            Job.tool == "inventory_import",
+            Job.status == JobStatus.SCHEDULED
+        ).all()
+
+        assert len(scheduled_jobs) == 0
+
+    def test_update_validation_status_failure_no_scheduled_job(
+        self, test_db_session, test_team, test_connector
+    ):
+        """Test that validation failure does not create scheduled job."""
+        service = InventoryService(test_db_session)
+
+        # Set inventory config with daily schedule
+        config = S3InventoryConfig(
+            destination_bucket="bucket",
+            source_bucket="source",
+            config_name="config"
+        )
+        service.set_inventory_config(
+            connector_id=test_connector.id,
+            config=config,
+            schedule="daily",
+            team_id=test_team.id
+        )
+
+        # Validate with failure
+        service.update_validation_status(
+            connector_id=test_connector.id,
+            team_id=test_team.id,
+            success=False,
+            error_message="Manifest not found"
+        )
+
+        # Check that no scheduled job was created
+        scheduled_jobs = test_db_session.query(Job).filter(
+            Job.team_id == test_team.id,
+            Job.tool == "inventory_import",
+            Job.status == JobStatus.SCHEDULED
+        ).all()
+
+        assert len(scheduled_jobs) == 0
