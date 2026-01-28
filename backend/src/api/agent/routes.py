@@ -95,7 +95,7 @@ from backend.src.api.agent.dependencies import AgentContext, get_agent_context, 
 
 
 # Create router with prefix and tags
-router = APIRouter(prefix="/api/agent/v1", tags=["agents"])
+router = APIRouter(prefix="/api/agent/v1", tags=["Agents"])
 
 
 # ============================================================================
