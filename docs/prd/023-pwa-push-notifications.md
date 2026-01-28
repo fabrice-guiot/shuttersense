@@ -14,13 +14,13 @@
 
 ## Executive Summary
 
-This PRD defines the requirements for converting ShutterSense.ai from a Single Page Application (SPA) into a Progressive Web Application (PWA) with push notification capabilities. The PWA will enable users to receive timely notifications on their devices (desktop and mobile) for high-value events such as job failures, analysis inflexion points, agent status changes, and upcoming event deadlines.
+This PRD defines the requirements for converting ShutterSense.ai from a Single Page Application (SPA) into a Progressive Web Application (PWA) with push notification capabilities. The PWA will enable users to receive timely notifications on their devices (desktop and mobile) for high-value events such as job failures, analysis inflection points, agent status changes, and upcoming event deadlines.
 
 ### Key Design Decisions
 
 1. **PWA Foundation**: Implement service worker, web app manifest, and offline capabilities using `vite-plugin-pwa`
-2. **Selective Notifications**: Only notify for high-value events (failures, inflexion points, agent status) - NOT routine job completions
-3. **Inflexion Point Detection**: Trigger notifications when analysis results show actual changes (new HTML reports), not NO_CHANGE results
+2. **Selective Notifications**: Only notify for high-value events (failures, inflection points, agent status) - NOT routine job completions
+3. **Inflection Point Detection**: Trigger notifications when analysis results show actual changes (new HTML reports), not NO_CHANGE results
 4. **User Control**: Granular notification preferences per notification category
 5. **Multi-Tenant Isolation**: Push subscriptions scoped to user and team for data security
 6. **iOS Compatibility**: Support iOS 16.4+ with "Add to Home Screen" PWA installation
@@ -68,7 +68,7 @@ The ShutterSense.ai frontend is a React SPA that:
 Users miss critical events when not actively using the application:
 
 1. **Job Failures**: Failed analysis jobs require attention but go unnoticed until next login
-2. **Collection Changes**: When a collection's analysis shows new issues (inflexion point), users want to know immediately
+2. **Collection Changes**: When a collection's analysis shows new issues (inflection point), users want to know immediately
 3. **Agent Offline**: If all agents go offline, no jobs can execute - users should be alerted
 4. **Deadline Reminders**: Event deadlines approach without notification
 
@@ -94,7 +94,7 @@ PWA push notifications provide:
 
 1. **PWA Foundation**: Convert SPA to installable PWA with service worker and manifest
 2. **Push Infrastructure**: Implement Web Push API with VAPID authentication
-3. **High-Value Notifications**: Notify only for actionable events (failures, inflexion points, agent issues)
+3. **High-Value Notifications**: Notify only for actionable events (failures, inflection points, agent issues)
 4. **User Preferences**: Allow users to control which notification categories they receive
 5. **Multi-Tenant Security**: Ensure notifications respect team boundaries
 
@@ -158,7 +158,7 @@ Body: PhotoStats analysis of "2024 Wedding Photos" failed: Connection timeout
 
 ---
 
-### Category 2: Analysis Inflexion Points (Priority: P0 - Critical)
+### Category 2: Analysis Inflection Points (Priority: P0 - Critical)
 
 **Trigger**: Analysis result created with `status=COMPLETED` AND `no_change_copy=false` (a new HTML report was generated, indicating the collection state changed)
 
@@ -169,7 +169,7 @@ Body: PhotoStats analysis of "2024 Wedding Photos" failed: Connection timeout
 - Body: "{Tool} found changes in {Collection}: {Issue Delta Summary}"
 - Click Action: Navigate to analysis result / report
 
-**Rationale**: Users want to know when their collection status actually changes, not when routine checks find nothing new. The inflexion point represents actionable information.
+**Rationale**: Users want to know when their collection status actually changes, not when routine checks find nothing new. The inflection point represents actionable information.
 
 **Example**:
 ```text
@@ -359,7 +359,7 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 
 **Acceptance Criteria:**
 - Settings page includes "Notifications" section
-- Toggle for each notification category (Failures, Inflexion Points, Agents, Deadlines, Retry Warnings)
+- Toggle for each notification category (Failures, Inflection Points, Agents, Deadlines, Retry Warnings)
 - All categories enabled by default
 - Changes take effect immediately
 - Settings synced across devices for same user
@@ -367,7 +367,7 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 **Technical Notes:**
 - Store as user-level Configuration entries
 - Category: `notification_preferences`
-- Keys: `job_failures`, `inflexion_points`, `agent_status`, `deadlines`, `retry_warning`
+- Keys: `job_failures`, `inflection_points`, `agent_status`, `deadlines`, `retry_warning`
 - Values: boolean
 
 ---
@@ -392,7 +392,7 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 
 ---
 
-### User Story 6: Inflexion Point Notification (Priority: P0 - Critical)
+### User Story 6: Inflection Point Notification (Priority: P0 - Critical)
 
 **As** a user
 **I want to** receive a notification when analysis results change
@@ -535,7 +535,7 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 
 **GUID Prefix**: `ntf_` (add to domain model)
 
-**Category Values**: `job_failure`, `inflexion_point`, `agent_status`, `deadline`, `retry_warning`
+**Category Values**: `job_failure`, `inflection_point`, `agent_status`, `deadline`, `retry_warning`
 
 ---
 
@@ -547,10 +547,10 @@ New user-level notification preferences:
 |----------|-----|------|---------|-------------|
 | `notification_preferences` | `enabled` | Boolean | false | Master enable/disable |
 | `notification_preferences` | `job_failures` | Boolean | true | Job failure notifications |
-| `notification_preferences` | `inflexion_points` | Boolean | true | Analysis change notifications |
+| `notification_preferences` | `inflection_points` | Boolean | true | Analysis change notifications |
 | `notification_preferences` | `agent_status` | Boolean | true | Agent availability notifications |
 | `notification_preferences` | `deadlines` | Boolean | true | Event deadline reminders |
-| `notification_preferences` | `retry_warning` | Boolean | true | Retry warning notifications |
+| `notification_preferences` | `retry_warning` | Boolean | false | Retry warning notifications |
 | `notification_preferences` | `deadline_days_before` | Integer | 3 | Days before deadline to remind |
 
 ---
@@ -609,7 +609,7 @@ New user-level notification preferences:
 - **FR-500.4**: Check user preferences before sending
 - **FR-500.5**: Store in notification history
 
-#### FR-600: Inflexion Point Notifications
+#### FR-600: Inflection Point Notifications
 
 - **FR-600.1**: Trigger when `complete_job()` creates result (not `complete_job_no_change()`)
 - **FR-600.2**: Only notify for `status=COMPLETED` AND `no_change_copy=false`
@@ -682,7 +682,7 @@ New user-level notification preferences:
 
 #### NFR-400: Compatibility
 
-- **NFR-400.1**: Desktop: Chrome 50+, Firefox 44+, Edge 17+
+- **NFR-400.1**: Desktop: Chrome 50+, Firefox 44+, Edge 17+, Safari 16+ (macOS; native Web Push, no extension required)
 - **NFR-400.2**: Android: Chrome 50+, Firefox 44+
 - **NFR-400.3**: iOS: Safari 16.4+ (PWA installed to home screen required)
 - **NFR-400.4**: Graceful fallback for unsupported browsers
@@ -873,13 +873,13 @@ Event Trigger                    Backend                        Push Service
   │                                │ Remove if 410 Gone             │
 ```
 
-### Inflexion Point Detection Logic
+### Inflection Point Detection Logic
 
 ```python
 # In JobCoordinatorService
 
 def complete_job(self, job_guid: str, result_data: dict, ...):
-    """Complete job with actual results (inflexion point)."""
+    """Complete job with actual results (inflection point)."""
 
     # ... existing completion logic ...
 
@@ -896,8 +896,8 @@ def complete_job(self, job_guid: str, result_data: dict, ...):
     if previous_result:
         issue_delta = result.issues_found - previous_result.issues_found
 
-    # Trigger notification (inflexion point detected)
-    self.notification_service.notify_inflexion_point(
+    # Trigger notification (inflection point detected)
+    self.notification_service.notify_inflection_point(
         job=job,
         result=result,
         issue_delta=issue_delta
@@ -907,7 +907,7 @@ def complete_job(self, job_guid: str, result_data: dict, ...):
 
 
 def complete_job_no_change(self, job_guid: str, referenced_result_guid: str, ...):
-    """Complete job with no-change status (NOT an inflexion point)."""
+    """Complete job with no-change status (NOT an inflection point)."""
 
     # ... existing no-change logic ...
 
@@ -918,7 +918,7 @@ def complete_job_no_change(self, job_guid: str, referenced_result_guid: str, ...
         # ...
     )
 
-    # NO notification - this is not an inflexion point
+    # NO notification - this is not an inflection point
 
     return result
 ```
@@ -1115,13 +1115,13 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
    - Send push notifications
    - Store in history
 
-3. **Inflexion Point Notifications**
+3. **Inflection Point Notifications**
    - Integrate with JobCoordinatorService.complete_job()
    - Skip for no_change_copy=true results
    - Calculate issue delta
    - Send to collection owners
 
-**Checkpoint**: Receiving notifications for failures and inflexion points
+**Checkpoint**: Receiving notifications for failures and inflection points
 
 ---
 
@@ -1424,7 +1424,7 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 | Firefox (Desktop) | Yes | Limited | No install prompt |
 | Firefox (Android) | Yes | Yes | Full support |
 | Edge (Desktop) | Yes | Yes | Full support |
-| Safari (macOS) | Yes (16.4+) | Limited | Requires extension |
+| Safari (macOS) | Yes (16+) | Limited | Native Web Push (Push API + Notifications API + Service Worker) since Safari 16; no extension required. Fuller PWA support in Safari 17+. |
 | Safari (iOS) | Yes (16.4+) | Yes | Requires home screen install |
 
 ### D. Notification Category Reference
@@ -1432,7 +1432,7 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 | Category | ID | Default | Trigger | Recipients |
 |----------|-----|---------|---------|------------|
 | Job Failures | `job_failure` | On | Job status → FAILED | Collection owners |
-| Inflexion Points | `inflexion_point` | On | Result with no_change_copy=false | Collection owners |
+| Inflection Points | `inflection_point` | On | Result with no_change_copy=false | Collection owners |
 | Agent Status | `agent_status` | On | Agent state changes | Team members |
 | Deadlines | `deadline` | On | N days before deadline | Event owners |
 | Retry Warning | `retry_warning` | Off | Final retry attempt | Collection owners |
@@ -1447,6 +1447,12 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 ---
 
 ## Revision History
+
+- **2026-01-28 (v1.3)**: Reviewer feedback - spelling, defaults, browser accuracy
+  - Standardized "inflexion" → "inflection" (US English) throughout document, including prose, headings, code identifiers, and config keys
+  - Fixed conflicting `retry_warning` default: aligned Configuration Entries table to `false`, matching Appendix D Category Reference ("Off")
+  - Fixed Safari macOS browser support: replaced incorrect "Requires extension" with native Web Push support since Safari 16+ (Push API + Notifications API + Service Worker)
+  - Updated NFR-400.1 to include Safari 16+ (macOS) in desktop browser list
 
 - **2026-01-28 (v1.2)**: Reviewer feedback - consistency fixes
   - Resolved Non-Goals vs User Story 9 contradiction: removed "Mark all read" from acceptance criteria (bulk operations are a Non-Goal for v1)
@@ -1466,6 +1472,6 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 
 - **2026-01-28 (v1.0)**: Initial draft
   - Defined PWA requirements and notification categories
-  - Specified inflexion point detection logic
+  - Specified inflection point detection logic
   - Created implementation plan with 8 phases
   - Identified iOS considerations and risks
