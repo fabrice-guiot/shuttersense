@@ -1405,8 +1405,8 @@ class InventoryService:
     def store_file_info_batch(
         self,
         collections_data: List[Dict[str, Any]],
-        connector_id: Optional[int] = None,
-        team_id: Optional[int] = None
+        team_id: int,
+        connector_id: Optional[int] = None
     ) -> int:
         """
         Store FileInfo for multiple collections from inventory import.
@@ -1418,11 +1418,16 @@ class InventoryService:
         Args:
             collections_data: List of dicts with collection_guid and file_info
             connector_id: Connector ID to validate mapping (required for security)
-            team_id: Team ID for tenant isolation
+            team_id: Team ID for tenant isolation (mandatory)
 
         Returns:
             Number of collections updated
+
+        Raises:
+            ValueError: If team_id is not provided
         """
+        if not team_id:
+            raise ValueError("team_id is required for tenant isolation")
         from backend.src.models.collection import Collection
         from backend.src.services.guid import GuidService
 
@@ -1460,12 +1465,10 @@ class InventoryService:
 
             try:
                 uuid_value = GuidService.parse_identifier(collection_guid, expected_prefix="col")
-                query = self.db.query(Collection).filter(Collection.uuid == uuid_value)
-
-                if team_id is not None:
-                    query = query.filter(Collection.team_id == team_id)
-
-                collection = query.first()
+                collection = self.db.query(Collection).filter(
+                    Collection.uuid == uuid_value,
+                    Collection.team_id == team_id
+                ).first()
 
                 if collection:
                     # Additional check: verify mapping exists for this specific collection

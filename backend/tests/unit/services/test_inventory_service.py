@@ -536,7 +536,25 @@ class TestInventoryServiceMapFolderToCollection:
 
     def test_map_folder_to_collection(self, test_db_session, test_team, test_connector):
         """Test mapping a folder to a collection."""
+        from backend.src.models import Collection, CollectionType, CollectionState
+        from backend.src.services.guid import GuidService
+
         service = InventoryService(test_db_session)
+
+        # Create a collection to map to
+        collection_uuid = GuidService.generate_uuid()
+        collection = Collection(
+            uuid=collection_uuid,
+            name="Test Collection",
+            type=CollectionType.S3,
+            state=CollectionState.LIVE,
+            location="my-bucket/2020/Vacation/",
+            team_id=test_team.id,
+            connector_id=test_connector.id,
+            is_accessible=True
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
 
         # Create folder
         folder = InventoryFolder(
@@ -551,11 +569,11 @@ class TestInventoryServiceMapFolderToCollection:
         # Map to collection
         result = service.map_folder_to_collection(
             folder_id=folder.id,
-            collection_guid="col_01hgw2bbg0000000000000001",
+            collection_guid=collection.guid,
             team_id=test_team.id
         )
 
-        assert result.collection_guid == "col_01hgw2bbg0000000000000001"
+        assert result.collection_guid == collection.guid
         assert result.is_mapped is True
 
     def test_map_nonexistent_folder_raises_error(self, test_db_session, test_team):
@@ -994,6 +1012,7 @@ class TestFileInfoStorage:
     def test_store_file_info_batch(self, test_db_session, test_team, test_connector):
         """Test batch storing FileInfo for multiple collections."""
         from backend.src.models import Collection, CollectionType, CollectionState
+        from backend.src.models.inventory_folder import InventoryFolder
         from backend.src.services.guid import GuidService
 
         service = InventoryService(test_db_session)
@@ -1016,6 +1035,19 @@ class TestFileInfoStorage:
             collections.append(collection)
         test_db_session.commit()
 
+        # Create InventoryFolder mappings for each collection
+        for i, collection in enumerate(collections):
+            folder = InventoryFolder(
+                connector_id=test_connector.id,
+                path=f"folder{i}/",
+                object_count=1,
+                total_size_bytes=1000,
+                collection_guid=collection.guid,
+                is_mappable=False  # Already mapped
+            )
+            test_db_session.add(folder)
+        test_db_session.commit()
+
         # Build batch data
         collections_data = [
             {
@@ -1034,7 +1066,8 @@ class TestFileInfoStorage:
 
         updated_count = service.store_file_info_batch(
             collections_data=collections_data,
-            team_id=test_team.id
+            team_id=test_team.id,
+            connector_id=test_connector.id
         )
 
         assert updated_count == 3
@@ -1049,6 +1082,7 @@ class TestFileInfoStorage:
     def test_store_file_info_batch_skips_invalid_guid(self, test_db_session, test_team, test_connector):
         """Test batch storage skips invalid collection GUIDs."""
         from backend.src.models import Collection, CollectionType, CollectionState
+        from backend.src.models.inventory_folder import InventoryFolder
         from backend.src.services.guid import GuidService
 
         service = InventoryService(test_db_session)
@@ -1066,6 +1100,18 @@ class TestFileInfoStorage:
             is_accessible=True
         )
         test_db_session.add(collection)
+        test_db_session.commit()
+
+        # Create InventoryFolder mapping for the valid collection
+        folder = InventoryFolder(
+            connector_id=test_connector.id,
+            path="folder/",
+            object_count=1,
+            total_size_bytes=1000,
+            collection_guid=collection.guid,
+            is_mappable=False  # Already mapped
+        )
+        test_db_session.add(folder)
         test_db_session.commit()
 
         # Build batch data with invalid GUID
@@ -1086,7 +1132,8 @@ class TestFileInfoStorage:
 
         updated_count = service.store_file_info_batch(
             collections_data=collections_data,
-            team_id=test_team.id
+            team_id=test_team.id,
+            connector_id=test_connector.id
         )
 
         # Only 1 should be updated (the valid one)
@@ -1094,3 +1141,20 @@ class TestFileInfoStorage:
 
         test_db_session.refresh(collection)
         assert collection.file_info is not None
+
+    def test_store_file_info_batch_requires_team_id(self, test_db_session, test_team, test_connector):
+        """Test that store_file_info_batch raises ValueError when team_id is falsy."""
+        service = InventoryService(test_db_session)
+
+        collections_data = [
+            {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "file_info": [{"key": "a.jpg", "size": 1000, "last_modified": "2020-01-01T00:00:00Z"}]
+            },
+        ]
+
+        with pytest.raises(ValueError, match="team_id is required"):
+            service.store_file_info_batch(
+                collections_data=collections_data,
+                team_id=0  # Falsy value
+            )

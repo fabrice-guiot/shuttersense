@@ -743,7 +743,7 @@ class TestCollectionTestJobHandling:
     """Tests for collection_test job completion handling.
 
     collection_test jobs update collection accessibility status
-    without creating an AnalysisResult record.
+    and create an AnalysisResult record for tracking purposes.
 
     Issue #90 - Distributed Agent Architecture (Phase 8)
     """

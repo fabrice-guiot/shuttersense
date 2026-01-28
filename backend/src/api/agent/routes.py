@@ -2380,8 +2380,8 @@ async def report_inventory_file_info(
         ]
         collections_updated = inventory_service.store_file_info_batch(
             collections_data=collections_data,
-            connector_id=connector_id,
-            team_id=ctx.team_id
+            team_id=ctx.team_id,
+            connector_id=connector_id
         )
     except Exception as e:
         logger.error(f"Error storing FileInfo: {str(e)}", exc_info=True)
