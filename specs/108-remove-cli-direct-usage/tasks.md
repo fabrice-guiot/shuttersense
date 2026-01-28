@@ -140,19 +140,19 @@
 
 ### Implementation for User Story 5
 
-- [ ] T040 [US5] Delete photo_stats.py from repository root
-- [ ] T041 [P] [US5] Delete photo_pairing.py from repository root
-- [ ] T042 [P] [US5] Delete pipeline_validation.py from repository root
-- [ ] T043 [US5] Delete CLI-specific test files: tests/test_photo_stats.py and tests/test_photo_pairing.py (preserve agent/tests/ analysis module tests)
-- [ ] T044 [US5] Remove the `backend-test` job from .github/workflows/test.yml (this job runs the CLI tool tests via `pytest tests/` against requirements.txt). Preserve the `backend-web-test` job which tests the backend webserver
-- [ ] T045 [US5] Update .specify/memory/constitution.md: Replace "I. Independent CLI Tools" principle with "I. Agent-Only Tool Execution" principle. New principle mandates all tool execution through authenticated agents, references agent/src/analysis/ as shared libraries, prohibits standalone execution scripts
-- [ ] T046 [US5] Update CLAUDE.md: Remove CLI tool references from Project Structure, Running Tools, Commands sections. Replace with agent command examples. Update project structure to reflect agent-only architecture
-- [ ] T047 [P] [US5] Update README.md: Remove CLI tool usage examples, add agent quick-start with test/create/run workflow
-- [ ] T048 [P] [US5] Update docs/installation.md: Focus on agent binary installation only, remove standalone Python script setup
-- [ ] T049 [P] [US5] Update docs/configuration.md: Remove CLI-specific YAML config sections, reference agent config
-- [ ] T050 [P] [US5] Update docs/photostats.md: Add archive notice, redirect users to `shuttersense-agent test --tool photostats` and `shuttersense-agent run --tool photostats`
-- [ ] T051 [P] [US5] Update docs/photo-pairing.md: Add archive notice, redirect users to `shuttersense-agent test --tool photo_pairing` and `shuttersense-agent run --tool photo_pairing`
-- [ ] T052 [US5] Run existing agent analysis module tests (agent/tests/unit/test_photostats_analyzer.py, test_photo_pairing_analyzer.py, test_pipeline_analyzer.py) to verify shared modules still function after CLI tool removal
+- [x] T040 [US5] Delete photo_stats.py from repository root
+- [x] T041 [P] [US5] Delete photo_pairing.py from repository root
+- [x] T042 [P] [US5] Delete pipeline_validation.py from repository root
+- [x] T043 [US5] Delete CLI-specific test files: tests/test_photo_stats.py and tests/test_photo_pairing.py (preserve agent/tests/ analysis module tests)
+- [x] T044 [US5] Remove the `backend-test` job from .github/workflows/test.yml (this job runs the CLI tool tests via `pytest tests/` against requirements.txt). Preserve the `backend-web-test` job which tests the backend webserver
+- [x] T045 [US5] Update .specify/memory/constitution.md: Replace "I. Independent CLI Tools" principle with "I. Agent-Only Tool Execution" principle. New principle mandates all tool execution through authenticated agents, references agent/src/analysis/ as shared libraries, prohibits standalone execution scripts
+- [x] T046 [US5] Update CLAUDE.md: Remove CLI tool references from Project Structure, Running Tools, Commands sections. Replace with agent command examples. Update project structure to reflect agent-only architecture
+- [x] T047 [P] [US5] Update README.md: Remove CLI tool usage examples, add agent quick-start with test/create/run workflow
+- [x] T048 [P] [US5] Update docs/installation.md: Focus on agent binary installation only, remove standalone Python script setup
+- [x] T049 [P] [US5] Update docs/configuration.md: Remove CLI-specific YAML config sections, reference agent config
+- [x] T050 [P] [US5] Update docs/photostats.md: Add archive notice, redirect users to `shuttersense-agent test --tool photostats` and `shuttersense-agent run --tool photostats`
+- [x] T051 [P] [US5] Update docs/photo-pairing.md: Add archive notice, redirect users to `shuttersense-agent test --tool photo_pairing` and `shuttersense-agent run --tool photo_pairing`
+- [x] T052 [US5] Run existing agent analysis module tests (agent/tests/unit/test_photostats_analyzer.py, test_photo_pairing_analyzer.py, test_pipeline_analyzer.py) to verify shared modules still function after CLI tool removal
 
 **Checkpoint**: CLI tools removed. Constitution updated. All documentation references agent commands. Analysis modules verified working via agent test suite.
 

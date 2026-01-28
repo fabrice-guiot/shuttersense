@@ -6,13 +6,15 @@ Auto-generated from all feature plans. Last updated: 2026-01-21
 
 ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
 
-### CLI Tools *(deprecated — Issue #108)*
+### Agent CLI
 
-> **Note**: Standalone CLI tools are being removed in favor of agent commands (`shuttersense-agent test`, `shuttersense-agent run`). See Issue #108.
+Analysis tools are executed through the ShutterSense agent binary (`shuttersense-agent`):
 
-1. **PhotoStats** - Analyze photo collections for orphaned files and sidecar issues
-2. **Photo Pairing Tool** - Analyze filename patterns, group files, track camera usage
-3. **Pipeline Validation** - Validate collections against user-defined processing workflows
+- `shuttersense-agent test` - Test local path accessibility
+- `shuttersense-agent collection create` - Register a collection on the server
+- `shuttersense-agent run` - Run analysis tools (online or offline)
+- `shuttersense-agent sync` - Upload offline results to the server
+- `shuttersense-agent self-test` - Verify agent configuration
 
 ### Web Application
 
@@ -55,12 +57,6 @@ ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyz
 - **boto3** - AWS S3 and S3 Inventory
 - **google-cloud-storage** - GCS and Storage Insights
 
-### CLI Dependencies
-- **PyYAML** (>=6.0) - Configuration file handling
-- **Jinja2** (>=3.1.0) - HTML template rendering
-- **pytest** - Testing framework
-- **Chart.js** - HTML report visualizations (via CDN)
-
 ### Security Features (Phase 7 & 10)
 - **Authlib** - OAuth 2.0 authentication (Google, Microsoft)
 - **PyJWT** - API token generation and validation
@@ -75,26 +71,31 @@ ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyz
 ## Project Structure
 
 ```text
-photo-admin/
-├── photo_stats.py              # PhotoStats tool
-├── photo_pairing.py            # Photo Pairing tool
-├── utils/                      # Shared utilities
-│   ├── config_manager.py      # PhotoAdminConfig class
-│   └── filename_parser.py     # FilenameParser class
-├── config/
-│   ├── template-config.yaml   # Configuration template
-│   └── config.yaml            # User configuration (gitignored)
-├── docs/                      # Documentation
-│   ├── installation.md
-│   ├── configuration.md
-│   ├── photostats.md
-│   └── photo-pairing.md
-├── specs/                     # Design specifications
-│   └── 001-photo-pairing-tool/
-├── tests/                     # Test suites
-│   ├── test_photo_stats.py    # 47 tests
-│   └── test_photo_pairing.py  # 40 tests
-└── requirements.txt           # Python dependencies
+shuttersense/
+├── agent/                         # ShutterSense Agent
+│   ├── cli/                      # CLI commands (Click)
+│   │   ├── main.py              # Entry point
+│   │   ├── run.py               # Run analysis tools
+│   │   ├── sync_results.py      # Sync offline results
+│   │   └── ...
+│   ├── src/
+│   │   ├── analysis/            # Shared analysis modules
+│   │   │   ├── photostats_analyzer.py
+│   │   │   ├── photo_pairing_analyzer.py
+│   │   │   └── pipeline_analyzer.py
+│   │   ├── cache/               # Local caching (collections, results)
+│   │   ├── api_client.py        # Server HTTP client
+│   │   ├── chunked_upload.py    # Large payload upload
+│   │   └── config.py            # Agent configuration
+│   └── tests/                   # Agent test suites
+├── backend/                       # FastAPI backend
+├── frontend/                      # React frontend
+├── utils/                         # Shared utilities
+│   ├── config_manager.py         # PhotoAdminConfig class
+│   └── filename_parser.py        # FilenameParser class
+├── docs/                          # Documentation
+├── specs/                         # Design specifications
+└── requirements.txt               # Python dependencies
 ```
 
 ## Version Management
@@ -114,10 +115,8 @@ The `version.py` module provides a single source of truth for version informatio
 
 All components use the same version from `version.py`:
 
-1. **CLI Tools** (`--version` flag):
-   - `python3 photo_stats.py --version`
-   - `python3 photo_pairing.py --version`
-   - `python3 pipeline_validation.py --version`
+1. **Agent** (`--version` flag):
+   - `shuttersense-agent --version`
 
 2. **Backend API**:
    - FastAPI app version (shown in `/docs`)
@@ -134,10 +133,10 @@ All components use the same version from `version.py`:
 ### Usage in Code
 
 ```python
-# Python CLI tools and backend
+# Python agent and backend
 from version import __version__
 
-print(f"Tool version: {__version__}")
+print(f"Version: {__version__}")
 ```
 
 ```typescript
@@ -174,28 +173,39 @@ To create a new release:
 
 ## Commands
 
-### Running Tools
+### Running Agent Commands
 
 ```bash
-# PhotoStats - analyze photo collections
-python3 photo_stats.py /path/to/photos
+# Test a local path
+shuttersense-agent test /path/to/photos
 
-# Photo Pairing - analyze filename patterns
-python3 photo_pairing.py /path/to/photos
+# Register a collection
+shuttersense-agent collection create "My Photos" /path/to/photos
+
+# Run analysis (online - uploads results to server)
+shuttersense-agent run col_GUID --tool photostats
+
+# Run analysis (offline - stores locally for later sync)
+shuttersense-agent run col_GUID --tool photostats --offline
+
+# Sync offline results to server
+shuttersense-agent sync
+
+# Verify agent configuration
+shuttersense-agent self-test
 ```
 
 ### Testing
 
 ```bash
-# Run all tests
-python3 -m pytest tests/
+# Run agent tests
+python3 -m pytest agent/tests/ -v
 
-# Run specific tool tests
-python3 -m pytest tests/test_photo_stats.py -v
-python3 -m pytest tests/test_photo_pairing.py -v
+# Run backend web tests
+python3 -m pytest backend/tests/unit/ -v
 
 # Run with coverage
-python3 -m pytest tests/ --cov=photo_pairing --cov=utils --cov-report=term-missing
+python3 -m pytest agent/tests/ --cov=src --cov=cli --cov-report=term-missing
 ```
 
 ### Code Quality
@@ -352,11 +362,12 @@ Example: `col_01hgw2bbg0000000000000001`
 
 See `docs/domain-model.md` for the complete prefix table including planned entities.
 
-### 1. Independent CLI Tools *(deprecated — replaced by Agent-Only Tool Execution, Issue #108)*
-- ~~Each tool is a standalone Python script at repository root~~
-- ~~Tools can run independently without requiring other tools~~
-- Analysis modules remain in `agent/src/analysis/` and are invoked via agent CLI commands
-- See Principle 7 (Agent-Only Execution) for the replacement architecture
+### 1. Agent-Only Tool Execution (Issue #108)
+- All analysis tools are executed through authenticated ShutterSense agents
+- Standalone CLI scripts have been removed from the repository
+- Analysis logic resides in shared modules under `agent/src/analysis/`
+- Tools are invoked via agent CLI commands: `test`, `run`, `sync`, `self-test`
+- Offline mode supported for LOCAL collections with later sync
 
 ### 2. Testing & Quality
 - Comprehensive test coverage (target >80% for core logic)
