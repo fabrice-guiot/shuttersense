@@ -166,9 +166,9 @@
 
 ### Implementation for User Story 6
 
-- [ ] T053 [US6] Implement `self-test` Click command in agent/cli/self_test.py. Check: server connectivity (URL reachable, measure latency), agent registration (API key valid via heartbeat), tool availability (import each analysis module), authorized roots accessibility (check each configured root path). Display pass/fail/warn per check with formatted output. Include remediation suggestions for failures
-- [ ] T054 [US6] Register `self-test` command in agent/cli/main.py via cli.add_command(self_test)
-- [ ] T055 [P] [US6] Write unit tests for self-test command (all pass, connectivity failure, invalid API key, inaccessible root, warn summary) in agent/tests/unit/test_self_test.py
+- [x] T053 [US6] Implement `self-test` Click command in agent/cli/self_test.py. Check: server connectivity (URL reachable, measure latency), agent registration (API key valid via heartbeat), tool availability (import each analysis module), authorized roots accessibility (check each configured root path). Display pass/fail/warn per check with formatted output. Include remediation suggestions for failures
+- [x] T054 [US6] Register `self-test` command in agent/cli/main.py via cli.add_command(self_test)
+- [x] T055 [P] [US6] Write unit tests for self-test command (all pass, connectivity failure, invalid API key, inaccessible root, warn summary) in agent/tests/unit/test_self_test.py
 
 **Checkpoint**: `shuttersense-agent self-test` validates the full agent configuration with clear pass/fail/warn output and actionable remediation advice.
 
