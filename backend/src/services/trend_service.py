@@ -117,7 +117,19 @@ def _generate_complete_date_range(
         return []
 
     # Determine end date
-    end_date = to_date if to_date else today
+    # When no explicit to_date, use today but extend to include any data
+    # that might be in UTC "tomorrow" (due to timezone differences)
+    if to_date:
+        end_date = to_date
+    else:
+        end_date = today
+        # If data exists for dates beyond today (UTC vs local timezone issue),
+        # extend end_date to include all data
+        if data_dates:
+            parsed_dates = [datetime.strptime(d, '%Y-%m-%d').date() for d in data_dates]
+            max_data_date = max(parsed_dates)
+            if max_data_date > end_date:
+                end_date = max_data_date
 
     # Generate all dates in range
     all_dates = []

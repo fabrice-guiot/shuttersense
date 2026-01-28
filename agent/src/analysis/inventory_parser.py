@@ -606,20 +606,21 @@ def parse_parquet_stream(
         )
 
     # Field mappings per provider
-    if provider == "gcs":
-        key_field = "name"
-        size_field = "size"
-        modified_field = "updated"
-        etag_field = "etag"
-        storage_class_field = "storageClass"
-    elif provider == "s3":
-        key_field = "Key"
-        size_field = "Size"
-        modified_field = "LastModifiedDate"
-        etag_field = "ETag"
-        storage_class_field = "StorageClass"
-    else:
-        raise ValueError(f"Unsupported provider: {provider}. Must be 'gcs' or 's3'.")
+    match provider:
+        case "gcs":
+            key_field = "name"
+            size_field = "size"
+            modified_field = "updated"
+            etag_field = "etag"
+            storage_class_field = "storageClass"
+        case "s3":
+            key_field = "Key"
+            size_field = "Size"
+            modified_field = "LastModifiedDate"
+            etag_field = "ETag"
+            storage_class_field = "StorageClass"
+        case _:
+            raise ValueError(f"Unsupported provider: {provider}. Must be 'gcs' or 's3'.")
 
     # Accept either bytes or file-like object
     # pyarrow.parquet.ParquetFile accepts both
