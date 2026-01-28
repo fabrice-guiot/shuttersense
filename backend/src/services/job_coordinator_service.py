@@ -718,8 +718,15 @@ class JobCoordinatorService:
         """
         job = self._get_job_for_agent(job_guid, agent_id, team_id)
 
-        # Update progress
-        job.progress = progress
+        # Merge progress, preserving metadata fields set at job creation
+        # (Issue #107: connector_id, connector_guid for inventory tools)
+        existing_progress = job.progress or {}
+        preserved_fields = ["connector_id", "connector_guid", "config"]
+        merged_progress = {**progress}
+        for field in preserved_fields:
+            if field in existing_progress and field not in progress:
+                merged_progress[field] = existing_progress[field]
+        job.progress = merged_progress
 
         # If job is still ASSIGNED, mark as RUNNING
         if job.status == JobStatus.ASSIGNED:
@@ -827,10 +834,11 @@ class JobCoordinatorService:
             raise ValidationError("Invalid result signature")
 
         # Handle collection_test jobs specially - update collection accessibility
+        # and create AnalysisResult following tool-implementation-pattern.md
         if job.tool == "collection_test":
-            self._handle_collection_test_completion(job, completion_data)
-            # Complete the job without creating an AnalysisResult
-            job.complete(result_id=None)
+            result = self._handle_collection_test_completion(job, completion_data)
+            # Complete the job with the created result
+            job.complete(result_id=result.id)
             job.progress = None
 
             self.db.commit()
@@ -839,6 +847,7 @@ class JobCoordinatorService:
                 "Collection test job completed",
                 extra={
                     "job_guid": job.guid,
+                    "result_guid": result.guid,
                     "collection_id": job.collection_id,
                     "success": completion_data.results.get("success", False)
                 }
@@ -1262,16 +1271,23 @@ class JobCoordinatorService:
         self,
         job: Job,
         completion_data: JobCompletionData
-    ) -> None:
+    ) -> AnalysisResult:
         """
         Handle completion of a collection_test job.
 
         Updates the collection's is_accessible and last_error fields
-        based on the test results.
+        based on the test results. Creates an AnalysisResult to follow
+        the standard tool execution pattern (Issue #107).
+
+        After successful accessibility check, triggers refresh jobs
+        (photostats, photo_pairing) for the collection.
 
         Args:
             job: The collection_test job
             completion_data: Completion data with test results
+
+        Returns:
+            Created AnalysisResult for the collection_test
         """
         from backend.src.models.collection import Collection
 
@@ -1280,7 +1296,7 @@ class JobCoordinatorService:
                 "Collection test job has no collection_id",
                 extra={"job_guid": job.guid}
             )
-            return
+            return self._create_collection_test_result(job, completion_data)
 
         collection = self.db.query(Collection).filter(
             Collection.id == job.collection_id
@@ -1291,7 +1307,7 @@ class JobCoordinatorService:
                 "Collection not found for collection_test job",
                 extra={"job_guid": job.guid, "collection_id": job.collection_id}
             )
-            return
+            return self._create_collection_test_result(job, completion_data)
 
         # Extract results
         results = completion_data.results
@@ -1312,6 +1328,138 @@ class JobCoordinatorService:
                 "result_message": message
             }
         )
+
+        # Create AnalysisResult following standard tool pattern
+        result = self._create_collection_test_result(job, completion_data)
+
+        # After successful accessibility check, trigger refresh jobs
+        if success:
+            self._trigger_collection_refresh_jobs(job, collection)
+
+        return result
+
+    def _create_collection_test_result(
+        self,
+        job: Job,
+        completion_data: JobCompletionData
+    ) -> AnalysisResult:
+        """
+        Create an AnalysisResult for a collection_test job.
+
+        Follows the standard tool execution pattern (Issue #107).
+
+        Args:
+            job: The collection_test job
+            completion_data: Completion data with test results
+
+        Returns:
+            Created AnalysisResult
+        """
+        now = datetime.utcnow()
+        started_at = job.started_at or job.assigned_at or job.created_at
+        duration = (now - started_at).total_seconds() if started_at else 0
+
+        results = completion_data.results or {}
+        success = results.get("success", False)
+
+        result = AnalysisResult(
+            team_id=job.team_id,
+            collection_id=job.collection_id,
+            pipeline_id=None,  # collection_test is not pipeline-based
+            pipeline_version=None,
+            tool=job.tool,
+            status=ResultStatus.COMPLETED if success else ResultStatus.FAILED,
+            started_at=started_at,
+            completed_at=now,
+            duration_seconds=duration,
+            results_json=results,
+            report_html=completion_data.report_html,
+            files_scanned=completion_data.files_scanned or 0,
+            issues_found=completion_data.issues_found or (0 if success else 1),
+            error_message=results.get("error") if not success else None,
+        )
+
+        self.db.add(result)
+        self.db.flush()
+
+        logger.info(
+            "Created collection_test result",
+            extra={
+                "result_guid": result.guid,
+                "job_guid": job.guid,
+                "collection_id": job.collection_id,
+                "success": success
+            }
+        )
+
+        return result
+
+    def _trigger_collection_refresh_jobs(
+        self,
+        job: Job,
+        collection: "Collection"
+    ) -> None:
+        """
+        Trigger refresh jobs for a collection after successful accessibility check.
+
+        Creates PENDING jobs for photostats and photo_pairing to analyze the
+        newly accessible collection. This implements the "auto-refresh" flow
+        after accessibility verification (Issue #107).
+
+        Args:
+            job: The completed collection_test job
+            collection: The collection that passed accessibility check
+        """
+        from backend.src.models.collection import Collection
+
+        # Tools to run for collection refresh
+        refresh_tools = ["photostats", "photo_pairing", "pipeline_validation"]
+
+        for tool in refresh_tools:
+            # Check if job already exists for this tool (avoid duplicates)
+            existing = self.db.query(Job).filter(
+                Job.collection_id == collection.id,
+                Job.tool == tool,
+                Job.status.in_([
+                    JobStatus.PENDING,
+                    JobStatus.SCHEDULED,
+                    JobStatus.ASSIGNED,
+                    JobStatus.RUNNING,
+                ])
+            ).first()
+
+            if existing:
+                logger.debug(
+                    f"Skipping {tool} refresh - job already exists",
+                    extra={
+                        "collection_guid": collection.guid,
+                        "existing_job_guid": existing.guid
+                    }
+                )
+                continue
+
+            # Create refresh job
+            refresh_job = Job(
+                team_id=job.team_id,
+                collection_id=collection.id,
+                pipeline_id=collection.pipeline_id,
+                pipeline_version=collection.pipeline_version,
+                tool=tool,
+                mode="collection",
+                status=JobStatus.PENDING,
+                bound_agent_id=collection.bound_agent_id,
+                required_capabilities=[tool],
+            )
+            self.db.add(refresh_job)
+
+            logger.info(
+                f"Created auto-refresh job for {tool}",
+                extra={
+                    "collection_guid": collection.guid,
+                    "job_guid": refresh_job.guid,
+                    "triggered_by": job.guid
+                }
+            )
 
     def _create_analysis_result(
         self,
@@ -1338,11 +1486,19 @@ class JobCoordinatorService:
             f"Creating AnalysisResult for job {job.guid}: input_state_hash={hash_preview}"
         )
 
+        # Extract connector_id for inventory tools (Issue #107)
+        # Inventory jobs store connector_id in their progress data
+        connector_id = None
+        if job.tool in ("inventory_validate", "inventory_import"):
+            progress = job.progress or {}
+            connector_id = progress.get("connector_id")
+
         result = AnalysisResult(
             team_id=job.team_id,
             collection_id=job.collection_id,
             pipeline_id=job.pipeline_id,
             pipeline_version=job.pipeline_version,
+            connector_id=connector_id,  # Issue #107: For inventory tools
             tool=job.tool,
             status=ResultStatus.COMPLETED,
             started_at=started_at,

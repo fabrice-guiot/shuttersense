@@ -313,6 +313,7 @@ describe('ConnectorList', () => {
         created_at: '2025-01-01T09:00:00Z',
         team_guid: 'tea_01hgw2bbg00000000000000001',
         current_job_guid: null,
+      running_jobs_count: 0,
       },
       {
         guid: 'agt_01hgw2bbg00000000000000002',
@@ -328,6 +329,7 @@ describe('ConnectorList', () => {
         created_at: '2025-01-01T09:00:00Z',
         team_guid: 'tea_01hgw2bbg00000000000000001',
         current_job_guid: null,
+      running_jobs_count: 0,
       },
     ]
 

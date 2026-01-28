@@ -83,6 +83,9 @@ from backend.src.models.release_manifest import ReleaseManifest
 # Storage Optimization (Issue #92)
 from backend.src.models.storage_metrics import StorageMetrics
 
+# Inventory Import (Issue #107)
+from backend.src.models.inventory_folder import InventoryFolder
+
 # Export Base and all models
 __all__ = [
     "Base",
@@ -135,4 +138,6 @@ __all__ = [
     "ReleaseManifest",
     # Storage Optimization (Issue #92)
     "StorageMetrics",
+    # Inventory Import (Issue #107)
+    "InventoryFolder",
 ]

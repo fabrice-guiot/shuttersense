@@ -574,3 +574,101 @@ class ConnectorService:
         )
 
         return stats
+
+    # ============================================================================
+    # Inventory Configuration Methods (Issue #107)
+    # ============================================================================
+
+    def set_inventory_config(
+        self,
+        connector_id: int,
+        config: Dict[str, Any],
+        schedule: str = "manual",
+        team_id: Optional[int] = None
+    ) -> Connector:
+        """
+        Set inventory configuration on a connector.
+
+        Delegates to InventoryService for the actual work.
+
+        Args:
+            connector_id: Internal connector ID
+            config: Inventory configuration dictionary (S3 or GCS)
+            schedule: Import schedule (manual/daily/weekly)
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Updated Connector with inventory config set
+
+        Raises:
+            ValueError: If connector type doesn't support inventory
+        """
+        from backend.src.services.inventory_service import InventoryService
+        from backend.src.schemas.inventory import S3InventoryConfig, GCSInventoryConfig
+
+        # Build typed config from dict
+        provider = config.get("provider", "")
+        if provider == "s3":
+            typed_config = S3InventoryConfig(**config)
+        elif provider == "gcs":
+            typed_config = GCSInventoryConfig(**config)
+        else:
+            raise ValueError(f"Unknown inventory provider: {provider}")
+
+        inventory_service = InventoryService(self.db)
+        return inventory_service.set_inventory_config(
+            connector_id=connector_id,
+            config=typed_config,
+            schedule=schedule,
+            team_id=team_id
+        )
+
+    def clear_inventory_config(
+        self,
+        connector_id: int,
+        team_id: Optional[int] = None
+    ) -> Connector:
+        """
+        Clear inventory configuration from a connector.
+
+        Delegates to InventoryService for the actual work.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Updated Connector with inventory config cleared
+        """
+        from backend.src.services.inventory_service import InventoryService
+
+        inventory_service = InventoryService(self.db)
+        return inventory_service.clear_inventory_config(
+            connector_id=connector_id,
+            team_id=team_id
+        )
+
+    def get_inventory_status(
+        self,
+        connector_id: int,
+        team_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get inventory status for a connector.
+
+        Delegates to InventoryService for the actual work.
+
+        Args:
+            connector_id: Internal connector ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Dictionary with inventory status information
+        """
+        from backend.src.services.inventory_service import InventoryService
+
+        inventory_service = InventoryService(self.db)
+        return inventory_service.get_inventory_status(
+            connector_id=connector_id,
+            team_id=team_id
+        )

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { FolderCheck, FolderSync, Edit, Trash2, Search, Bot } from 'lucide-react'
+import { FolderCheck, FolderSync, Edit, Trash2, Search, Bot, CloudDownload } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CollectionStatus } from './CollectionStatus'
+import { formatRelativeTime } from '@/utils/dateFormat'
 import type { CollectionListProps } from '@/contracts/components/collection-components'
 import type { Collection, CollectionType } from '@/contracts/api/collection-api'
 import {
@@ -64,12 +65,16 @@ export function CollectionList({
   onDelete,
   onRefresh,
   onInfo,
+  onRefreshFromCloud,
   search,
   className
 }: CollectionListProps) {
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     collection: Collection | null
+    forceDelete?: boolean
+    resultCount?: number
+    jobCount?: number
   }>({ open: false, collection: null })
 
   // Filter collections by tab (client-side tab filtering only)
@@ -91,10 +96,29 @@ export function CollectionList({
     setDeleteDialog({ open: true, collection })
   }
 
-  const handleDeleteConfirm = () => {
-    if (deleteDialog.collection) {
-      onDelete(deleteDialog.collection)
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.collection) return
+
+    try {
+      // If force delete is already requested, pass true
+      await onDelete(deleteDialog.collection, deleteDialog.forceDelete)
       setDeleteDialog({ open: false, collection: null })
+    } catch (err: any) {
+      // Check if error is about existing results/jobs
+      const errorMessage = err?.userMessage || err?.message || ''
+      const resultMatch = errorMessage.match(/(\d+) analysis result\(s\)/)
+      const jobMatch = errorMessage.match(/(\d+) active job\(s\)/)
+
+      if (resultMatch || jobMatch) {
+        // Show force-delete confirmation dialog
+        setDeleteDialog({
+          ...deleteDialog,
+          forceDelete: true,
+          resultCount: resultMatch ? parseInt(resultMatch[1], 10) : 0,
+          jobCount: jobMatch ? parseInt(jobMatch[1], 10) : 0
+        })
+      }
+      // If it's a different error, the hook will show a toast
     }
   }
 
@@ -145,6 +169,7 @@ export function CollectionList({
               <TableHead>State</TableHead>
               <TableHead>Pipeline</TableHead>
               <TableHead>Location</TableHead>
+              <TableHead>Inventory</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -220,6 +245,34 @@ export function CollectionList({
                   {collection.location}
                 </TableCell>
                 <TableCell>
+                  {/* T074: Display inventory timestamp for remote collections */}
+                  {collection.type === 'local' ? (
+                    <span className="text-muted-foreground text-sm">-</span>
+                  ) : collection.file_info?.updated_at ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-sm cursor-default">
+                            {formatRelativeTime(collection.file_info.updated_at)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            <div>
+                              {collection.file_info.count.toLocaleString()} files cached
+                            </div>
+                            <div className="text-muted-foreground">
+                              Source: {collection.file_info.source === 'inventory' ? 'Bucket Inventory' : 'Cloud API'}
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">Not imported</span>
+                  )}
+                </TableCell>
+                <TableCell>
                   <CollectionStatus collection={collection} />
                 </TableCell>
                 <TableCell>
@@ -255,6 +308,25 @@ export function CollectionList({
                         <TooltipContent>Refresh Collection</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+
+                    {/* T075: Refresh from Cloud button for remote collections */}
+                    {collection.type !== 'local' && onRefreshFromCloud && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onRefreshFromCloud(collection)}
+                              aria-label="Refresh from Cloud Storage"
+                            >
+                              <CloudDownload className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Refresh from Cloud Storage</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
 
                     <TooltipProvider>
                       <Tooltip>
@@ -328,10 +400,34 @@ export function CollectionList({
       <Dialog open={deleteDialog.open} onOpenChange={handleDeleteCancel}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Collection</DialogTitle>
+            <DialogTitle>
+              {deleteDialog.forceDelete ? 'Confirm Deletion with Data' : 'Delete Collection'}
+            </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteDialog.collection?.name}"?
-              This action cannot be undone.
+              {deleteDialog.forceDelete ? (
+                <>
+                  <span className="font-medium text-destructive">
+                    "{deleteDialog.collection?.name}" has existing data:
+                  </span>
+                  <ul className="mt-2 list-disc list-inside text-sm">
+                    {(deleteDialog.resultCount ?? 0) > 0 && (
+                      <li>{deleteDialog.resultCount} analysis result(s)</li>
+                    )}
+                    {(deleteDialog.jobCount ?? 0) > 0 && (
+                      <li>{deleteDialog.jobCount} active job(s)</li>
+                    )}
+                  </ul>
+                  <p className="mt-2">
+                    Deleting this collection will permanently remove all associated data.
+                    This action cannot be undone.
+                  </p>
+                </>
+              ) : (
+                <>
+                  Are you sure you want to delete "{deleteDialog.collection?.name}"?
+                  This action cannot be undone.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -339,7 +435,7 @@ export function CollectionList({
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
+              {deleteDialog.forceDelete ? 'Delete Everything' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

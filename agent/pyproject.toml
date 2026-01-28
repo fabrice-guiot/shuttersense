@@ -40,6 +40,8 @@ dependencies = [
     "PyYAML>=6.0",
     # Platform detection
     "platformdirs>=3.0",
+    # Parquet format support for S3/GCS inventory import
+    "pyarrow>=14.0.0",
 ]
 
 [project.optional-dependencies]

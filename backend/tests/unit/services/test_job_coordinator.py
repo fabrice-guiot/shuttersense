@@ -743,7 +743,7 @@ class TestCollectionTestJobHandling:
     """Tests for collection_test job completion handling.
 
     collection_test jobs update collection accessibility status
-    without creating an AnalysisResult record.
+    and create an AnalysisResult record for tracking purposes.
 
     Issue #90 - Distributed Agent Architecture (Phase 8)
     """
@@ -837,10 +837,10 @@ class TestCollectionTestJobHandling:
         assert collection.is_accessible is False
         assert collection.last_error == "Permission denied: /path/to/collection"
 
-    def test_collection_test_no_analysis_result_created(
+    def test_collection_test_creates_analysis_result(
         self, test_db_session, test_team, test_user, create_agent, create_collection, create_job
     ):
-        """collection_test jobs don't create AnalysisResult records."""
+        """collection_test jobs create AnalysisResult records for tracking purposes."""
         from backend.src.models import AnalysisResult
 
         agent = create_agent(test_team, test_user)
@@ -873,13 +873,20 @@ class TestCollectionTestJobHandling:
             completion_data=completion_data,
         )
 
-        # Job completed without result_id
+        # Job completed with result_id
         assert completed_job.status == JobStatus.COMPLETED
-        assert completed_job.result_id is None
+        assert completed_job.result_id is not None
 
-        # No new AnalysisResult created
+        # An AnalysisResult is created for collection_test jobs
         final_count = test_db_session.query(AnalysisResult).count()
-        assert final_count == initial_count
+        assert final_count == initial_count + 1
+
+        # Verify result properties
+        result = test_db_session.query(AnalysisResult).filter(
+            AnalysisResult.id == completed_job.result_id
+        ).first()
+        assert result is not None
+        assert result.tool == "collection_test"
 
     def test_collection_test_clears_progress(
         self, test_db_session, test_team, test_user, create_agent, create_collection, create_job

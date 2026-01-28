@@ -213,6 +213,33 @@ def test_connector_service(test_db_session, test_encryptor):
     return ConnectorService(test_db_session, test_encryptor)
 
 
+@pytest.fixture
+def test_connector(test_db_session, test_team, test_encryptor):
+    """Create a test S3 connector for inventory tests."""
+    import json
+    from backend.src.models.connector import CredentialLocation
+
+    credentials = {
+        'aws_access_key_id': 'AKIAIOSFODNN7EXAMPLE',
+        'aws_secret_access_key': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        'region': 'us-east-1'
+    }
+    encrypted_creds = test_encryptor.encrypt(json.dumps(credentials))
+
+    connector = Connector(
+        name='Test S3 Connector',
+        type='s3',
+        team_id=test_team.id,
+        credential_location=CredentialLocation.SERVER,
+        credentials=encrypted_creds,
+        is_active=True,
+    )
+    test_db_session.add(connector)
+    test_db_session.commit()
+    test_db_session.refresh(connector)
+    return connector
+
+
 # ============================================================================
 # Sample Data Factories
 # ============================================================================

@@ -319,6 +319,11 @@ class ConnectorResponse(BaseModel):
         is_active: Active status
         last_validated: Last successful connection test
         last_error: Last connection error message
+        inventory_config: Inventory configuration (S3/GCS)
+        inventory_validation_status: Validation status (pending/validating/validated/failed)
+        inventory_validation_error: Error message if validation failed
+        inventory_last_import_at: Last successful import timestamp
+        inventory_schedule: Import schedule (manual/daily/weekly)
         created_at: Creation timestamp
         updated_at: Last update timestamp
 
@@ -335,6 +340,22 @@ class ConnectorResponse(BaseModel):
     is_active: bool
     last_validated: Optional[datetime]
     last_error: Optional[str]
+    # Inventory configuration fields (Issue #107)
+    inventory_config: Optional[Dict[str, Any]] = Field(
+        default=None, description="Inventory configuration (S3/GCS)"
+    )
+    inventory_validation_status: Optional[str] = Field(
+        default=None, description="Validation status (pending/validating/validated/failed)"
+    )
+    inventory_validation_error: Optional[str] = Field(
+        default=None, description="Error message if validation failed"
+    )
+    inventory_last_import_at: Optional[datetime] = Field(
+        default=None, description="Last successful import timestamp"
+    )
+    inventory_schedule: Optional[str] = Field(
+        default=None, description="Import schedule (manual/daily/weekly)"
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -555,6 +576,36 @@ class BoundAgentSummary(BaseModel):
     }
 
 
+class FileInfoSummary(BaseModel):
+    """
+    Summary of FileInfo cache on a collection.
+
+    Fields:
+        count: Number of cached FileInfo entries
+        source: Source of FileInfo (api or inventory)
+        updated_at: When FileInfo was last updated
+        delta: Delta summary from last inventory import
+
+    Example:
+        >>> summary = FileInfoSummary(count=150, source="inventory")
+    """
+    count: int = Field(default=0, ge=0, description="Number of cached files")
+    source: Optional[str] = Field(default=None, description="FileInfo source: api or inventory")
+    updated_at: Optional[datetime] = Field(default=None, description="Last update timestamp")
+    delta: Optional[Dict[str, Any]] = Field(default=None, description="Delta summary")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "count": 150,
+                "source": "inventory",
+                "updated_at": "2026-01-25T10:00:00Z",
+                "delta": {"new_count": 5, "modified_count": 2, "deleted_count": 0}
+            }
+        }
+    }
+
+
 class CollectionResponse(BaseModel):
     """
     Schema for collection API responses.
@@ -576,6 +627,7 @@ class CollectionResponse(BaseModel):
         is_accessible: Accessibility flag (True=accessible, False=not accessible, None=pending/testing)
         last_error: Last error message
         metadata: User-defined metadata
+        file_info: FileInfo cache summary (Issue #107)
         created_at: Creation timestamp
         updated_at: Last update timestamp
         connector: Optional connector details (full object)
@@ -601,6 +653,7 @@ class CollectionResponse(BaseModel):
     accessibility_message: Optional[str] = Field(default=None, description="Accessibility error message")
     last_scanned_at: Optional[datetime] = Field(default=None, description="Last completed scan timestamp")
     metadata: Optional[Dict[str, Any]] = None
+    file_info: Optional[FileInfoSummary] = Field(default=None, description="FileInfo cache summary")
     created_at: datetime
     updated_at: datetime
     connector: Optional[ConnectorResponse] = None
@@ -672,6 +725,17 @@ class CollectionResponse(BaseModel):
         else:
             result['connector_guid'] = None
             result['connector'] = None
+
+        # Extract FileInfo summary (Issue #107)
+        if hasattr(data, 'file_info') and data.file_info is not None:
+            result['file_info'] = FileInfoSummary(
+                count=len(data.file_info) if data.file_info else 0,
+                source=getattr(data, 'file_info_source', None),
+                updated_at=getattr(data, 'file_info_updated_at', None),
+                delta=getattr(data, 'file_info_delta', None)
+            )
+        else:
+            result['file_info'] = None
 
         return result
 
@@ -772,6 +836,30 @@ class CollectionRefreshResponse(BaseModel):
     success: bool = Field(..., description="Refresh success status")
     message: str = Field(..., description="Descriptive message")
     file_count: int = Field(..., ge=0, description="Number of files found")
+
+
+class CollectionClearCacheResponse(BaseModel):
+    """
+    Schema for collection inventory cache clear response (Issue #107 - T075).
+
+    Used when clearing cached FileInfo from bucket inventory imports,
+    typically before running tools with fresh cloud API data.
+
+    Fields:
+        success: Clear operation result
+        message: Descriptive message
+        cleared_count: Number of cached FileInfo entries that were cleared
+
+    Example:
+        >>> response = CollectionClearCacheResponse(
+        ...     success=True,
+        ...     message="Inventory cache cleared",
+        ...     cleared_count=12345
+        ... )
+    """
+    success: bool = Field(..., description="Clear operation success status")
+    message: str = Field(..., description="Descriptive message")
+    cleared_count: int = Field(..., ge=0, description="Number of cached entries cleared")
 
     model_config = {
         "json_schema_extra": {

@@ -30,8 +30,16 @@ from backend.src.schemas.collection import (
     CollectionResponse,
     CollectionTestResponse,
     CollectionRefreshResponse,
+    CollectionClearCacheResponse,
     CollectionStatsResponse,
 )
+from backend.src.schemas.inventory import (
+    CreateCollectionsFromInventoryRequest,
+    CreateCollectionsFromInventoryResponse,
+    CollectionCreatedSummary,
+    CollectionCreationError,
+)
+from backend.src.services.inventory_service import InventoryService
 from backend.src.services.collection_service import CollectionService
 from backend.src.services.config_service import ConfigService
 from backend.src.services.connector_service import ConnectorService
@@ -1220,4 +1228,324 @@ async def clear_pipeline(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clear pipeline: {str(e)}"
+        )
+
+
+# ============================================================================
+# Inventory-based Collection Creation (Issue #107)
+# ============================================================================
+
+@router.post(
+    "/from-inventory",
+    response_model=CreateCollectionsFromInventoryResponse,
+    summary="Create collections from inventory folders",
+    description="Batch create collections from selected inventory folders"
+)
+async def create_collections_from_inventory(
+    request: CreateCollectionsFromInventoryRequest,
+    ctx: TenantContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+    collection_service: CollectionService = Depends(get_collection_service)
+) -> CreateCollectionsFromInventoryResponse:
+    """
+    Create multiple collections from inventory folders.
+
+    This endpoint supports the two-step wizard for mapping folders to collections:
+    1. User selects folders from the folder tree (enforced in frontend)
+    2. User configures name/state for each and submits here
+
+    Request Body:
+        connector_guid: GUID of the connector
+        folders: List of folder mappings with name, state, and optional pipeline
+
+    Returns:
+        CreateCollectionsFromInventoryResponse with created list and errors list
+
+    Example:
+        POST /api/collections/from-inventory
+        {
+            "connector_guid": "con_01hgw...",
+            "folders": [
+                {"folder_guid": "fld_01hgw...", "name": "Vacation 2020", "state": "archived"}
+            ]
+        }
+    """
+    inventory_service = InventoryService(db)
+    created: list[CollectionCreatedSummary] = []
+    errors: list[CollectionCreationError] = []
+
+    try:
+        # Resolve connector
+        connector = inventory_service.get_connector_by_guid(
+            request.connector_guid, team_id=ctx.team_id
+        )
+
+        # Validate all folder mappings first
+        folder_guids = [m.folder_guid for m in request.folders]
+        valid_folders, validation_errors = inventory_service.validate_folder_mappings(
+            connector_id=connector.id,
+            folder_guids=folder_guids,
+            team_id=ctx.team_id
+        )
+
+        # Add validation errors
+        for folder_guid, error_msg in validation_errors:
+            errors.append(CollectionCreationError(
+                folder_guid=folder_guid,
+                error=error_msg
+            ))
+
+        # Map folder GUIDs to folder objects for easy lookup
+        folder_map = {f.guid: f for f in valid_folders}
+
+        # Create collections for valid folders
+        for mapping in request.folders:
+            if mapping.folder_guid not in folder_map:
+                continue  # Already reported in validation errors
+
+            folder = folder_map[mapping.folder_guid]
+
+            try:
+                # Resolve pipeline if provided
+                pipeline_id = None
+                if mapping.pipeline_guid:
+                    pipeline_uuid = GuidService.parse_identifier(
+                        mapping.pipeline_guid, expected_prefix="pip"
+                    )
+                    pipeline = db.query(Pipeline).filter(
+                        Pipeline.uuid == pipeline_uuid
+                    ).first()
+                    if not pipeline:
+                        errors.append(CollectionCreationError(
+                            folder_guid=mapping.folder_guid,
+                            error=f"Pipeline not found: {mapping.pipeline_guid}"
+                        ))
+                        continue
+                    pipeline_id = pipeline.id
+
+                # Map state string to enum
+                state = CollectionState[mapping.state.upper()]
+
+                # Map connector type to collection type (S3 -> S3, GCS -> GCS)
+                collection_type = CollectionType(connector.type.value)
+
+                # Build full location URI from connector's source bucket + folder path
+                # S3: s3://bucket/path/  GCS: gs://bucket/path/
+                # URL decode the path (inventory stores URL-encoded paths like "Spring%20Training")
+                from urllib.parse import unquote
+                decoded_path = unquote(folder.path)
+
+                source_bucket = connector.inventory_config.get("source_bucket", "")
+                if connector.type.value == "s3":
+                    location = f"s3://{source_bucket}/{decoded_path}"
+                elif connector.type.value == "gcs":
+                    location = f"gs://{source_bucket}/{decoded_path}"
+                else:
+                    location = decoded_path  # Fallback
+
+                # Create the collection
+                collection = collection_service.create_collection(
+                    name=mapping.name,
+                    type=collection_type,
+                    location=location,
+                    team_id=ctx.team_id,
+                    state=state,
+                    connector_id=connector.id,
+                    pipeline_id=pipeline_id
+                )
+
+                # Map folder to collection
+                inventory_service.map_folder_to_collection(
+                    folder_id=folder.id,
+                    collection_guid=collection.guid,
+                    team_id=ctx.team_id
+                )
+
+                created.append(CollectionCreatedSummary(
+                    collection_guid=collection.guid,
+                    folder_guid=mapping.folder_guid,
+                    name=mapping.name
+                ))
+
+                logger.info(
+                    "Created collection from inventory folder",
+                    extra={
+                        "collection_guid": collection.guid,
+                        "folder_guid": mapping.folder_guid,
+                        "folder_path": folder.path,
+                        "collection_name": mapping.name
+                    }
+                )
+
+                # Auto-trigger accessibility test for collections with agent-side credentials
+                # This follows the tool-implementation-pattern.md documented pattern
+                from backend.src.models.connector import CredentialLocation
+                from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+                if connector.credential_location == CredentialLocation.AGENT:
+                    # Create collection_test job requiring connector credentials
+                    test_job = Job(
+                        team_id=ctx.team_id,
+                        collection_id=collection.id,
+                        tool="collection_test",
+                        mode="collection",
+                        status=PersistentJobStatus.PENDING,
+                        bound_agent_id=None,  # Any agent with connector credentials
+                        required_capabilities=[f"connector:{connector.guid}"],
+                    )
+                    db.add(test_job)
+                    db.flush()  # Flush to persist job and generate GUID
+
+                    # Set collection accessibility to pending while job runs
+                    collection.is_accessible = None
+                    db.commit()
+
+                    logger.info(
+                        "Auto-created collection_test job for inventory collection",
+                        extra={
+                            "collection_guid": collection.guid,
+                            "job_guid": test_job.guid,
+                            "connector_guid": connector.guid
+                        }
+                    )
+
+            except ValueError as e:
+                errors.append(CollectionCreationError(
+                    folder_guid=mapping.folder_guid,
+                    error=str(e)
+                ))
+            except Exception as e:
+                logger.error(
+                    f"Error creating collection from folder: {str(e)}",
+                    extra={"folder_guid": mapping.folder_guid}
+                )
+                errors.append(CollectionCreationError(
+                    folder_guid=mapping.folder_guid,
+                    error=f"Internal error: {str(e)}"
+                ))
+
+        return CreateCollectionsFromInventoryResponse(
+            created=created,
+            errors=errors
+        )
+
+    except ValueError as e:
+        logger.warning(f"Invalid request: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating collections from inventory: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create collections: {str(e)}"
+        )
+
+
+@router.post(
+    "/{guid}/clear-inventory-cache",
+    response_model=CollectionClearCacheResponse,
+    summary="Clear inventory cache (Issue #107 - T075)",
+    description="Clear cached FileInfo from bucket inventory to force fresh cloud API listing"
+)
+async def clear_inventory_cache(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+    collection_service: CollectionService = Depends(get_collection_service)
+) -> CollectionClearCacheResponse:
+    """
+    Clear cached FileInfo from a collection's inventory import.
+
+    This endpoint is used before running analysis tools when fresh file listings
+    from the cloud API are needed (bypassing cached inventory data).
+
+    The operation clears:
+    - file_info: Cached FileInfo array
+    - file_info_source: Source indicator ("api" or "inventory")
+    - file_info_updated_at: Last update timestamp
+    - file_info_delta: Import delta summary
+
+    Path Parameters:
+        guid: Collection GUID (col_xxx format)
+
+    Returns:
+        CollectionClearCacheResponse with success status and cleared entry count
+
+    Raises:
+        400 Bad Request: If GUID format is invalid, prefix mismatch, or collection is LOCAL type
+        404 Not Found: If collection doesn't exist
+
+    Example:
+        POST /api/collections/col_01hgw2bbg0000000000000001/clear-inventory-cache
+
+        Response:
+        {
+          "success": true,
+          "message": "Inventory cache cleared. Tools will fetch fresh file listings from cloud.",
+          "cleared_count": 12345
+        }
+    """
+    try:
+        # Validate GUID format
+        try:
+            GuidService.parse_identifier(guid, expected_prefix="col")
+        except ValueError as e:
+            logger.warning(f"Invalid collection GUID format: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+
+        # Get collection with tenant filtering
+        collection = collection_service.get_by_guid(guid, team_id=ctx.team_id)
+
+        if not collection:
+            logger.warning(f"Collection not found for clear-inventory-cache: {guid}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection not found: {guid}"
+            )
+
+        # Local collections don't have inventory cache
+        if collection.type == CollectionType.LOCAL:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Local collections do not have inventory cache"
+            )
+
+        # Count entries before clearing
+        cleared_count = collection.file_info_count
+
+        # Clear the cached FileInfo
+        collection.file_info = None
+        collection.file_info_source = None
+        collection.file_info_updated_at = None
+        collection.file_info_delta = None
+
+        db.commit()
+
+        logger.info(
+            f"Cleared inventory cache for collection {guid}",
+            extra={
+                "collection_guid": guid,
+                "cleared_count": cleared_count
+            }
+        )
+
+        return CollectionClearCacheResponse(
+            success=True,
+            message="Inventory cache cleared. Tools will fetch fresh file listings from cloud.",
+            cleared_count=cleared_count
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error clearing inventory cache: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear inventory cache: {str(e)}"
         )

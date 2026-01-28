@@ -5,6 +5,12 @@
  * These contracts mirror the backend FastAPI endpoints (unchanged).
  */
 
+import type {
+  InventoryConfig,
+  InventoryValidationStatus,
+  InventorySchedule
+} from './inventory-api'
+
 // ============================================================================
 // Entity Types
 // ============================================================================
@@ -29,6 +35,12 @@ export interface Connector {
   metadata?: Record<string, unknown> | null
   last_validated?: string | null
   last_error?: string | null
+  // Inventory configuration fields (Issue #107)
+  inventory_config?: InventoryConfig | null
+  inventory_validation_status?: InventoryValidationStatus | null
+  inventory_validation_error?: string | null
+  inventory_last_import_at?: string | null
+  inventory_schedule?: InventorySchedule | null
   created_at: string  // ISO 8601 timestamp
   updated_at: string  // ISO 8601 timestamp
 }

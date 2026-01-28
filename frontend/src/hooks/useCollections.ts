@@ -137,6 +137,9 @@ export const useCollections = (
 
   /**
    * Delete a collection
+   * @param guid - Collection GUID
+   * @param force - If true, force delete even with existing results/jobs
+   * @throws Error if collection has data and force=false (caller should handle to show force-delete dialog)
    */
   const deleteCollection = useCallback(async (guid: string, force = false) => {
     setLoading(true)
@@ -153,9 +156,14 @@ export const useCollections = (
     } catch (err: any) {
       const errorMessage = err.userMessage || 'Failed to delete collection'
       setError(errorMessage)
-      toast.error('Failed to delete collection', {
-        description: errorMessage
-      })
+
+      // Don't show toast for "collection has data" errors - let caller handle with force-delete dialog
+      const isHasDataError = errorMessage.includes('analysis result(s)') || errorMessage.includes('active job(s)')
+      if (!isHasDataError) {
+        toast.error('Failed to delete collection', {
+          description: errorMessage
+        })
+      }
       throw err
     } finally {
       setLoading(false)

@@ -14,10 +14,12 @@ Design Rationale:
 
 import enum
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Any
 
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Enum, Text, Boolean, ForeignKey, Index
 from sqlalchemy.orm import relationship
+
+from backend.src.models.types import JSONBType
 
 from backend.src.models import Base
 from backend.src.models.mixins import GuidMixin
@@ -181,6 +183,16 @@ class Collection(Base, GuidMixin):
     # Last refresh timestamp (updated when tool completes)
     last_refresh_at = Column(DateTime, nullable=True)
 
+    # FileInfo cache from inventory import (Issue #107 - Bucket Inventory Import)
+    # JSONB array of FileInfo objects: {key, size, last_modified, etag, storage_class}
+    file_info = Column(JSONBType, nullable=True)
+    # When FileInfo was last updated from inventory or API
+    file_info_updated_at = Column(DateTime, nullable=True)
+    # Source of FileInfo: "api" (direct cloud list) or "inventory" (from inventory import)
+    file_info_source = Column(String(20), nullable=True)
+    # Delta summary from last inventory import: {new_count, modified_count, deleted_count, computed_at}
+    file_info_delta = Column(JSONBType, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -248,6 +260,38 @@ class Collection(Base, GuidMixin):
             True if bound_agent_id is set
         """
         return self.bound_agent_id is not None
+
+    @property
+    def has_file_info(self) -> bool:
+        """
+        Check if this collection has cached FileInfo.
+
+        Returns:
+            True if file_info is set and not empty
+        """
+        return self.file_info is not None and len(self.file_info) > 0
+
+    @property
+    def has_inventory_file_info(self) -> bool:
+        """
+        Check if this collection has FileInfo from inventory import.
+
+        Returns:
+            True if file_info_source is "inventory"
+        """
+        return self.file_info_source == "inventory"
+
+    @property
+    def file_info_count(self) -> int:
+        """
+        Get the number of files in cached FileInfo.
+
+        Returns:
+            Number of FileInfo entries, or 0 if not cached
+        """
+        if self.file_info is None:
+            return 0
+        return len(self.file_info)
 
     def get_effective_cache_ttl(self, team_ttl_config: Optional[Dict[str, int]] = None) -> int:
         """

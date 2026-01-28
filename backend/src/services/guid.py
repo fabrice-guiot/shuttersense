@@ -53,6 +53,8 @@ ENTITY_PREFIXES = {
     "art": "AgentRegistrationToken",
     "job": "Job",
     "imp": "ImportSession",
+    "fld": "InventoryFolder",
+    "rel": "ReleaseManifest",
 }
 
 # Crockford Base32 alphabet (excludes I, L, O, U to avoid confusion)
@@ -61,7 +63,7 @@ CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # Pattern for validating GUIDs
 # Format: {3-char prefix}_{26-char Crockford Base32}
 GUID_PATTERN = re.compile(
-    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|ten|usr|tok|agt|art|job|imp)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|ten|usr|tok|agt|art|job|imp|fld|rel)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
     re.IGNORECASE
 )
 

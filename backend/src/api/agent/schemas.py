@@ -582,6 +582,32 @@ class PreviousResultData(BaseModel):
     }
 
 
+class CachedFileInfo(BaseModel):
+    """
+    Cached FileInfo from inventory import (Issue #107 - T071).
+
+    Represents a file's metadata from the bucket inventory, used to skip
+    cloud API calls when computing Input State hashes.
+    """
+    key: str = Field(..., description="Full object key/path (e.g., '2020/vacation/IMG_001.CR3')")
+    size: int = Field(..., ge=0, description="File size in bytes")
+    last_modified: str = Field(..., description="ISO8601 timestamp of last modification")
+    etag: Optional[str] = Field(None, description="Object ETag (for change detection)")
+    storage_class: Optional[str] = Field(None, description="Storage class (e.g., STANDARD, GLACIER)")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "key": "2020/vacation/IMG_001.CR3",
+                "size": 25000000,
+                "last_modified": "2022-11-25T13:30:49.000Z",
+                "etag": "371e1101d4248ef2609e269697bb0221-2",
+                "storage_class": "STANDARD"
+            }
+        }
+    }
+
+
 class JobClaimResponse(BaseModel):
     """Response schema for job claim."""
 
@@ -603,6 +629,17 @@ class JobClaimResponse(BaseModel):
         description="Previous result for comparison (null if no previous result exists)"
     )
 
+    # Cached FileInfo from Inventory Import (Issue #107 - T071)
+    file_info: Optional[List[CachedFileInfo]] = Field(
+        None,
+        description="Cached file metadata from inventory import. When present, agent should "
+                    "use this instead of calling cloud APIs (unless force_cloud_refresh is true)."
+    )
+    file_info_source: Optional[str] = Field(
+        None,
+        description="Source of file_info: 'inventory' (from bucket inventory) or 'api' (from cloud API)"
+    )
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -620,7 +657,15 @@ class JobClaimResponse(BaseModel):
                     "guid": "res_01hgw2bbg...",
                     "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb924...",
                     "completed_at": "2026-01-20T10:00:00.000Z"
-                }
+                },
+                "file_info": [
+                    {
+                        "key": "2020/vacation/IMG_001.CR3",
+                        "size": 25000000,
+                        "last_modified": "2022-11-25T13:30:49.000Z"
+                    }
+                ],
+                "file_info_source": "inventory"
             }
         }
     }
@@ -845,6 +890,10 @@ class ConnectorTestData(BaseModel):
         None,
         description="Decrypted credentials (only for server credential mode)"
     )
+    inventory_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Inventory configuration for inventory_validate jobs"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -853,7 +902,8 @@ class ConnectorTestData(BaseModel):
                 "type": "s3",
                 "name": "Production AWS S3",
                 "credential_location": "agent",
-                "credentials": None
+                "credentials": None,
+                "inventory_config": None
             }
         }
     }
@@ -1271,6 +1321,333 @@ class JobCompleteWithUploadRequest(BaseModel):
                 "files_scanned": 5000,
                 "issues_found": 17,
                 "signature": "abc123def456..."
+            }
+        }
+    }
+
+
+# ============================================================================
+# Inventory Validation Schemas (Issue #107)
+# ============================================================================
+
+class InventoryValidationRequest(BaseModel):
+    """Request schema for reporting inventory validation results."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx) being validated"
+    )
+    success: bool = Field(
+        ...,
+        description="Whether validation succeeded"
+    )
+    error_message: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="Error message if validation failed"
+    )
+    manifest_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Number of manifests found (if successful)"
+    )
+    latest_manifest: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="Path of the latest manifest.json (e.g., '2026-01-26T01-00Z/manifest.json')"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "success": True,
+                "manifest_count": 3,
+                "latest_manifest": "2026-01-26T01-00Z/manifest.json"
+            }
+        }
+    }
+
+
+class InventoryValidationResponse(BaseModel):
+    """Response schema for inventory validation result submission."""
+
+    status: str = Field(
+        ...,
+        description="Validation status (validated/failed)"
+    )
+    message: str = Field(
+        ...,
+        description="Status message"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "validated",
+                "message": "Inventory configuration validated successfully"
+            }
+        }
+    }
+
+
+# ============================================================================
+# Inventory Folders Schemas (Issue #107)
+# ============================================================================
+
+class InventoryFoldersRequest(BaseModel):
+    """Request schema for reporting discovered inventory folders."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx)"
+    )
+    folders: List[str] = Field(
+        ...,
+        description="List of discovered folder paths"
+    )
+    folder_stats: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Stats per folder (file_count, total_size)"
+    )
+    total_files: int = Field(
+        ...,
+        ge=0,
+        description="Total files processed"
+    )
+    total_size: int = Field(
+        ...,
+        ge=0,
+        description="Total size in bytes"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "folders": ["2020/", "2020/Vacation/", "2021/"],
+                "folder_stats": {
+                    "2020/": {"file_count": 150, "total_size": 3750000000},
+                    "2020/Vacation/": {"file_count": 100, "total_size": 2500000000}
+                },
+                "total_files": 250,
+                "total_size": 6250000000
+            }
+        }
+    }
+
+
+class InventoryFoldersResponse(BaseModel):
+    """Response schema for inventory folders submission."""
+
+    status: str = Field(
+        ...,
+        description="Processing status (success/error)"
+    )
+    message: str = Field(
+        ...,
+        description="Status message"
+    )
+    folders_stored: int = Field(
+        ...,
+        ge=0,
+        description="Number of folders stored/updated"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "success",
+                "message": "Stored 42 inventory folders",
+                "folders_stored": 42
+            }
+        }
+    }
+
+
+# ============================================================================
+# Inventory FileInfo Schemas (Issue #107 - Phase B)
+# ============================================================================
+
+class CollectionFileInfoItem(BaseModel):
+    """FileInfo item for a single file."""
+
+    key: str = Field(
+        ...,
+        description="Full object key/path"
+    )
+    size: int = Field(
+        ...,
+        ge=0,
+        description="File size in bytes"
+    )
+    last_modified: str = Field(
+        ...,
+        description="ISO8601 timestamp of last modification"
+    )
+    etag: Optional[str] = Field(
+        None,
+        description="Object ETag (for change detection)"
+    )
+    storage_class: Optional[str] = Field(
+        None,
+        description="Storage class (e.g., STANDARD, GLACIER)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "key": "2020/vacation/IMG_001.CR3",
+                "size": 25000000,
+                "last_modified": "2022-11-25T13:30:49.000Z",
+                "etag": "371e1101d4248ef2609e269697bb0221-2",
+                "storage_class": "STANDARD"
+            }
+        }
+    }
+
+
+class CollectionFileInfo(BaseModel):
+    """FileInfo for a single collection from inventory."""
+
+    collection_guid: str = Field(
+        ...,
+        description="Collection GUID (col_xxx)"
+    )
+    file_info: List[CollectionFileInfoItem] = Field(
+        ...,
+        description="List of FileInfo items for this collection"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "file_info": [
+                    {
+                        "key": "2020/vacation/IMG_001.CR3",
+                        "size": 25000000,
+                        "last_modified": "2022-11-25T13:30:49.000Z"
+                    }
+                ]
+            }
+        }
+    }
+
+
+class InventoryFileInfoRequest(BaseModel):
+    """Request schema for reporting FileInfo from inventory import Phase B."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx)"
+    )
+    collections: List[CollectionFileInfo] = Field(
+        ...,
+        description="List of collections with their FileInfo"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "collections": [
+                    {
+                        "collection_guid": "col_01hgw2bbg0000000000000001",
+                        "file_info": [
+                            {
+                                "key": "2020/vacation/IMG_001.CR3",
+                                "size": 25000000,
+                                "last_modified": "2022-11-25T13:30:49.000Z"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+
+
+class InventoryFileInfoResponse(BaseModel):
+    """Response schema for FileInfo submission."""
+
+    status: str = Field(
+        ...,
+        description="Processing status (success/error)"
+    )
+    message: str = Field(
+        ...,
+        description="Status message"
+    )
+    collections_updated: int = Field(
+        ...,
+        ge=0,
+        description="Number of collections updated with FileInfo"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "success",
+                "message": "Updated FileInfo for 5 collections",
+                "collections_updated": 5
+            }
+        }
+    }
+
+
+# ============================================================================
+# Connector Collections Query (Issue #107 - Phase B)
+# ============================================================================
+
+class ConnectorCollectionInfo(BaseModel):
+    """Collection info for inventory FileInfo population."""
+
+    collection_guid: str = Field(
+        ...,
+        description="Collection GUID (col_xxx)"
+    )
+    folder_path: str = Field(
+        ...,
+        description="Inventory folder path prefix for this collection"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "folder_path": "2020/vacation/"
+            }
+        }
+    }
+
+
+class ConnectorCollectionsResponse(BaseModel):
+    """Response with collections mapped to a connector's inventory folders."""
+
+    connector_guid: str = Field(
+        ...,
+        description="Connector GUID (con_xxx)"
+    )
+    collections: List[ConnectorCollectionInfo] = Field(
+        default_factory=list,
+        description="Collections with their folder path prefix"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "collections": [
+                    {
+                        "collection_guid": "col_01hgw2bbg0000000000000001",
+                        "folder_path": "2020/vacation/"
+                    },
+                    {
+                        "collection_guid": "col_01hgw2bbg0000000000000002",
+                        "folder_path": "2021/wedding/"
+                    }
+                ]
             }
         }
     }

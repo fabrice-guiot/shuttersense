@@ -35,8 +35,10 @@ export interface CollectionListProps {
 
   /**
    * Callback when delete button clicked
+   * @param collection - Collection to delete
+   * @param force - If true, force delete even with existing results/jobs
    */
-  onDelete: (collection: Collection) => void
+  onDelete: (collection: Collection, force?: boolean) => void | Promise<void>
 
   /**
    * Callback when refresh/test button clicked
@@ -47,6 +49,12 @@ export interface CollectionListProps {
    * Callback when info button clicked
    */
   onInfo: (collection: Collection) => void
+
+  /**
+   * Callback when "Refresh from Cloud" button clicked (Issue #107 - T075)
+   * Only applicable for remote collections (S3, GCS, SMB)
+   */
+  onRefreshFromCloud?: (collection: Collection) => void
 
   /**
    * Current search term for empty state message (Issue #38)

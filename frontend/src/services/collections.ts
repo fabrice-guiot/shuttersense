@@ -71,7 +71,7 @@ export const deleteCollection = async (
   force = false
 ): Promise<CollectionDeleteResponse | void> => {
   const safeGuid = encodeURIComponent(validateGuid(guid, 'col'))
-  const params = force ? { force_delete: force } : {}
+  const params = force ? { force: true } : {}
   const response = await api.delete<CollectionDeleteResponse>(`/collections/${safeGuid}`, { params })
   // If status is 200, return the result/job info
   if (response.status === 200) {
@@ -135,5 +135,23 @@ export const assignPipeline = async (collectionGuid: string, pipelineGuid: strin
 export const clearPipeline = async (collectionGuid: string): Promise<Collection> => {
   const safeGuid = encodeURIComponent(validateGuid(collectionGuid, 'col'))
   const response = await api.post<Collection>(`/collections/${safeGuid}/clear-pipeline`)
+  return response.data
+}
+
+/**
+ * Clear inventory cache from a collection (Issue #107 - T075)
+ * Clears cached FileInfo so tools will fetch fresh file listings from cloud API
+ * @param collectionGuid - Collection GUID (col_xxx format)
+ * @returns Response with success status and cleared count
+ */
+export interface CollectionClearCacheResponse {
+  success: boolean
+  message: string
+  cleared_count: number
+}
+
+export const clearInventoryCache = async (collectionGuid: string): Promise<CollectionClearCacheResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(collectionGuid, 'col'))
+  const response = await api.post<CollectionClearCacheResponse>(`/collections/${safeGuid}/clear-inventory-cache`)
   return response.data
 }

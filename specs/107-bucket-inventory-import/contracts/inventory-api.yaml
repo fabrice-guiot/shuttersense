@@ -1,0 +1,572 @@
+openapi: 3.1.0
+info:
+  title: ShutterSense Inventory API
+  description: API endpoints for cloud storage bucket inventory import
+  version: 1.0.0
+
+paths:
+  /api/connectors/{connector_guid}/inventory/config:
+    put:
+      summary: Configure inventory source
+      description: Set inventory configuration on a connector (S3 or GCS)
+      operationId: updateInventoryConfig
+      tags:
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/ConnectorGuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/S3InventoryConfigRequest'
+                - $ref: '#/components/schemas/GCSInventoryConfigRequest'
+      responses:
+        '200':
+          description: Configuration saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorWithInventory'
+        '400':
+          description: Invalid configuration
+        '404':
+          description: Connector not found
+
+    delete:
+      summary: Remove inventory configuration
+      description: Clear inventory configuration from connector
+      operationId: deleteInventoryConfig
+      tags:
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/ConnectorGuid'
+      responses:
+        '204':
+          description: Configuration removed
+        '404':
+          description: Connector not found
+
+  /api/connectors/{connector_guid}/inventory/import:
+    post:
+      summary: Trigger inventory import
+      description: Create a job to import inventory data from cloud storage
+      operationId: triggerInventoryImport
+      tags:
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/ConnectorGuid'
+      responses:
+        '202':
+          description: Import job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreated'
+        '400':
+          description: Inventory not configured or validation pending
+        '404':
+          description: Connector not found
+        '409':
+          description: Import already in progress
+
+  /api/connectors/{connector_guid}/inventory/folders:
+    get:
+      summary: List discovered folders
+      description: Get folders discovered from inventory import
+      operationId: listInventoryFolders
+      tags:
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/ConnectorGuid'
+        - name: path_prefix
+          in: query
+          description: Filter by path prefix
+          schema:
+            type: string
+        - name: unmapped_only
+          in: query
+          description: Only return folders not mapped to collections
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 1000
+            maximum: 10000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of folders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryFolderList'
+        '404':
+          description: Connector not found
+
+  /api/connectors/{connector_guid}/inventory/status:
+    get:
+      summary: Get inventory status
+      description: Get current inventory import status and statistics
+      operationId: getInventoryStatus
+      tags:
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/ConnectorGuid'
+      responses:
+        '200':
+          description: Inventory status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryStatus'
+        '404':
+          description: Connector not found
+
+  /api/collections/from-inventory:
+    post:
+      summary: Create collections from inventory folders
+      description: Batch create collections from selected inventory folders
+      operationId: createCollectionsFromInventory
+      tags:
+        - Inventory
+        - Collections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionsFromInventoryRequest'
+      responses:
+        '201':
+          description: Collections created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCollectionsFromInventoryResponse'
+        '400':
+          description: Invalid request (overlapping paths, missing required fields)
+        '404':
+          description: Connector or folder not found
+
+  /api/agent/v1/jobs/{job_guid}/inventory/folders:
+    post:
+      summary: Report discovered folders (Agent)
+      description: Agent reports Phase A results (folder extraction)
+      operationId: reportInventoryFolders
+      tags:
+        - Agent
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/JobGuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportFoldersRequest'
+      responses:
+        '200':
+          description: Folders stored
+        '400':
+          description: Invalid request
+        '404':
+          description: Job not found
+
+  /api/agent/v1/jobs/{job_guid}/inventory/file-info:
+    post:
+      summary: Report collection FileInfo (Agent)
+      description: Agent reports Phase B results (FileInfo per collection)
+      operationId: reportFileInfo
+      tags:
+        - Agent
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/JobGuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportFileInfoRequest'
+      responses:
+        '200':
+          description: FileInfo stored
+        '400':
+          description: Invalid request
+        '404':
+          description: Job or Collection not found
+
+  /api/agent/v1/jobs/{job_guid}/inventory/delta:
+    post:
+      summary: Report delta summary (Agent)
+      description: Agent reports Phase C results (delta detection)
+      operationId: reportDelta
+      tags:
+        - Agent
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/JobGuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportDeltaRequest'
+      responses:
+        '200':
+          description: Delta stored
+        '400':
+          description: Invalid request
+        '404':
+          description: Job or Collection not found
+
+components:
+  parameters:
+    ConnectorGuid:
+      name: connector_guid
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^con_[0-9a-z]{26}$'
+
+    JobGuid:
+      name: job_guid
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^job_[0-9a-z]{26}$'
+
+  schemas:
+    S3InventoryConfigRequest:
+      type: object
+      required:
+        - provider
+        - destination_bucket
+        - source_bucket
+        - config_name
+      properties:
+        provider:
+          type: string
+          enum: [s3]
+        destination_bucket:
+          type: string
+          minLength: 3
+          maxLength: 63
+        source_bucket:
+          type: string
+          minLength: 3
+          maxLength: 63
+        config_name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        format:
+          type: string
+          enum: [CSV, ORC, Parquet]
+          default: CSV
+        schedule:
+          type: string
+          enum: [manual, daily, weekly]
+          default: manual
+
+    GCSInventoryConfigRequest:
+      type: object
+      required:
+        - provider
+        - destination_bucket
+        - report_config_name
+      properties:
+        provider:
+          type: string
+          enum: [gcs]
+        destination_bucket:
+          type: string
+          minLength: 3
+          maxLength: 63
+        report_config_name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        format:
+          type: string
+          enum: [CSV, Parquet]
+          default: CSV
+        schedule:
+          type: string
+          enum: [manual, daily, weekly]
+          default: manual
+
+    ConnectorWithInventory:
+      type: object
+      properties:
+        guid:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [s3, gcs, smb]
+        inventory_config:
+          oneOf:
+            - $ref: '#/components/schemas/S3InventoryConfigRequest'
+            - $ref: '#/components/schemas/GCSInventoryConfigRequest'
+        inventory_validation_status:
+          type: string
+          enum: [pending, validating, validated, failed]
+        inventory_validation_error:
+          type: string
+          nullable: true
+        inventory_last_import_at:
+          type: string
+          format: date-time
+          nullable: true
+        inventory_schedule:
+          type: string
+          enum: [manual, daily, weekly]
+
+    InventoryFolder:
+      type: object
+      properties:
+        guid:
+          type: string
+        path:
+          type: string
+        object_count:
+          type: integer
+        total_size_bytes:
+          type: integer
+          format: int64
+        deepest_modified:
+          type: string
+          format: date-time
+          nullable: true
+        discovered_at:
+          type: string
+          format: date-time
+        collection_guid:
+          type: string
+          nullable: true
+        suggested_name:
+          type: string
+          description: Suggested collection name from path
+
+    InventoryFolderList:
+      type: object
+      properties:
+        folders:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryFolder'
+        total_count:
+          type: integer
+        has_more:
+          type: boolean
+
+    InventoryStatus:
+      type: object
+      properties:
+        validation_status:
+          type: string
+          enum: [pending, validating, validated, failed]
+        validation_error:
+          type: string
+          nullable: true
+        last_import_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_scheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+        folder_count:
+          type: integer
+        mapped_folder_count:
+          type: integer
+        current_job:
+          $ref: '#/components/schemas/JobSummary'
+          nullable: true
+
+    JobSummary:
+      type: object
+      properties:
+        guid:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        phase:
+          type: string
+          enum: [folder_extraction, file_info_population, delta_detection]
+        progress_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    JobCreated:
+      type: object
+      properties:
+        job_guid:
+          type: string
+        message:
+          type: string
+
+    CreateCollectionsFromInventoryRequest:
+      type: object
+      required:
+        - connector_guid
+        - folders
+      properties:
+        connector_guid:
+          type: string
+        folders:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/FolderToCollectionMapping'
+
+    FolderToCollectionMapping:
+      type: object
+      required:
+        - folder_guid
+        - name
+        - state
+      properties:
+        folder_guid:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        state:
+          type: string
+          enum: [live, archived, closed]
+        pipeline_guid:
+          type: string
+          nullable: true
+
+    CreateCollectionsFromInventoryResponse:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            type: object
+            properties:
+              collection_guid:
+                type: string
+              folder_guid:
+                type: string
+              name:
+                type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              folder_guid:
+                type: string
+              error:
+                type: string
+
+    ReportFoldersRequest:
+      type: object
+      required:
+        - folders
+        - signature
+      properties:
+        folders:
+          type: array
+          items:
+            type: object
+            required:
+              - path
+              - object_count
+              - total_size_bytes
+            properties:
+              path:
+                type: string
+              object_count:
+                type: integer
+              total_size_bytes:
+                type: integer
+                format: int64
+              deepest_modified:
+                type: string
+                format: date-time
+        signature:
+          type: string
+          description: HMAC-SHA256 signature
+
+    ReportFileInfoRequest:
+      type: object
+      required:
+        - collection_guid
+        - file_info
+        - signature
+      properties:
+        collection_guid:
+          type: string
+        file_info:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileInfo'
+        signature:
+          type: string
+
+    FileInfo:
+      type: object
+      required:
+        - key
+        - size
+        - last_modified
+      properties:
+        key:
+          type: string
+        size:
+          type: integer
+          format: int64
+        last_modified:
+          type: string
+        etag:
+          type: string
+          nullable: true
+        storage_class:
+          type: string
+          nullable: true
+
+    ReportDeltaRequest:
+      type: object
+      required:
+        - collection_guid
+        - delta
+        - signature
+      properties:
+        collection_guid:
+          type: string
+        delta:
+          $ref: '#/components/schemas/DeltaSummary'
+        signature:
+          type: string
+
+    DeltaSummary:
+      type: object
+      properties:
+        new_count:
+          type: integer
+        modified_count:
+          type: integer
+        deleted_count:
+          type: integer

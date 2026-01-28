@@ -176,6 +176,8 @@ let results: AnalysisResult[] = [
       orphaned_images: ['orphan1.jpg', 'orphan2.jpg'],
       orphaned_xmp: ['orphan1.xmp', 'orphan2.xmp', 'orphan3.xmp'],
     },
+    connector_guid: null,
+    connector_name: null,
     created_at: '2025-01-01T10:00:00Z',
   },
   {
@@ -207,6 +209,8 @@ let results: AnalysisResult[] = [
         'XYZ2': { name: 'Sony A7R', image_count: 300, group_count: 150, serial_number: '67890' },
       },
     },
+    connector_guid: null,
+    connector_name: null,
     created_at: '2025-01-01T11:00:00Z',
   },
   {
@@ -237,6 +241,8 @@ let results: AnalysisResult[] = [
       orphaned_images: [],
       orphaned_xmp: [],
     },
+    connector_guid: null,
+    connector_name: null,
     created_at: '2025-01-01T12:00:00Z',
   },
   {
@@ -263,6 +269,8 @@ let results: AnalysisResult[] = [
     results: {
       consistency_counts: { CONSISTENT: 400, PARTIAL: 50, INCONSISTENT: 50 },
     },
+    connector_guid: null,
+    connector_name: null,
     created_at: '2025-01-01T13:00:00Z',
   },
 ]
@@ -309,6 +317,7 @@ let collections: Collection[] = [
     accessibility_message: null,
     last_scanned_at: null,
     bound_agent: null,
+    file_info: null,
     created_at: '2025-01-01T09:00:00Z',
     updated_at: '2025-01-01T09:00:00Z',
   },
@@ -327,6 +336,12 @@ let collections: Collection[] = [
     bound_agent: null,
     accessibility_message: null,
     last_scanned_at: null,
+    file_info: {
+      count: 1234,
+      source: 'inventory',
+      updated_at: '2025-01-15T10:00:00Z',
+      delta: null,
+    },
     created_at: '2025-01-01T09:00:00Z',
     updated_at: '2025-01-01T09:00:00Z',
   },
@@ -821,6 +836,7 @@ export const handlers = [
       accessibility_message: null,
       last_scanned_at: null,
       bound_agent: null,
+      file_info: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -844,7 +860,7 @@ export const handlers = [
 
   http.delete(`${BASE_URL}/collections/:guid`, ({ params, request }) => {
     const url = new URL(request.url)
-    const forceDelete = url.searchParams.get('force_delete') === 'true'
+    const forceDelete = url.searchParams.get('force') === 'true'
     const guid = params.guid as string
 
     const index = collections.findIndex((c) => c.guid === guid)
@@ -971,13 +987,12 @@ export const handlers = [
         )
       }
 
-      // Look up the pipeline to get numeric ID for the Job response
+      // Look up the pipeline for the Job response
       const pipeline = pipelines.find((p) => p.guid === data.pipeline_guid)
-      const pipelineId = pipeline ? pipelines.indexOf(pipeline) + 1 : null
 
       // Check for duplicate display_graph job
       const existingJob = jobs.find(
-        (j) => j.pipeline_id === pipelineId && j.mode === 'display_graph' &&
+        (j) => j.pipeline_guid === data.pipeline_guid && j.mode === 'display_graph' &&
                (j.status === 'queued' || j.status === 'running')
       )
       if (existingJob) {
@@ -994,18 +1009,21 @@ export const handlers = [
 
       const newJob: JobResponse = {
         id: generateJobGuid(),
-        collection_id: null,
+        collection_guid: null,
         tool: data.tool,
-        pipeline_id: pipelineId,
+        pipeline_guid: pipeline?.guid ?? null,
         mode: 'display_graph',
         status: 'queued',
         position: jobs.filter((j) => j.status === 'queued').length + 1,
         created_at: new Date().toISOString(),
+        scheduled_for: null,
         started_at: null,
         completed_at: null,
         progress: null,
         error_message: null,
-        result_id: null,
+        result_guid: null,
+        agent_guid: null,
+        agent_name: null,
       }
       jobs.push(newJob)
       return HttpResponse.json(newJob, { status: 202 })
@@ -1039,12 +1057,9 @@ export const handlers = [
       )
     }
 
-    // Get numeric ID for Job response
-    const collectionId = collections.indexOf(collection) + 1
-
     // Check for duplicate job
     const existingJob = jobs.find(
-      (j) => j.collection_id === collectionId && j.tool === data.tool &&
+      (j) => j.collection_guid === collection.guid && j.tool === data.tool &&
              (j.status === 'queued' || j.status === 'running')
     )
     if (existingJob) {
@@ -1061,22 +1076,24 @@ export const handlers = [
 
     // Look up pipeline if provided
     const pipeline = data.pipeline_guid ? pipelines.find((p) => p.guid === data.pipeline_guid) : null
-    const pipelineId = pipeline ? pipelines.indexOf(pipeline) + 1 : null
 
     const newJob: JobResponse = {
       id: generateJobGuid(),
-      collection_id: collectionId,
+      collection_guid: collection.guid,
       tool: data.tool,
-      pipeline_id: pipelineId,
+      pipeline_guid: pipeline?.guid ?? null,
       mode: data.mode ?? null,
       status: 'queued',
       position: jobs.filter((j) => j.status === 'queued').length + 1,
       created_at: new Date().toISOString(),
+      scheduled_for: null,
       started_at: null,
       completed_at: null,
       progress: null,
       error_message: null,
-      result_id: null,
+      result_guid: null,
+      agent_guid: null,
+      agent_name: null,
     }
     jobs.push(newJob)
     return HttpResponse.json(newJob, { status: 202 })
@@ -1186,6 +1203,8 @@ export const handlers = [
         has_report: r.has_report,
         input_state_hash: r.input_state_hash,
         no_change_copy: r.no_change_copy,
+        connector_guid: r.connector_guid,
+        connector_name: r.connector_name,
       }))
 
     return HttpResponse.json({ items, total, limit, offset })
@@ -1200,6 +1219,9 @@ export const handlers = [
         photostats: results.filter((r) => r.tool === 'photostats').length,
         photo_pairing: results.filter((r) => r.tool === 'photo_pairing').length,
         pipeline_validation: results.filter((r) => r.tool === 'pipeline_validation').length,
+        collection_test: results.filter((r) => r.tool === 'collection_test').length,
+        inventory_validate: results.filter((r) => r.tool === 'inventory_validate').length,
+        inventory_import: results.filter((r) => r.tool === 'inventory_import').length,
       },
       last_run: results.length > 0 ? results[results.length - 1].completed_at : null,
     }
@@ -1843,6 +1865,14 @@ ${pipeline.edges.map((e) => `  - from: ${e.from}
         photo_pairing: 3,
         pipeline_validation: 3,
       },
+      stable_periods: {
+        photostats_stable: false,
+        photostats_stable_days: 0,
+        photo_pairing_stable: false,
+        photo_pairing_stable_days: 0,
+        pipeline_validation_stable: false,
+        pipeline_validation_stable_days: 0,
+      },
     }
     return HttpResponse.json(response)
   }),
@@ -2356,6 +2386,7 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
       travel_status: 'booked',
       travel_booking_date: '2026-02-01',
       deadline_date: null,
+      deadline_time: null,
       deleted_at: null,
     }
 
@@ -2403,6 +2434,7 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
       total_count: locations.length,
       known_count: locations.filter((l) => l.is_known).length,
       with_coordinates_count: locations.filter((l) => l.latitude !== null && l.longitude !== null).length,
+      with_instagram_count: locations.filter((l) => l.instagram_handle !== null).length,
     }
     return HttpResponse.json(stats)
   }),
@@ -2465,6 +2497,8 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
       travel_required_default: data.travel_required_default ?? false,
       notes: data.notes ?? null,
       is_known: data.is_known ?? true,
+      instagram_handle: null,
+      instagram_url: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -2816,6 +2850,8 @@ ${Object.entries(configData.processing_methods).map(([key, desc]) => `  ${key}: 
       rating: data.rating ?? null,
       ticket_required_default: data.ticket_required_default ?? true,
       notes: data.notes ?? null,
+      instagram_handle: null,
+      instagram_url: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -3045,6 +3081,7 @@ export function resetMockData(): void {
       accessibility_message: null,
       last_scanned_at: null,
       bound_agent: null,
+      file_info: null,
       created_at: '2025-01-01T09:00:00Z',
       updated_at: '2025-01-01T09:00:00Z',
     },
@@ -3063,6 +3100,7 @@ export function resetMockData(): void {
       accessibility_message: null,
       last_scanned_at: null,
       bound_agent: null,
+      file_info: null,
       created_at: '2025-01-01T09:00:00Z',
       updated_at: '2025-01-01T09:00:00Z',
     },
@@ -3078,6 +3116,8 @@ export function resetMockData(): void {
       pipeline_guid: null,
       pipeline_version: null,
       pipeline_name: null,
+      connector_guid: null,
+      connector_name: null,
       status: 'COMPLETED',
       started_at: '2025-01-01T10:00:00Z',
       completed_at: '2025-01-01T10:05:00Z',
@@ -3108,6 +3148,8 @@ export function resetMockData(): void {
       pipeline_guid: null,
       pipeline_version: null,
       pipeline_name: null,
+      connector_guid: null,
+      connector_name: null,
       status: 'COMPLETED',
       started_at: '2025-01-01T11:00:00Z',
       completed_at: '2025-01-01T11:03:00Z',
@@ -3139,6 +3181,8 @@ export function resetMockData(): void {
       pipeline_guid: null,
       pipeline_version: null,
       pipeline_name: null,
+      connector_guid: null,
+      connector_name: null,
       status: 'FAILED',
       started_at: '2025-01-01T12:00:00Z',
       completed_at: '2025-01-01T12:00:30Z',
@@ -3169,6 +3213,8 @@ export function resetMockData(): void {
       pipeline_guid: 'pip_01hgw2bbg00000000000000001',
       pipeline_version: 1,
       pipeline_name: 'Standard RAW Workflow',
+      connector_guid: null,
+      connector_name: null,
       status: 'COMPLETED',
       started_at: '2025-01-01T13:00:00Z',
       completed_at: '2025-01-01T13:05:00Z',
@@ -3372,6 +3418,8 @@ export function resetMockData(): void {
       travel_required_default: true,
       notes: 'Annual EAA AirVenture event location',
       is_known: true,
+      instagram_handle: 'eaa',
+      instagram_url: 'https://instagram.com/eaa',
       created_at: '2026-01-01T09:00:00Z',
       updated_at: '2026-01-01T09:00:00Z',
     },
@@ -3397,6 +3445,8 @@ export function resetMockData(): void {
       travel_required_default: true,
       notes: 'Great for wildlife photography',
       is_known: true,
+      instagram_handle: null,
+      instagram_url: null,
       created_at: '2026-01-01T09:00:00Z',
       updated_at: '2026-01-01T09:00:00Z',
     },
@@ -3471,6 +3521,8 @@ export function resetMockData(): void {
       rating: 5,
       ticket_required_default: true,
       notes: 'Military demonstration team organizer',
+      instagram_handle: 'usafdemosteams',
+      instagram_url: 'https://instagram.com/usafdemosteams',
       created_at: '2026-01-01T09:00:00Z',
       updated_at: '2026-01-01T09:00:00Z',
     },
@@ -3487,6 +3539,8 @@ export function resetMockData(): void {
       rating: 4,
       ticket_required_default: false,
       notes: 'Conservation organization',
+      instagram_handle: null,
+      instagram_url: null,
       created_at: '2026-01-01T10:00:00Z',
       updated_at: '2026-01-01T10:00:00Z',
     },

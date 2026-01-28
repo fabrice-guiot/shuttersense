@@ -64,14 +64,18 @@ class AnalysisResultSummary(BaseModel):
 
     Contains essential information without full result details.
     For pipeline-only results (display_graph mode), collection fields are null.
+    For inventory results, connector fields are populated instead (Issue #107).
     """
     guid: str = Field(..., description="External identifier (res_xxx)")
-    collection_guid: Optional[str] = Field(None, description="Collection GUID (col_xxx, null for display_graph)")
-    collection_name: Optional[str] = Field(None, description="Collection name (null for display_graph)")
+    collection_guid: Optional[str] = Field(None, description="Collection GUID (col_xxx, null for display_graph/inventory)")
+    collection_name: Optional[str] = Field(None, description="Collection name (null for display_graph/inventory)")
     tool: str = Field(..., description="Tool that produced this result")
     pipeline_guid: Optional[str] = Field(None, description="Pipeline GUID (pip_xxx) if applicable")
     pipeline_version: Optional[int] = Field(None, description="Pipeline version used")
     pipeline_name: Optional[str] = Field(None, description="Pipeline name if applicable")
+    # Connector fields for inventory tools (Issue #107)
+    connector_guid: Optional[str] = Field(None, description="Connector GUID (con_xxx, for inventory tools)")
+    connector_name: Optional[str] = Field(None, description="Connector name (for inventory tools)")
     status: str = Field(..., description="Result status")
     started_at: datetime = Field(..., description="Execution start time")
     completed_at: datetime = Field(..., description="Execution end time")
@@ -179,14 +183,18 @@ class AnalysisResultResponse(BaseModel):
 
     Contains all result information including tool-specific results.
     For pipeline-only results (display_graph mode), collection fields are null.
+    For inventory results, connector fields are populated instead (Issue #107).
     """
     guid: str = Field(..., description="External identifier (res_xxx)")
-    collection_guid: Optional[str] = Field(None, description="Collection GUID (col_xxx, null for display_graph)")
-    collection_name: Optional[str] = Field(None, description="Collection name (null for display_graph)")
+    collection_guid: Optional[str] = Field(None, description="Collection GUID (col_xxx, null for display_graph/inventory)")
+    collection_name: Optional[str] = Field(None, description="Collection name (null for display_graph/inventory)")
     tool: str = Field(..., description="Tool that produced this result")
     pipeline_guid: Optional[str] = Field(None, description="Pipeline GUID (pip_xxx) if applicable")
     pipeline_version: Optional[int] = Field(None, description="Pipeline version used at execution time")
     pipeline_name: Optional[str] = Field(None, description="Pipeline name if applicable")
+    # Connector fields for inventory tools (Issue #107)
+    connector_guid: Optional[str] = Field(None, description="Connector GUID (con_xxx, for inventory tools)")
+    connector_name: Optional[str] = Field(None, description="Connector name (for inventory tools)")
     status: str = Field(..., description="Result status")
     started_at: datetime = Field(..., description="Execution start time")
     completed_at: datetime = Field(..., description="Execution end time")

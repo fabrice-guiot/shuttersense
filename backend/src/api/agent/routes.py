@@ -59,6 +59,7 @@ from backend.src.api.agent.schemas import (
     JobFailRequest,
     JobNoChangeRequest,  # Storage Optimization (Issue #92)
     PreviousResultData,   # Storage Optimization (Issue #92)
+    CachedFileInfo,       # Inventory FileInfo cache (Issue #107 - T071)
     JobStatusResponse,
     JobConfigData,
     JobConfigResponse,
@@ -77,6 +78,18 @@ from backend.src.api.agent.schemas import (
     FinalizeUploadRequest,
     FinalizeUploadResponse,
     UploadStatusResponse,
+    # Inventory validation schemas (Issue #107)
+    InventoryValidationRequest,
+    InventoryValidationResponse,
+    # Inventory folders schemas (Issue #107)
+    InventoryFoldersRequest,
+    InventoryFoldersResponse,
+    # Inventory FileInfo schemas (Issue #107 - Phase B)
+    InventoryFileInfoRequest,
+    InventoryFileInfoResponse,
+    # Connector collections query (Issue #107 - Phase B)
+    ConnectorCollectionInfo,
+    ConnectorCollectionsResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -409,6 +422,28 @@ async def claim_job(
             completed_at=result.previous_result.completed_at,
         )
 
+    # Get cached FileInfo from inventory import (Issue #107 - T071)
+    # Include file_info if collection has cached data from inventory
+    file_info = None
+    file_info_source = None
+    if job.collection and job.collection.file_info:
+        # Check if force_cloud_refresh is requested in job parameters
+        force_refresh = (job.parameters or {}).get("force_cloud_refresh", False)
+        if not force_refresh:
+            # Convert stored FileInfo to API format
+            file_info = [
+                CachedFileInfo(
+                    key=fi.get("key", ""),
+                    size=fi.get("size", 0),
+                    last_modified=fi.get("last_modified", ""),
+                    etag=fi.get("etag"),
+                    storage_class=fi.get("storage_class"),
+                )
+                for fi in job.collection.file_info
+                if fi.get("key")  # Skip invalid entries
+            ]
+            file_info_source = job.collection.file_info_source
+
     return JobClaimResponse(
         guid=job.guid,
         tool=job.tool,
@@ -422,6 +457,8 @@ async def claim_job(
         retry_count=job.retry_count,
         max_retries=job.max_retries,
         previous_result=previous_result,
+        file_info=file_info,
+        file_info_source=file_info_source,
     )
 
 
@@ -806,22 +843,63 @@ async def get_job_config(
         collection_path = job.collection.location
 
     # Get pipeline data if applicable
+    # If job has no pipeline assigned, use the default pipeline for pipeline_validation tool
     pipeline_guid = None
     pipeline_data = None
-    if job.pipeline:
-        pipeline_guid = job.pipeline.guid
+    pipeline = job.pipeline
+
+    # Resolve default pipeline if job has no explicit pipeline
+    if not pipeline and job.tool == "pipeline_validation":
+        from backend.src.models.pipeline import Pipeline
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.team_id == ctx.team_id,
+            Pipeline.is_default == True
+        ).first()
+
+    if pipeline:
+        pipeline_guid = pipeline.guid
         pipeline_data = PipelineData(
-            guid=job.pipeline.guid,
-            name=job.pipeline.name,
-            version=job.pipeline_version or job.pipeline.version,  # Use job's version or current
-            nodes=job.pipeline.nodes_json or [],
-            edges=job.pipeline.edges_json or [],
+            guid=pipeline.guid,
+            name=pipeline.name,
+            version=job.pipeline_version or pipeline.version,  # Use job's version or current
+            nodes=pipeline.nodes_json or [],
+            edges=pipeline.edges_json or [],
         )
 
     # Get connector data for ALL jobs with connectors (not just collection_test)
     # This allows agents to use storage adapters for remote collections
     connector_data = None
-    if job.collection and job.collection.connector:
+    inventory_config = None
+
+    # For inventory_validate and inventory_import jobs, get connector from job.progress
+    if job.tool in ("inventory_validate", "inventory_import") and job.progress:
+        connector_guid = job.progress.get("connector_guid")
+        inventory_config = job.progress.get("config")
+        if connector_guid:
+            connector = connector_service.get_by_guid(connector_guid, team_id=ctx.team_id)
+            if connector:
+                # For SERVER credentials, decrypt and include credentials
+                # For AGENT credentials, agent uses locally stored credentials
+                credentials = None
+                if connector.credential_location == CredentialLocation.SERVER:
+                    connector_with_creds = connector_service.get_by_guid(
+                        connector.guid,
+                        team_id=ctx.team_id,
+                        decrypt_credentials=True
+                    )
+                    if connector_with_creds:
+                        credentials = getattr(connector_with_creds, 'decrypted_credentials', None)
+
+                connector_data = ConnectorTestData(
+                    guid=connector.guid,
+                    type=connector.type.value,
+                    name=connector.name,
+                    credential_location=connector.credential_location.value,
+                    credentials=credentials,
+                    inventory_config=inventory_config,
+                )
+
+    elif job.collection and job.collection.connector:
         connector = job.collection.connector
 
         # For SERVER credentials, decrypt and include credentials
@@ -1886,3 +1964,522 @@ async def revoke_agent(
     )
 
     return None
+
+
+# ============================================================================
+# Inventory Validation Endpoints (Issue #107)
+# ============================================================================
+
+@router.post(
+    "/jobs/{job_guid}/inventory/validate",
+    response_model=InventoryValidationResponse,
+    summary="Report inventory validation result",
+    description="Submit the result of an inventory configuration validation job."
+)
+async def report_inventory_validation(
+    job_guid: str,
+    data: InventoryValidationRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Report inventory validation result.
+
+    Called by agents after validating inventory configuration accessibility.
+    Updates the connector's inventory_validation_status based on the result.
+
+    Path Parameters:
+        job_guid: GUID of the validation job (job_xxx format)
+
+    Request Body:
+        InventoryValidationRequest with validation results
+
+    Returns:
+        InventoryValidationResponse with status update confirmation
+
+    Raises:
+        404: If job or connector not found
+        400: If job is not an inventory validation job
+        403: If job is not assigned to this agent
+    """
+    from backend.src.models.job import Job, JobStatus
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    from backend.src.services.inventory_service import InventoryService
+
+    # Parse job GUID
+    try:
+        job_uuid = Job.parse_guid(job_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Get job
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id,
+    ).first()
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job type is inventory_validate
+    if job.tool != "inventory_validate":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job is not an inventory validation job"
+        )
+
+    # Verify agent is assigned to this job
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Get connector from job progress
+    progress = job.progress or {}
+    connector_id = progress.get("connector_id")
+    connector_guid = progress.get("connector_guid")
+
+    if not connector_id:
+        # Try to get connector by GUID from request
+        if data.connector_guid:
+            from backend.src.services.guid import GuidService
+            try:
+                connector_uuid = GuidService.parse_identifier(data.connector_guid, expected_prefix="con")
+                from backend.src.models import Connector
+                connector = db.query(Connector).filter(
+                    Connector.uuid == connector_uuid,
+                    Connector.team_id == ctx.team_id,
+                ).first()
+                if connector:
+                    connector_id = connector.id
+            except ValueError:
+                pass
+
+    if not connector_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not determine connector from job"
+        )
+
+    # Update connector validation status
+    inventory_service = InventoryService(db)
+    try:
+        connector = inventory_service.update_validation_status(
+            connector_id=connector_id,
+            success=data.success,
+            error_message=data.error_message,
+            latest_manifest=data.latest_manifest,
+            team_id=ctx.team_id
+        )
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Connector not found"
+        )
+
+    db.commit()
+
+    # NOTE: Job completion is NOT done here.
+    # The agent should call the standard /jobs/{guid}/complete endpoint after
+    # reporting validation results. This follows the standard tool pattern where
+    # specialized data endpoints only store intermediate results, and job lifecycle
+    # is managed by the standard completion flow.
+
+    status_str = "validated" if data.success else "failed"
+    message = "Inventory configuration validated successfully" if data.success else f"Validation failed: {data.error_message}"
+
+    logger.info(
+        f"Inventory validation completed",
+        extra={
+            "job_guid": job_guid,
+            "connector_guid": connector.guid if connector else connector_guid,
+            "success": data.success
+        }
+    )
+
+    return InventoryValidationResponse(
+        status=status_str,
+        message=message
+    )
+
+
+@router.post(
+    "/jobs/{job_guid}/inventory/folders",
+    response_model=InventoryFoldersResponse,
+    summary="Report inventory folders",
+    description="Submit discovered folders from inventory import job."
+)
+async def report_inventory_folders(
+    job_guid: str,
+    data: InventoryFoldersRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Report discovered inventory folders.
+
+    Called by agents after completing inventory import to submit
+    the discovered folder structure.
+
+    Path Parameters:
+        job_guid: GUID of the import job (job_xxx format)
+
+    Request Body:
+        InventoryFoldersRequest with folders and statistics
+
+    Returns:
+        InventoryFoldersResponse with storage confirmation
+
+    Raises:
+        404: If job or connector not found
+        400: If job is not an inventory import job
+        403: If job is not assigned to this agent
+    """
+    from backend.src.models.job import Job, JobStatus
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    from backend.src.services.inventory_service import InventoryService
+
+    # Parse job GUID
+    try:
+        job_uuid = Job.parse_guid(job_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Get job
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id,
+    ).first()
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job type is inventory_import
+    if job.tool != "inventory_import":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not an inventory import job (tool: {job.tool})"
+        )
+
+    # Verify job is assigned to this agent
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Get connector from job progress
+    progress = job.progress or {}
+    connector_id = progress.get("connector_id")
+
+    if not connector_id:
+        # Try to get connector by GUID from request
+        if data.connector_guid:
+            from backend.src.services.guid import GuidService
+            try:
+                connector_uuid = GuidService.parse_identifier(data.connector_guid, expected_prefix="con")
+                from backend.src.models import Connector
+                connector = db.query(Connector).filter(
+                    Connector.uuid == connector_uuid,
+                    Connector.team_id == ctx.team_id,
+                ).first()
+                if connector:
+                    connector_id = connector.id
+            except ValueError:
+                pass
+
+    if not connector_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not determine connector from job"
+        )
+
+    # Store the discovered folders
+    inventory_service = InventoryService(db)
+    try:
+        folders_stored = inventory_service.store_folders(
+            connector_id=connector_id,
+            team_id=ctx.team_id,
+            folders=data.folders,
+            folder_stats=data.folder_stats,
+            total_files=data.total_files,
+            total_size=data.total_size
+        )
+    except Exception as e:
+        logger.error(f"Error storing inventory folders: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to store folders: {str(e)}"
+        )
+
+    db.commit()
+
+    # NOTE: Job completion is NOT done here.
+    # The agent should call the standard /jobs/{guid}/complete endpoint after
+    # reporting folders. This follows the standard tool pattern where specialized
+    # data endpoints only store intermediate results, and job lifecycle is managed
+    # by the standard completion flow.
+
+    logger.info(
+        f"Inventory import completed",
+        extra={
+            "job_guid": job_guid,
+            "connector_guid": data.connector_guid,
+            "folders_stored": folders_stored,
+            "total_files": data.total_files
+        }
+    )
+
+    return InventoryFoldersResponse(
+        status="success",
+        message=f"Stored {folders_stored} inventory folders",
+        folders_stored=folders_stored
+    )
+
+
+@router.post(
+    "/jobs/{job_guid}/inventory/file-info",
+    response_model=InventoryFileInfoResponse,
+    summary="Report inventory FileInfo",
+    description="Submit FileInfo for collections from inventory import Phase B."
+)
+async def report_inventory_file_info(
+    job_guid: str,
+    data: InventoryFileInfoRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    agent_service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Report FileInfo for collections from inventory import.
+
+    Called by agents during inventory import Phase B (FileInfo Population)
+    to submit the extracted FileInfo for each mapped collection.
+
+    Path Parameters:
+        job_guid: GUID of the import job (job_xxx format)
+
+    Request Body:
+        connector_guid: Connector GUID (con_xxx)
+        collections: List of collection FileInfo data
+
+    Returns:
+        InventoryFileInfoResponse with update count
+
+    Raises:
+        404: If job or connector not found
+        400: If job is not an inventory import job
+        403: If job is not assigned to this agent
+    """
+    from backend.src.models.job import Job, JobStatus
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    from backend.src.services.inventory_service import InventoryService
+
+    # Parse job GUID
+    try:
+        from backend.src.services.guid import GuidService
+        job_uuid = GuidService.parse_identifier(job_guid, expected_prefix="job")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    # Get job (with team_id filter to prevent cross-tenant access)
+    job = db.query(Job).filter(
+        Job.uuid == job_uuid,
+        Job.team_id == ctx.team_id
+    ).first()
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
+
+    # Verify job type is inventory_import
+    if job.tool != "inventory_import":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not an inventory import job (tool: {job.tool})"
+        )
+
+    # Verify job is assigned to this agent
+    if job.agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job is not assigned to this agent"
+        )
+
+    # Verify job is in running status
+    if job.status != JobStatus.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Job is not in running status (status: {job.status.value})"
+        )
+
+    # Get connector ID from job progress
+    progress = job.progress or {}
+    connector_id = progress.get("connector_id")
+    connector_guid_from_job = progress.get("connector_guid")
+
+    if not connector_id and not connector_guid_from_job:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job does not have connector information"
+        )
+
+    # Verify connector GUID matches
+    if connector_guid_from_job and connector_guid_from_job != data.connector_guid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connector GUID does not match job's connector"
+        )
+
+    # Store FileInfo for each collection
+    inventory_service = InventoryService(db)
+
+    # Validate that all collection GUIDs are actually mapped to this connector
+    # This prevents agents from updating arbitrary collections
+    allowed_collections = inventory_service.get_collections_for_connector(
+        connector_id=connector_id,
+        team_id=ctx.team_id
+    )
+    allowed_guids = {c["collection_guid"] for c in allowed_collections}
+
+    submitted_guids = {c.collection_guid for c in data.collections}
+    invalid_guids = submitted_guids - allowed_guids
+
+    if invalid_guids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUIDs not mapped to this connector: {', '.join(sorted(invalid_guids))}"
+        )
+
+    try:
+        collections_data = [
+            {
+                "collection_guid": c.collection_guid,
+                "file_info": [fi.model_dump() for fi in c.file_info]
+            }
+            for c in data.collections
+        ]
+        collections_updated = inventory_service.store_file_info_batch(
+            collections_data=collections_data,
+            team_id=ctx.team_id,
+            connector_id=connector_id
+        )
+    except Exception as e:
+        logger.error(f"Error storing FileInfo: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to store FileInfo: {str(e)}"
+        )
+
+    # Update job progress to indicate Phase B complete
+    if not job.progress:
+        job.progress = {}
+    job.progress["phase_b_complete"] = True
+    job.progress["collections_with_file_info"] = collections_updated
+    db.commit()
+
+    logger.info(
+        f"Inventory FileInfo stored",
+        extra={
+            "job_guid": job_guid,
+            "connector_guid": data.connector_guid,
+            "collections_updated": collections_updated
+        }
+    )
+
+    return InventoryFileInfoResponse(
+        status="success",
+        message=f"Updated FileInfo for {collections_updated} collections",
+        collections_updated=collections_updated
+    )
+
+
+@router.get(
+    "/connectors/{connector_guid}/collections",
+    response_model=ConnectorCollectionsResponse,
+    summary="Get collections for connector",
+    description="Get collections mapped to inventory folders for a connector (for Phase B FileInfo population)."
+)
+async def get_connector_collections(
+    connector_guid: str,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Get collections mapped to a connector's inventory folders.
+
+    Used by agents during inventory import Phase B to determine which
+    collections need FileInfo populated and what folder path prefix
+    to filter inventory entries by.
+
+    Path Parameters:
+        connector_guid: Connector GUID (con_xxx format)
+
+    Returns:
+        ConnectorCollectionsResponse with list of collections and their folder paths
+
+    Raises:
+        404: If connector not found
+        400: If connector GUID format is invalid
+    """
+    from backend.src.services.inventory_service import InventoryService
+    from backend.src.services.guid import GuidService
+
+    # Parse connector GUID
+    try:
+        connector_uuid = GuidService.parse_identifier(connector_guid, expected_prefix="con")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    # Get connector
+    from backend.src.models import Connector
+    connector = db.query(Connector).filter(
+        Connector.uuid == connector_uuid,
+        Connector.team_id == ctx.team_id
+    ).first()
+
+    if not connector:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Connector not found"
+        )
+
+    # Get collections for this connector
+    inventory_service = InventoryService(db)
+    collections_data = inventory_service.get_collections_for_connector(
+        connector_id=connector.id,
+        team_id=ctx.team_id
+    )
+
+    return ConnectorCollectionsResponse(
+        connector_guid=connector_guid,
+        collections=[
+            ConnectorCollectionInfo(
+                collection_guid=c["collection_guid"],
+                folder_path=c["folder_path"]
+            )
+            for c in collections_data
+        ]
+    )

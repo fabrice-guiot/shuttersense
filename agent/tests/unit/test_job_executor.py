@@ -466,3 +466,186 @@ class TestPipelineConfigCreation:
 
         assert len(config.branching_nodes) == 1
         assert config.branching_nodes[0].condition_description == "If HDR"
+
+
+# =============================================================================
+# T071: Cached FileInfo Usage Tests (Issue #107)
+# =============================================================================
+
+
+class TestCachedFileInfo:
+    """Tests for using cached FileInfo instead of cloud API calls (T071)."""
+
+    def test_should_use_cached_file_info_when_available(self, mock_api_client):
+        """Should use cached FileInfo when present in job."""
+        executor = JobExecutor(mock_api_client)
+
+        job_with_file_info = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "file_info": [
+                {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            ],
+        }
+
+        assert executor._should_use_cached_file_info(job_with_file_info) is True
+
+    def test_should_not_use_cached_file_info_when_missing(self, mock_api_client):
+        """Should not use cached FileInfo when not present."""
+        executor = JobExecutor(mock_api_client)
+
+        job_without_file_info = {
+            "guid": "job_test",
+            "tool": "photostats",
+        }
+
+        assert executor._should_use_cached_file_info(job_without_file_info) is False
+
+    def test_should_not_use_cached_file_info_when_empty(self, mock_api_client):
+        """Should not use cached FileInfo when empty list."""
+        executor = JobExecutor(mock_api_client)
+
+        job_with_empty_file_info = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "file_info": [],
+        }
+
+        assert executor._should_use_cached_file_info(job_with_empty_file_info) is False
+
+    def test_should_not_use_cached_file_info_with_force_refresh(self, mock_api_client):
+        """Should not use cached FileInfo when force_cloud_refresh is requested (T072)."""
+        executor = JobExecutor(mock_api_client)
+
+        job_with_force_refresh = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "file_info": [
+                {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            ],
+            "parameters": {"force_cloud_refresh": True},
+        }
+
+        assert executor._should_use_cached_file_info(job_with_force_refresh) is False
+
+    def test_convert_cached_file_info(self, mock_api_client):
+        """Convert cached FileInfo from server format to adapter format."""
+        executor = JobExecutor(mock_api_client)
+
+        cached_file_info = [
+            {"key": "vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            {"key": "vacation/IMG_002.CR3", "size": 24000000, "last_modified": "2022-01-02T00:00:00Z"},
+        ]
+
+        result = executor._convert_cached_file_info(cached_file_info, "vacation")
+
+        assert len(result) == 2
+        # First file
+        assert result[0].path == "IMG_001.CR3"
+        assert result[0].size == 25000000
+        assert result[0].last_modified == "2022-01-01T00:00:00Z"
+        # Second file
+        assert result[1].path == "IMG_002.CR3"
+        assert result[1].size == 24000000
+
+    def test_convert_cached_file_info_preserves_paths_without_prefix(self, mock_api_client):
+        """Convert preserves full path when key doesn't match collection path."""
+        executor = JobExecutor(mock_api_client)
+
+        cached_file_info = [
+            {"key": "other/path/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+        ]
+
+        result = executor._convert_cached_file_info(cached_file_info, "vacation")
+
+        # Key doesn't start with "vacation/", so full key is kept
+        assert result[0].path == "other/path/IMG_001.CR3"
+
+    def test_convert_cached_file_info_skips_empty_keys(self, mock_api_client):
+        """Convert skips entries with empty or missing keys."""
+        executor = JobExecutor(mock_api_client)
+
+        cached_file_info = [
+            {"key": "vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            {"key": "", "size": 1000, "last_modified": "2022-01-01T00:00:00Z"},  # Empty key
+            {"size": 2000, "last_modified": "2022-01-01T00:00:00Z"},  # Missing key
+        ]
+
+        result = executor._convert_cached_file_info(cached_file_info, "vacation")
+
+        # Only the first entry should be included
+        assert len(result) == 1
+        assert result[0].path == "IMG_001.CR3"
+
+    def test_convert_cached_file_info_url_decodes_keys(self, mock_api_client):
+        """Convert URL-decodes keys from S3/GCS inventory (e.g., %20 -> space)."""
+        executor = JobExecutor(mock_api_client)
+
+        # S3/GCS inventory stores URL-encoded keys
+        cached_file_info = [
+            {"key": "vacation/IMG%20001-DxO_DeepPRIME%20XD2s.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            {"key": "vacation/file%26name.jpg", "size": 1000, "last_modified": "2022-01-01T00:00:00Z"},  # %26 = &
+            {"key": "vacation/special%2Bchars.tif", "size": 2000, "last_modified": "2022-01-01T00:00:00Z"},  # %2B = +
+        ]
+
+        result = executor._convert_cached_file_info(cached_file_info, "vacation")
+
+        assert len(result) == 3
+        # Verify URL decoding worked
+        assert result[0].path == "IMG 001-DxO_DeepPRIME XD2s.CR3"  # %20 decoded to space
+        assert result[1].path == "file&name.jpg"  # %26 decoded to &
+        assert result[2].path == "special+chars.tif"  # %2B decoded to +
+
+    def test_convert_cached_file_info_handles_encoded_collection_path(self, mock_api_client):
+        """Convert handles URL-encoded collection paths correctly."""
+        executor = JobExecutor(mock_api_client)
+
+        cached_file_info = [
+            {"key": "My%20Photos/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+        ]
+
+        # Collection path might also be URL-encoded
+        result = executor._convert_cached_file_info(cached_file_info, "My%20Photos")
+
+        assert len(result) == 1
+        assert result[0].path == "IMG_001.CR3"  # Relative path after removing decoded prefix
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_passes_cached_file_info(self, mock_api_client):
+        """_execute_tool passes cached FileInfo to tool methods."""
+        executor = JobExecutor(mock_api_client)
+
+        job = {
+            "guid": "job_test",
+            "tool": "photostats",
+            "collection_path": "2020/vacation",
+            "file_info": [
+                {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2022-01-01T00:00:00Z"},
+            ],
+            "file_info_source": "inventory",
+        }
+        config = {
+            "connector": {
+                "guid": "con_test",
+                "type": "s3",
+                "name": "Test S3",
+            },
+            "photo_extensions": [".cr3"],
+            "metadata_extensions": [".xmp"],
+            "require_sidecar": [],
+        }
+
+        # Mock _run_photostats to verify it receives cached_file_info
+        with patch.object(executor, '_run_photostats', new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = JobResult(success=True, results={})
+            await executor._execute_tool(job, config)
+
+            # Verify cached_file_info was passed (4th argument)
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args
+            # Arguments: collection_path, config, connector, cached_file_info
+            assert call_args[0][0] == "2020/vacation"  # collection_path
+            assert call_args[0][2] == config["connector"]  # connector
+            # The 4th argument (cached_file_info) should be a list of FileInfo
+            assert call_args[0][3] is not None
+            assert len(call_args[0][3]) == 1
