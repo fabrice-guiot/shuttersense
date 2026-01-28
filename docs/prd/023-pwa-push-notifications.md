@@ -151,7 +151,7 @@ PWA push notifications provide:
 **Rationale**: Failed jobs require user intervention; immediate notification prevents delays
 
 **Example**:
-```
+```text
 Title: Analysis Failed
 Body: PhotoStats analysis of "2024 Wedding Photos" failed: Connection timeout
 ```
@@ -172,7 +172,7 @@ Body: PhotoStats analysis of "2024 Wedding Photos" failed: Connection timeout
 **Rationale**: Users want to know when their collection status actually changes, not when routine checks find nothing new. The inflexion point represents actionable information.
 
 **Example**:
-```
+```text
 Title: New Analysis Results
 Body: PhotoStats found changes in "Client Wedding": 12 new orphaned files detected
 ```
@@ -196,17 +196,17 @@ Body: PhotoStats found changes in "Client Wedding": 12 new orphaned files detect
 - Body: Varies by trigger type
 
 **Examples**:
-```
+```text
 Title: Agent Pool Offline
 Body: All agents are offline. Jobs cannot be processed until an agent reconnects.
 ```
 
-```
+```text
 Title: Agent Error
 Body: Agent "Home Server" reported an error: Disk space critical
 ```
 
-```
+```text
 Title: Agents Available
 Body: Agent "Home Server" is back online. Job processing has resumed.
 ```
@@ -243,7 +243,7 @@ Agent offline detection has three layers, providing defense in depth:
 - Click Action: Navigate to event details
 
 **Example**:
-```
+```text
 Title: Deadline Approaching
 Body: "Smith Wedding - Final Delivery" deadline in 3 days
 ```
@@ -359,7 +359,7 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 
 **Acceptance Criteria:**
 - Settings page includes "Notifications" section
-- Toggle for each notification category (Failures, Inflexion Points, Agents, Deadlines)
+- Toggle for each notification category (Failures, Inflexion Points, Agents, Deadlines, Retry Warnings)
 - All categories enabled by default
 - Changes take effect immediately
 - Settings synced across devices for same user
@@ -367,7 +367,7 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 **Technical Notes:**
 - Store as user-level Configuration entries
 - Category: `notification_preferences`
-- Keys: `job_failures`, `inflexion_points`, `agent_status`, `deadlines`
+- Keys: `job_failures`, `inflexion_points`, `agent_status`, `deadlines`, `retry_warning`
 - Values: boolean
 
 ---
@@ -446,8 +446,8 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 - Respects user's timezone for deadline calculation
 
 **Technical Notes:**
-- Requires scheduled check (during job cleanup or dedicated cron)
-- Store `last_reminder_sent` to prevent duplicates
+- Reminders triggered by the agent job system via a daily `deadline_check` job per team (see Category 4 Scheduling Mechanism). No separate server-side cron is introduced, consistent with Non-Goals.
+- Store `last_reminder_sent` per deadline to prevent duplicate notifications (idempotent delivery tracked by `(event_guid, reminder_days_before)` key)
 - Use event's `deadline_date` and `deadline_time` fields
 - Calculate relative to user's configured timezone
 
@@ -463,9 +463,10 @@ Deadline checks are scheduled through the **existing agent job scheduler**, cons
 - Notification bell icon in header shows unread count
 - Clicking bell opens notification panel/dropdown
 - Panel shows last 20 notifications
-- Notifications marked as read when viewed
-- "Mark all read" option available
+- Notifications marked as read individually when viewed
 - Notifications older than 30 days auto-deleted
+
+**Note**: Bulk operations such as "mark all read" are out of scope for v1 (see Non-Goals).
 
 **Technical Notes:**
 - Store in new `notifications` table
@@ -549,6 +550,7 @@ New user-level notification preferences:
 | `notification_preferences` | `inflexion_points` | Boolean | true | Analysis change notifications |
 | `notification_preferences` | `agent_status` | Boolean | true | Agent availability notifications |
 | `notification_preferences` | `deadlines` | Boolean | true | Event deadline reminders |
+| `notification_preferences` | `retry_warning` | Boolean | true | Retry warning notifications |
 | `notification_preferences` | `deadline_days_before` | Integer | 3 | Days before deadline to remind |
 
 ---
@@ -698,7 +700,7 @@ New user-level notification preferences:
 
 ### Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Frontend (React)                          │
 │  ┌─────────────────────────────────────────────────────────────┐│
@@ -813,7 +815,7 @@ self.addEventListener('notificationclick', (event) => {
 
 ### Push Subscription Flow
 
-```
+```text
 User                           Frontend                         Backend
   │                               │                                │
   │  Click "Enable Notifications" │                                │
@@ -847,7 +849,7 @@ User                           Frontend                         Backend
 
 ### Notification Delivery Flow
 
-```
+```text
 Event Trigger                    Backend                        Push Service
   │                                │                                │
   │  Job fails                     │                                │
@@ -923,7 +925,7 @@ def complete_job_no_change(self, job_guid: str, referenced_result_guid: str, ...
 
 ### API Endpoints
 
-```
+```text
 POST   /api/notifications/subscribe     - Register push subscription
 DELETE /api/notifications/subscribe     - Remove push subscription
 GET    /api/notifications/status        - Check subscription status
@@ -997,7 +999,7 @@ Add to `package.json`:
 
 Add to `requirements.txt`:
 
-```
+```text
 pywebpush>=2.0.0
 ```
 
@@ -1256,7 +1258,7 @@ Push notifications on iOS have specific requirements:
 
 Provide clear instructions for iOS users:
 
-```
+```text
 To receive notifications on iOS:
 
 1. Tap the Share button in Safari
@@ -1389,7 +1391,7 @@ npx web-push generate-vapid-keys
 ```
 
 Store these in environment variables:
-```
+```bash
 VAPID_PUBLIC_KEY=BEl62iUYgU...
 VAPID_PRIVATE_KEY=xYz123...
 VAPID_SUBJECT=mailto:admin@shuttersense.ai
@@ -1445,6 +1447,12 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 ---
 
 ## Revision History
+
+- **2026-01-28 (v1.2)**: Reviewer feedback - consistency fixes
+  - Resolved Non-Goals vs User Story 9 contradiction: removed "Mark all read" from acceptance criteria (bulk operations are a Non-Goal for v1)
+  - Added language identifiers to all fenced code blocks (markdownlint compliance)
+  - Updated User Story 8 Technical Notes to reference agent-job scheduling approach instead of conflicting "job cleanup or dedicated cron" guidance
+  - Added missing `retry_warning` preference key to Configuration Entries table and User Story 4
 
 - **2026-01-28 (v1.1)**: Reviewer feedback - scheduling mechanisms
   - Category 4 (Event Deadlines): Documented agent job scheduler as scheduling mechanism with `deadline_check` job type, daily frequency, backfill window, idempotent delivery, and performance assessment
