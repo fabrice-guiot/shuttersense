@@ -3,7 +3,7 @@
 **Feature Branch**: `108-remove-cli-direct-usage`
 **Created**: 2026-01-28
 **Status**: Draft
-**Input**: User description: "Github issue #93, based on the full PRD: docs/prd/000-remove-cli-direct-usage.md"
+**Input**: User description: "GitHub issue #93, based on the full PRD: docs/prd/000-remove-cli-direct-usage.md"
 
 ## User Scenarios & Testing *(mandatory)*
 

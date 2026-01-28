@@ -147,7 +147,7 @@ shuttersense-agent test /path/to/photos
 shuttersense-agent run col_01hgw2bbg... --tool photostats
 
 # Verify analysis modules still importable
-python3 -c "from agent.src.analysis import calculate_stats; print('OK')"
+python3 -c "from src.analysis import calculate_stats; print('OK')"
 ```
 
 ---

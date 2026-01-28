@@ -6,7 +6,9 @@ Auto-generated from all feature plans. Last updated: 2026-01-21
 
 ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
 
-### CLI Tools
+### CLI Tools *(deprecated — Issue #108)*
+
+> **Note**: Standalone CLI tools are being removed in favor of agent commands (`shuttersense-agent test`, `shuttersense-agent run`). See Issue #108.
 
 1. **PhotoStats** - Analyze photo collections for orphaned files and sidecar issues
 2. **Photo Pairing Tool** - Analyze filename patterns, group files, track camera usage
@@ -350,10 +352,11 @@ Example: `col_01hgw2bbg0000000000000001`
 
 See `docs/domain-model.md` for the complete prefix table including planned entities.
 
-### 1. Independent CLI Tools
-- Each tool is a standalone Python script at repository root
-- Tools can run independently without requiring other tools
-- Use shared infrastructure (PhotoAdminConfig, utils/) but remain decoupled
+### 1. Independent CLI Tools *(deprecated — replaced by Agent-Only Tool Execution, Issue #108)*
+- ~~Each tool is a standalone Python script at repository root~~
+- ~~Tools can run independently without requiring other tools~~
+- Analysis modules remain in `agent/src/analysis/` and are invoked via agent CLI commands
+- See Principle 7 (Agent-Only Execution) for the replacement architecture
 
 ### 2. Testing & Quality
 - Comprehensive test coverage (target >80% for core logic)
@@ -538,7 +541,7 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
-- 108-remove-cli-direct-usage: Added Python 3.10+ (agent and backend), TypeScript 5.9.3 (frontend - minimal changes) + Click 8.1+ (agent CLI), FastAPI (backend API), httpx (agent HTTP client), Pydantic v2 (data validation), platformdirs (config paths)
+- 108-remove-cli-direct-usage: Remove standalone CLI tools (photo_stats.py, photo_pairing.py, pipeline_validation.py) and consolidate all tool execution through agent commands (test, collection, run, sync, self-test). Added local caching, offline execution, and new agent API endpoints for collection management and result upload
 
 ### Issue #107: Cloud Storage Bucket Inventory Import (2026-01)
 - S3 Inventory and GCS Storage Insights integration
