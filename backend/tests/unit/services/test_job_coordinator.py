@@ -1098,6 +1098,7 @@ class TestServerSideNoChangeDetection:
     ):
         """Server detects no-change and auto-completes the job."""
         from backend.src.services.input_state_service import get_input_state_service
+        from backend.src.services.config_loader import DatabaseConfigLoader
 
         agent = create_agent(test_team, test_user)
 
@@ -1108,9 +1109,18 @@ class TestServerSideNoChangeDetection:
         ]
         collection = create_inventory_collection(test_team, bound_agent=agent, file_info=file_info)
 
+        # Build config dict matching what server-side hash computation uses
+        loader = DatabaseConfigLoader(team_id=test_team.id, db=test_db_session)
+        config = {
+            "photo_extensions": loader.photo_extensions,
+            "metadata_extensions": loader.metadata_extensions,
+            "camera_mappings": loader.camera_mappings,
+            "processing_methods": loader.processing_methods,
+            "require_sidecar": loader.require_sidecar,
+        }
+
         # Compute the input state hash that matches the current state
         input_state_service = get_input_state_service()
-        config = {}  # Empty config for test
         current_hash = input_state_service.compute_collection_input_state_hash(
             collection, config, "photostats"
         )
@@ -1188,6 +1198,7 @@ class TestServerSideNoChangeDetection:
     ):
         """Server-side auto-complete links to the previous result."""
         from backend.src.services.input_state_service import get_input_state_service
+        from backend.src.services.config_loader import DatabaseConfigLoader
         from backend.src.models import AnalysisResult
 
         agent = create_agent(test_team, test_user)
@@ -1197,9 +1208,18 @@ class TestServerSideNoChangeDetection:
         ]
         collection = create_inventory_collection(test_team, bound_agent=agent, file_info=file_info)
 
+        # Build config dict matching what server-side hash computation uses
+        loader = DatabaseConfigLoader(team_id=test_team.id, db=test_db_session)
+        config = {
+            "photo_extensions": loader.photo_extensions,
+            "metadata_extensions": loader.metadata_extensions,
+            "camera_mappings": loader.camera_mappings,
+            "processing_methods": loader.processing_methods,
+            "require_sidecar": loader.require_sidecar,
+        }
+
         # Compute matching hash
         input_state_service = get_input_state_service()
-        config = {}
         current_hash = input_state_service.compute_collection_input_state_hash(
             collection, config, "photostats"
         )

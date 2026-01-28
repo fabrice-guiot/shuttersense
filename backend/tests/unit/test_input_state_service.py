@@ -563,6 +563,39 @@ class TestComputeInventoryFileHash:
 
         assert hash_inventory == hash_tuples
 
+    def test_url_encoded_paths_are_decoded(self, service):
+        """Should URL-decode paths to match agent-side behavior.
+
+        S3/GCS inventory keys are URL-encoded (e.g., spaces become %20).
+        The agent URL-decodes these before hashing, so we must too.
+        """
+        # URL-encoded FileInfo (as stored in S3/GCS inventory)
+        encoded_file_info = [
+            {"key": "2025/Spring%20Training/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49Z"},
+            {"key": "2025/Event%20%26%20Session/IMG_002.dng", "size": 26000000, "last_modified": "2022-11-25T13:30:50Z"},
+        ]
+
+        # Equivalent with decoded paths (what agent uses)
+        decoded_file_info = [
+            {"key": "2025/Spring Training/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49Z"},
+            {"key": "2025/Event & Session/IMG_002.dng", "size": 26000000, "last_modified": "2022-11-25T13:30:50Z"},
+        ]
+
+        # Both should produce the same hash (decoded internally)
+        hash_encoded = service.compute_inventory_file_hash(encoded_file_info)
+        hash_decoded = service.compute_inventory_file_hash(decoded_file_info)
+
+        assert hash_encoded == hash_decoded
+
+        # Verify against direct file_list_hash with decoded paths
+        files_tuples = [
+            ("2025/Spring Training/IMG_001.dng", 25000000, 1669383049.0),
+            ("2025/Event & Session/IMG_002.dng", 26000000, 1669383050.0),
+        ]
+        hash_tuples = service.compute_file_list_hash(files_tuples)
+
+        assert hash_encoded == hash_tuples
+
 
 class TestCanComputeServerSideHash:
     """Tests for InputStateService.can_compute_server_side_hash."""

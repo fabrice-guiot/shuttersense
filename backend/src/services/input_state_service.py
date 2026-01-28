@@ -227,6 +227,10 @@ class InputStateService:
         Converts inventory FileInfo format (key, size, last_modified) to the
         same format used by agent-side file list hashing for compatibility.
 
+        Note: S3/GCS inventory keys are URL-encoded (e.g., %20 for space).
+        The agent URL-decodes these keys before hashing, so we must do the same
+        to ensure hash compatibility.
+
         Args:
             file_info: List of FileInfo dicts from Collection.file_info
                        Each dict has: key, size, last_modified, etag?, storage_class?
@@ -241,6 +245,8 @@ class InputStateService:
             ... ]
             >>> hash = service.compute_inventory_file_hash(file_info)
         """
+        from urllib.parse import unquote
+
         # Convert inventory FileInfo to (path, size, mtime) tuples
         # This matches the agent-side format for compatibility
         files: List[Tuple[str, int, float]] = []
@@ -249,10 +255,14 @@ class InputStateService:
             size = fi.get("size", 0)
             last_modified = fi.get("last_modified", "")
 
+            # URL-decode the key to match agent-side behavior
+            # (S3/GCS inventory keys are URL-encoded, agent decodes them)
+            decoded_key = unquote(key)
+
             # Parse ISO8601 timestamp to Unix timestamp
             mtime = self._parse_iso8601_to_timestamp(last_modified)
             if mtime is not None:
-                files.append((key, size, mtime))
+                files.append((decoded_key, size, mtime))
 
         # Use existing file list hash computation
         return self.compute_file_list_hash(files)

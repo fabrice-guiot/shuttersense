@@ -625,7 +625,7 @@ class JobCoordinatorService:
 
         # Get configuration for hash computation
         if config is None:
-            config = self._get_tool_config(job.tool, job.team_id)
+            config = self._get_tool_config(job)
 
         # Import InputStateService here to avoid circular imports
         from backend.src.services.input_state_service import get_input_state_service
@@ -780,28 +780,113 @@ class JobCoordinatorService:
 
     def _get_tool_config(
         self,
-        tool: str,
-        team_id: int
+        job: Job
     ) -> Optional[Dict[str, Any]]:
         """
-        Get tool configuration for a team.
+        Get tool configuration for a job.
+
+        Builds the same config dict structure that the agent receives from
+        the /api/agent/v1/jobs/{job_guid}/config endpoint. This ensures
+        server-side hash computation matches agent-side computation.
 
         Args:
-            tool: Tool name (photostats, photo_pairing, pipeline_validation)
-            team_id: Team ID
+            job: Job to get configuration for
 
         Returns:
-            Configuration dict or None if not found
+            Configuration dict matching agent's format, or None on error
         """
         try:
-            from backend.src.services.config_service import ConfigService
-            config_service = ConfigService(self.db)
-            config = config_service.get_config(team_id=team_id)
-            if config:
-                return config.config_data
+            from backend.src.services.config_loader import DatabaseConfigLoader
+
+            loader = DatabaseConfigLoader(team_id=job.team_id, db=self.db)
+
+            # Build config dict matching JobConfigData structure
+            config: Dict[str, Any] = {
+                "photo_extensions": loader.photo_extensions,
+                "metadata_extensions": loader.metadata_extensions,
+                "camera_mappings": loader.camera_mappings,
+                "processing_methods": loader.processing_methods,
+                "require_sidecar": loader.require_sidecar,
+            }
+
+            # Add pipeline if job has one (agent includes this in hash)
+            if job.pipeline:
+                config["pipeline"] = {
+                    "guid": job.pipeline.guid,
+                    "name": job.pipeline.name,
+                    "version": job.pipeline_version or job.pipeline.version,
+                    "nodes": job.pipeline.nodes_json or [],
+                    "edges": job.pipeline.edges_json or [],
+                }
+
+            return config
         except Exception as e:
             logger.warning(f"Failed to get tool config: {e}")
         return None
+
+    def _warn_if_inventory_no_change_mismatch(
+        self,
+        job: Job,
+        agent_hash: str,
+        input_state_json: Optional[str] = None
+    ) -> None:
+        """
+        Log warning if agent reports NO_CHANGE for an inventory-sourced collection.
+
+        This indicates a hash mismatch - server-side detection should have
+        auto-completed this job. Logs both hashes to help debug the mismatch.
+
+        Args:
+            job: The job being completed
+            agent_hash: Input state hash reported by agent
+            input_state_json: Optional input state JSON from agent (for debugging)
+        """
+        if not job.collection:
+            return
+
+        collection = job.collection
+        if collection.file_info_source != "inventory":
+            return
+
+        # This is unexpected - server should have auto-completed this job
+        # Recalculate server-side hash to compare
+        server_hash = None
+        try:
+            config = self._get_tool_config(job)
+            if config:
+                from backend.src.services.input_state_service import get_input_state_service
+                input_state_service = get_input_state_service()
+                server_hash = input_state_service.compute_collection_input_state_hash(
+                    collection=collection,
+                    configuration=config,
+                    tool=job.tool
+                )
+        except Exception as e:
+            logger.warning(f"Failed to compute server hash for debugging: {e}")
+
+        # Log warning with both hashes
+        extra = {
+            "job_guid": job.guid,
+            "collection_guid": collection.guid,
+            "file_info_source": collection.file_info_source,
+            "agent_hash": agent_hash,
+            "server_hash": server_hash,
+            "hash_match": agent_hash == server_hash if server_hash else None,
+        }
+
+        if input_state_json:
+            # Truncate if too long for logging
+            if len(input_state_json) > 2000:
+                extra["agent_input_state_json"] = input_state_json[:2000] + "... (truncated)"
+            else:
+                extra["agent_input_state_json"] = input_state_json
+
+        logger.warning(
+            "Agent reported NO_CHANGE for inventory-sourced collection - "
+            "server-side detection should have auto-completed this job. "
+            "Hash mismatch indicates config or file_info inconsistency.",
+            extra=extra
+        )
 
     # =========================================================================
     # Load Balancing
@@ -1194,6 +1279,10 @@ class JobCoordinatorService:
         # Verify signature (basic validation)
         if not self.verify_signature(job, {"hash": input_state_hash}, signature):
             raise ValidationError("Invalid result signature")
+
+        # Debug: Warn if agent reports NO_CHANGE for inventory-sourced collection
+        # This shouldn't happen - server-side detection should have auto-completed it
+        self._warn_if_inventory_no_change_mismatch(job, input_state_hash, input_state_json)
 
         # Look up source result
         try:

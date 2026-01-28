@@ -560,6 +560,20 @@ class JobExecutor:
                 return False, current_hash
 
             # Collection unchanged - complete with NO_CHANGE
+            file_info_source = job.get("file_info_source")
+
+            # Warn if server should have auto-completed this (inventory collection)
+            if file_info_source == "inventory":
+                logger.warning(
+                    f"Agent completing NO_CHANGE for inventory-sourced collection - "
+                    f"server should have auto-completed this job. Possible hash mismatch.",
+                    extra={
+                        "job_guid": job_guid,
+                        "file_info_source": file_info_source,
+                        "input_state_hash": current_hash[:16] + "...",
+                    }
+                )
+
             logger.info(
                 f"Collection unchanged for job {job_guid} - completing with NO_CHANGE",
                 extra={
@@ -578,12 +592,52 @@ class JobExecutor:
             # Sign the request
             signature = self._result_signer.sign({"hash": current_hash})
 
+            # For inventory collections, force upload input_state_json for debugging
+            # (server should have auto-completed, so this helps diagnose hash mismatch)
+            input_state_json = None
+            if file_info_source == "inventory":
+                try:
+                    from urllib.parse import unquote
+
+                    # Build files list from cached FileInfo for debugging
+                    # IMPORTANT: Must URL-decode keys to match what's actually hashed
+                    cached_file_info = job.get("file_info", [])
+                    files_for_json = []
+                    for info in cached_file_info:
+                        # URL-decode the key (same as _convert_cached_file_info)
+                        key = unquote(info.get("key", ""))
+                        # Convert to (path, size, mtime) tuple
+                        mtime = 0
+                        if info.get("last_modified"):
+                            try:
+                                from datetime import datetime
+                                dt = datetime.fromisoformat(
+                                    info["last_modified"].replace("Z", "+00:00")
+                                )
+                                mtime = int(dt.timestamp())
+                            except (ValueError, AttributeError):
+                                pass
+                        files_for_json.append((key, info["size"], mtime))
+
+                    input_state_json = computer.compute_input_state_json(
+                        files=files_for_json,
+                        configuration=config,
+                        tool=tool
+                    )
+                    logger.info(
+                        f"Including input_state_json for debugging inventory hash mismatch",
+                        extra={"job_guid": job_guid, "json_size": len(input_state_json)}
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to compute input_state_json for debugging: {e}")
+
             # Submit NO_CHANGE completion
             await self._api_client.complete_job_no_change(
                 job_guid=job_guid,
                 input_state_hash=current_hash,
                 source_result_guid=previous_result["guid"],
                 signature=signature,
+                input_state_json=input_state_json,
             )
 
             return True, current_hash

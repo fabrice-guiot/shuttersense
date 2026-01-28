@@ -653,7 +653,11 @@ export function ResultDetailPanel({
                 Collection Unchanged
               </div>
               <div className="text-blue-600 dark:text-blue-300">
-                This result references a previous analysis because the collection has not changed.
+                {(result.results as unknown as Record<string, unknown>)?._server_side_no_change ? (
+                  <>The bucket inventory showed that the collection had not changed. This result references a previous analysis.</>
+                ) : (
+                  <>This result references a previous analysis because the collection has not changed.</>
+                )}
                 {result.download_report_from && (
                   <span className="block mt-1 text-xs">
                     Report source: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">{result.download_report_from}</code>

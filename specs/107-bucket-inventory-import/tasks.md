@@ -283,7 +283,7 @@
 - [x] T135 [US7] Integration test: change detected, job sent to agent in `backend/tests/unit/services/test_job_coordinator.py`
 - [x] T136 [US7] Integration test: non-inventory FileInfo, job sent to agent in `backend/tests/unit/services/test_job_coordinator.py`
 - [x] T137 [US7] Integration test: no previous execution, job sent to agent in `backend/tests/unit/services/test_job_coordinator.py`
-- [ ] T138 [US7] Integration test: next job returned after auto-completion in API endpoint test (deferred - needs claim_job endpoint test)
+- [x] T138 [US7] Integration test: next job returned after auto-completion in API endpoint test
 - [ ] T139 [US7] Performance test: SC-011 - server-side detection adds <50ms latency (deferred - performance tests)
 
 **Checkpoint**: Server auto-completes "no change" jobs for inventory-sourced Collections without agent involvement
@@ -482,7 +482,8 @@ backend/tests/
 │   │   ├── test_inventory_api.py         # T016, T016b, T040a, T040b, T062, T062a, T062b, T073, T073a, T093a, T099a
 │   │   ├── test_inventory_validation_flow.py  # T016a
 │   │   ├── test_inventory_scheduling.py  # T084a
-│   │   └── test_nochange_detection.py    # T134, T135, T136, T137, T138
+│   │   └── test_nochange_detection.py    # T134, T135, T136, T137
+│   ├── test_job_claim.py                   # T138
 │   └── tools/
 │       └── test_fileinfo_integration.py  # T071a, T117
 ├── performance/

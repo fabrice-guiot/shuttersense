@@ -7,9 +7,13 @@ Tests job claiming via the agent API including:
 - Capability matching
 - Bound agent routing
 - Tenant isolation
+- Server-side auto-completion loop (Phase 7)
 
 Issue #90 - Distributed Agent Architecture (Phase 5)
 Task: T072
+
+Issue #107 - Bucket Inventory Import (Phase 7)
+Task: T138
 """
 
 import pytest
@@ -196,6 +200,144 @@ class TestJobClaimEndpoint:
 
         assert response.status_code == 403
         assert "must be online" in response.json()["detail"].lower()
+
+    # =========================================================================
+    # Phase 7: Server-Side Auto-Completion Loop (Issue #107, T138)
+    # =========================================================================
+
+    def test_claim_job_returns_next_after_auto_completion(
+        self,
+        agent_client,
+        test_db_session,
+        test_team,
+        create_job,
+        create_inventory_collection,
+        create_previous_result,
+    ):
+        """Auto-completed job is skipped and next available job is returned.
+
+        When the endpoint auto-completes a job via server-side no-change
+        detection, it loops and returns the next claimable job to the agent.
+
+        Issue #107 - Phase 7 (Server-Side No-Change Detection)
+        Task: T138 [US7]
+        """
+        from backend.src.services.input_state_service import get_input_state_service
+        from backend.src.services.config_loader import DatabaseConfigLoader
+
+        # Create inventory collection with file info
+        file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+            {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+        ]
+        inventory_collection = create_inventory_collection(
+            test_team, file_info=file_info
+        )
+
+        # Build config dict matching what server-side hash computation uses
+        # (same structure as _get_tool_config in JobCoordinatorService)
+        loader = DatabaseConfigLoader(team_id=test_team.id, db=test_db_session)
+        config = {
+            "photo_extensions": loader.photo_extensions,
+            "metadata_extensions": loader.metadata_extensions,
+            "camera_mappings": loader.camera_mappings,
+            "processing_methods": loader.processing_methods,
+            "require_sidecar": loader.require_sidecar,
+        }
+
+        # Compute hash matching current state using same config as server
+        input_state_service = get_input_state_service()
+        current_hash = input_state_service.compute_collection_input_state_hash(
+            inventory_collection, config, "photostats"
+        )
+
+        # Create previous result with matching hash → triggers auto-completion
+        create_previous_result(
+            test_team, inventory_collection, "photostats",
+            input_state_hash=current_hash
+        )
+
+        # Job 1: Inventory collection → will be auto-completed (created first = claimed first)
+        auto_job = create_job(
+            test_team, tool="photostats", collection=inventory_collection
+        )
+
+        # Job 2: Normal job (no inventory collection) → should be returned to agent
+        normal_job = create_job(test_team, tool="photostats")
+
+        response = agent_client.post("/api/agent/v1/jobs/claim")
+
+        assert response.status_code == 200
+        data = response.json()
+        # Should receive the normal job (auto-completed job was skipped)
+        assert data["guid"] == normal_job.guid
+
+        # Verify the first job was auto-completed by the server
+        test_db_session.refresh(auto_job)
+        assert auto_job.status == JobStatus.COMPLETED
+
+        # Verify the second job was assigned to the agent
+        test_db_session.refresh(normal_job)
+        assert normal_job.status == JobStatus.ASSIGNED
+
+    def test_claim_job_204_when_all_auto_completed(
+        self,
+        agent_client,
+        test_db_session,
+        test_team,
+        create_job,
+        create_inventory_collection,
+        create_previous_result,
+    ):
+        """Returns 204 when all claimable jobs are auto-completed server-side.
+
+        When every available job triggers server-side no-change detection and
+        no more jobs remain, the endpoint returns 204 No Content.
+
+        Issue #107 - Phase 7 (Server-Side No-Change Detection)
+        Task: T138 [US7]
+        """
+        from backend.src.services.input_state_service import get_input_state_service
+        from backend.src.services.config_loader import DatabaseConfigLoader
+
+        file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+        collection = create_inventory_collection(test_team, file_info=file_info)
+
+        # Build config dict matching what server-side hash computation uses
+        loader = DatabaseConfigLoader(team_id=test_team.id, db=test_db_session)
+        config = {
+            "photo_extensions": loader.photo_extensions,
+            "metadata_extensions": loader.metadata_extensions,
+            "camera_mappings": loader.camera_mappings,
+            "processing_methods": loader.processing_methods,
+            "require_sidecar": loader.require_sidecar,
+        }
+
+        input_state_service = get_input_state_service()
+        current_hash = input_state_service.compute_collection_input_state_hash(
+            collection, config, "photostats"
+        )
+
+        create_previous_result(
+            test_team, collection, "photostats",
+            input_state_hash=current_hash
+        )
+
+        # Only inventory job → auto-completed, nothing left
+        auto_job = create_job(
+            test_team, tool="photostats", collection=collection
+        )
+
+        response = agent_client.post("/api/agent/v1/jobs/claim")
+
+        assert response.status_code == 204
+        assert response.content == b""
+
+        # Verify the job was auto-completed
+        test_db_session.refresh(auto_job)
+        assert auto_job.status == JobStatus.COMPLETED
 
 
 # ============================================================================
@@ -392,3 +534,63 @@ def offline_agent_client(
         yield client
 
     app.dependency_overrides.clear()
+
+
+# ============================================================================
+# Phase 7: Server-Side Auto-Completion Fixtures (Issue #107, T138)
+# ============================================================================
+
+@pytest.fixture
+def create_inventory_collection(test_db_session):
+    """Factory fixture to create collections with inventory file info."""
+    from backend.src.models.collection import Collection, CollectionType, CollectionState
+
+    def _create(team, file_info=None, bound_agent=None):
+        collection = Collection(
+            team_id=team.id,
+            name="Inventory Collection",
+            location="/photos/inventory",
+            type=CollectionType.LOCAL,
+            state=CollectionState.LIVE,
+            file_info=file_info or [
+                {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+                {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+            ],
+            file_info_source="inventory",
+            bound_agent_id=bound_agent.id if bound_agent else None,
+        )
+        test_db_session.add(collection)
+        test_db_session.commit()
+        test_db_session.refresh(collection)
+        return collection
+
+    return _create
+
+
+@pytest.fixture
+def create_previous_result(test_db_session):
+    """Factory fixture to create a previous AnalysisResult with input_state_hash."""
+    from backend.src.models.analysis_result import AnalysisResult
+    from backend.src.models import ResultStatus
+
+    def _create(team, collection, tool, input_state_hash):
+        result = AnalysisResult(
+            team_id=team.id,
+            collection_id=collection.id,
+            tool=tool,
+            status=ResultStatus.COMPLETED,
+            started_at=datetime.utcnow(),
+            completed_at=datetime.utcnow(),
+            duration_seconds=1.0,
+            files_scanned=2,
+            issues_found=0,
+            results_json={"total_files": 2},
+            report_html="<html>Previous Report</html>",
+            input_state_hash=input_state_hash,
+        )
+        test_db_session.add(result)
+        test_db_session.commit()
+        test_db_session.refresh(result)
+        return result
+
+    return _create
