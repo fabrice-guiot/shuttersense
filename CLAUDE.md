@@ -18,6 +18,8 @@ ShutterSense.ai - Capture. Process. Analyze. A comprehensive solution for analyz
 - **Frontend** (React/TypeScript) - Modern, accessible UI with real-time progress updates
 
 ## Active Technologies
+- Python 3.10+ (agent and backend), TypeScript 5.9.3 (frontend - minimal changes) + Click 8.1+ (agent CLI), FastAPI (backend API), httpx (agent HTTP client), Pydantic v2 (data validation), platformdirs (config paths) (108-remove-cli-direct-usage)
+- PostgreSQL 12+ (server), JSON files (agent local cache), SQLAlchemy 2.0+ (ORM) (108-remove-cli-direct-usage)
 
 ### Backend
 - **Python 3.10+** - Required for match/case syntax
@@ -536,17 +538,15 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 108-remove-cli-direct-usage: Added Python 3.10+ (agent and backend), TypeScript 5.9.3 (frontend - minimal changes) + Click 8.1+ (agent CLI), FastAPI (backend API), httpx (agent HTTP client), Pydantic v2 (data validation), platformdirs (config paths)
 
 ### Issue #107: Cloud Storage Bucket Inventory Import (2026-01)
 - S3 Inventory and GCS Storage Insights integration
 - Connector-based AnalysisResult tracking
-- Standardized tool completion pattern
 
 ### Issue #106: Fix Trend Aggregation (2026-01)
-- Recharts integration for data visualization
 
 ### Issue #22: Storage Optimization (2026-01)
-- Result retention policies and cleanup
 
 ### Phase 7 Production-Ready Application (2026-01-09)
 
