@@ -262,29 +262,29 @@
 
 ### Backend Implementation
 
-- [ ] T120 [US7] Create input state hash computation service in `backend/src/services/input_state_hash_service.py`
-- [ ] T121 [US7] Implement FileInfo hash computation (deterministic hash of file list)
-- [ ] T122 [US7] Implement config hash computation (hash of relevant job config data)
-- [ ] T123 [US7] Combine FileInfo hash + config hash into input_state_hash
-- [ ] T124 [US7] Extend job claim endpoint to check for inventory-sourced FileInfo (`file_info_source: "inventory"`)
-- [ ] T125 [US7] Add server-side hash comparison against previous execution's `input_state_hash`
-- [ ] T126 [US7] Implement auto-completion with `termination_status: "no_change"` when hashes match
-- [ ] T127 [US7] Return next available job to agent when current job is auto-completed
-- [ ] T128 [US7] Add metadata to auto-completed jobs indicating server-side detection
-- [ ] T129 [US7] Skip server-side detection when `file_info_source` is null or "api"
-- [ ] T130 [US7] Skip server-side detection when no previous execution result exists
+- [x] T120 [US7] Create input state hash computation service in `backend/src/services/input_state_service.py` (existing, extended)
+- [x] T121 [US7] Implement FileInfo hash computation (deterministic hash of file list)
+- [x] T122 [US7] Implement config hash computation (hash of relevant job config data)
+- [x] T123 [US7] Combine FileInfo hash + config hash into input_state_hash
+- [x] T124 [US7] Extend job claim endpoint to check for inventory-sourced FileInfo (`file_info_source: "inventory"`)
+- [x] T125 [US7] Add server-side hash comparison against previous execution's `input_state_hash`
+- [x] T126 [US7] Implement auto-completion with `status: NO_CHANGE` when hashes match
+- [x] T127 [US7] Return next available job to agent when current job is auto-completed
+- [x] T128 [US7] Add metadata to auto-completed jobs indicating server-side detection (`_server_side_no_change: true`)
+- [x] T129 [US7] Skip server-side detection when `file_info_source` is null or "api"
+- [x] T130 [US7] Skip server-side detection when no previous execution result exists
 
 ### Tests for US7
 
-- [ ] T131 [P] [US7] Unit tests for FileInfo hash computation (deterministic, order-independent) in `backend/tests/unit/services/test_input_state_hash_service.py`
-- [ ] T132 [P] [US7] Unit tests for config hash computation in `backend/tests/unit/services/test_input_state_hash_service.py`
-- [ ] T133 [P] [US7] Unit tests for hash comparison logic in `backend/tests/unit/services/test_input_state_hash_service.py`
-- [ ] T134 [US7] Integration test: no-change detected, job auto-completed in `backend/tests/integration/api/test_nochange_detection.py`
-- [ ] T135 [US7] Integration test: change detected, job sent to agent in `backend/tests/integration/api/test_nochange_detection.py`
-- [ ] T136 [US7] Integration test: non-inventory FileInfo, job sent to agent in `backend/tests/integration/api/test_nochange_detection.py`
-- [ ] T137 [US7] Integration test: no previous execution, job sent to agent in `backend/tests/integration/api/test_nochange_detection.py`
-- [ ] T138 [US7] Integration test: next job returned after auto-completion in `backend/tests/integration/api/test_nochange_detection.py`
-- [ ] T139 [US7] Performance test: SC-011 - server-side detection adds <50ms latency in `backend/tests/performance/test_nochange_performance.py`
+- [x] T131 [P] [US7] Unit tests for FileInfo hash computation (deterministic, order-independent) in `backend/tests/unit/test_input_state_service.py`
+- [x] T132 [P] [US7] Unit tests for config hash computation in `backend/tests/unit/test_input_state_service.py`
+- [x] T133 [P] [US7] Unit tests for hash comparison logic in `backend/tests/unit/test_input_state_service.py`
+- [x] T134 [US7] Integration test: no-change detected, job auto-completed in `backend/tests/unit/services/test_job_coordinator.py`
+- [x] T135 [US7] Integration test: change detected, job sent to agent in `backend/tests/unit/services/test_job_coordinator.py`
+- [x] T136 [US7] Integration test: non-inventory FileInfo, job sent to agent in `backend/tests/unit/services/test_job_coordinator.py`
+- [x] T137 [US7] Integration test: no previous execution, job sent to agent in `backend/tests/unit/services/test_job_coordinator.py`
+- [ ] T138 [US7] Integration test: next job returned after auto-completion in API endpoint test (deferred - needs claim_job endpoint test)
+- [ ] T139 [US7] Performance test: SC-011 - server-side detection adds <50ms latency (deferred - performance tests)
 
 **Checkpoint**: Server auto-completes "no change" jobs for inventory-sourced Collections without agent involvement
 

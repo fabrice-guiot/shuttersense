@@ -955,3 +955,287 @@ class TestCollectionTestJobHandling:
         )
 
         assert completed_job.status == JobStatus.COMPLETED
+
+
+# ============================================================================
+# Phase 7: Server-Side No-Change Detection Tests (Issue #107)
+# ============================================================================
+
+class TestServerSideNoChangeDetection:
+    """Tests for server-side no-change detection for inventory-sourced collections.
+
+    When a collection has file_info from bucket inventory (file_info_source='inventory'),
+    the server can compute Input State hash and compare with previous result to skip
+    redundant job execution.
+
+    Issue #107 - Bucket Inventory Import (Phase 7)
+    """
+
+    @pytest.fixture
+    def create_inventory_collection(self, test_db_session):
+        """Factory fixture to create collections with inventory file info."""
+        def _create(team, bound_agent=None, file_info=None):
+            import tempfile
+
+            temp_dir = tempfile.mkdtemp()
+
+            collection = Collection(
+                team_id=team.id,
+                name="Inventory Collection",
+                location=temp_dir,
+                type=CollectionType.LOCAL,
+                state=CollectionState.LIVE,
+                connector_id=None,
+                bound_agent_id=bound_agent.id if bound_agent else None,
+                file_info=file_info or [
+                    {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+                    {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+                ],
+                file_info_source="inventory",
+            )
+            test_db_session.add(collection)
+            test_db_session.commit()
+            test_db_session.refresh(collection)
+
+            return collection
+
+        return _create
+
+    @pytest.fixture
+    def create_previous_result(self, test_db_session):
+        """Factory fixture to create a previous AnalysisResult with input_state_hash."""
+        def _create(team, collection, tool, input_state_hash):
+            from backend.src.models import AnalysisResult, ResultStatus
+
+            result = AnalysisResult(
+                team_id=team.id,
+                collection_id=collection.id,
+                tool=tool,
+                status=ResultStatus.COMPLETED,
+                started_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                duration_seconds=1.0,
+                files_scanned=2,
+                issues_found=0,
+                results_json={"total_files": 2},
+                report_html="<html>Previous Report</html>",
+                input_state_hash=input_state_hash,
+            )
+            test_db_session.add(result)
+            test_db_session.commit()
+            test_db_session.refresh(result)
+
+            return result
+
+        return _create
+
+    def test_no_server_detection_for_api_source(
+        self, test_db_session, test_team, test_user, create_agent, create_job, create_collection
+    ):
+        """Server-side detection is skipped for API-sourced file info."""
+        agent = create_agent(test_team, test_user)
+        collection = create_collection(test_team, bound_agent=agent)
+
+        # Set file_info from API (not inventory)
+        collection.file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+        collection.file_info_source = "api"  # Not inventory
+        test_db_session.commit()
+
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.PENDING,
+            collection=collection,
+            bound_agent=agent,
+        )
+
+        service = JobCoordinatorService(test_db_session)
+
+        result = service.claim_job(
+            agent_id=agent.id,
+            team_id=test_team.id,
+            agent_capabilities=["local_filesystem"],
+        )
+
+        # Job claimed normally, not auto-completed
+        assert result is not None
+        assert result.server_completed is False
+        assert result.job.status == JobStatus.ASSIGNED
+
+    def test_no_server_detection_without_previous_result(
+        self, test_db_session, test_team, test_user, create_agent, create_job, create_inventory_collection
+    ):
+        """Server-side detection is skipped when there's no previous result."""
+        agent = create_agent(test_team, test_user)
+        collection = create_inventory_collection(test_team, bound_agent=agent)
+
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.PENDING,
+            collection=collection,
+            bound_agent=agent,
+        )
+
+        service = JobCoordinatorService(test_db_session)
+
+        result = service.claim_job(
+            agent_id=agent.id,
+            team_id=test_team.id,
+            agent_capabilities=["local_filesystem"],
+        )
+
+        # Job claimed normally (no previous result to compare)
+        assert result is not None
+        assert result.server_completed is False
+        assert result.job.status == JobStatus.ASSIGNED
+
+    def test_server_detection_when_no_change(
+        self, test_db_session, test_team, test_user, create_agent, create_job,
+        create_inventory_collection, create_previous_result
+    ):
+        """Server detects no-change and auto-completes the job."""
+        from backend.src.services.input_state_service import get_input_state_service
+
+        agent = create_agent(test_team, test_user)
+
+        # Create collection with inventory file info
+        file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+            {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+        ]
+        collection = create_inventory_collection(test_team, bound_agent=agent, file_info=file_info)
+
+        # Compute the input state hash that matches the current state
+        input_state_service = get_input_state_service()
+        config = {}  # Empty config for test
+        current_hash = input_state_service.compute_collection_input_state_hash(
+            collection, config, "photostats"
+        )
+
+        # Create a previous result with the same hash
+        create_previous_result(
+            test_team, collection, "photostats", input_state_hash=current_hash
+        )
+
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.PENDING,
+            collection=collection,
+            bound_agent=agent,
+        )
+
+        service = JobCoordinatorService(test_db_session)
+
+        result = service.claim_job(
+            agent_id=agent.id,
+            team_id=test_team.id,
+            agent_capabilities=["local_filesystem"],
+        )
+
+        # Job auto-completed by server
+        assert result is not None
+        assert result.server_completed is True
+        assert result.job.status == JobStatus.COMPLETED
+
+    def test_server_detection_when_files_changed(
+        self, test_db_session, test_team, test_user, create_agent, create_job,
+        create_inventory_collection, create_previous_result
+    ):
+        """Server detects change and returns job for agent execution."""
+        agent = create_agent(test_team, test_user)
+
+        # Create collection with new file info
+        new_file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+            {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+            {"key": "2020/IMG_002.dng", "size": 26000000, "last_modified": "2023-01-01T10:00:00.000Z"},  # New file
+        ]
+        collection = create_inventory_collection(test_team, bound_agent=agent, file_info=new_file_info)
+
+        # Create a previous result with an old hash (different file list)
+        create_previous_result(
+            test_team, collection, "photostats", input_state_hash="old_hash_12345"
+        )
+
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.PENDING,
+            collection=collection,
+            bound_agent=agent,
+        )
+
+        service = JobCoordinatorService(test_db_session)
+
+        result = service.claim_job(
+            agent_id=agent.id,
+            team_id=test_team.id,
+            agent_capabilities=["local_filesystem"],
+        )
+
+        # Job returned for agent execution (files changed)
+        assert result is not None
+        assert result.server_completed is False
+        assert result.job.status == JobStatus.ASSIGNED
+
+    def test_server_detection_preserves_previous_result_link(
+        self, test_db_session, test_team, test_user, create_agent, create_job,
+        create_inventory_collection, create_previous_result
+    ):
+        """Server-side auto-complete links to the previous result."""
+        from backend.src.services.input_state_service import get_input_state_service
+        from backend.src.models import AnalysisResult
+
+        agent = create_agent(test_team, test_user)
+
+        file_info = [
+            {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+        ]
+        collection = create_inventory_collection(test_team, bound_agent=agent, file_info=file_info)
+
+        # Compute matching hash
+        input_state_service = get_input_state_service()
+        config = {}
+        current_hash = input_state_service.compute_collection_input_state_hash(
+            collection, config, "photostats"
+        )
+
+        # Create previous result
+        previous_result = create_previous_result(
+            test_team, collection, "photostats", input_state_hash=current_hash
+        )
+
+        job = create_job(
+            test_team,
+            tool="photostats",
+            status=JobStatus.PENDING,
+            collection=collection,
+            bound_agent=agent,
+        )
+
+        service = JobCoordinatorService(test_db_session)
+
+        result = service.claim_job(
+            agent_id=agent.id,
+            team_id=test_team.id,
+            agent_capabilities=["local_filesystem"],
+        )
+
+        # Job auto-completed
+        assert result.server_completed is True
+
+        # A new result was created that references previous or copies data
+        test_db_session.refresh(result.job)
+        assert result.job.result_id is not None
+
+        # Get the new result
+        new_result = test_db_session.query(AnalysisResult).filter(
+            AnalysisResult.id == result.job.result_id
+        ).first()
+        assert new_result is not None
+        # Results JSON should indicate server-side no-change
+        assert new_result.results_json.get("_server_side_no_change") is True

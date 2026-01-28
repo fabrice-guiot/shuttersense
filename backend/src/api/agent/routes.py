@@ -374,18 +374,38 @@ async def claim_job(
             detail="Agent not found"
         )
 
-    # Try to claim a job
-    result = coordinator.claim_job(
-        agent_id=ctx.agent_id,
-        team_id=ctx.team_id,
-        agent_capabilities=agent.capabilities,
-    )
+    # Try to claim jobs - loop to handle server-side auto-completion
+    # When a job is auto-completed server-side, we try to claim the next one
+    max_server_completions = 5  # Safety limit to prevent infinite loops
+    server_completions = 0
 
-    if not result:
-        # No jobs available - return 204
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    while server_completions < max_server_completions:
+        result = coordinator.claim_job(
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            agent_capabilities=agent.capabilities,
+        )
 
-    job = result.job
+        if not result:
+            # No jobs available - return 204
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+        job = result.job
+
+        # Phase 7 (Issue #107): Check if job was auto-completed server-side
+        if result.server_completed:
+            server_completions += 1
+            # Broadcast the completion
+            manager = get_connection_manager()
+            job_response = _db_job_to_response(job)
+            asyncio.create_task(
+                manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+            )
+            # Continue to claim next job
+            continue
+
+        # Normal job claim - break out of loop to return to agent
+        break
 
     # Build response with collection path if applicable
     collection_guid = None

@@ -2,6 +2,8 @@
 Input State service for computing collection state hashes.
 
 Issue #92: Storage Optimization for Analysis Results
+Issue #107 Phase 7: Server-Side No-Change Detection
+
 Provides deterministic hash computation for Input State comparison.
 
 The Input State hash is computed from:
@@ -9,14 +11,22 @@ The Input State hash is computed from:
 2. Configuration hash: SHA-256 of sorted tool configuration
 
 This allows detecting when a collection has changed since the last analysis.
+
+Phase 7 adds server-side detection for inventory-sourced FileInfo:
+- Server can compute hash from Collection.file_info (inventory source)
+- During job claim, server compares hash to previous result
+- If match, job is auto-completed without sending to agent
 """
 
 import hashlib
 import json
-from typing import List, Tuple, Dict, Any, Optional
+from datetime import datetime
+from typing import List, Tuple, Dict, Any, Optional, TYPE_CHECKING
 
 from backend.src.utils.logging_config import get_logger
 
+if TYPE_CHECKING:
+    from backend.src.models import Collection
 
 logger = get_logger("services")
 
@@ -201,6 +211,141 @@ class InputStateService:
         }
 
         return json.dumps(state, sort_keys=True, indent=2)
+
+
+    # =========================================================================
+    # Phase 7: Server-Side No-Change Detection (Issue #107)
+    # =========================================================================
+
+    def compute_inventory_file_hash(
+        self,
+        file_info: List[Dict[str, Any]]
+    ) -> str:
+        """
+        Compute SHA-256 hash from inventory-sourced FileInfo.
+
+        Converts inventory FileInfo format (key, size, last_modified) to the
+        same format used by agent-side file list hashing for compatibility.
+
+        Args:
+            file_info: List of FileInfo dicts from Collection.file_info
+                       Each dict has: key, size, last_modified, etag?, storage_class?
+
+        Returns:
+            64-character hex SHA-256 hash
+
+        Example:
+            >>> file_info = [
+            ...     {"key": "2020/IMG_001.dng", "size": 25000000, "last_modified": "2022-11-25T13:30:49.000Z"},
+            ...     {"key": "2020/IMG_001.xmp", "size": 4096, "last_modified": "2022-11-25T13:30:50.000Z"},
+            ... ]
+            >>> hash = service.compute_inventory_file_hash(file_info)
+        """
+        # Convert inventory FileInfo to (path, size, mtime) tuples
+        # This matches the agent-side format for compatibility
+        files: List[Tuple[str, int, float]] = []
+        for fi in file_info:
+            key = fi.get("key", "")
+            size = fi.get("size", 0)
+            last_modified = fi.get("last_modified", "")
+
+            # Parse ISO8601 timestamp to Unix timestamp
+            mtime = self._parse_iso8601_to_timestamp(last_modified)
+            if mtime is not None:
+                files.append((key, size, mtime))
+
+        # Use existing file list hash computation
+        return self.compute_file_list_hash(files)
+
+    def _parse_iso8601_to_timestamp(self, iso_string: str) -> Optional[float]:
+        """
+        Parse ISO8601 timestamp to Unix timestamp.
+
+        Handles various ISO8601 formats including:
+        - 2022-11-25T13:30:49.000Z
+        - 2022-11-25T13:30:49Z
+        - 2022-11-25T13:30:49+00:00
+
+        Args:
+            iso_string: ISO8601 formatted timestamp string
+
+        Returns:
+            Unix timestamp as float, or None if parsing fails
+        """
+        if not iso_string:
+            return None
+
+        try:
+            # Try standard ISO format with Z suffix
+            if iso_string.endswith("Z"):
+                # Remove Z and parse
+                dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+            else:
+                dt = datetime.fromisoformat(iso_string)
+
+            return dt.timestamp()
+        except (ValueError, TypeError):
+            logger.warning(f"Failed to parse ISO8601 timestamp: {iso_string}")
+            return None
+
+    def can_compute_server_side_hash(
+        self,
+        collection: "Collection"
+    ) -> bool:
+        """
+        Check if server-side hash computation is possible for a collection.
+
+        Server-side detection is only possible when:
+        1. Collection has file_info data
+        2. file_info_source is "inventory" (not "api" or null)
+
+        Args:
+            collection: Collection model instance
+
+        Returns:
+            True if server-side hash computation is possible
+        """
+        if collection is None:
+            return False
+
+        if not collection.file_info:
+            return False
+
+        # Only compute hash for inventory-sourced FileInfo
+        # API-sourced or null means agent must compute hash from actual files
+        return collection.file_info_source == "inventory"
+
+    def compute_collection_input_state_hash(
+        self,
+        collection: "Collection",
+        configuration: Dict[str, Any],
+        tool: str
+    ) -> Optional[str]:
+        """
+        Compute Input State hash for a collection using server-side data.
+
+        This is the main entry point for server-side no-change detection.
+        Returns None if server-side computation is not possible.
+
+        Args:
+            collection: Collection with file_info from inventory
+            configuration: Tool configuration dictionary
+            tool: Tool name (e.g., "photostats", "photo_pairing")
+
+        Returns:
+            64-character hex SHA-256 hash, or None if computation not possible
+        """
+        if not self.can_compute_server_side_hash(collection):
+            return None
+
+        # Compute file hash from inventory FileInfo
+        file_hash = self.compute_inventory_file_hash(collection.file_info)
+
+        # Compute configuration hash
+        config_hash = self.compute_configuration_hash(configuration)
+
+        # Combine into final Input State hash
+        return self.compute_input_state_hash(file_hash, config_hash, tool)
 
 
 # Module-level singleton for convenience
