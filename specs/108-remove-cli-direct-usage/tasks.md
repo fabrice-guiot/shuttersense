@@ -54,11 +54,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Implement TestCacheEntry save/load/is_valid/cleanup methods in agent/src/cache/test_cache.py using Pydantic models from cache __init__ and JSON file storage at {data_dir}/test-cache/{path_hash}.json
-- [ ] T009 [US1] Implement `test` Click command in agent/cli/test.py with <path> argument and --tool, --check-only, --output options. Command validates path accessibility, lists and categorizes files using LocalAdapter, optionally runs analysis modules (photostats, photo_pairing, pipeline_validation), displays summary, and caches results via test_cache
-- [ ] T010 [US1] Register `test` command in agent/cli/main.py via cli.add_command(test)
-- [ ] T011 [P] [US1] Write unit tests for test_cache save/load/expiry/cleanup in agent/tests/unit/test_test_cache.py
-- [ ] T012 [P] [US1] Write unit tests for test CLI command (path validation, check-only mode, tool filter, output flag, error messages) in agent/tests/unit/test_test_command.py
+- [x] T008 [US1] Implement TestCacheEntry save/load/is_valid/cleanup methods in agent/src/cache/test_cache.py using Pydantic models from cache __init__ and JSON file storage at {data_dir}/test-cache/{path_hash}.json
+- [x] T009 [US1] Implement `test` Click command in agent/cli/test.py with <path> argument and --tool, --check-only, --output options. Command validates path accessibility, lists and categorizes files using LocalAdapter, optionally runs analysis modules (photostats, photo_pairing, pipeline_validation), displays summary, and caches results via test_cache
+- [x] T010 [US1] Register `test` command in agent/cli/main.py via cli.add_command(test)
+- [x] T011 [P] [US1] Write unit tests for test_cache save/load/expiry/cleanup in agent/tests/unit/test_test_cache.py
+- [x] T012 [P] [US1] Write unit tests for test CLI command (path validation, check-only mode, tool filter, output flag, error messages) in agent/tests/unit/test_test_command.py
 
 **Checkpoint**: `shuttersense-agent test /path` works end-to-end. User can test local paths, see file counts and analysis results, save HTML reports, and results are cached for 24 hours.
 
