@@ -888,15 +888,15 @@ class TestFileInfoAccuracy:
             {
                 "key": "photos/2020/vacation/IMG_001.CR3",
                 "size": 25165824,  # 24MB exactly
-                "last_modified_date": "2022-06-15T10:30:00Z",
-                "e_tag": '"abc123def456"',
+                "last_modified": "2022-06-15T10:30:00Z",
+                "etag": '"abc123def456"',
                 "storage_class": "STANDARD",
             },
             {
                 "key": "photos/2020/vacation/IMG_002.CR3",
                 "size": 24117248,  # ~23MB
-                "last_modified_date": "2022-06-15T10:31:00Z",
-                "e_tag": '"xyz789uvw012"',
+                "last_modified": "2022-06-15T10:31:00Z",
+                "etag": '"xyz789uvw012"',
                 "storage_class": "GLACIER",
             },
         ]
@@ -944,13 +944,13 @@ class TestFileInfoAccuracy:
             {
                 "key": "events/2021/conference/DSC_0001.NEF",
                 "size": 52428800,  # 50MB
-                "time_created": "2021-09-10T14:00:00Z",
+                "updated": "2021-09-10T14:00:00Z",
                 "storage_class": "STANDARD",
             },
             {
                 "key": "events/2021/conference/DSC_0002.NEF",
                 "size": 51380224,  # ~49MB
-                "time_created": "2021-09-10T14:01:00Z",
+                "updated": "2021-09-10T14:01:00Z",
                 "storage_class": "NEARLINE",
             },
         ]

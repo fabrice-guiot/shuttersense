@@ -966,7 +966,7 @@ class InventoryImportTool:
             CollectionDelta with summary and individual changes
         """
         # Handle first import case (no stored FileInfo)
-        if not stored_file_info:
+        if stored_file_info is None:
             # All files are "new" for first import
             changes = [
                 FileDelta(

@@ -804,7 +804,7 @@ class JobCoordinatorService:
             config: Dict[str, Any] = {
                 "photo_extensions": loader.photo_extensions,
                 "metadata_extensions": loader.metadata_extensions,
-                "camera_mappings": loader.camera_mappings,
+                "cameras": loader.camera_mappings,
                 "processing_methods": loader.processing_methods,
                 "require_sidecar": loader.require_sidecar,
             }
@@ -1203,7 +1203,6 @@ class JobCoordinatorService:
 
         # Complete the job
         job.complete(result_id=result.id)
-        job.progress = None  # Clear progress
 
         # Create scheduled follow-up job if TTL is configured
         scheduled_job = self._maybe_create_scheduled_job(job)
@@ -1211,6 +1210,8 @@ class JobCoordinatorService:
         # Chain scheduling for inventory_import jobs (Issue #107 - Phase 6)
         if job.tool == "inventory_import":
             scheduled_job = self._maybe_create_scheduled_inventory_import(job)
+
+        job.progress = None  # Clear progress after scheduling reads it
 
         # Increment storage metrics counter (Issue #92: T057)
         self._increment_storage_metrics_on_completion(team_id)

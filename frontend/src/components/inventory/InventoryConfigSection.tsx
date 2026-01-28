@@ -80,12 +80,18 @@ export function InventoryConfigSection({
     const prevJob = prevJobRef.current
     const currentJob = status?.current_job
 
-    // Check if job just completed (was running, now null or completed)
+    // Check if job just completed (was running/pending, now null or completed)
     if (prevJob && !currentJob) {
-      // Job completed - show notification
-      toast.success('Inventory import completed', {
-        description: 'Check the Collections list for change details.'
-      })
+      // Job removed from status - check previous state to determine notification
+      if (prevJob.status === 'cancelled') {
+        // Job was cancelled - no success toast
+        toast.error('Inventory import was cancelled')
+      } else if (prevJob.status === 'running' || prevJob.status === 'pending') {
+        // Job completed successfully (transitioned from active to removed)
+        toast.success('Inventory import completed', {
+          description: 'Check the Collections list for change details.'
+        })
+      }
     } else if (prevJob && currentJob?.status === 'completed' && prevJob.status !== 'completed') {
       // Job status changed to completed
       toast.success('Inventory import completed', {

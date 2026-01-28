@@ -118,7 +118,7 @@ class TestJobClaiming:
         agent = create_agent(test_team, test_user)
 
         # Create a scheduled job for the future
-        future_job = create_job(
+        create_job(
             test_team,
             tool="photostats",
             status=JobStatus.SCHEDULED,
@@ -153,7 +153,7 @@ class TestJobClaiming:
         agent = create_agent(test_team, test_user)
 
         # Create job in other team
-        other_job = create_job(other_team, tool="photostats", status=JobStatus.PENDING)
+        create_job(other_team, tool="photostats", status=JobStatus.PENDING)
 
         service = JobCoordinatorService(test_db_session)
 
@@ -1043,7 +1043,7 @@ class TestServerSideNoChangeDetection:
         collection.file_info_source = "api"  # Not inventory
         test_db_session.commit()
 
-        job = create_job(
+        create_job(
             test_team,
             tool="photostats",
             status=JobStatus.PENDING,
@@ -1071,7 +1071,7 @@ class TestServerSideNoChangeDetection:
         agent = create_agent(test_team, test_user)
         collection = create_inventory_collection(test_team, bound_agent=agent)
 
-        job = create_job(
+        create_job(
             test_team,
             tool="photostats",
             status=JobStatus.PENDING,
@@ -1114,7 +1114,7 @@ class TestServerSideNoChangeDetection:
         config = {
             "photo_extensions": loader.photo_extensions,
             "metadata_extensions": loader.metadata_extensions,
-            "camera_mappings": loader.camera_mappings,
+            "cameras": loader.camera_mappings,
             "processing_methods": loader.processing_methods,
             "require_sidecar": loader.require_sidecar,
         }
@@ -1130,7 +1130,7 @@ class TestServerSideNoChangeDetection:
             test_team, collection, "photostats", input_state_hash=current_hash
         )
 
-        job = create_job(
+        create_job(
             test_team,
             tool="photostats",
             status=JobStatus.PENDING,
@@ -1171,7 +1171,7 @@ class TestServerSideNoChangeDetection:
             test_team, collection, "photostats", input_state_hash="old_hash_12345"
         )
 
-        job = create_job(
+        create_job(
             test_team,
             tool="photostats",
             status=JobStatus.PENDING,
@@ -1213,7 +1213,7 @@ class TestServerSideNoChangeDetection:
         config = {
             "photo_extensions": loader.photo_extensions,
             "metadata_extensions": loader.metadata_extensions,
-            "camera_mappings": loader.camera_mappings,
+            "cameras": loader.camera_mappings,
             "processing_methods": loader.processing_methods,
             "require_sidecar": loader.require_sidecar,
         }
@@ -1225,11 +1225,11 @@ class TestServerSideNoChangeDetection:
         )
 
         # Create previous result
-        previous_result = create_previous_result(
+        create_previous_result(
             test_team, collection, "photostats", input_state_hash=current_hash
         )
 
-        job = create_job(
+        create_job(
             test_team,
             tool="photostats",
             status=JobStatus.PENDING,

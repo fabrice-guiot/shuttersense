@@ -253,8 +253,13 @@ class TestNewFileDetection:
         # All changes should be "new"
         assert all(c.change_type == "new" for c in delta.changes)
 
-    def test_first_import_empty_stored_list(self, mock_adapter, base_file_info):
-        """Test that empty stored list also treated as first import."""
+    def test_empty_stored_list_is_not_first_import(self, mock_adapter, base_file_info):
+        """Test that empty stored list is NOT treated as first import.
+
+        An empty list means a previous import returned zero files, which is
+        distinct from None (no history at all). All current files are still
+        detected as 'new' but is_first_import is False.
+        """
         tool = InventoryImportTool(
             adapter=mock_adapter,
             inventory_config={},
@@ -264,11 +269,11 @@ class TestNewFileDetection:
         delta = tool._compute_collection_delta(
             collection_guid="col_test001",
             current_file_info=base_file_info,
-            stored_file_info=[]  # Empty list
+            stored_file_info=[]  # Empty list — previous import had zero files
         )
 
-        # Empty list is also treated as first import
-        assert delta.is_first_import is True
+        # Empty list is a prior import with no files, not a first import
+        assert delta.is_first_import is False
         assert delta.summary.new_count == 3
 
 

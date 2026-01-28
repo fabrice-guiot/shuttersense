@@ -818,7 +818,7 @@ class JobConfigData(BaseModel):
         ...,
         description="List of metadata file extensions (e.g., .xmp)"
     )
-    camera_mappings: Dict[str, List[Dict[str, Any]]] = Field(
+    cameras: Dict[str, List[Dict[str, Any]]] = Field(
         ...,
         description="Camera ID to camera info mappings"
     )
@@ -836,7 +836,7 @@ class JobConfigData(BaseModel):
             "example": {
                 "photo_extensions": [".dng", ".cr3", ".tiff"],
                 "metadata_extensions": [".xmp"],
-                "camera_mappings": {},
+                "cameras": {},
                 "processing_methods": {"HDR": "High Dynamic Range"},
                 "require_sidecar": [".cr3"]
             }

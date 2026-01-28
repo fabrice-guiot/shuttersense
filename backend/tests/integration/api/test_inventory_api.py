@@ -1616,7 +1616,7 @@ class TestScheduledInventoryImport:
     """Integration tests for scheduled inventory import - T084a."""
 
     def test_schedule_setting_stored_and_returned(
-        self, test_client, test_db_session, test_team, test_encryptor
+        self, test_client
     ):
         """Test that schedule setting is stored and returned correctly."""
         # Create connector
@@ -1758,7 +1758,8 @@ class TestScheduledInventoryImport:
         ).first()
 
         # Create a scheduled job manually
-        scheduled_time = datetime(2026, 2, 1, 0, 0, 0)
+        from datetime import timezone
+        scheduled_time = datetime(2026, 2, 1, 0, 0, 0, tzinfo=timezone.utc)
         job = Job(
             team_id=connector.team_id,
             collection_id=None,

@@ -267,7 +267,7 @@ class ChunkedUploadClient:
         Args:
             job_guid: GUID of the job
             content: Content bytes to upload
-            upload_type: Type of content (results_json or report_html)
+            upload_type: Type of content (results_json, report_html, file_info, or delta)
 
         Returns:
             ChunkedUploadResult with upload details

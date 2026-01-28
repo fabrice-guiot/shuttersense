@@ -213,7 +213,7 @@ Authorization: Bearer {token}
 ```
 
 **Inventory path pattern:**
-```
+```text
 s3://{destination_bucket}/{destination_prefix}/{source_bucket}/{config_name}/{timestamp}/manifest.json
 ```
 
@@ -229,7 +229,7 @@ s3://{destination_bucket}/{destination_prefix}/{source_bucket}/{config_name}/{ti
 ```
 
 **Inventory path pattern:**
-```
+```text
 gs://{destination_bucket}/{report_config_name}/{date}/manifest.json
 ```
 

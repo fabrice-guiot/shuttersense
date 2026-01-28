@@ -261,14 +261,14 @@ export function CollectionList({
                                 const delta = collection.file_info.delta
                                 const netChange = delta.new_count - delta.deleted_count
                                 if (delta.is_first_import || netChange > 0) {
-                                  // Growth - green trending up
-                                  return <TrendingUp className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                                  // Growth - positive trending up
+                                  return <TrendingUp className="h-3.5 w-3.5 text-success" />
                                 } else if (netChange < 0) {
-                                  // Shrinkage - yellow trending down (worth attention)
-                                  return <TrendingDown className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
+                                  // Shrinkage - attention trending down (worth attention)
+                                  return <TrendingDown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                                 } else {
-                                  // Stable - blue horizontal arrow (no net change)
-                                  return <ArrowRight className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                                  // Stable - neutral horizontal arrow (no net change)
+                                  return <ArrowRight className="h-3.5 w-3.5 text-info" />
                                 }
                               })()
                             )}
@@ -287,23 +287,23 @@ export function CollectionList({
                               <div className="border-t border-border pt-1 mt-1">
                                 <div className="font-medium">Last import changes:</div>
                                 {collection.file_info.delta.is_first_import ? (
-                                  <div className="text-green-600 dark:text-green-400">
+                                  <div className="text-success">
                                     First import ({collection.file_info.delta.new_count.toLocaleString()} files)
                                   </div>
                                 ) : collection.file_info.delta.total_changes > 0 ? (
                                   <div className="space-y-0.5">
                                     {collection.file_info.delta.new_count > 0 && (
-                                      <div className="text-green-600 dark:text-green-400">
+                                      <div className="text-success">
                                         +{collection.file_info.delta.new_count.toLocaleString()} new
                                       </div>
                                     )}
                                     {collection.file_info.delta.modified_count > 0 && (
-                                      <div className="text-yellow-600 dark:text-yellow-400">
+                                      <div className="text-amber-600 dark:text-amber-400">
                                         ~{collection.file_info.delta.modified_count.toLocaleString()} modified
                                       </div>
                                     )}
                                     {collection.file_info.delta.deleted_count > 0 && (
-                                      <div className="text-red-600 dark:text-red-400">
+                                      <div className="text-destructive">
                                         -{collection.file_info.delta.deleted_count.toLocaleString()} deleted
                                       </div>
                                     )}

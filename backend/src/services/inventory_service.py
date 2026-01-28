@@ -121,7 +121,6 @@ class InventoryService:
 
         # Check if schedule is changing
         old_schedule = connector.inventory_schedule or "manual"
-        was_validated = connector.inventory_validation_status == InventoryValidationStatus.VALIDATED
 
         # Cancel scheduled jobs if schedule is changing to manual
         if schedule == "manual" and old_schedule != "manual":

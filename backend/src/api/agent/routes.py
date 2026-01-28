@@ -382,6 +382,7 @@ async def claim_job(
     max_server_completions = 5  # Safety limit to prevent infinite loops
     server_completions = 0
 
+    job = None
     while server_completions < max_server_completions:
         result = coordinator.claim_job(
             agent_id=ctx.agent_id,
@@ -409,6 +410,9 @@ async def claim_job(
 
         # Normal job claim - break out of loop to return to agent
         break
+    else:
+        # Loop exhausted max_server_completions without finding a non-server-completed job
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     # Build response with collection path if applicable
     collection_guid = None
@@ -951,7 +955,7 @@ async def get_job_config(
         config=JobConfigData(
             photo_extensions=loader.photo_extensions,
             metadata_extensions=loader.metadata_extensions,
-            camera_mappings=loader.camera_mappings,
+            cameras=loader.camera_mappings,
             processing_methods=loader.processing_methods,
             require_sidecar=loader.require_sidecar,
         ),
@@ -2722,6 +2726,15 @@ async def report_inventory_delta(
             detail="Connector GUID does not match job's connector"
         )
 
+    # Validate that all collection GUIDs belong to this connector
+    from backend.src.services.inventory_service import InventoryService
+    inventory_service = InventoryService(db)
+    allowed_collections = inventory_service.get_collections_for_connector(
+        connector_id=connector_id,
+        team_id=ctx.team_id
+    )
+    allowed_collection_guids = {c["collection_guid"] for c in allowed_collections}
+
     # Store delta summary on each collection
     collections_updated = 0
     now = datetime.utcnow()
@@ -2737,6 +2750,13 @@ async def report_inventory_delta(
         except ValueError:
             logger.warning(f"Invalid collection GUID in delta: {collection_guid}")
             continue
+
+        # Verify collection belongs to this connector
+        if collection_guid not in allowed_collection_guids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Collection {collection_guid} is not mapped to this connector"
+            )
 
         # Get collection (with team_id filter)
         collection = db.query(Collection).filter(

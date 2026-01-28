@@ -493,7 +493,7 @@ class JobExecutor:
                 file_count = 0
 
                 logger.debug(
-                    f"Display graph mode - using pipeline identity for hash",
+                    "Display graph mode - using pipeline identity for hash",
                     extra={
                         "pipeline_guid": pipeline_guid,
                         "pipeline_version": pipeline_version,
@@ -565,8 +565,8 @@ class JobExecutor:
             # Warn if server should have auto-completed this (inventory collection)
             if file_info_source == "inventory":
                 logger.warning(
-                    f"Agent completing NO_CHANGE for inventory-sourced collection - "
-                    f"server should have auto-completed this job. Possible hash mismatch.",
+                    "Agent completing NO_CHANGE for inventory-sourced collection - "
+                    "server should have auto-completed this job. Possible hash mismatch.",
                     extra={
                         "job_guid": job_guid,
                         "file_info_source": file_info_source,
@@ -600,12 +600,29 @@ class JobExecutor:
                     from urllib.parse import unquote
 
                     # Build files list from cached FileInfo for debugging
-                    # IMPORTANT: Must URL-decode keys to match what's actually hashed
+                    # IMPORTANT: Must normalize paths exactly like _convert_cached_file_info
+                    # to match what's actually hashed (URL-decode, strip collection prefix)
                     cached_file_info = job.get("file_info", [])
                     files_for_json = []
+
+                    # Normalize collection prefix (same as _convert_cached_file_info)
+                    prefix = unquote(collection_path.rstrip("/") + "/") if collection_path else ""
+
                     for info in cached_file_info:
                         # URL-decode the key (same as _convert_cached_file_info)
-                        key = unquote(info.get("key", ""))
+                        decoded_key = unquote(info.get("key", ""))
+                        if not decoded_key:
+                            continue
+
+                        # Strip collection prefix to get relative path
+                        if prefix and decoded_key.startswith(prefix):
+                            relative_path = decoded_key[len(prefix):]
+                        else:
+                            relative_path = decoded_key
+
+                        if not relative_path:
+                            continue
+
                         # Convert to (path, size, mtime) tuple
                         mtime = 0
                         if info.get("last_modified"):
@@ -617,7 +634,7 @@ class JobExecutor:
                                 mtime = int(dt.timestamp())
                             except (ValueError, AttributeError):
                                 pass
-                        files_for_json.append((key, info["size"], mtime))
+                        files_for_json.append((relative_path, info["size"], mtime))
 
                     input_state_json = computer.compute_input_state_json(
                         files=files_for_json,
@@ -625,7 +642,7 @@ class JobExecutor:
                         tool=tool
                     )
                     logger.info(
-                        f"Including input_state_json for debugging inventory hash mismatch",
+                        "Including input_state_json for debugging inventory hash mismatch",
                         extra={"job_guid": job_guid, "json_size": len(input_state_json)}
                     )
                 except Exception as e:
@@ -2088,7 +2105,7 @@ class JobExecutor:
                 latest_manifest=latest_manifest if success else None
             )
             logger.info(
-                f"Reported inventory validation result",
+                "Reported inventory validation result",
                 extra={
                     "job_guid": job_guid,
                     "connector_guid": connector_guid,
@@ -2182,7 +2199,7 @@ class JobExecutor:
                 )
 
                 logger.info(
-                    f"Phase A completed: Folder extraction",
+                    "Phase A completed: Folder extraction",
                     extra={
                         "job_guid": job_guid,
                         "folders_found": len(result.folders),
@@ -2209,7 +2226,7 @@ class JobExecutor:
                 )
 
                 logger.info(
-                    f"Inventory import completed successfully",
+                    "Inventory import completed successfully",
                     extra={
                         "job_guid": job_guid,
                         "folders_found": len(result.folders),
@@ -2323,7 +2340,7 @@ class JobExecutor:
 
             if not collections_data:
                 logger.info(
-                    f"No collections mapped to connector, skipping Phase B",
+                    "No collections mapped to connector, skipping Phase B",
                     extra={
                         "job_guid": job_guid,
                         "connector_guid": connector_guid
@@ -2358,7 +2375,7 @@ class JobExecutor:
 
             if phase_b_result.collections_processed == 0:
                 logger.info(
-                    f"Phase B: No collections to update",
+                    "Phase B: No collections to update",
                     extra={
                         "job_guid": job_guid,
                         "connector_guid": connector_guid
@@ -2429,7 +2446,7 @@ class JobExecutor:
         try:
             if not phase_b_result or not phase_b_result.success:
                 logger.info(
-                    f"Skipping Phase C: Phase B did not complete successfully",
+                    "Skipping Phase C: Phase B did not complete successfully",
                     extra={"job_guid": job_guid, "connector_guid": connector_guid}
                 )
                 return 0
@@ -2446,7 +2463,7 @@ class JobExecutor:
 
             if phase_c_result.collections_processed == 0:
                 logger.info(
-                    f"Phase C: No collections to report deltas for",
+                    "Phase C: No collections to report deltas for",
                     extra={"job_guid": job_guid, "connector_guid": connector_guid}
                 )
                 return 0
