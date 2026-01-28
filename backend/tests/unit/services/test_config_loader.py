@@ -4,7 +4,6 @@ Unit tests for ConfigLoader protocol and implementations.
 Tests the ConfigLoader protocol interface and concrete implementations:
 - DictConfigLoader (dict-based)
 - DatabaseConfigLoader (database-backed)
-- FileConfigLoader (file-backed, if available)
 
 Issue #90 - Distributed Agent Architecture (Phase 5)
 Task: T071
