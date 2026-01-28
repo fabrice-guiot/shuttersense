@@ -23,7 +23,7 @@ from backend.src.services.exceptions import NotFoundError, ValidationError
 from backend.src.config.settings import get_settings
 
 
-router = APIRouter(prefix="/api/tokens", tags=["tokens"])
+router = APIRouter(prefix="/api/tokens", tags=["Tokens"])
 
 
 # ============================================================================

@@ -274,6 +274,118 @@ async def lifespan(app: FastAPI):
 # Initialize logging before creating app
 init_logging()
 
+# ============================================================================
+# OpenAPI Tag Metadata
+# ============================================================================
+# Define tag groups and descriptions for API documentation.
+# Order here determines display order in Swagger UI and ReDoc.
+# Groups align with frontend menu structure for consistency.
+openapi_tags = [
+    # === Core Application ===
+    {
+        "name": "Collections",
+        "description": "Photo collection management - create, configure, and organize collections.",
+    },
+    {
+        "name": "Pipelines",
+        "description": "Processing pipeline workflows - define and manage validation rules.",
+    },
+    {
+        "name": "Events",
+        "description": "Calendar event management for photo shoots and sessions.",
+    },
+
+    # === Processing & Results ===
+    {
+        "name": "Tools",
+        "description": "Job execution - run analysis tools against collections.",
+    },
+    {
+        "name": "Results",
+        "description": "Analysis results storage and retrieval.",
+    },
+    {
+        "name": "Trends",
+        "description": "Historical analysis data and trend aggregation.",
+    },
+    {
+        "name": "Analytics",
+        "description": "Storage metrics, usage analytics, and trend analysis.",
+    },
+
+    # === Directory ===
+    {
+        "name": "Locations",
+        "description": "Event location and venue management.",
+    },
+    {
+        "name": "Organizers",
+        "description": "Event organizer management.",
+    },
+    {
+        "name": "Performers",
+        "description": "Event performer and participant management.",
+    },
+
+    # === Settings ===
+    {
+        "name": "Configuration",
+        "description": "Application configuration and tool settings.",
+    },
+    {
+        "name": "Categories",
+        "description": "Event category taxonomy management.",
+    },
+    {
+        "name": "Connectors",
+        "description": "Remote storage connectors - S3, GCS, SMB configuration.",
+    },
+    {
+        "name": "Users",
+        "description": "User profile and account management.",
+    },
+
+    # === Infrastructure (internal APIs - not accessible via API tokens) ===
+    {
+        "name": "Agents",
+        "description": "Distributed agent operations - registration, heartbeat, job execution. "
+                      "**Internal API**: Not accessible via API tokens.",
+    },
+    {
+        "name": "Authentication",
+        "description": "OAuth 2.0 authentication - Google and Microsoft login. "
+                      "**Internal API**: Not accessible via API tokens.",
+    },
+    {
+        "name": "Tokens",
+        "description": "API token management for programmatic access. "
+                      "**Internal API**: Not accessible via API tokens.",
+    },
+
+    # === Administration (internal APIs - not accessible via API tokens) ===
+    {
+        "name": "Admin - Teams",
+        "description": "Super admin: Multi-tenant team management. "
+                      "**Internal API**: Not accessible via API tokens.",
+    },
+    {
+        "name": "Admin - Release Manifests",
+        "description": "Super admin: Agent binary release attestation. "
+                      "**Internal API**: Not accessible via API tokens.",
+    },
+
+    # === System ===
+    {
+        "name": "Health",
+        "description": "Health check and liveness probe.",
+    },
+    {
+        "name": "System",
+        "description": "System information and version endpoint.",
+    },
+]
+
+
 # Create FastAPI application
 # Note: docs_url and redoc_url are set to None to use custom endpoints with favicon
 app = FastAPI(
@@ -286,6 +398,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url="/openapi.json",
+    openapi_tags=openapi_tags,
 )
 
 # ============================================================================
@@ -591,44 +704,53 @@ async def get_version() -> Dict[str, str]:
     }
 
 
-# API routers
-from backend.src.api import collections, connectors, tools, results, pipelines, trends, config, categories, events, locations, organizers, performers, analytics
+# ============================================================================
+# API Routers
+# ============================================================================
+# Router registration order matches openapi_tags for consistent documentation.
+# Groups align with frontend menu structure.
+
+from backend.src.api import (
+    collections, connectors, tools, results, pipelines, trends,
+    config, categories, events, locations, organizers, performers, analytics
+)
 from backend.src.api import auth as auth_router
 from backend.src.api import users as users_router
 from backend.src.api import tokens as tokens_router
 from backend.src.api.admin import teams_router as admin_teams_router
 from backend.src.api.admin import release_manifests_router as admin_release_manifests_router
+from backend.src.api.agent import router as agent_router
 
+# === Core Application ===
 app.include_router(collections.router, prefix="/api")
-app.include_router(connectors.router, prefix="/api")
+app.include_router(pipelines.router, prefix="/api")
+app.include_router(events.router, prefix="/api")
+
+# === Processing & Results ===
 app.include_router(tools.router, prefix="/api")
 app.include_router(results.router, prefix="/api")
-app.include_router(pipelines.router, prefix="/api")
 app.include_router(trends.router, prefix="/api")
-app.include_router(config.router, prefix="/api")
-app.include_router(categories.router, prefix="/api")
-app.include_router(events.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
+
+# === Directory ===
 app.include_router(locations.router, prefix="/api")
 app.include_router(organizers.router, prefix="/api")
 app.include_router(performers.router, prefix="/api")
-app.include_router(analytics.router, prefix="/api")
 
-# Authentication router
-app.include_router(auth_router.router, prefix="/api")
-
-# User management router
+# === Settings ===
+app.include_router(config.router, prefix="/api")
+app.include_router(categories.router, prefix="/api")
+app.include_router(connectors.router, prefix="/api")
 app.include_router(users_router.router, prefix="/api")
 
-# Token management routes (Phase 10)
+# === Infrastructure (internal APIs - not accessible via API tokens) ===
+app.include_router(agent_router)
+app.include_router(auth_router.router, prefix="/api")
 app.include_router(tokens_router.router)
 
-# Admin routes (super admin only)
+# === Administration (internal APIs - not accessible via API tokens) ===
 app.include_router(admin_teams_router, prefix="/api/admin")
 app.include_router(admin_release_manifests_router, prefix="/api/admin")
-
-# Agent API routes (Issue #90 - Distributed Agent Architecture)
-from backend.src.api.agent import router as agent_router
-app.include_router(agent_router)
 
 
 # ============================================================================
