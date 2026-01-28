@@ -338,7 +338,9 @@ openapi_tags = [
     },
     {
         "name": "Connectors",
-        "description": "Remote storage connectors - S3, GCS, SMB configuration.",
+        "description": "Remote storage connectors - S3, GCS, SMB configuration. "
+                      "Includes **inventory endpoints** under `/api/connectors/{guid}/inventory/*` "
+                      "for S3 Inventory and GCS Storage Insights integration.",
     },
     {
         "name": "Users",
@@ -349,6 +351,8 @@ openapi_tags = [
     {
         "name": "Agents",
         "description": "Distributed agent operations - registration, heartbeat, job execution. "
+                      "Includes inventory import phases: folder extraction (Phase A), "
+                      "FileInfo population (Phase B), and delta detection (Phase C). "
                       "**Internal API**: Not accessible via API tokens.",
     },
     {
@@ -496,6 +500,7 @@ def custom_openapi():
         version=app.version,
         description=app.description,
         routes=app.routes,
+        tags=openapi_tags,
     )
 
     # Add security scheme for Bearer token authentication

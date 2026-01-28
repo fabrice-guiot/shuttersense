@@ -425,8 +425,17 @@
 
 ### Documentation & Validation
 
-- [ ] T104 [P] Update OpenAPI documentation for inventory endpoints
-- [ ] T105 [P] Add inventory examples to API documentation
+- [x] T104 [P] Update OpenAPI documentation for inventory endpoints
+  - Added OPENAPI_TAGS_METADATA in main.py with descriptions for all endpoint groups
+  - Connectors tag explicitly mentions inventory endpoints under `/api/connectors/{guid}/inventory/*`
+  - Agents tag describes inventory import phases (A, B, C)
+- [x] T105 [P] Add inventory examples to API documentation
+  - Created `backend/docs/api/inventory.md` with comprehensive examples
+  - Includes all inventory endpoints with request/response examples
+  - Documents S3 and GCS configuration patterns
+  - Describes import pipeline phases (A, B, C) with progress events
+  - Documents delta summary structure and scheduled imports
+  - Lists common errors and agent API endpoints
 - [ ] T106 Run quickstart.md validation (full pipeline test)
 - [ ] T107 End-to-end test: complete workflow from config to delta detection
 - [ ] T119 E2E test: SC-001 - Complete configuration to first import workflow in `tests/e2e/test_inventory_workflow.py`
