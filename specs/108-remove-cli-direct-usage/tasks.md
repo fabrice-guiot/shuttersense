@@ -72,13 +72,13 @@
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Add agent_create_collection() method to backend/src/services/collection_service.py that accepts agent_id, team_id, name, location, and optional test_results. Creates Collection with type=LOCAL, bound_agent_id=agent, team_id from agent context
-- [ ] T014 [US2] Add POST /api/agent/v1/collections endpoint in backend/src/api/agent/routes.py. Authenticate agent, resolve team_id, call collection_service.agent_create_collection(), return GUID and web_url. Handle 409 if path already registered
-- [ ] T015 [US2] Implement create_collection() method body in agent/src/api_client.py to call POST /api/agent/v1/collections with name, location, and optional test_results
-- [ ] T016 [US2] Implement `collection` Click group and `create` subcommand in agent/cli/collection.py with <path> argument and --name, --skip-test, --analyze options. Load test cache, auto-run test if no valid cache (unless --skip-test), prompt for name if not provided (suggest folder name), call API client, display GUID and web URL. If --analyze, create job via existing API
-- [ ] T017 [US2] Register `collection` group in agent/cli/main.py via cli.add_command(collection)
-- [ ] T018 [P] [US2] Write unit tests for collection create CLI command (cache lookup, auto-test, name prompt, skip-test, analyze flag) in agent/tests/unit/test_collection_command.py
-- [ ] T019 [P] [US2] Write unit tests for agent collection creation endpoint (auth, team scoping, duplicate path 409, bound agent) in backend/tests/test_agent_collection_api.py
+- [x] T013 [US2] Add agent_create_collection() method to backend/src/services/collection_service.py that accepts agent_id, team_id, name, location, and optional test_results. Creates Collection with type=LOCAL, bound_agent_id=agent, team_id from agent context
+- [x] T014 [US2] Add POST /api/agent/v1/collections endpoint in backend/src/api/agent/routes.py. Authenticate agent, resolve team_id, call collection_service.agent_create_collection(), return GUID and web_url. Handle 409 if path already registered
+- [x] T015 [US2] Implement create_collection() method body in agent/src/api_client.py to call POST /api/agent/v1/collections with name, location, and optional test_results
+- [x] T016 [US2] Implement `collection` Click group and `create` subcommand in agent/cli/collection.py with <path> argument and --name, --skip-test, --analyze options. Load test cache, auto-run test if no valid cache (unless --skip-test), prompt for name if not provided (suggest folder name), call API client, display GUID and web URL. If --analyze, create job via existing API
+- [x] T017 [US2] Register `collection` group in agent/cli/main.py via cli.add_command(collection)
+- [x] T018 [P] [US2] Write unit tests for collection create CLI command (cache lookup, auto-test, name prompt, skip-test, analyze flag) in agent/tests/unit/test_collection_command.py
+- [x] T019 [P] [US2] Write unit tests for agent collection creation endpoint (auth, team scoping, duplicate path 409, bound agent) in backend/tests/unit/test_agent_collection_create.py
 
 **Checkpoint**: `shuttersense-agent collection create /path --name "Name"` creates a Collection on the server. Test-then-create workflow works end-to-end.
 

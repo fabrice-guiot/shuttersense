@@ -955,6 +955,54 @@ class CollectionService:
         return True, f"Cache refreshed successfully. {file_count:,} files cached.", file_count
 
     # ============================================================================
+    # Agent-Initiated Collection Creation (Issue #108)
+    # ============================================================================
+
+    def agent_create_collection(
+        self,
+        agent_id: int,
+        team_id: int,
+        name: str,
+        location: str,
+        test_results: Optional[Dict[str, Any]] = None,
+    ) -> Collection:
+        """
+        Create a LOCAL Collection initiated by an agent.
+
+        The collection is automatically bound to the creating agent with
+        type=LOCAL. Accessibility testing is deferred to the agent
+        (is_accessible=None means pending).
+
+        Args:
+            agent_id: Internal ID of the creating agent
+            team_id: Team ID for tenant isolation (from AgentContext)
+            name: Collection display name
+            location: Absolute path to the local directory
+            test_results: Optional test result summary from the agent's
+                local test cache (stored as metadata)
+
+        Returns:
+            Created Collection instance
+
+        Raises:
+            ValueError: If name already exists, agent not found, or path
+                not under agent's authorized roots
+        """
+        metadata = None
+        if test_results:
+            metadata = {"test_results": test_results}
+
+        return self.create_collection(
+            name=name,
+            type=CollectionType.LOCAL,
+            location=location,
+            team_id=team_id,
+            state=CollectionState.LIVE,
+            bound_agent_id=agent_id,
+            metadata=metadata,
+        )
+
+    # ============================================================================
     # KPI Statistics Methods (Issue #37)
     # ============================================================================
 

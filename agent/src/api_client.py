@@ -1168,7 +1168,38 @@ class AgentApiClient:
             ApiError: If creation fails (400 validation, 409 duplicate)
             ConnectionError: If connection to server fails
         """
-        raise NotImplementedError("Implemented in US2 (Phase 4)")
+        payload: dict[str, Any] = {
+            "name": name,
+            "location": location,
+        }
+        if test_results is not None:
+            payload["test_results"] = test_results
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/collections",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 201:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 409:
+            detail = response.json().get("detail", "Collection already exists")
+            raise ApiError(detail, status_code=409)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Invalid request")
+            raise ApiError(detail, status_code=400)
+        else:
+            raise ApiError(
+                f"Collection creation failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
 
     async def list_collections(
         self,

@@ -93,6 +93,9 @@ from backend.src.api.agent.schemas import (
     # Inventory delta schemas (Issue #107 - Phase C)
     InventoryDeltaRequest,
     InventoryDeltaResponse,
+    # Agent collection management (Issue #108)
+    AgentCreateCollectionRequest,
+    AgentCreateCollectionResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -2817,4 +2820,92 @@ async def report_inventory_delta(
         status="success",
         message=f"Stored delta for {collections_updated} collections",
         collections_updated=collections_updated
+    )
+
+
+# ============================================================================
+# Agent Collection Management (Issue #108)
+# ============================================================================
+
+
+def _get_collection_service(db: Session = Depends(get_db)):
+    """Dependency to get CollectionService for agent routes."""
+    from backend.src.services.collection_service import CollectionService
+    from backend.src.utils.cache import FileListingCache
+    file_cache = FileListingCache()
+    connector_service = ConnectorService(db)
+    return CollectionService(db=db, file_cache=file_cache, connector_service=connector_service)
+
+
+@router.post(
+    "/collections",
+    response_model=AgentCreateCollectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a LOCAL collection",
+    description="Create a new LOCAL collection bound to the authenticated agent. "
+                "The collection is automatically bound to the creating agent.",
+)
+async def agent_create_collection(
+    data: AgentCreateCollectionRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Create a LOCAL collection from the agent.
+
+    The collection is created with type=LOCAL and bound to the authenticated agent.
+    Accessibility testing is deferred to the agent (is_accessible=None).
+    """
+    from backend.src.services.collection_service import CollectionService
+    from backend.src.utils.cache import FileListingCache
+
+    file_cache = FileListingCache()
+    connector_svc = ConnectorService(db)
+    collection_service = CollectionService(
+        db=db, file_cache=file_cache, connector_service=connector_svc
+    )
+
+    # Convert test_results to dict if provided
+    test_results_dict = None
+    if data.test_results:
+        test_results_dict = data.test_results.model_dump(mode="json")
+
+    try:
+        collection = collection_service.agent_create_collection(
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            name=data.name,
+            location=data.location,
+            test_results=test_results_dict,
+        )
+    except ValueError as e:
+        error_msg = str(e)
+        if "already exists" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=error_msg,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        )
+    except Exception as e:
+        logger.exception(f"Failed to create collection for agent {ctx.agent_guid}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create collection: {str(e)}",
+        )
+
+    # Build web URL
+    web_url = f"/collections/{collection.guid}"
+
+    return AgentCreateCollectionResponse(
+        guid=collection.guid,
+        name=collection.name,
+        type=collection.type.value.upper(),
+        location=collection.location,
+        bound_agent_guid=ctx.agent_guid,
+        web_url=web_url,
+        created_at=collection.created_at,
     )
