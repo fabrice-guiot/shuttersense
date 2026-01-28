@@ -108,7 +108,7 @@ PWA push notifications provide:
 ### Non-Goals (v1)
 
 1. **Full Offline Mode**: Not caching analysis data or reports
-2. **Notification Scheduling**: All notifications are event-driven, not scheduled
+2. **Server-Side Scheduling Beyond Safety Net**: No server-side cron jobs except the dead agent safety net; all other scheduled work (deadline checks) flows through the agent job system
 3. **Rich Media**: No images or action buttons in notifications (v1 keeps it simple)
 4. **Email Fallback**: Push-only, no email notification channel
 5. **Bulk Operations**: No "mark all read" or notification management
@@ -213,6 +213,24 @@ Body: Agent "Home Server" is back online. Job processing has resumed.
 
 **Rationale**: Agent availability directly impacts job execution. Users need to know when processing is blocked.
 
+#### Detection Layers
+
+Agent offline detection has three layers, providing defense in depth:
+
+**Layer 1 - Graceful Shutdown**: When an agent shuts down gracefully, it reports its status change to the server via the existing agent API. This immediately triggers an agent status notification if the pool becomes empty.
+
+**Layer 2 - Heartbeat Timeout (Agent-Driven)**: The existing `AgentService.check_offline_agents()` detects agents that missed their heartbeat window (90 seconds). This runs when other agents send heartbeats or when the server processes agent-related requests. However, if ALL agents are down simultaneously, no agent activity triggers this check.
+
+**Layer 3 - Server-Side Dead Agent Cron (Safety Net)**: A lightweight server-side cron job acts as a last line of defense for the scenario where all agents go down without reporting (e.g., network partition, host crash). This is the **only** server-side scheduled task, justified because the very mechanism it monitors (agents) is unavailable to trigger it.
+
+- **Mechanism**: A single cron entry (system crontab or systemd timer) runs a multi-tenant check every 2 minutes.
+- **Action**: Queries all agents across all teams where `last_heartbeat < NOW() - HEARTBEAT_TIMEOUT_SECONDS` AND `status = 'ONLINE'`. For each match, forces status to `OFFLINE`, releases assigned jobs back to `PENDING`, and triggers agent status notifications.
+- **Multi-Tenant**: Single query covers all teams. Notifications are scoped per-team.
+- **Implementation**: A management command (`python -m backend.manage check_dead_agents`) invoked by cron. Alternatively, a FastAPI startup background task with `asyncio.sleep(120)` loop.
+- **Performance**: Single indexed query on `(status, last_heartbeat)`. Expected < 5ms for typical deployments.
+- **Idempotent**: Re-running against already-offline agents produces no duplicate notifications (status already `OFFLINE`, no state change detected).
+- **Why server-side?**: This is the one check that cannot rely on agents, because it detects the failure of the agent infrastructure itself. All other scheduled work (deadline checks, cleanup) flows through the agent job system.
+
 ---
 
 ### Category 4: Event Deadlines (Priority: P2)
@@ -232,7 +250,28 @@ Body: "Smith Wedding - Final Delivery" deadline in 3 days
 
 **Rationale**: Event deadlines represent commitments to clients; reminders prevent missed deliveries.
 
-**Technical Note**: Requires a scheduled job to check deadlines and trigger notifications. Consider running during job creation cleanup cycle or as a lightweight background process.
+#### Scheduling Mechanism
+
+Deadline checks are scheduled through the **existing agent job scheduler**, consistent with the distributed architecture established in PRD-021. This keeps the server as a coordinator and avoids introducing a separate scheduling subsystem.
+
+**Approach**: A dedicated `deadline_check` job type is created by the server and claimed by agents like any other job. The agent executes the check (or delegates it back to a server API endpoint given query simplicity), and the server sends resulting notifications.
+
+- **Frequency**: Once per day. The server creates a `deadline_check` job daily (e.g., at midnight UTC or at a team-configured time). This is sufficient because deadlines are measured in days, not hours.
+- **Execution**: The deadline query is lightweight (single indexed query on `deadline_date` and `is_deadline=true`), so it can execute server-side via an internal API call triggered by the agent. This keeps the door open for future complexity (e.g., computing delivery readiness from collection analysis status) that would benefit from agent-side execution.
+- **Scope**: Each `deadline_check` job is team-scoped. Multi-tenant isolation is maintained through the standard `team_id` filtering.
+
+**Performance Impact**:
+- **Query load**: Single query per team per day: `SELECT * FROM events WHERE team_id = ? AND is_deadline = true AND deadline_date BETWEEN ? AND ? AND status NOT IN ('COMPLETED', 'CANCELLED')`. Negligible impact.
+- **Optimization**: Index on `(team_id, deadline_date)` WHERE `is_deadline = true`. Batch notification delivery for all matching deadlines in a single job execution.
+- **Estimated cost**: < 10ms query time, < 1s total job execution per team.
+
+**Failure Handling**:
+- **Missed check (agent unavailable)**: If no agent is available to claim the `deadline_check` job, it remains queued. When an agent comes back online, it claims and executes the job. A **backfill window of 7 days** ensures that if the check was missed for several days, deadlines that entered the reminder window during the outage are still notified.
+- **Idempotent delivery**: Each deadline notification is tracked via a `(event_guid, reminder_days_before)` composite key in the notification history. Duplicate checks produce no duplicate notifications.
+- **Job failure**: Standard job retry mechanism applies (max 3 retries). If all retries fail, a job failure notification is sent (Category 1), alerting the user that deadline checks could not be completed.
+- **Agent down during check**: The server's dead-agent safety net (see Category 3) ensures stale jobs are released back to the queue for another agent.
+
+**Why not server-side cron for deadlines?** Keeping all scheduled work flowing through the agent job system maintains architectural consistency. The agent scheduler is already capable of creating recurring jobs. Adding a server-side cron for deadlines would create a parallel scheduling system to maintain. If the deadline check grows in complexity (e.g., evaluating collection processing status against delivery requirements), agent-side execution becomes necessary anyway.
 
 ---
 
@@ -585,15 +624,25 @@ New user-level notification preferences:
 - **FR-700.4**: Debounce notifications (5-minute window per agent)
 - **FR-700.5**: Send to all users in the team
 - **FR-700.6**: Check user preferences before sending
+- **FR-700.7**: Detect graceful agent shutdown via agent status report API
+- **FR-700.8**: Detect agent-driven heartbeat timeout via `AgentService.check_offline_agents()`
+- **FR-700.9**: Implement server-side dead agent cron as safety net for all-agents-down scenario
+- **FR-700.10**: Dead agent cron runs every 2 minutes, multi-tenant, queries `(status, last_heartbeat)` index
+- **FR-700.11**: Dead agent cron forces OFFLINE status, releases assigned jobs to PENDING, triggers notification
+- **FR-700.12**: Dead agent cron is idempotent (no duplicate notifications for already-offline agents)
 
 #### FR-800: Deadline Notifications
 
-- **FR-800.1**: Check for upcoming deadlines on schedule (e.g., during cleanup)
+- **FR-800.1**: Schedule deadline checks via agent job system (`deadline_check` job type), once per day per team
 - **FR-800.2**: Notify based on user's configured days-before preference
-- **FR-800.3**: Send only one reminder per deadline
+- **FR-800.3**: Send only one reminder per deadline, tracked by `(event_guid, reminder_days_before)` key
 - **FR-800.4**: Use user's timezone for deadline calculation
 - **FR-800.5**: Check user preferences before sending
 - **FR-800.6**: Store in notification history
+- **FR-800.7**: Backfill window of 7 days for missed checks (agent unavailability)
+- **FR-800.8**: Deadline query uses index on `(team_id, deadline_date)` WHERE `is_deadline = true`
+- **FR-800.9**: Standard job retry mechanism applies (max 3 retries) for failed deadline check jobs
+- **FR-800.10**: Deadline check job can execute query server-side (lightweight) or agent-side (future extensibility)
 
 #### FR-900: Notification History
 
@@ -694,7 +743,18 @@ New user-level notification preferences:
 │  │  JobCoordinatorService.fail_job()     → NotificationService  ││
 │  │  JobCoordinatorService.complete_job() → NotificationService  ││
 │  │  AgentService.check_offline_agents()  → NotificationService  ││
-│  │  (Deadline check - new scheduled)     → NotificationService  ││
+│  │  AgentService.process_heartbeat()     → NotificationService  ││
+│  │  DeadlineCheckJob (agent-scheduled)   → NotificationService  ││
+│  └─────────────────────────────────────────────────────────────┘│
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │     Dead Agent Safety Net (Server-Side Cron)                 ││
+│  │  - Runs every 2 minutes (crontab or background loop)         ││
+│  │  - Multi-tenant: single query across all teams               ││
+│  │  - Forces OFFLINE status for agents with stale heartbeats    ││
+│  │  - Releases orphaned jobs back to PENDING                    ││
+│  │  - Triggers agent status notifications                       ││
+│  │  - Only server-side scheduled task (justified: monitors       ││
+│  │    the agent infrastructure itself)                           ││
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
                                │
@@ -1068,20 +1128,29 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 **Tasks:**
 
 1. **Agent Status Tracking**
-   - Track "all offline" state
-   - Detect state transitions
-   - Implement debouncing
+   - Track "all offline" state per team
+   - Detect state transitions (online→offline, offline→online)
+   - Implement debouncing (5-minute window per agent)
 
-2. **Agent Notifications**
-   - Notify on all-offline transition
-   - Notify on agent error
-   - Notify on recovery (first online)
+2. **Graceful Shutdown & Heartbeat Detection (Layers 1 & 2)**
+   - Integrate with existing agent shutdown status reporting
+   - Integrate with `AgentService.check_offline_agents()` heartbeat timeout
+   - Trigger notifications on pool-level state changes
 
-3. **Team-Wide Delivery**
+3. **Server-Side Dead Agent Cron (Layer 3 - Safety Net)**
+   - Create management command: `python -m backend.manage check_dead_agents`
+   - Multi-tenant query: all agents WHERE `status = 'ONLINE'` AND `last_heartbeat < NOW() - 90s`
+   - Force status to `OFFLINE`, release assigned jobs to `PENDING`
+   - Trigger agent status notifications per affected team
+   - Add index on `(status, last_heartbeat)` for query performance
+   - Configure cron entry (every 2 minutes) or FastAPI background loop
+   - Ensure idempotency: no duplicate notifications for already-offline agents
+
+4. **Team-Wide Delivery**
    - Send to all team members
    - Respect individual preferences
 
-**Checkpoint**: Receiving agent status notifications
+**Checkpoint**: Receiving agent status notifications via all three detection layers
 
 ---
 
@@ -1089,23 +1158,30 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 
 **Tasks:**
 
-1. **Deadline Check Scheduler**
-   - Add deadline check to cleanup cycle
-   - Or implement lightweight cron job
-   - Query upcoming deadlines
+1. **Deadline Check Job Type**
+   - Define `deadline_check` as a new job type in the agent job system
+   - Server creates one `deadline_check` job per team per day
+   - Job is claimed and executed by agents like any other job
+   - Agent calls server-side API endpoint to execute the deadline query (lightweight)
 
-2. **Deadline Notifications**
-   - Calculate days until deadline
-   - Match user's days_before preference
-   - Track sent reminders (no duplicates)
-   - Respect user timezone
+2. **Deadline Query & Notification**
+   - Query: `SELECT FROM events WHERE team_id = ? AND is_deadline = true AND deadline_date BETWEEN ? AND ? AND status NOT IN ('COMPLETED', 'CANCELLED')`
+   - Add database index on `(team_id, deadline_date)` WHERE `is_deadline = true`
+   - Calculate days until deadline per user's configured `deadline_days_before` preference
+   - Respect user's timezone for date boundary calculation
+   - Batch notification delivery for all matching deadlines in a single job execution
 
-3. **Retry Warning Notifications**
+3. **Idempotent Delivery & Backfill**
+   - Track sent reminders by `(event_guid, reminder_days_before)` composite key in notification history
+   - Backfill window: 7 days - if checks were missed, catch up on deadlines that entered the window during the outage
+   - Duplicate checks produce no duplicate notifications
+
+4. **Retry Warning Notifications**
    - Detect final retry attempt
    - Send warning notification
    - Link to job details
 
-**Checkpoint**: Receiving deadline reminders
+**Checkpoint**: Receiving deadline reminders via agent-scheduled checks
 
 ---
 
@@ -1369,6 +1445,16 @@ VAPID_SUBJECT=mailto:admin@shuttersense.ai
 ---
 
 ## Revision History
+
+- **2026-01-28 (v1.1)**: Reviewer feedback - scheduling mechanisms
+  - Category 4 (Event Deadlines): Documented agent job scheduler as scheduling mechanism with `deadline_check` job type, daily frequency, backfill window, idempotent delivery, and performance assessment
+  - Category 3 (Agent Status): Added three-layer detection model (graceful shutdown, heartbeat timeout, server-side dead agent cron safety net)
+  - Dead agent cron is the only server-side scheduled task, justified by monitoring the agent infrastructure itself
+  - Updated FR-700 with dead agent cron requirements (FR-700.7 through FR-700.12)
+  - Updated FR-800 with agent-scheduled deadline checks (FR-800.7 through FR-800.10)
+  - Updated Phase 5 and Phase 6 implementation plans
+  - Updated architecture diagram with safety net and deadline check integration points
+  - Fixed Non-Goals: clarified scheduling approach (agent jobs + one safety net cron)
 
 - **2026-01-28 (v1.0)**: Initial draft
   - Defined PWA requirements and notification categories
