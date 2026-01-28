@@ -117,16 +117,16 @@
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] Implement OfflineResult save/load/list_pending/mark_synced/delete methods in agent/src/cache/result_store.py using Pydantic models from cache __init__ and JSON file storage at {data_dir}/results/{result_id}.json
-- [ ] T031 [US3] Add agent_upload_offline_result() method to backend/src/services/tool_service.py that creates both a Job record (status=COMPLETED) and an AnalysisResult in a single transaction. Set job timestamps from offline execution data, agent_id from agent context
-- [ ] T032 [US3] Add POST /api/agent/v1/results/upload endpoint in backend/src/api/agent/routes.py. Authenticate agent, validate collection_guid belongs to agent, call tool_service.agent_upload_offline_result(), return job_guid and result_guid. Support idempotent upload via result_id (409 if already uploaded)
-- [ ] T033 [US3] Implement upload_result() method body in agent/src/api_client.py to call POST /api/agent/v1/results/upload with OfflineResult data
-- [ ] T034 [US3] Implement `run` Click command in agent/cli/run.py with <collection-guid> argument and --tool (required), --offline, --output options. Online mode: create job on server, execute locally using analysis modules and LocalAdapter (reuse patterns from job_executor.py), report results. Offline mode: load collection from cache, reject if remote type, execute locally, save OfflineResult via result_store
-- [ ] T035 [US3] Implement `sync` Click command in agent/cli/sync_results.py with --dry-run option. Scan result_store for pending results, display list. If not dry-run: upload each result via API client, mark synced, delete local files. Handle partial failure with resume support
-- [ ] T036 [US3] Register `run` and `sync` commands in agent/cli/main.py via cli.add_command()
-- [ ] T037 [P] [US3] Write unit tests for result_store save/load/list_pending/mark_synced/delete in agent/tests/unit/test_result_store.py
-- [ ] T038 [P] [US3] Write unit tests for run CLI command (online mode, offline mode, remote rejection, tool validation) in agent/tests/unit/test_run_command.py
-- [ ] T039 [P] [US3] Write unit tests for sync CLI command (dry-run, upload, cleanup, partial failure resume) in agent/tests/unit/test_sync_command.py
+- [x] T030 [US3] Implement OfflineResult save/load/list_pending/mark_synced/delete methods in agent/src/cache/result_store.py using Pydantic models from cache __init__ and JSON file storage at {data_dir}/results/{result_id}.json
+- [x] T031 [US3] Add agent_upload_offline_result() method to backend/src/services/tool_service.py that creates both a Job record (status=COMPLETED) and an AnalysisResult in a single transaction. Set job timestamps from offline execution data, agent_id from agent context
+- [x] T032 [US3] Add POST /api/agent/v1/results/upload endpoint in backend/src/api/agent/routes.py. Authenticate agent, validate collection_guid belongs to agent, call tool_service.agent_upload_offline_result(), return job_guid and result_guid. Support idempotent upload via result_id (409 if already uploaded)
+- [x] T033 [US3] Implement upload_result() method body in agent/src/api_client.py to call POST /api/agent/v1/results/upload with OfflineResult data
+- [x] T034 [US3] Implement `run` Click command in agent/cli/run.py with <collection-guid> argument and --tool (required), --offline, --output options. Online mode: create job on server, execute locally using analysis modules and LocalAdapter (reuse patterns from job_executor.py), report results. Offline mode: load collection from cache, reject if remote type, execute locally, save OfflineResult via result_store
+- [x] T035 [US3] Implement `sync` Click command in agent/cli/sync_results.py with --dry-run option. Scan result_store for pending results, display list. If not dry-run: upload each result via API client, mark synced, delete local files. Handle partial failure with resume support
+- [x] T036 [US3] Register `run` and `sync` commands in agent/cli/main.py via cli.add_command()
+- [x] T037 [P] [US3] Write unit tests for result_store save/load/list_pending/mark_synced/delete in agent/tests/unit/test_result_store.py
+- [x] T038 [P] [US3] Write unit tests for run CLI command (online mode, offline mode, remote rejection, tool validation) in agent/tests/unit/test_run_command.py
+- [x] T039 [P] [US3] Write unit tests for sync CLI command (dry-run, upload, cleanup, partial failure resume) in agent/tests/unit/test_sync_command.py
 
 **Checkpoint**: `shuttersense-agent run <guid> --tool photostats` works in both online and offline modes. `shuttersense-agent sync` uploads offline results. Results appear identically to online job results in the web UI.
 

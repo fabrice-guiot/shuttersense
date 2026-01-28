@@ -100,6 +100,9 @@ from backend.src.api.agent.schemas import (
     AgentCollectionListResponse,
     AgentCollectionTestRequest,
     AgentCollectionTestResponse,
+    # Agent offline result upload (Issue #108)
+    AgentUploadResultRequest,
+    AgentUploadResultResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -3061,4 +3064,127 @@ async def agent_test_collection(
         guid=collection.guid,
         is_accessible=collection.is_accessible,
         updated_at=collection.updated_at or datetime.utcnow(),
+    )
+
+
+# ============================================================================
+# Offline Result Upload (Issue #108 - Phase 6)
+# ============================================================================
+
+
+@router.post(
+    "/results/upload",
+    response_model=AgentUploadResultResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload offline analysis result",
+    description="Upload an analysis result from offline agent execution. "
+                "Creates both a Job (COMPLETED) and AnalysisResult in a single transaction. "
+                "Supports idempotent upload via result_id (returns 409 if already uploaded).",
+)
+async def agent_upload_result(
+    data: AgentUploadResultRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Upload an offline analysis result from an agent."""
+    from backend.src.services.tool_service import agent_upload_offline_result
+    from backend.src.models.collection import Collection
+    from backend.src.models.analysis_result import AnalysisResult as AnalysisResultModel
+
+    # Validate collection_guid belongs to this agent's team
+    collection = None
+    collections = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+    ).all()
+    for col in collections:
+        if col.guid == data.collection_guid:
+            collection = col
+            break
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {data.collection_guid} not found",
+        )
+
+    # Verify collection is bound to this agent (for LOCAL collections)
+    if collection.bound_agent_id and collection.bound_agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Collection is bound to a different agent",
+        )
+
+    # Check for idempotent upload: look for existing result with same result_id
+    # We store result_id in the job's progress_json for tracking
+    from backend.src.models.job import Job
+    existing_job = db.query(Job).filter(
+        Job.team_id == ctx.team_id,
+        Job.collection_id == collection.id,
+    ).all()
+    for ej in existing_job:
+        if ej.progress and isinstance(ej.progress, dict):
+            if ej.progress.get("offline_result_id") == data.result_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Result {data.result_id} has already been uploaded",
+                )
+
+    # Validate tool name
+    valid_tools = {"photostats", "photo_pairing", "pipeline_validation"}
+    if data.tool not in valid_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool '{data.tool}'. Must be one of: {sorted(valid_tools)}",
+        )
+
+    try:
+        job, result = agent_upload_offline_result(
+            db=db,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            collection_id=collection.id,
+            tool=data.tool,
+            executed_at=data.executed_at,
+            analysis_data=data.analysis_data,
+            html_report=data.html_report,
+            result_id=data.result_id,
+        )
+
+        # Store the offline_result_id in job's progress_json for idempotency tracking
+        import json as json_module
+        job.progress_json = json_module.dumps({"offline_result_id": data.result_id})
+        db.commit()
+
+    except Exception as e:
+        logger.error(
+            "Failed to upload offline result",
+            extra={
+                "result_id": data.result_id,
+                "collection_guid": data.collection_guid,
+                "tool": data.tool,
+                "error": str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload result: {str(e)}",
+        )
+
+    logger.info(
+        "Offline result uploaded",
+        extra={
+            "result_id": data.result_id,
+            "job_guid": job.guid,
+            "result_guid": result.guid,
+            "collection_guid": data.collection_guid,
+            "tool": data.tool,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentUploadResultResponse(
+        job_guid=job.guid,
+        result_guid=result.guid,
+        collection_guid=data.collection_guid,
+        status="uploaded",
     )

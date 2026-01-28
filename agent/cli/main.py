@@ -37,6 +37,8 @@ from cli.connectors import connectors  # noqa: E402
 from cli.capabilities import capabilities  # noqa: E402
 from cli.test import test  # noqa: E402
 from cli.collection import collection  # noqa: E402
+from cli.run import run  # noqa: E402
+from cli.sync_results import sync  # noqa: E402
 
 cli.add_command(register)
 cli.add_command(start)
@@ -45,11 +47,11 @@ cli.add_command(connectors)
 cli.add_command(capabilities)
 cli.add_command(test)
 cli.add_command(collection)
+cli.add_command(run)
+cli.add_command(sync)
 
 
 # Additional commands will be added here as they are implemented:
-# - run: Run analysis tool (Issue #108, US3)
-# - sync: Upload offline results (Issue #108, US3)
 # - self-test: Verify configuration (Issue #108, US6)
 
 

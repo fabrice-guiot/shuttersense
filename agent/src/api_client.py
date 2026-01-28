@@ -1328,7 +1328,42 @@ class AgentApiClient:
             ApiError: If validation fails (400) or already uploaded (409)
             ConnectionError: If connection to server fails
         """
-        raise NotImplementedError("Implemented in US3 (Phase 6)")
+        payload: dict[str, Any] = {
+            "result_id": result_id,
+            "collection_guid": collection_guid,
+            "tool": tool,
+            "executed_at": executed_at,
+            "analysis_data": analysis_data,
+        }
+        if html_report is not None:
+            payload["html_report"] = html_report
+
+        try:
+            response = await self._client.post(
+                f"{API_BASE_PATH}/results/upload",
+                json=payload,
+            )
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        if response.status_code == 201:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 409:
+            raise ApiError("Result already uploaded", status_code=409)
+        elif response.status_code == 400:
+            detail = response.json().get("detail", "Validation error")
+            raise ApiError(detail, status_code=400)
+        elif response.status_code == 404:
+            raise ApiError("Collection not found", status_code=404)
+        else:
+            raise ApiError(
+                f"Upload failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
 
     # -------------------------------------------------------------------------
     # Cleanup

@@ -172,6 +172,92 @@ class JobAdapter:
         )
 
 
+def agent_upload_offline_result(
+    db: Session,
+    agent_id: int,
+    team_id: int,
+    collection_id: int,
+    tool: str,
+    executed_at: datetime,
+    analysis_data: Dict[str, Any],
+    html_report: Optional[str] = None,
+    result_id: Optional[str] = None,
+) -> tuple:
+    """
+    Create both a Job record (status=COMPLETED) and an AnalysisResult
+    from an offline agent execution in a single transaction.
+
+    This is used when an agent uploads results from an offline analysis run.
+    The Job is created to maintain a consistent audit trail in the job history.
+
+    Args:
+        db: Database session
+        agent_id: Internal ID of the uploading agent
+        team_id: Team ID for tenant isolation
+        collection_id: Internal ID of the analyzed collection
+        tool: Tool name (photostats, photo_pairing, pipeline_validation)
+        executed_at: When the analysis was executed on the agent
+        analysis_data: Full analysis output (tool-specific JSON)
+        html_report: Optional pre-rendered HTML report
+        result_id: Optional locally generated UUID for idempotency
+
+    Returns:
+        Tuple of (Job, AnalysisResult) records
+
+    Raises:
+        Exception: If transaction fails (rolls back automatically)
+    """
+    now = datetime.utcnow()
+
+    # Create Job record with COMPLETED status (retroactive record of offline execution)
+    job = Job(
+        team_id=team_id,
+        collection_id=collection_id,
+        tool=tool,
+        status=PersistentJobStatus.COMPLETED,
+        agent_id=agent_id,
+        assigned_at=executed_at,
+        started_at=executed_at,
+        completed_at=now,
+        priority=0,
+        required_capabilities_json=json.dumps([tool]),
+    )
+    db.add(job)
+    db.flush()  # Get job.id without committing
+
+    # Create AnalysisResult
+    duration = (now - executed_at).total_seconds() if executed_at else 0
+    result = AnalysisResult(
+        team_id=team_id,
+        collection_id=collection_id,
+        tool=tool,
+        status=ResultStatus.COMPLETED,
+        started_at=executed_at,
+        completed_at=now,
+        duration_seconds=duration,
+        results_json=analysis_data.get("results", analysis_data),
+        report_html=html_report,
+        files_scanned=analysis_data.get("files_scanned") or analysis_data.get("total_files"),
+        issues_found=analysis_data.get("issues_found") or analysis_data.get("issues_count"),
+    )
+    db.add(result)
+    db.flush()  # Get result.id
+
+    # Link job to result
+    job.result_id = result.id
+
+    db.commit()
+    db.refresh(job)
+    db.refresh(result)
+
+    logger.info(
+        "Uploaded offline result: job=%s result=%s tool=%s collection_id=%d",
+        job.guid, result.guid, tool, collection_id,
+    )
+
+    return job, result
+
+
 class ToolService:
     """
     Service for managing tool execution jobs.
