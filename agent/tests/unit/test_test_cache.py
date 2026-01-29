@@ -100,12 +100,14 @@ class TestNormalizePath:
     """Tests for _normalize_path."""
 
     def test_already_absolute(self):
+        import os
         result = _normalize_path("/tmp/photos")
-        assert result.startswith("/")
+        assert os.path.isabs(result)
 
     def test_trailing_slash_removed(self):
+        import os
         result = _normalize_path("/tmp/photos/")
-        assert not result.endswith("/") or result == "/"
+        assert not result.endswith(os.sep) or result in ("/", os.sep)
 
     def test_consistent_hashing(self):
         """Same logical path should produce same hash."""
