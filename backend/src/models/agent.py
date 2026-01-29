@@ -145,21 +145,21 @@ class Agent(Base, GuidMixin):
     capabilities_json = Column(
         JSONB().with_variant(Text, "sqlite"),
         nullable=False,
-        default=list
+        default="[]"
     )
 
     # Connectors with local credentials (JSONB array of connector GUIDs)
     connectors_json = Column(
         JSONB().with_variant(Text, "sqlite"),
         nullable=False,
-        default=list
+        default="[]"
     )
 
     # Authorized local filesystem roots (JSONB array of path strings)
     authorized_roots_json = Column(
         JSONB().with_variant(Text, "sqlite"),
         nullable=False,
-        default=list
+        default="[]"
     )
 
     # Pending commands to be sent to agent on next heartbeat

@@ -129,21 +129,9 @@ class TestTestResultSummary:
 class TestAgentCreateCollection:
     """Tests for CollectionService.agent_create_collection()."""
 
-    def test_creates_local_collection(self, test_db_session, test_team, test_cache, test_connector_service):
+    def test_creates_local_collection(self, test_db_session, test_team, create_agent, test_cache, test_connector_service):
         """agent_create_collection creates a LOCAL collection bound to the agent."""
-        # Create a mock agent in the DB
-        from backend.src.models.agent import Agent, AgentStatus
-        agent = Agent(
-            name="Test Agent",
-            hostname="test-host",
-            os_info="Linux",
-            status=AgentStatus.ONLINE,
-            team_id=test_team.id,
-            capabilities=["photostats"],
-        )
-        test_db_session.add(agent)
-        test_db_session.commit()
-        test_db_session.refresh(agent)
+        agent = create_agent()
 
         service = CollectionService(
             db=test_db_session,
@@ -168,20 +156,9 @@ class TestAgentCreateCollection:
             assert collection.team_id == test_team.id
             assert collection.guid.startswith("col_")
 
-    def test_stores_test_results_as_metadata(self, test_db_session, test_team, test_cache, test_connector_service):
+    def test_stores_test_results_as_metadata(self, test_db_session, test_team, create_agent, test_cache, test_connector_service):
         """Test results are stored in metadata_json."""
-        from backend.src.models.agent import Agent, AgentStatus
-        agent = Agent(
-            name="Test Agent",
-            hostname="test-host",
-            os_info="Linux",
-            status=AgentStatus.ONLINE,
-            team_id=test_team.id,
-            capabilities=["photostats"],
-        )
-        test_db_session.add(agent)
-        test_db_session.commit()
-        test_db_session.refresh(agent)
+        agent = create_agent()
 
         service = CollectionService(
             db=test_db_session,
@@ -213,20 +190,9 @@ class TestAgentCreateCollection:
             assert "test_results" in metadata
             assert metadata["test_results"]["file_count"] == 5000
 
-    def test_no_test_results_no_metadata(self, test_db_session, test_team, test_cache, test_connector_service):
+    def test_no_test_results_no_metadata(self, test_db_session, test_team, create_agent, test_cache, test_connector_service):
         """Without test_results, metadata is not set."""
-        from backend.src.models.agent import Agent, AgentStatus
-        agent = Agent(
-            name="Test Agent",
-            hostname="test-host",
-            os_info="Linux",
-            status=AgentStatus.ONLINE,
-            team_id=test_team.id,
-            capabilities=["photostats"],
-        )
-        test_db_session.add(agent)
-        test_db_session.commit()
-        test_db_session.refresh(agent)
+        agent = create_agent()
 
         service = CollectionService(
             db=test_db_session,
@@ -248,20 +214,9 @@ class TestAgentCreateCollection:
                 metadata = json.loads(collection.metadata_json) if isinstance(collection.metadata_json, str) else collection.metadata_json
                 assert "test_results" not in metadata
 
-    def test_duplicate_name_raises(self, test_db_session, test_team, test_cache, test_connector_service):
+    def test_duplicate_name_raises(self, test_db_session, test_team, create_agent, test_cache, test_connector_service):
         """Creating a collection with a duplicate name raises ValueError."""
-        from backend.src.models.agent import Agent, AgentStatus
-        agent = Agent(
-            name="Test Agent",
-            hostname="test-host",
-            os_info="Linux",
-            status=AgentStatus.ONLINE,
-            team_id=test_team.id,
-            capabilities=["photostats"],
-        )
-        test_db_session.add(agent)
-        test_db_session.commit()
-        test_db_session.refresh(agent)
+        agent = create_agent()
 
         service = CollectionService(
             db=test_db_session,
