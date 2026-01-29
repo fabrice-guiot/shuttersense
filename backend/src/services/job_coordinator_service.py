@@ -1787,6 +1787,13 @@ class JobCoordinatorService:
                 )
                 continue
 
+            # Build required capabilities: tool + connector (if agent-side credentials)
+            from backend.src.models.connector import CredentialLocation
+            required_capabilities = [tool]
+            if (collection.connector and
+                    collection.connector.credential_location == CredentialLocation.AGENT):
+                required_capabilities.append(f"connector:{collection.connector.guid}")
+
             # Create refresh job
             refresh_job = Job(
                 team_id=job.team_id,
@@ -1797,7 +1804,7 @@ class JobCoordinatorService:
                 mode="collection",
                 status=JobStatus.PENDING,
                 bound_agent_id=collection.bound_agent_id,
-                required_capabilities=[tool],
+                required_capabilities=required_capabilities,
             )
             self.db.add(refresh_job)
 

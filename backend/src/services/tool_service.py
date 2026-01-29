@@ -632,6 +632,13 @@ class ToolService:
                 }
             )
 
+        # Build required capabilities: tool + connector (if agent-side credentials)
+        from backend.src.models.connector import CredentialLocation
+        required_capabilities = [tool.value]
+        if (collection.connector and
+                collection.connector.credential_location == CredentialLocation.AGENT):
+            required_capabilities.append(f"connector:{collection.connector.guid}")
+
         # Create persistent job record
         job = Job(
             team_id=collection.team_id,
@@ -642,7 +649,7 @@ class ToolService:
             mode=mode_str,
             status=PersistentJobStatus.PENDING,
             bound_agent_id=collection.bound_agent_id,
-            required_capabilities=[tool.value],  # Basic capability requirement
+            required_capabilities=required_capabilities,
         )
 
         self.db.add(job)
