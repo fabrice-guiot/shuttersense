@@ -3364,14 +3364,12 @@ async def agent_upload_result(
         db.commit()
 
     except Exception as e:
-        logger.error(
-            "Failed to upload offline result",
-            extra={
-                "result_id": data.result_id,
-                "collection_guid": data.collection_guid,
-                "tool": data.tool,
-                "error": str(e),
-            },
+        logger.exception(
+            "Failed to upload offline result for collection=%s tool=%s result_id=%s: %s",
+            data.collection_guid,
+            data.tool,
+            data.result_id,
+            e,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
