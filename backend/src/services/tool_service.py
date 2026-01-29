@@ -226,7 +226,9 @@ def agent_upload_offline_result(
     db.flush()  # Get job.id without committing
 
     # Create AnalysisResult
-    duration = (now - executed_at).total_seconds() if executed_at else 0
+    # Strip timezone info to match naive `now` from utcnow()
+    executed_at_naive = executed_at.replace(tzinfo=None) if executed_at and executed_at.tzinfo else executed_at
+    duration = (now - executed_at_naive).total_seconds() if executed_at_naive else 0
     result = AnalysisResult(
         team_id=team_id,
         collection_id=collection_id,
