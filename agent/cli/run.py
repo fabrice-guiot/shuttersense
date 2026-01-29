@@ -302,13 +302,13 @@ def _execute_tool(
 
     if tool == "photostats":
         return _run_photostats(
-            file_infos, photo_extensions, metadata_extensions, require_sidecar
+            file_infos, photo_extensions, metadata_extensions, require_sidecar, location
         )
     elif tool == "photo_pairing":
-        return _run_photo_pairing(file_infos, photo_extensions)
+        return _run_photo_pairing(file_infos, photo_extensions, location)
     elif tool == "pipeline_validation":
         return _run_pipeline_validation(
-            file_infos, photo_extensions, metadata_extensions, team_config
+            file_infos, photo_extensions, metadata_extensions, team_config, location
         )
     else:
         raise ValueError(f"Unknown tool: {tool}")
@@ -319,9 +319,11 @@ def _run_photostats(
     photo_extensions: set[str],
     metadata_extensions: set[str],
     require_sidecar: set[str],
+    location: str,
 ) -> tuple[Dict[str, Any], Optional[str]]:
-    """Run PhotoStats analysis."""
+    """Run PhotoStats analysis and generate HTML report."""
     from src.analysis.photostats_analyzer import analyze_pairing, calculate_stats
+    from src.analysis.report_generators import generate_photostats_report
 
     stats = calculate_stats(file_infos, photo_extensions, metadata_extensions)
     pairing = analyze_pairing(
@@ -332,10 +334,17 @@ def _run_photostats(
         pairing.get("orphaned_xmp", [])
     )
 
+    # Compute storage_by_type from file_sizes (sum of per-file sizes per extension)
+    storage_by_type = {
+        ext: sum(sizes)
+        for ext, sizes in stats.get("file_sizes", {}).items()
+    }
+
     results = {
         "total_files": stats.get("total_files", 0),
         "total_size": stats.get("total_size", 0),
         "file_counts": stats.get("file_counts", {}),
+        "storage_by_type": storage_by_type,
         "orphaned_images": pairing.get("orphaned_images", []),
         "orphaned_xmp": pairing.get("orphaned_xmp", []),
         "files_scanned": stats.get("total_files", 0),
@@ -350,18 +359,21 @@ def _run_photostats(
         },
     }
 
-    return results, None  # No HTML report in CLI mode for now
+    report_html = generate_photostats_report(results, location)
+    return results, report_html
 
 
 def _run_photo_pairing(
     file_infos: list,
     photo_extensions: set[str],
+    location: str,
 ) -> tuple[Dict[str, Any], Optional[str]]:
-    """Run Photo Pairing analysis."""
+    """Run Photo Pairing analysis and generate HTML report."""
     from src.analysis.photo_pairing_analyzer import (
         build_imagegroups,
         calculate_analytics,
     )
+    from src.analysis.report_generators import generate_photo_pairing_report
 
     # Filter to photo files only
     photo_files = [f for f in file_infos if f.extension in photo_extensions]
@@ -378,7 +390,9 @@ def _run_photo_pairing(
         "image_count": analytics.get("image_count", 0),
         "group_count": analytics.get("group_count", 0),
         "invalid_files": len(invalid_files),
+        "invalid_files_count": len(invalid_files),
         "camera_usage": analytics.get("camera_usage", {}),
+        "method_usage": analytics.get("method_usage", {}),
         "files_scanned": len(file_infos),
         "issues_found": len(invalid_files),
         "issues_count": len(invalid_files),
@@ -391,7 +405,9 @@ def _run_photo_pairing(
         },
     }
 
-    return results, None
+    invalid_file_paths = [f["path"] for f in invalid_files] if invalid_files and isinstance(invalid_files[0], dict) else invalid_files
+    report_html = generate_photo_pairing_report(results, invalid_file_paths, location)
+    return results, report_html
 
 
 def _run_pipeline_validation(
@@ -399,8 +415,9 @@ def _run_pipeline_validation(
     photo_extensions: set[str],
     metadata_extensions: set[str],
     team_config: TeamConfigCache,
+    location: str,
 ) -> tuple[Dict[str, Any], Optional[str]]:
-    """Run Pipeline Validation analysis using cached pipeline config."""
+    """Run Pipeline Validation analysis and generate HTML report."""
     if team_config.default_pipeline is None:
         click.echo(
             click.style("Warning: ", fg="yellow")
@@ -423,6 +440,7 @@ def _run_pipeline_validation(
 
     from src.analysis.pipeline_analyzer import run_pipeline_validation
     from src.analysis.pipeline_config_builder import build_pipeline_config
+    from src.analysis.report_generators import generate_pipeline_validation_report
 
     pipeline = team_config.default_pipeline
     pipeline_config = build_pipeline_config(
@@ -430,34 +448,43 @@ def _run_pipeline_validation(
         edges_json=pipeline.edges,
     )
 
-    result = run_pipeline_validation(
+    validation_result = run_pipeline_validation(
         file_infos,
         pipeline_config=pipeline_config,
         photo_extensions=photo_extensions,
         metadata_extensions=metadata_extensions,
     )
 
-    status_counts = result.get("status_counts", {})
+    status_counts = validation_result.get("status_counts", {})
     issues = status_counts.get("partial", 0) + status_counts.get("inconsistent", 0)
+
+    # Build overall_status with uppercase keys (matches job_executor format)
+    overall_status = {
+        "CONSISTENT": status_counts.get("consistent", 0) + status_counts.get("consistent_with_warning", 0),
+        "PARTIAL": status_counts.get("partial", 0),
+        "INCONSISTENT": status_counts.get("inconsistent", 0),
+    }
 
     results = {
         "total_files": len(file_infos),
         "files_scanned": len(file_infos),
-        "total_images": result.get("total_images", 0),
+        "total_images": validation_result.get("total_images", 0),
+        "overall_status": overall_status,
         "status_counts": status_counts,
-        "by_termination": result.get("by_termination", {}),
+        "by_termination": validation_result.get("by_termination", {}),
         "issues_found": issues,
         "issues_count": issues,
         "results": {
-            "total_images": result.get("total_images", 0),
-            "total_groups": result.get("total_groups", 0),
+            "total_images": validation_result.get("total_images", 0),
+            "total_groups": validation_result.get("total_groups", 0),
             "status_counts": status_counts,
-            "by_termination": result.get("by_termination", {}),
-            "invalid_files_count": result.get("invalid_files_count", 0),
+            "by_termination": validation_result.get("by_termination", {}),
+            "invalid_files_count": validation_result.get("invalid_files_count", 0),
         },
     }
 
-    return results, None
+    report_html = generate_pipeline_validation_report(results, validation_result, location)
+    return results, report_html
 
 
 async def _upload_result_async(

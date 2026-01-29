@@ -14,6 +14,7 @@ Task: T009
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,13 @@ from src.config import AgentConfig
 from src.config_resolver import resolve_team_config
 from src.remote.base import FileInfo
 from src.remote.local_adapter import LocalAdapter
+
+# Auto-generated report filename patterns per tool
+_REPORT_FILENAMES = {
+    "photostats": "photo_stats_report",
+    "photo_pairing": "photo_pairing_report",
+    "pipeline_validation": "pipeline_validation_report",
+}
 
 # Default extensions used only for --check-only mode (file categorization)
 DEFAULT_PHOTO_EXTENSIONS = {".dng", ".cr3", ".tiff", ".tif"}
@@ -137,6 +145,86 @@ def _count_issues(tool: str, result: dict) -> int:
     return 0
 
 
+def _generate_report_for_tool(
+    tool: str,
+    result: dict,
+    location: str,
+) -> Optional[str]:
+    """Generate an HTML report string for a tool result.
+
+    Args:
+        tool: Tool name (photostats, photo_pairing, pipeline_validation)
+        result: Raw result dict from the tool's _run_* function
+        location: Directory path being analyzed
+
+    Returns:
+        HTML report string, or None if the tool was skipped
+    """
+    if result.get("skipped"):
+        return None
+
+    from src.analysis.report_generators import (
+        generate_photo_pairing_report,
+        generate_photostats_report,
+        generate_pipeline_validation_report,
+    )
+
+    if tool == "photostats":
+        stats = result.get("stats", {})
+        pairing = result.get("pairing", {})
+        # Build the results dict expected by the report generator
+        storage_by_type = {
+            ext: sum(sizes)
+            for ext, sizes in stats.get("file_sizes", {}).items()
+        }
+        report_data = {
+            "total_files": stats.get("total_files", 0),
+            "total_size": stats.get("total_size", 0),
+            "file_counts": stats.get("file_counts", {}),
+            "storage_by_type": storage_by_type,
+            "orphaned_images": pairing.get("orphaned_images", []),
+            "orphaned_xmp": pairing.get("orphaned_xmp", []),
+        }
+        return generate_photostats_report(report_data, location)
+
+    elif tool == "photo_pairing":
+        from src.analysis.photo_pairing_analyzer import calculate_analytics
+
+        imagegroups = result.get("imagegroups", [])
+        invalid_files = result.get("invalid_files", [])
+        analytics = calculate_analytics(imagegroups, {})
+        report_data = {
+            "image_count": analytics.get("image_count", 0),
+            "group_count": analytics.get("group_count", 0),
+            "camera_usage": analytics.get("camera_usage", {}),
+            "method_usage": analytics.get("method_usage", {}),
+            "invalid_files_count": len(invalid_files),
+        }
+        invalid_file_paths = (
+            [f["path"] for f in invalid_files]
+            if invalid_files and isinstance(invalid_files[0], dict)
+            else invalid_files
+        )
+        return generate_photo_pairing_report(report_data, invalid_file_paths, location)
+
+    elif tool == "pipeline_validation":
+        status_counts = result.get("status_counts", {})
+        overall_status = {
+            "CONSISTENT": status_counts.get("consistent", 0)
+            + status_counts.get("consistent_with_warning", 0),
+            "PARTIAL": status_counts.get("partial", 0),
+            "INCONSISTENT": status_counts.get("inconsistent", 0),
+        }
+        report_data = {
+            "total_images": result.get("total_images", 0),
+            "overall_status": overall_status,
+            "by_termination": result.get("by_termination", {}),
+        }
+        return generate_pipeline_validation_report(report_data, result, location)
+
+    return None
+
+
 @click.command("test")
 @click.argument("path", type=click.Path(exists=False))
 @click.option(
@@ -153,9 +241,10 @@ def _count_issues(tool: str, result: dict) -> int:
 )
 @click.option(
     "--output",
+    "-o",
     type=click.Path(),
     default=None,
-    help="Save HTML report to this file path.",
+    help="Save HTML report. File path with --tool, directory path without.",
 )
 def test(path: str, tool: Optional[str], check_only: bool, output: Optional[str]) -> None:
     """Test a local directory for accessibility and run analysis tools.
@@ -176,9 +265,25 @@ def test(path: str, tool: Optional[str], check_only: bool, output: Optional[str]
         shuttersense-agent test /photos/2024
         shuttersense-agent test /photos/2024 --check-only
         shuttersense-agent test /photos/2024 --tool photostats
-        shuttersense-agent test /photos/2024 --output report.html
+        shuttersense-agent test /photos/2024 --tool photostats -o report.html
+        shuttersense-agent test /photos/2024 -o ./reports/
     """
     resolved_path = str(Path(path).resolve())
+
+    # Validate --output semantics early
+    if output and not tool:
+        output_path = Path(output)
+        # If --output looks like a file (has .html extension) but no --tool, error
+        if output_path.suffix.lower() == ".html":
+            click.echo(
+                click.style("Error: ", fg="red", bold=True)
+                + "Cannot write all tool reports to a single file.\n"
+                "  Use --tool to select a specific tool, or specify a directory "
+                "to save all reports.\n"
+                "  Example: --tool photostats --output report.html\n"
+                "  Example: --output ./reports/"
+            )
+            sys.exit(1)
 
     click.echo(f"Testing path: {resolved_path}")
 
@@ -305,10 +410,32 @@ def test(path: str, tool: Optional[str], check_only: bool, output: Optional[str]
     )
 
     # --- Step 4: Output report if requested ---
-    if output:
-        click.echo(f"\n  Report saved to: {output}")
-        # HTML report generation will be implemented with full tool integration
-        # For now, note the path for future use
+    if output and all_results:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+        if tool:
+            # Single tool → write to the specified file path
+            output_path = Path(output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            result_data = all_results.get(tool)
+            if result_data and not result_data.get("skipped"):
+                report_html = _generate_report_for_tool(tool, result_data, resolved_path)
+                if report_html:
+                    output_path.write_text(report_html, encoding="utf-8")
+                    click.echo(f"  Report saved: {output_path}")
+        else:
+            # All tools → treat output as a directory
+            output_dir = Path(output)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            for t, result_data in all_results.items():
+                if result_data.get("skipped"):
+                    continue
+                report_html = _generate_report_for_tool(t, result_data, resolved_path)
+                if report_html:
+                    base_name = _REPORT_FILENAMES.get(t, f"{t}_report")
+                    report_path = output_dir / f"{base_name}_{timestamp}.html"
+                    report_path.write_text(report_html, encoding="utf-8")
+                    click.echo(f"  Report saved: {report_path}")
 
     # --- Step 5: Print summary ---
     _print_summary(file_count, photo_count, sidecar_count, issues_found)

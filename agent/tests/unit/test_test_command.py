@@ -183,13 +183,33 @@ class TestToolFilter:
 class TestOutputFlag:
     """Tests for --output option."""
 
-    def test_output_flag_accepted(self, runner, mock_adapter, mock_save, mock_config):
+    def test_output_html_without_tool_errors(self, runner):
+        """--output report.html without --tool should error."""
+        result = runner.invoke(test, ["/tmp/photos", "--output", "report.html"])
+        assert result.exit_code == 1
+        assert "Cannot write all tool reports to a single file" in result.output
+
+    def test_output_directory_without_tool_accepted(self, runner, mock_adapter, mock_save, mock_config):
+        """--output ./reports/ without --tool should be accepted (directory mode)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("cli.test._run_photostats", return_value={"stats": {}, "pairing": {}}), \
+                 patch("cli.test._run_photo_pairing", return_value={"imagegroups": {}, "invalid_files": []}), \
+                 patch("cli.test._run_pipeline_validation", return_value={"status_counts": {}}), \
+                 patch("cli.test._generate_report_for_tool", return_value="<html></html>"):
+                result = runner.invoke(test, ["/tmp/photos", "--output", tmpdir])
+            assert result.exit_code == 0
+
+    def test_output_file_with_tool_accepted(self, runner, mock_adapter, mock_save, mock_config):
+        """--tool photostats --output report.html should be accepted."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
+            output_path = f.name
         with patch("cli.test._run_photostats", return_value={"stats": {}, "pairing": {}}), \
-             patch("cli.test._run_photo_pairing", return_value={"imagegroups": {}, "invalid_files": []}), \
-             patch("cli.test._run_pipeline_validation", return_value={"status_counts": {}}):
-            result = runner.invoke(test, ["/tmp/photos", "--output", "report.html"])
+             patch("cli.test._generate_report_for_tool", return_value="<html></html>"):
+            result = runner.invoke(test, ["/tmp/photos", "--tool", "photostats", "--output", output_path])
         assert result.exit_code == 0
-        assert "report.html" in result.output
+        assert "Report saved" in result.output
 
 
 # ============================================================================
