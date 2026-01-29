@@ -248,13 +248,32 @@ def agent_upload_offline_result(
     # Link job to result
     job.result_id = result.id
 
+    # Cancel existing scheduled jobs and schedule next run.
+    # An offline upload is a force-run: it supersedes any scheduled job
+    # for the same collection/tool, then schedules the next one per TTL.
+    # This mirrors JobCoordinatorService.complete_job().
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    coordinator = JobCoordinatorService(db)
+    cancelled = coordinator.cancel_scheduled_jobs_for_collection(collection_id, tool)
+    if cancelled > 0:
+        db.flush()  # Persist CANCELLED status before scheduling query
+        logger.info(
+            "Cancelled %d scheduled job(s) due to offline result upload",
+            cancelled,
+            extra={"collection_id": collection_id, "tool": tool},
+        )
+
+    # Schedule next run based on collection state TTL config
+    scheduled_job = coordinator._maybe_create_scheduled_job(job)
+
     db.commit()
     db.refresh(job)
     db.refresh(result)
 
     logger.info(
-        "Uploaded offline result: job=%s result=%s tool=%s collection_id=%d",
+        "Uploaded offline result: job=%s result=%s tool=%s collection_id=%d scheduled=%s",
         job.guid, result.guid, tool, collection_id,
+        scheduled_job.guid if scheduled_job else None,
     )
 
     return job, result
