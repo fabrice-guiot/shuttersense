@@ -1058,6 +1058,85 @@ class AgentConnectorMetadataResponse(BaseModel):
     }
 
 
+class AgentConnectorDebugInfoResponse(BaseModel):
+    """
+    Response schema for connector debug info including inventory configuration.
+
+    Used by agent debug commands to access connector details needed
+    for inventory manifest comparison and diagnostics.
+    """
+
+    guid: str = Field(..., description="Connector GUID (con_xxx)")
+    name: str = Field(..., description="Connector display name")
+    type: str = Field(..., description="Connector type (s3, gcs, smb)")
+    credential_location: str = Field(..., description="Credential storage location")
+    inventory_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Inventory bucket configuration (S3 Inventory / GCS Storage Insights)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "con_01hgw2bbg...",
+                "name": "Production S3 Bucket",
+                "type": "s3",
+                "credential_location": "agent",
+                "inventory_config": {
+                    "source_bucket": "my-photos",
+                    "destination_bucket": "my-inventory",
+                    "config_name": "daily-inventory",
+                }
+            }
+        }
+    }
+
+
+class CollectionDebugInfoResponse(BaseModel):
+    """
+    Response schema for collection debug info.
+
+    Returns the collection's stored FileInfo, location, and folder path
+    so debug commands can replicate the same hash computation as tool execution.
+    """
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    name: str = Field(..., description="Collection display name")
+    location: str = Field(..., description="Collection location (bucket/prefix or local path)")
+    folder_path: Optional[str] = Field(
+        None,
+        description="Inventory folder path (from InventoryFolder mapping)"
+    )
+    connector_guid: Optional[str] = Field(
+        None,
+        description="Connector GUID if remote collection"
+    )
+    file_info: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Stored FileInfo entries (from inventory import or cloud API)"
+    )
+    file_info_source: Optional[str] = Field(
+        None,
+        description="Source of FileInfo: 'api' or 'inventory'"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "name": "Vacation Photos 2024",
+                "location": "s3://my-bucket/2020/vacation",
+                "folder_path": "2020/vacation/",
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "file_info": [
+                    {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2026-01-15T10:00:00Z"}
+                ],
+                "file_info_source": "inventory"
+            }
+        }
+    }
+
+
 class ReportConnectorCapabilityRequest(BaseModel):
     """Request schema for reporting connector capability from agent."""
 

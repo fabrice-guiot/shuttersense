@@ -69,6 +69,8 @@ from backend.src.api.agent.schemas import (
     AgentConnectorResponse,
     AgentConnectorListResponse,
     AgentConnectorMetadataResponse,
+    AgentConnectorDebugInfoResponse,
+    CollectionDebugInfoResponse,
     ReportConnectorCapabilityRequest,
     ReportConnectorCapabilityResponse,
     # Chunked upload schemas (Phase 15)
@@ -1644,6 +1646,107 @@ async def get_connector_metadata(
         type=connector.type.value,
         credential_location=connector.credential_location.value,
         credential_fields=credential_fields,
+    )
+
+
+@router.get(
+    "/connectors/{guid}/debug-info",
+    response_model=AgentConnectorDebugInfoResponse,
+    summary="Get connector debug info",
+    description="Get connector details including inventory configuration for debug diagnostics."
+)
+async def get_connector_debug_info(
+    guid: str,
+    agent_ctx: AgentContext = Depends(require_online_agent),
+    connector_service: ConnectorService = Depends(get_connector_service),
+):
+    """
+    Get connector debug info including inventory configuration.
+
+    Used by agent debug commands to access connector details needed for
+    inventory manifest comparison and diagnostics.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx)
+
+    Returns:
+        Connector details with inventory_config
+    """
+    connector = connector_service.get_by_guid(guid, team_id=agent_ctx.agent.team_id)
+
+    if not connector:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Connector not found: {guid}"
+        )
+
+    return AgentConnectorDebugInfoResponse(
+        guid=connector.guid,
+        name=connector.name,
+        type=connector.type.value,
+        credential_location=connector.credential_location.value,
+        inventory_config=connector.inventory_config,
+    )
+
+
+@router.get(
+    "/collections/{guid}/debug-info",
+    response_model=CollectionDebugInfoResponse,
+    summary="Get collection debug info",
+    description="Get collection details including stored FileInfo and location for debug diagnostics."
+)
+async def get_collection_debug_info(
+    guid: str,
+    agent_ctx: AgentContext = Depends(require_online_agent),
+    db: Session = Depends(get_db),
+):
+    """
+    Get collection debug info including stored FileInfo and location.
+
+    Used by agent debug commands to replicate the same hash computation
+    as tool execution (URL-decode keys, strip collection path prefix).
+
+    Path Parameters:
+        guid: Collection GUID (col_xxx)
+
+    Returns:
+        Collection details with file_info, location, and folder_path
+    """
+    from backend.src.models.collection import Collection
+    from backend.src.models.inventory_folder import InventoryFolder
+
+    # Find collection by GUID within agent's team
+    collection = None
+    collections = db.query(Collection).filter(
+        Collection.team_id == agent_ctx.agent.team_id,
+    ).all()
+    for col in collections:
+        if col.guid == guid:
+            collection = col
+            break
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection not found: {guid}"
+        )
+
+    # Get folder_path from InventoryFolder mapping (if exists)
+    folder_path = None
+    inventory_folder = db.query(InventoryFolder).filter(
+        InventoryFolder.collection_guid == guid
+    ).first()
+    if inventory_folder:
+        folder_path = inventory_folder.path
+
+    return CollectionDebugInfoResponse(
+        guid=collection.guid,
+        name=collection.name,
+        location=collection.location,
+        folder_path=folder_path,
+        connector_guid=collection.connector.guid if collection.connector else None,
+        file_info=collection.file_info,
+        file_info_source=collection.file_info_source,
     )
 
 
