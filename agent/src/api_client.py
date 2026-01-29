@@ -1178,6 +1178,79 @@ class AgentApiClient:
             )
 
     # -------------------------------------------------------------------------
+    # Previous Result Lookup (Issue #92 + Issue #108)
+    # -------------------------------------------------------------------------
+
+    def get_previous_result(
+        self,
+        collection_guid: str,
+        tool: str,
+    ) -> Optional[dict[str, Any]]:
+        """
+        Get the previous result for a collection+tool for no-change detection.
+
+        Args:
+            collection_guid: GUID of the collection
+            tool: Tool name (photostats, photo_pairing, pipeline_validation)
+
+        Returns:
+            Dict with guid, input_state_hash, completed_at or None if no previous result
+        """
+        response = self.get(f"/collections/{collection_guid}/previous-result?tool={tool}")
+        if response.status_code == 200:
+            return response.json()
+        return None
+
+    # -------------------------------------------------------------------------
+    # No-Change Result Recording (Issue #108)
+    # -------------------------------------------------------------------------
+
+    def upload_no_change_result(
+        self,
+        collection_guid: str,
+        tool: str,
+        input_state_hash: str,
+        source_result_guid: str,
+    ) -> Optional[dict[str, Any]]:
+        """
+        Record a NO_CHANGE result on the server (synchronous, for CLI use).
+
+        Called when the CLI detects no changes (input_state_hash matches
+        previous result). Creates a Job+AnalysisResult with NO_CHANGE status.
+
+        Args:
+            collection_guid: GUID of the collection (col_xxx)
+            tool: Tool name (photostats, photo_pairing, pipeline_validation)
+            input_state_hash: SHA-256 hash of Input State (64-char hex)
+            source_result_guid: GUID of the previous result (res_xxx)
+
+        Returns:
+            Response dict with job_guid, result_guid, collection_guid, status
+            or None on error
+        """
+        payload = {
+            "collection_guid": collection_guid,
+            "tool": tool,
+            "input_state_hash": input_state_hash,
+            "source_result_guid": source_result_guid,
+        }
+
+        try:
+            response = self.post("/results/no-change", json=payload)
+        except Exception as e:
+            logger.warning(f"Failed to record no-change result: {e}")
+            return None
+
+        if response.status_code == 201:
+            return response.json()
+
+        logger.warning(
+            f"No-change result recording failed with status {response.status_code}: "
+            f"{response.text}"
+        )
+        return None
+
+    # -------------------------------------------------------------------------
     # Collection Management (Issue #108, Task T007)
     # -------------------------------------------------------------------------
 
@@ -1343,6 +1416,7 @@ class AgentApiClient:
         executed_at: str,
         analysis_data: dict[str, Any],
         html_report: Optional[str] = None,
+        input_state_hash: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Upload an offline analysis result.
@@ -1358,6 +1432,7 @@ class AgentApiClient:
             executed_at: ISO8601 timestamp of when analysis was executed
             analysis_data: Full analysis output (tool-specific JSON)
             html_report: Optional HTML report string
+            input_state_hash: Optional SHA-256 hash of Input State for no-change detection
 
         Returns:
             Response containing job GUID, result GUID, and status
@@ -1445,6 +1520,10 @@ class AgentApiClient:
             payload["report_upload_id"] = report_upload_id
         elif html_report is not None:
             payload["html_report"] = html_report
+
+        # Storage optimization: include input state hash if provided
+        if input_state_hash is not None:
+            payload["input_state_hash"] = input_state_hash
 
         try:
             response = await self._client.post(

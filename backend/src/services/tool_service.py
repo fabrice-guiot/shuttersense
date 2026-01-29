@@ -182,6 +182,7 @@ def agent_upload_offline_result(
     analysis_data: Dict[str, Any],
     html_report: Optional[str] = None,
     result_id: Optional[str] = None,
+    input_state_hash: Optional[str] = None,
 ) -> tuple:
     """
     Create both a Job record (status=COMPLETED) and an AnalysisResult
@@ -200,6 +201,7 @@ def agent_upload_offline_result(
         analysis_data: Full analysis output (tool-specific JSON)
         html_report: Optional pre-rendered HTML report
         result_id: Optional locally generated UUID for idempotency
+        input_state_hash: Optional SHA-256 hash of Input State for no-change detection
 
     Returns:
         Tuple of (Job, AnalysisResult) records
@@ -208,6 +210,22 @@ def agent_upload_offline_result(
         Exception: If transaction fails (rolls back automatically)
     """
     now = datetime.utcnow()
+
+    # Resolve pipeline for this collection (same logic as ToolService._get_pipeline_for_collection)
+    pipeline_id = None
+    pipeline_version = None
+    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    if collection:
+        if collection.pipeline_id:
+            pipeline = db.query(Pipeline).filter(Pipeline.id == collection.pipeline_id).first()
+            if pipeline:
+                pipeline_version = collection.pipeline_version or pipeline.version
+                pipeline_id = pipeline.id
+        if pipeline_id is None:
+            default_pipeline = db.query(Pipeline).filter(Pipeline.is_default == True).first()
+            if default_pipeline:
+                pipeline_id = default_pipeline.id
+                pipeline_version = default_pipeline.version
 
     # Create Job record with COMPLETED status (retroactive record of offline execution)
     job = Job(
@@ -221,6 +239,8 @@ def agent_upload_offline_result(
         completed_at=now,
         priority=0,
         required_capabilities_json=json.dumps([tool]),
+        pipeline_id=pipeline_id,
+        pipeline_version=pipeline_version,
     )
     db.add(job)
     db.flush()  # Get job.id without committing
@@ -241,6 +261,9 @@ def agent_upload_offline_result(
         report_html=html_report,
         files_scanned=analysis_data.get("files_scanned") or analysis_data.get("total_files"),
         issues_found=analysis_data.get("issues_found") or analysis_data.get("issues_count"),
+        pipeline_id=pipeline_id,
+        pipeline_version=pipeline_version,
+        input_state_hash=input_state_hash,
     )
     db.add(result)
     db.flush()  # Get result.id
@@ -273,6 +296,155 @@ def agent_upload_offline_result(
     logger.info(
         "Uploaded offline result: job=%s result=%s tool=%s collection_id=%d scheduled=%s",
         job.guid, result.guid, tool, collection_id,
+        scheduled_job.guid if scheduled_job else None,
+    )
+
+    return job, result
+
+
+def agent_record_no_change_result(
+    db: Session,
+    agent_id: int,
+    team_id: int,
+    collection_id: int,
+    tool: str,
+    input_state_hash: str,
+    source_result_guid: str,
+) -> tuple:
+    """
+    Create a Job (COMPLETED) + AnalysisResult (NO_CHANGE) from a CLI
+    no-change detection in a single transaction.
+
+    This mirrors agent_upload_offline_result but for the case where the
+    agent CLI detects no changes (input_state_hash matches previous result).
+    No HMAC signature needed — the agent is already authenticated via API key.
+
+    Args:
+        db: Database session
+        agent_id: Internal ID of the agent
+        team_id: Team ID for tenant isolation
+        collection_id: Internal ID of the analyzed collection
+        tool: Tool name (photostats, photo_pairing, pipeline_validation)
+        input_state_hash: SHA-256 hash of Input State (64-char hex)
+        source_result_guid: GUID of the previous result being referenced
+
+    Returns:
+        Tuple of (Job, AnalysisResult) records
+
+    Raises:
+        ValueError: If source result not found or validation fails
+    """
+    now = datetime.utcnow()
+
+    # Look up source result by GUID + team_id
+    source_result = None
+    source_results = db.query(AnalysisResult).filter(
+        AnalysisResult.team_id == team_id,
+    ).all()
+    for r in source_results:
+        if r.guid == source_result_guid:
+            source_result = r
+            break
+
+    if source_result is None:
+        raise ValueError(f"Source result {source_result_guid} not found")
+
+    # Validate collection and tool match
+    if source_result.collection_id != collection_id:
+        raise ValueError("Source result belongs to a different collection")
+    if source_result.tool != tool:
+        raise ValueError("Source result is for a different tool")
+
+    # Determine download_report_from (follow chain if source is also NO_CHANGE)
+    download_from_guid = source_result_guid
+    if source_result.download_report_from:
+        download_from_guid = source_result.download_report_from
+
+    # Resolve pipeline (same logic as upload)
+    pipeline_id = None
+    pipeline_version = None
+    collection = db.query(Collection).filter(Collection.id == collection_id).first()
+    if collection:
+        if collection.pipeline_id:
+            pipeline = db.query(Pipeline).filter(Pipeline.id == collection.pipeline_id).first()
+            if pipeline:
+                pipeline_version = collection.pipeline_version or pipeline.version
+                pipeline_id = pipeline.id
+        if pipeline_id is None:
+            default_pipeline = db.query(Pipeline).filter(Pipeline.is_default == True).first()
+            if default_pipeline:
+                pipeline_id = default_pipeline.id
+                pipeline_version = default_pipeline.version
+
+    # Create Job record with COMPLETED status (retroactive record of no-change detection)
+    job = Job(
+        team_id=team_id,
+        collection_id=collection_id,
+        tool=tool,
+        status=PersistentJobStatus.COMPLETED,
+        agent_id=agent_id,
+        assigned_at=now,
+        started_at=now,
+        completed_at=now,
+        priority=0,
+        required_capabilities_json=json.dumps([tool]),
+        pipeline_id=pipeline_id,
+        pipeline_version=pipeline_version,
+    )
+    db.add(job)
+    db.flush()
+
+    # Create AnalysisResult with NO_CHANGE status
+    result = AnalysisResult(
+        team_id=team_id,
+        collection_id=collection_id,
+        tool=tool,
+        status=ResultStatus.NO_CHANGE,
+        started_at=now,
+        completed_at=now,
+        duration_seconds=0,
+        # Copy from source result
+        results_json=source_result.results_json,
+        files_scanned=source_result.files_scanned,
+        issues_found=source_result.issues_found,
+        # NO report_html — reference source's report
+        report_html=None,
+        pipeline_id=pipeline_id,
+        pipeline_version=pipeline_version,
+        input_state_hash=input_state_hash,
+        no_change_copy=True,
+        download_report_from=download_from_guid,
+    )
+    db.add(result)
+    db.flush()
+
+    # Link job to result
+    job.result_id = result.id
+
+    # Cancel existing scheduled jobs and schedule next run
+    from backend.src.services.job_coordinator_service import JobCoordinatorService
+    coordinator = JobCoordinatorService(db)
+    cancelled = coordinator.cancel_scheduled_jobs_for_collection(collection_id, tool)
+    if cancelled > 0:
+        db.flush()
+        logger.info(
+            "Cancelled %d scheduled job(s) due to CLI no-change result",
+            cancelled,
+            extra={"collection_id": collection_id, "tool": tool},
+        )
+
+    # Schedule next run based on collection state TTL config
+    scheduled_job = coordinator._maybe_create_scheduled_job(job)
+
+    db.commit()
+    db.refresh(job)
+    db.refresh(result)
+
+    logger.info(
+        "Recorded CLI no-change result: job=%s result=%s tool=%s collection_id=%d "
+        "source=%s download_from=%s scheduled=%s",
+        job.guid, result.guid, tool, collection_id,
+        source_result_guid, download_from_guid,
         scheduled_job.guid if scheduled_job else None,
     )
 

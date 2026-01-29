@@ -2210,6 +2210,13 @@ class AgentUploadResultRequest(BaseModel):
         None,
         description="Upload ID for chunked HTML report (from chunked upload)"
     )
+    # Storage Optimization (Issue #92 + Issue #108)
+    input_state_hash: Optional[str] = Field(
+        None,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hash of Input State for no-change detection"
+    )
 
     @model_validator(mode='after')
     def validate_data_source(self) -> 'AgentUploadResultRequest':
@@ -2245,6 +2252,48 @@ class AgentUploadResultRequest(BaseModel):
                     "missing_sidecars": 5
                 },
                 "html_report": None
+            }
+        }
+    }
+
+
+class AgentNoChangeResultRequest(BaseModel):
+    """Request schema for recording a NO_CHANGE result from CLI.
+
+    Used when the agent CLI detects the Input State hash matches a previous
+    result, indicating no changes to the collection since the last analysis.
+    No HMAC signature required — the agent is already authenticated via API key.
+    """
+
+    collection_guid: str = Field(
+        ...,
+        min_length=1,
+        description="Collection GUID (col_xxx)"
+    )
+    tool: str = Field(
+        ...,
+        min_length=1,
+        description="Tool name: photostats, photo_pairing, pipeline_validation"
+    )
+    input_state_hash: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hash of Input State (64 char hex string)"
+    )
+    source_result_guid: str = Field(
+        ...,
+        pattern=r"^res_[0-9a-hjkmnp-tv-z]{26}$",
+        description="GUID of the previous result being referenced (res_xxx)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "tool": "photostats",
+                "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "source_result_guid": "res_01hgw2bbg0000000000000001",
             }
         }
     }

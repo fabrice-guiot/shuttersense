@@ -14,7 +14,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 
@@ -146,24 +146,44 @@ def run(
     else:
         click.echo(click.style("OK", fg="green", bold=True) + f" ({result.message})")
 
-    # --- Step 5: Execute analysis ---
+    # --- Step 5: Load file list and compute Input State hash ---
     location = collection_entry.location
     click.echo(f"Running {tool} on: {location}")
     click.echo(f"Collection: {collection_entry.name} ({collection_guid})")
     click.echo(f"Mode: {'offline' if offline else 'online'}")
     click.echo()
 
-    start_time = time.time()
-    executed_at = datetime.now(timezone.utc)
-
     try:
-        analysis_data, report_html = _execute_tool(tool, location, team_config)
+        file_infos, input_state_hash = _prepare_analysis(location, tool, team_config)
     except FileNotFoundError as e:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
             + f"Path not accessible: {e}"
         )
         sys.exit(1)
+
+    # --- Step 6: Online no-change check ---
+    if not offline:
+        previous = _fetch_previous_result(config, collection_guid, tool)
+        if previous and previous.get("input_state_hash") == input_state_hash:
+            click.echo("No changes detected since last analysis.")
+            # Record NO_CHANGE result on server
+            response = _record_no_change(
+                config, collection_guid, tool,
+                input_state_hash, previous["guid"],
+            )
+            if response:
+                click.echo(f"  Result GUID: {response.get('result_guid', 'N/A')}")
+            click.echo(f"  Source:      {previous.get('guid', 'N/A')}")
+            click.echo(f"  Completed:   {previous.get('completed_at', 'N/A')}")
+            sys.exit(0)
+
+    # --- Step 7: Execute analysis ---
+    start_time = time.time()
+    executed_at = datetime.now(timezone.utc)
+
+    try:
+        analysis_data, report_html = _execute_tool(tool, file_infos, location, team_config)
     except Exception as e:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
@@ -188,13 +208,13 @@ def run(
     click.echo(f"  Files scanned: {files_scanned:,}")
     click.echo(f"  Issues found:  {issues_count}")
 
-    # --- Step 5: Save report if requested ---
+    # --- Step 8: Save report if requested ---
     if output and report_html:
         output_path = Path(output)
         output_path.write_text(report_html, encoding="utf-8")
         click.echo(f"  Report saved:  {output_path}")
 
-    # --- Step 6: Upload or store result ---
+    # --- Step 9: Upload or store result ---
     if offline:
         # Save to local result store
         offline_result = OfflineResult(
@@ -206,6 +226,7 @@ def run(
             agent_version=__version__,
             analysis_data=analysis_data,
             html_report_path=output if output else None,
+            input_state_hash=input_state_hash,
         )
         result_path = result_store.save(offline_result)
         click.echo()
@@ -232,6 +253,7 @@ def run(
                     executed_at=executed_at.isoformat(),
                     analysis_data=analysis_data,
                     html_report=report_html,
+                    input_state_hash=input_state_hash,
                 )
             )
         except AgentConnectionError as e:
@@ -265,26 +287,29 @@ def run(
         click.echo(f"  Result GUID: {upload_response.get('result_guid', 'N/A')}")
 
 
-def _execute_tool(
-    tool: str,
+def _prepare_analysis(
     location: str,
+    tool: str,
     team_config: TeamConfigCache,
-) -> tuple[Dict[str, Any], Optional[str]]:
+) -> Tuple[List, str]:
     """
-    Execute an analysis tool against a local path.
+    Load file list and compute Input State hash.
+
+    Separates file loading from tool execution so the hash can be
+    computed before running the tool (enabling online no-change detection).
 
     Args:
-        tool: Tool name (photostats, photo_pairing, pipeline_validation)
         location: Local filesystem path to analyze
+        tool: Tool name (photostats, photo_pairing, pipeline_validation)
         team_config: Team configuration with extensions, cameras, pipeline
 
     Returns:
-        Tuple of (analysis_data dict, optional HTML report string)
+        Tuple of (file_infos list, input_state_hash string)
 
     Raises:
-        FileNotFoundError: If the path doesn't exist
-        Exception: If analysis fails
+        FileNotFoundError: If the path doesn't exist or isn't a directory
     """
+    from src.input_state import get_input_state_computer
     from src.remote.local_adapter import LocalAdapter
 
     path = Path(location)
@@ -296,6 +321,130 @@ def _execute_tool(
     adapter = LocalAdapter({})
     file_infos = adapter.list_files_with_metadata(location)
 
+    # Compute Input State hash
+    computer = get_input_state_computer()
+    file_hash, _ = computer.compute_file_list_hash_from_file_info(file_infos)
+
+    # Build config dict matching the structure used by the job executor
+    # and server-side hash computation (JobConfigData + pipeline).
+    # Extensions must NOT be pre-sorted here — json.dumps(sort_keys=True)
+    # sorts dict keys but not list values, so the list order must match
+    # the server response order used by the job executor path.
+    config_dict: Dict[str, Any] = {
+        "photo_extensions": team_config.photo_extensions,
+        "metadata_extensions": team_config.metadata_extensions,
+        "require_sidecar": team_config.require_sidecar,
+        "cameras": team_config.cameras,
+        "processing_methods": team_config.processing_methods,
+    }
+    if team_config.default_pipeline:
+        config_dict["pipeline"] = {
+            "guid": team_config.default_pipeline.guid,
+            "name": team_config.default_pipeline.name,
+            "version": team_config.default_pipeline.version,
+            "nodes": team_config.default_pipeline.nodes,
+            "edges": team_config.default_pipeline.edges,
+        }
+
+    config_hash = computer.compute_configuration_hash(config_dict)
+    input_state_hash = computer.compute_input_state_hash(file_hash, config_hash, tool)
+
+    return file_infos, input_state_hash
+
+
+def _fetch_previous_result(
+    config: AgentConfig,
+    collection_guid: str,
+    tool: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Fetch previous result from server for no-change comparison.
+
+    Gracefully returns None on any error (connection, auth, 404, etc.)
+    so that analysis always proceeds when the server is unreachable.
+
+    Args:
+        config: Agent configuration with server URL and API key
+        collection_guid: Collection GUID
+        tool: Tool name
+
+    Returns:
+        Previous result dict with guid, input_state_hash, completed_at or None
+    """
+    try:
+        client = AgentApiClient(
+            server_url=config.server_url,
+            api_key=config.api_key,
+        )
+        return client.get_previous_result(collection_guid, tool)
+    except Exception:
+        return None
+
+
+def _record_no_change(
+    config: AgentConfig,
+    collection_guid: str,
+    tool: str,
+    input_state_hash: str,
+    source_result_guid: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Record a NO_CHANGE result on the server.
+
+    Gracefully returns None on any error so that the CLI still exits
+    successfully (the no-change detection itself succeeded even if
+    recording fails).
+
+    Args:
+        config: Agent configuration with server URL and API key
+        collection_guid: Collection GUID
+        tool: Tool name
+        input_state_hash: SHA-256 hash of Input State
+        source_result_guid: GUID of the previous result
+
+    Returns:
+        Server response dict or None on error
+    """
+    try:
+        client = AgentApiClient(
+            server_url=config.server_url,
+            api_key=config.api_key,
+        )
+        return client.upload_no_change_result(
+            collection_guid=collection_guid,
+            tool=tool,
+            input_state_hash=input_state_hash,
+            source_result_guid=source_result_guid,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to record no-change result on server: %s", e
+        )
+        return None
+
+
+def _execute_tool(
+    tool: str,
+    file_infos: list,
+    location: str,
+    team_config: TeamConfigCache,
+) -> tuple[Dict[str, Any], Optional[str]]:
+    """
+    Execute an analysis tool against pre-loaded file data.
+
+    Args:
+        tool: Tool name (photostats, photo_pairing, pipeline_validation)
+        file_infos: Pre-loaded list of FileInfo objects
+        location: Local filesystem path (for report display)
+        team_config: Team configuration with extensions, cameras, pipeline
+
+    Returns:
+        Tuple of (analysis_data dict, optional HTML report string)
+
+    Raises:
+        Exception: If analysis fails
+    """
     photo_extensions = set(team_config.photo_extensions)
     metadata_extensions = set(team_config.metadata_extensions)
     require_sidecar = set(team_config.require_sidecar)
@@ -496,6 +645,7 @@ async def _upload_result_async(
     executed_at: str,
     analysis_data: Dict[str, Any],
     html_report: Optional[str] = None,
+    input_state_hash: Optional[str] = None,
 ) -> dict:
     """Async helper to upload result via API client."""
     async with AgentApiClient(server_url=server_url, api_key=api_key) as client:
@@ -506,4 +656,5 @@ async def _upload_result_async(
             executed_at=executed_at,
             analysis_data=analysis_data,
             html_report=html_report,
+            input_state_hash=input_state_hash,
         )

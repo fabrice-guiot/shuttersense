@@ -18,7 +18,7 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from backend.src.utils.websocket import get_connection_manager
@@ -105,6 +105,7 @@ from backend.src.api.agent.schemas import (
     AgentPrepareResultUploadResponse,
     AgentUploadResultRequest,
     AgentUploadResultResponse,
+    AgentNoChangeResultRequest,
     # Team config (Issue #108 - config caching)
     TeamConfigResponse,
 )
@@ -3356,6 +3357,7 @@ async def agent_upload_result(
             analysis_data=analysis_data,
             html_report=html_report,
             result_id=data.result_id,
+            input_state_hash=data.input_state_hash,
         )
 
         # Store the offline_result_id in job's progress_json for idempotency tracking
@@ -3393,4 +3395,154 @@ async def agent_upload_result(
         result_guid=result.guid,
         collection_guid=data.collection_guid,
         status="uploaded",
+    )
+
+
+@router.post(
+    "/results/no-change",
+    response_model=AgentUploadResultResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record NO_CHANGE result from CLI",
+    description="Record a NO_CHANGE Job+AnalysisResult when the agent CLI detects "
+                "no changes (input_state_hash matches previous result). "
+                "Mirrors POST /results/upload but creates NO_CHANGE status. "
+                "No HMAC signature required — the agent is already authenticated via API key.",
+)
+async def agent_record_no_change_result(
+    data: AgentNoChangeResultRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Record a NO_CHANGE result from an agent CLI no-change detection."""
+    from backend.src.services.tool_service import agent_record_no_change_result as record_no_change
+    from backend.src.models.collection import Collection
+
+    # Validate collection_guid belongs to this agent's team
+    collection = None
+    collections = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+    ).all()
+    for col in collections:
+        if col.guid == data.collection_guid:
+            collection = col
+            break
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {data.collection_guid} not found",
+        )
+
+    # Verify collection is bound to this agent (for LOCAL collections)
+    if collection.bound_agent_id and collection.bound_agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Collection is bound to a different agent",
+        )
+
+    # Validate tool name
+    valid_tools = {"photostats", "photo_pairing", "pipeline_validation"}
+    if data.tool not in valid_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool '{data.tool}'. Must be one of: {sorted(valid_tools)}",
+        )
+
+    try:
+        job, result = record_no_change(
+            db=db,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            collection_id=collection.id,
+            tool=data.tool,
+            input_state_hash=data.input_state_hash,
+            source_result_guid=data.source_result_guid,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    logger.info(
+        "CLI no-change result recorded",
+        extra={
+            "job_guid": job.guid,
+            "result_guid": result.guid,
+            "collection_guid": data.collection_guid,
+            "tool": data.tool,
+            "source_result_guid": data.source_result_guid,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentUploadResultResponse(
+        job_guid=job.guid,
+        result_guid=result.guid,
+        collection_guid=data.collection_guid,
+        status="no_change",
+    )
+
+
+@router.get(
+    "/collections/{collection_guid}/previous-result",
+    response_model=PreviousResultData,
+    summary="Get previous result for no-change comparison",
+    description="Returns the most recent COMPLETED or NO_CHANGE AnalysisResult "
+                "for a collection+tool combination. Used by agents to detect "
+                "when a collection has not changed since the last analysis.",
+)
+async def get_previous_result_for_collection(
+    collection_guid: str,
+    tool: str = Query(..., description="Tool name (photostats, photo_pairing, pipeline_validation)"),
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Get previous result for no-change comparison (Issue #92 + Issue #108)."""
+    from backend.src.models.collection import Collection
+    from backend.src.models.analysis_result import AnalysisResult as AnalysisResultModel
+    from backend.src.models.analysis_result import ResultStatus
+
+    # Find collection by GUID within agent's team
+    collection = None
+    collections = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+    ).all()
+    for col in collections:
+        if col.guid == collection_guid:
+            collection = col
+            break
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {collection_guid} not found",
+        )
+
+    # Query most recent COMPLETED or NO_CHANGE result for this collection+tool
+    previous = (
+        db.query(AnalysisResultModel)
+        .filter(
+            AnalysisResultModel.collection_id == collection.id,
+            AnalysisResultModel.team_id == ctx.team_id,
+            AnalysisResultModel.tool == tool,
+            AnalysisResultModel.status.in_([
+                ResultStatus.COMPLETED,
+                ResultStatus.NO_CHANGE,
+            ]),
+        )
+        .order_by(AnalysisResultModel.completed_at.desc())
+        .first()
+    )
+
+    if previous is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No previous result found for {tool} on {collection_guid}",
+        )
+
+    return PreviousResultData(
+        guid=previous.guid,
+        input_state_hash=previous.input_state_hash,
+        completed_at=previous.completed_at,
     )

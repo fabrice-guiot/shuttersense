@@ -115,6 +115,23 @@ def mock_upload_success():
     }
 
 
+FAKE_INPUT_STATE_HASH = "a" * 64
+
+
+@pytest.fixture
+def mock_prepare_analysis():
+    """Mock _prepare_analysis to return fake file_infos and hash."""
+    with patch("cli.run._prepare_analysis", return_value=([], FAKE_INPUT_STATE_HASH)) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_fetch_previous_result_none():
+    """Mock _fetch_previous_result to return None (no previous result)."""
+    with patch("cli.run._fetch_previous_result", return_value=None) as mock:
+        yield mock
+
+
 # ============================================================================
 # Registration Tests
 # ============================================================================
@@ -150,7 +167,10 @@ class TestCollectionLookup:
         assert result.exit_code == 1
         assert "not found in local cache" in result.output
 
-    def test_collection_found_in_cache(self, runner, mock_config, local_collection_cache, mock_upload_success):
+    def test_collection_found_in_cache(
+        self, runner, mock_config, local_collection_cache,
+        mock_upload_success, mock_prepare_analysis, mock_fetch_previous_result_none,
+    ):
         with patch("cli.run.col_cache") as mock_cache, \
              patch("cli.run._execute_tool", return_value=({"total_files": 10, "results": {}}, None)), \
              patch("cli.run._upload_result_async", new_callable=AsyncMock, return_value=mock_upload_success):
@@ -168,7 +188,9 @@ class TestCollectionLookup:
 class TestOfflineMode:
     """Tests for offline execution mode."""
 
-    def test_offline_saves_result(self, runner, mock_config, local_collection_cache):
+    def test_offline_saves_result(
+        self, runner, mock_config, local_collection_cache, mock_prepare_analysis,
+    ):
         with patch("cli.run.col_cache") as mock_cache, \
              patch("cli.run._execute_tool", return_value=({"total_files": 10, "results": {}}, None)), \
              patch("cli.run.result_store") as mock_store:
@@ -195,7 +217,10 @@ class TestOfflineMode:
 class TestOnlineMode:
     """Tests for online execution mode."""
 
-    def test_online_uploads_result(self, runner, mock_config, local_collection_cache, mock_upload_success):
+    def test_online_uploads_result(
+        self, runner, mock_config, local_collection_cache,
+        mock_upload_success, mock_prepare_analysis, mock_fetch_previous_result_none,
+    ):
         with patch("cli.run.col_cache") as mock_cache, \
              patch("cli.run._execute_tool", return_value=({"total_files": 10, "results": {}}, None)), \
              patch("cli.run._upload_result_async", new_callable=AsyncMock, return_value=mock_upload_success):
@@ -205,7 +230,10 @@ class TestOnlineMode:
         assert "Result uploaded successfully" in result.output
         assert "job_01hgw2bbg0000000000000001" in result.output
 
-    def test_online_connection_error(self, runner, mock_config, local_collection_cache):
+    def test_online_connection_error(
+        self, runner, mock_config, local_collection_cache,
+        mock_prepare_analysis, mock_fetch_previous_result_none,
+    ):
         from src.api_client import ConnectionError as AgentConnectionError
 
         with patch("cli.run.col_cache") as mock_cache, \
@@ -224,6 +252,76 @@ class TestOnlineMode:
             result = runner.invoke(run, ["col_s3bucket", "--tool", "photostats"])
         assert result.exit_code == 1
         assert "not yet supported via CLI" in result.output
+
+    def test_online_no_change_detected(
+        self, runner, mock_config, local_collection_cache, mock_prepare_analysis,
+    ):
+        """When previous result hash matches current, skip execution and record on server."""
+        previous_result = {
+            "guid": "res_previous123",
+            "input_state_hash": FAKE_INPUT_STATE_HASH,
+            "completed_at": "2026-01-20T10:00:00+00:00",
+        }
+        no_change_response = {
+            "job_guid": "job_nochange001",
+            "result_guid": "res_nochange001",
+            "collection_guid": "col_local123",
+            "status": "no_change",
+        }
+        with patch("cli.run.col_cache") as mock_cache, \
+             patch("cli.run._fetch_previous_result", return_value=previous_result), \
+             patch("cli.run._record_no_change", return_value=no_change_response) as mock_record, \
+             patch("cli.run._execute_tool") as mock_execute:
+            mock_cache.load.return_value = local_collection_cache
+            result = runner.invoke(run, ["col_local123", "--tool", "photostats"])
+        assert result.exit_code == 0
+        assert "No changes detected" in result.output
+        assert "res_nochange001" in result.output
+        assert "res_previous123" in result.output
+        mock_execute.assert_not_called()
+        mock_record.assert_called_once_with(
+            mock_config, "col_local123", "photostats",
+            FAKE_INPUT_STATE_HASH, "res_previous123",
+        )
+
+    def test_online_no_change_recording_failure(
+        self, runner, mock_config, local_collection_cache, mock_prepare_analysis,
+    ):
+        """When no-change recording fails, still exit 0 (detection succeeded)."""
+        previous_result = {
+            "guid": "res_previous123",
+            "input_state_hash": FAKE_INPUT_STATE_HASH,
+            "completed_at": "2026-01-20T10:00:00+00:00",
+        }
+        with patch("cli.run.col_cache") as mock_cache, \
+             patch("cli.run._fetch_previous_result", return_value=previous_result), \
+             patch("cli.run._record_no_change", return_value=None), \
+             patch("cli.run._execute_tool") as mock_execute:
+            mock_cache.load.return_value = local_collection_cache
+            result = runner.invoke(run, ["col_local123", "--tool", "photostats"])
+        assert result.exit_code == 0
+        assert "No changes detected" in result.output
+        assert "res_previous123" in result.output
+        mock_execute.assert_not_called()
+
+    def test_online_change_detected_runs_analysis(
+        self, runner, mock_config, local_collection_cache, mock_upload_success,
+        mock_prepare_analysis,
+    ):
+        """When previous result hash differs, run analysis normally."""
+        previous_result = {
+            "guid": "res_previous123",
+            "input_state_hash": "b" * 64,  # Different from FAKE_INPUT_STATE_HASH
+            "completed_at": "2026-01-20T10:00:00+00:00",
+        }
+        with patch("cli.run.col_cache") as mock_cache, \
+             patch("cli.run._fetch_previous_result", return_value=previous_result), \
+             patch("cli.run._execute_tool", return_value=({"total_files": 10, "results": {}}, None)), \
+             patch("cli.run._upload_result_async", new_callable=AsyncMock, return_value=mock_upload_success):
+            mock_cache.load.return_value = local_collection_cache
+            result = runner.invoke(run, ["col_local123", "--tool", "photostats"])
+        assert result.exit_code == 0
+        assert "Result uploaded successfully" in result.output
 
 
 # ============================================================================
@@ -255,13 +353,16 @@ class TestExecutionErrors:
 
     def test_path_not_found(self, runner, mock_config, local_collection_cache):
         with patch("cli.run.col_cache") as mock_cache, \
-             patch("cli.run._execute_tool", side_effect=FileNotFoundError("Path does not exist")):
+             patch("cli.run._prepare_analysis", side_effect=FileNotFoundError("Path does not exist")):
             mock_cache.load.return_value = local_collection_cache
             result = runner.invoke(run, ["col_local123", "--tool", "photostats"])
         assert result.exit_code == 1
         assert "Path not accessible" in result.output
 
-    def test_analysis_failure(self, runner, mock_config, local_collection_cache):
+    def test_analysis_failure(
+        self, runner, mock_config, local_collection_cache,
+        mock_prepare_analysis, mock_fetch_previous_result_none,
+    ):
         with patch("cli.run.col_cache") as mock_cache, \
              patch("cli.run._execute_tool", side_effect=RuntimeError("Tool crashed")):
             mock_cache.load.return_value = local_collection_cache
@@ -278,7 +379,10 @@ class TestExecutionErrors:
 class TestOutputOption:
     """Tests for --output option."""
 
-    def test_output_saves_report(self, runner, mock_config, local_collection_cache, tmp_path, mock_upload_success):
+    def test_output_saves_report(
+        self, runner, mock_config, local_collection_cache, tmp_path,
+        mock_upload_success, mock_prepare_analysis, mock_fetch_previous_result_none,
+    ):
         report_path = str(tmp_path / "report.html")
         report_html = "<html><body>Report</body></html>"
 
