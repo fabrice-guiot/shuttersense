@@ -1895,278 +1895,6 @@ async def pool_status_websocket(
         manager.disconnect(channel, websocket)
 
 
-@router.get(
-    "/{guid}/detail",
-    response_model=AgentDetailResponse,
-    summary="Get agent detail view",
-    description="Get detailed information about an agent including job statistics and recent history."
-)
-async def get_agent_detail(
-    guid: str,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-    db: Session = Depends(get_db),
-):
-    """
-    Get detailed information about a specific agent.
-
-    Includes:
-    - Basic agent info (name, hostname, status, etc.)
-    - System metrics (CPU, memory, disk)
-    - Bound collections count
-    - Job statistics (completed, failed)
-    - Recent job history (last 10 jobs)
-    """
-    from sqlalchemy import func
-    from backend.src.models.job import Job, JobStatus
-
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    # Get bound collections count
-    bound_collections_count = agent.bound_collections.count()
-
-    # Get job statistics
-    total_jobs_completed = db.query(func.count(Job.id)).filter(
-        Job.agent_id == agent.id,
-        Job.status == JobStatus.COMPLETED
-    ).scalar() or 0
-
-    total_jobs_failed = db.query(func.count(Job.id)).filter(
-        Job.agent_id == agent.id,
-        Job.status == JobStatus.FAILED
-    ).scalar() or 0
-
-    # Get recent jobs (last 10)
-    recent_jobs_query = db.query(Job).filter(
-        Job.agent_id == agent.id
-    ).order_by(Job.created_at.desc()).limit(10).all()
-
-    recent_jobs = []
-    for job in recent_jobs_query:
-        recent_jobs.append(AgentJobHistoryItem(
-            guid=job.guid,
-            tool=job.tool,
-            collection_guid=job.collection.guid if job.collection else None,
-            collection_name=job.collection.name if job.collection else None,
-            status=job.status.value,
-            started_at=job.started_at,
-            completed_at=job.completed_at,
-            error_message=job.error_message,
-        ))
-
-    # Convert metrics to schema if present
-    metrics = None
-    if agent.metrics:
-        metrics_data = {k: v for k, v in agent.metrics.items() if k != "metrics_updated_at"}
-        metrics = AgentMetrics(**metrics_data) if metrics_data else None
-
-    # Get current job GUID if running
-    current_job = db.query(Job).filter(
-        Job.agent_id == agent.id,
-        Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
-    ).first()
-
-    return AgentDetailResponse(
-        guid=agent.guid,
-        name=agent.name,
-        hostname=agent.hostname,
-        os_info=agent.os_info,
-        status=agent.status,
-        error_message=agent.error_message,
-        last_heartbeat=agent.last_heartbeat,
-        capabilities=agent.capabilities,
-        authorized_roots=agent.authorized_roots,
-        version=agent.version,
-        created_at=agent.created_at,
-        team_guid=agent.team.guid if agent.team else "",
-        current_job_guid=current_job.guid if current_job else None,
-        metrics=metrics,
-        bound_collections_count=bound_collections_count,
-        total_jobs_completed=total_jobs_completed,
-        total_jobs_failed=total_jobs_failed,
-        recent_jobs=recent_jobs,
-    )
-
-
-@router.get(
-    "/{guid}/jobs",
-    response_model=AgentJobHistoryResponse,
-    summary="Get agent job history",
-    description="Get paginated job history for a specific agent."
-)
-async def get_agent_jobs(
-    guid: str,
-    offset: int = 0,
-    limit: int = 20,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-    db: Session = Depends(get_db),
-):
-    """
-    Get paginated job history for a specific agent.
-
-    Args:
-        guid: Agent GUID
-        offset: Number of items to skip (default 0)
-        limit: Maximum items to return (default 20, max 100)
-    """
-    from sqlalchemy import func
-    from backend.src.models.job import Job
-
-    # Clamp limit
-    limit = min(limit, 100)
-
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    # Get total count
-    total_count = db.query(func.count(Job.id)).filter(
-        Job.agent_id == agent.id
-    ).scalar() or 0
-
-    # Get paginated jobs
-    jobs_query = db.query(Job).filter(
-        Job.agent_id == agent.id
-    ).order_by(Job.created_at.desc()).offset(offset).limit(limit).all()
-
-    jobs = []
-    for job in jobs_query:
-        jobs.append(AgentJobHistoryItem(
-            guid=job.guid,
-            tool=job.tool,
-            collection_guid=job.collection.guid if job.collection else None,
-            collection_name=job.collection.name if job.collection else None,
-            status=job.status.value,
-            started_at=job.started_at,
-            completed_at=job.completed_at,
-            error_message=job.error_message,
-        ))
-
-    return AgentJobHistoryResponse(
-        jobs=jobs,
-        total_count=total_count,
-        offset=offset,
-        limit=limit,
-    )
-
-
-@router.get(
-    "/{guid}",
-    response_model=AgentResponse,
-    summary="Get agent by GUID",
-    description="Get details of a specific agent."
-)
-async def get_agent(
-    guid: str,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-):
-    """Get details of a specific agent."""
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    return agent_to_response(agent)
-
-
-@router.patch(
-    "/{guid}",
-    response_model=AgentResponse,
-    summary="Update agent",
-    description="Update agent name."
-)
-async def update_agent(
-    guid: str,
-    data: AgentUpdateRequest,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-):
-    """Update agent name."""
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    agent = service.rename_agent(agent, data.name)
-    return agent_to_response(agent)
-
-
-@router.delete(
-    "/{guid}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Revoke agent",
-    description="Revoke an agent's access. The agent will no longer be able to connect."
-)
-async def revoke_agent(
-    guid: str,
-    reason: str = "Revoked by administrator",
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-):
-    """Revoke an agent's access."""
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    service.revoke_agent(agent, reason)
-
-    # Broadcast pool status update after revocation
-    pool_status = service.get_pool_status(ctx.team_id)
-    manager = get_connection_manager()
-    asyncio.create_task(
-        manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
-    )
-
-    return None
-
-
 # ============================================================================
 # Inventory Validation Endpoints (Issue #107)
 # ============================================================================
@@ -3649,3 +3377,295 @@ async def get_previous_result_for_collection(
         input_state_hash=previous.input_state_hash,
         completed_at=previous.completed_at,
     )
+
+
+# ============================================================================
+# Agent CRUD Endpoints (wildcard /{guid} routes) — MUST BE LAST
+# ============================================================================
+# WARNING: These routes use /{guid} path parameters which match ANY single
+# path segment. FastAPI evaluates routes in registration order, so if these
+# appear before a literal route like /collections, a request to
+# GET /collections will match /{guid} with guid="collections" instead.
+#
+# ALL new routes with literal paths MUST be added ABOVE this section.
+# DO NOT add any routes after this block.
+
+
+@router.get(
+    "/{guid}/detail",
+    response_model=AgentDetailResponse,
+    summary="Get agent detail view",
+    description="Get detailed information about an agent including job statistics and recent history."
+)
+async def get_agent_detail(
+    guid: str,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Get detailed information about a specific agent.
+
+    Includes:
+    - Basic agent info (name, hostname, status, etc.)
+    - System metrics (CPU, memory, disk)
+    - Bound collections count
+    - Job statistics (completed, failed)
+    - Recent job history (last 10 jobs)
+    """
+    from sqlalchemy import func
+    from backend.src.models.job import Job, JobStatus
+
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    # Get bound collections count
+    bound_collections_count = agent.bound_collections.count()
+
+    # Get job statistics
+    total_jobs_completed = db.query(func.count(Job.id)).filter(
+        Job.agent_id == agent.id,
+        Job.status == JobStatus.COMPLETED
+    ).scalar() or 0
+
+    total_jobs_failed = db.query(func.count(Job.id)).filter(
+        Job.agent_id == agent.id,
+        Job.status == JobStatus.FAILED
+    ).scalar() or 0
+
+    # Get recent jobs (last 10)
+    recent_jobs_query = db.query(Job).filter(
+        Job.agent_id == agent.id
+    ).order_by(Job.created_at.desc()).limit(10).all()
+
+    recent_jobs = []
+    for job in recent_jobs_query:
+        recent_jobs.append(AgentJobHistoryItem(
+            guid=job.guid,
+            tool=job.tool,
+            collection_guid=job.collection.guid if job.collection else None,
+            collection_name=job.collection.name if job.collection else None,
+            status=job.status.value,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            error_message=job.error_message,
+        ))
+
+    # Convert metrics to schema if present
+    metrics = None
+    if agent.metrics:
+        metrics_data = {k: v for k, v in agent.metrics.items() if k != "metrics_updated_at"}
+        metrics = AgentMetrics(**metrics_data) if metrics_data else None
+
+    # Get current job GUID if running
+    current_job = db.query(Job).filter(
+        Job.agent_id == agent.id,
+        Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
+    ).first()
+
+    return AgentDetailResponse(
+        guid=agent.guid,
+        name=agent.name,
+        hostname=agent.hostname,
+        os_info=agent.os_info,
+        status=agent.status,
+        error_message=agent.error_message,
+        last_heartbeat=agent.last_heartbeat,
+        capabilities=agent.capabilities,
+        authorized_roots=agent.authorized_roots,
+        version=agent.version,
+        created_at=agent.created_at,
+        team_guid=agent.team.guid if agent.team else "",
+        current_job_guid=current_job.guid if current_job else None,
+        metrics=metrics,
+        bound_collections_count=bound_collections_count,
+        total_jobs_completed=total_jobs_completed,
+        total_jobs_failed=total_jobs_failed,
+        recent_jobs=recent_jobs,
+    )
+
+
+@router.get(
+    "/{guid}/jobs",
+    response_model=AgentJobHistoryResponse,
+    summary="Get agent job history",
+    description="Get paginated job history for a specific agent."
+)
+async def get_agent_jobs(
+    guid: str,
+    offset: int = 0,
+    limit: int = 20,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Get paginated job history for a specific agent.
+
+    Args:
+        guid: Agent GUID
+        offset: Number of items to skip (default 0)
+        limit: Maximum items to return (default 20, max 100)
+    """
+    from sqlalchemy import func
+    from backend.src.models.job import Job
+
+    # Clamp limit
+    limit = min(limit, 100)
+
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    # Get total count
+    total_count = db.query(func.count(Job.id)).filter(
+        Job.agent_id == agent.id
+    ).scalar() or 0
+
+    # Get paginated jobs
+    jobs_query = db.query(Job).filter(
+        Job.agent_id == agent.id
+    ).order_by(Job.created_at.desc()).offset(offset).limit(limit).all()
+
+    jobs = []
+    for job in jobs_query:
+        jobs.append(AgentJobHistoryItem(
+            guid=job.guid,
+            tool=job.tool,
+            collection_guid=job.collection.guid if job.collection else None,
+            collection_name=job.collection.name if job.collection else None,
+            status=job.status.value,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            error_message=job.error_message,
+        ))
+
+    return AgentJobHistoryResponse(
+        jobs=jobs,
+        total_count=total_count,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/{guid}",
+    response_model=AgentResponse,
+    summary="Get agent by GUID",
+    description="Get details of a specific agent."
+)
+async def get_agent(
+    guid: str,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+):
+    """Get details of a specific agent."""
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    return agent_to_response(agent)
+
+
+@router.patch(
+    "/{guid}",
+    response_model=AgentResponse,
+    summary="Update agent",
+    description="Update agent name."
+)
+async def update_agent(
+    guid: str,
+    data: AgentUpdateRequest,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+):
+    """Update agent name."""
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    agent = service.rename_agent(agent, data.name)
+    return agent_to_response(agent)
+
+
+@router.delete(
+    "/{guid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke agent",
+    description="Revoke an agent's access. The agent will no longer be able to connect."
+)
+async def revoke_agent(
+    guid: str,
+    reason: str = "Revoked by administrator",
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+):
+    """Revoke an agent's access."""
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    service.revoke_agent(agent, reason)
+
+    # Broadcast pool status update after revocation
+    pool_status = service.get_pool_status(ctx.team_id)
+    manager = get_connection_manager()
+    asyncio.create_task(
+        manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+    )
+
+    return None
+
+
+# ============================================================================
+# END OF ROUTES — DO NOT ADD NEW ROUTES BELOW THIS LINE
+# ============================================================================
+# The /{guid} wildcard routes above will shadow any literal routes registered
+# after them (e.g., /collections, /results, /config). Add new routes ABOVE
+# the "Agent CRUD Endpoints (wildcard /{guid} routes)" section instead.
