@@ -226,6 +226,7 @@ backend/alembic.ini
 
 # Agent-specific
 agent/src/_version.py
+debug-dump_*.md
 
 # Frontend-specific
 frontend/node_modules/
