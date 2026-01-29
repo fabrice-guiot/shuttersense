@@ -1,59 +1,65 @@
 # PhotoStats Tool
 
-PhotoStats is a Python utility for analyzing photo collections, providing detailed statistics and reports about your photo library.
+> **Note**: The standalone `photo_stats.py` CLI script has been removed. PhotoStats analysis is now available exclusively through the ShutterSense agent. See the usage examples below.
+
+PhotoStats analyzes photo collections, providing detailed statistics and reports about your photo library.
 
 ## Features
 
-- **Configurable File Types**: Support for customizable photo and metadata file extensions via YAML configuration
+- **Configurable File Types**: Support for customizable photo and metadata file extensions via server-managed team configuration
 - **File Scanning**: Recursively scans folders for configured photo and XMP files
 - **Statistics Collection**: Counts files by type and calculates storage usage
 - **File Pairing Analysis**: Identifies orphaned images and XMP metadata files
 - **XMP Metadata Extraction**: Parses and analyzes metadata from XMP sidecar files
-- **HTML Reports**: Generates beautiful, interactive HTML reports with charts
-
-## Prerequisites
-
-Before using PhotoStats, make sure you have:
-1. [Installed the tool](installation.md)
-2. [Configured the file types](configuration.md) you want to scan
+- **HTML Reports**: Generates interactive HTML reports with charts
 
 ## Usage
 
-### Basic Usage
+### Test a Local Path
 
-Scan a folder and generate a report:
+Validate a directory and run PhotoStats analysis before creating a collection:
 
 ```bash
-python photo_stats.py /path/to/your/photos
+shuttersense-agent test /path/to/photos --tool photostats
 ```
 
 This will:
-1. Load configuration to determine which file types to scan
-2. Scan the specified folder recursively
-3. Collect statistics on all configured photo files and metadata files
-4. Analyze file pairing (images with/without XMP files)
-5. Extract and analyze XMP metadata
-6. Generate an HTML report named `photo_stats_report.html` in the current directory
+1. Validate the path is accessible
+2. Scan the folder recursively for configured photo and metadata files
+3. Collect statistics, analyze file pairing, and extract XMP metadata
+4. Display a summary of results
+5. Cache results for 24 hours
 
-### Custom Output File
-
-Specify a custom output filename:
+### Save an HTML Report
 
 ```bash
-python photo_stats.py /path/to/your/photos my_report.html
+shuttersense-agent test /path/to/photos --tool photostats --output report.html
 ```
 
-### Custom Configuration File
-
-Use a specific configuration file:
+### Run Against a Registered Collection
 
 ```bash
-python photo_stats.py /path/to/your/photos my_report.html config/config.yaml
+# Online mode (uploads results to server)
+shuttersense-agent run <collection-guid> --tool photostats
+
+# Offline mode (saves results locally for later sync)
+shuttersense-agent run <collection-guid> --tool photostats --offline
+
+# With HTML report output
+shuttersense-agent run <collection-guid> --tool photostats --output report.html
+```
+
+### Sync Offline Results
+
+```bash
+# Preview pending results
+shuttersense-agent sync --dry-run
+
+# Upload all pending results
+shuttersense-agent sync
 ```
 
 ## What PhotoStats Analyzes
-
-The tool performs several types of analysis on your photo collection:
 
 1. **File Type Distribution**: Counts how many files of each type exist
 2. **Storage Analysis**: Calculates total storage used by each file type
@@ -61,130 +67,35 @@ The tool performs several types of analysis on your photo collection:
 4. **Orphan Detection**: Finds XMP files without matching images and images without required sidecars
 5. **Metadata Extraction**: Parses XMP files to extract embedded metadata
 
-## Output
-
-### Console Output
-
-The tool provides progress information and a summary in the console:
-
-```
-Scanning folder: /Users/you/Photos
-Found 1234 files
-Analyzing file pairing...
-Extracting XMP metadata...
-Scan completed in 2.45 seconds
-Generating HTML report: photo_stats_report.html
-
-==================================================
-SUMMARY
-==================================================
-Total files: 1234
-Total size: 45.67 GB
-Paired files: 580
-Orphaned images: 12
-Orphaned XMP: 3
-
-File counts:
-  .CR3: 600
-  .DNG: 150
-  .TIFF: 432
-  .XMP: 52
-
-==================================================
-
-✓ HTML report saved to: /path/to/photo_stats_report.html
-```
-
-### HTML Report
+## HTML Report Contents
 
 The generated HTML report contains:
 
-- **Summary Statistics**:
-  - Total images (excluding sidecars)
-  - Total size
-  - Orphaned images count
-  - Orphaned sidecars count
-
-- **Image Type Distribution Chart**:
-  - Visual breakdown of image file counts
-  - Sidecars excluded except orphaned ones
-
-- **Storage Distribution Chart**:
-  - Storage usage by image type
-  - Combines each image with its paired sidecar size
-
-- **Pairing Status**:
-  - Lists of orphaned images (missing required sidecars)
-  - Lists of orphaned XMP sidecar files (no matching image)
+- **Summary Statistics**: Total images, total size, orphaned images/sidecars counts
+- **Image Type Distribution Chart**: Visual breakdown of image file counts
+- **Storage Distribution Chart**: Storage usage by image type
+- **Pairing Status**: Lists of orphaned images and orphaned XMP sidecar files
 
 ## Understanding the Results
 
 ### Paired Files
-
 Images that have matching XMP sidecar files (e.g., `IMG_001.CR3` paired with `IMG_001.xmp`).
 
 ### Orphaned Images
-
-Images that require XMP sidecars (based on your configuration's `require_sidecar` setting) but don't have one. This might indicate:
-- Missing metadata files
-- Files that haven't been processed yet
-- Potential data loss
+Images that require XMP sidecars (based on your configuration's `require_sidecar` setting) but don't have one. This might indicate missing metadata files, unprocessed files, or potential data loss.
 
 ### Orphaned XMP Files
-
-XMP sidecar files that don't have a matching image file. This might indicate:
-- Deleted images but metadata retained
-- Naming mismatches
-- Files that need cleanup
-
-## Examples
-
-### Scan a photo library
-
-```bash
-python photo_stats.py ~/Pictures/2024
-```
-
-### Generate a report for a specific project
-
-```bash
-python photo_stats.py /Volumes/Photos/Wedding_Project wedding_stats.html
-```
-
-### Use a custom configuration for RAW files
-
-```bash
-python photo_stats.py ~/Photos/RAW raw_report.html config/raw-only-config.yaml
-```
+XMP sidecar files that don't have a matching image file. This might indicate deleted images with retained metadata, naming mismatches, or files that need cleanup.
 
 ## Tips
 
 - **Large Collections**: For very large photo collections, the scan may take several minutes. The tool provides progress updates.
 - **Network Drives**: Scanning network drives will be slower than local drives.
-- **Configuration**: Adjust your configuration file to match your specific workflow and file types.
+- **Configuration**: Adjust your team configuration on the server to match your specific workflow and file types.
 - **Regular Checks**: Run PhotoStats periodically to ensure your photo collection integrity.
-
-## Troubleshooting
-
-### No configuration file found
-
-If you see this message, follow the prompts to create a configuration file from the template, or see the [Configuration Guide](configuration.md).
-
-### No files found
-
-This might mean:
-- The folder path is incorrect
-- No files match your configured file types
-- The folder is empty
-
-Check your configuration and folder path.
-
-### Report not generated
-
-Ensure you have write permissions in the output directory.
 
 ## Next Steps
 
-- Learn more about [configuration options](configuration.md)
-- Check out the [Installation guide](installation.md) for development setup
-- See the main [README](../README.md) for information about running tests
+- Learn about [configuration options](configuration.md)
+- See the [Installation Guide](installation.md) for setup
+- See the [Agent Installation Guide](agent-installation.md) for agent setup

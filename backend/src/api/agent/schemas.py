@@ -5,6 +5,8 @@ Defines request and response models for:
 - Agent registration
 - Heartbeat updates
 - Agent status and metadata
+- Agent collection management (Issue #108)
+- Agent offline result upload (Issue #108)
 """
 
 from datetime import datetime
@@ -932,6 +934,21 @@ class JobConfigResponse(BaseModel):
     )
 
 
+class TeamConfigResponse(BaseModel):
+    """Standalone team configuration (not job-specific).
+
+    Used by agent CLI commands (test, run) to get the team's tool
+    configuration without needing a job. Includes the default pipeline
+    definition if one exists.
+    """
+
+    config: JobConfigData = Field(..., description="Team tool configuration")
+    default_pipeline: Optional[PipelineData] = Field(
+        None,
+        description="Default pipeline definition (if one exists)"
+    )
+
+
 # ============================================================================
 # Connector Schemas (for agent credential configuration)
 # ============================================================================
@@ -1036,6 +1053,85 @@ class AgentConnectorMetadataResponse(BaseModel):
                     {"name": "password", "type": "password", "required": True, "description": "Password"},
                     {"name": "domain", "type": "string", "required": False, "description": "Domain (optional)"}
                 ]
+            }
+        }
+    }
+
+
+class AgentConnectorDebugInfoResponse(BaseModel):
+    """
+    Response schema for connector debug info including inventory configuration.
+
+    Used by agent debug commands to access connector details needed
+    for inventory manifest comparison and diagnostics.
+    """
+
+    guid: str = Field(..., description="Connector GUID (con_xxx)")
+    name: str = Field(..., description="Connector display name")
+    type: str = Field(..., description="Connector type (s3, gcs, smb)")
+    credential_location: str = Field(..., description="Credential storage location")
+    inventory_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Inventory bucket configuration (S3 Inventory / GCS Storage Insights)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "con_01hgw2bbg...",
+                "name": "Production S3 Bucket",
+                "type": "s3",
+                "credential_location": "agent",
+                "inventory_config": {
+                    "source_bucket": "my-photos",
+                    "destination_bucket": "my-inventory",
+                    "config_name": "daily-inventory",
+                }
+            }
+        }
+    }
+
+
+class CollectionDebugInfoResponse(BaseModel):
+    """
+    Response schema for collection debug info.
+
+    Returns the collection's stored FileInfo, location, and folder path
+    so debug commands can replicate the same hash computation as tool execution.
+    """
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    name: str = Field(..., description="Collection display name")
+    location: str = Field(..., description="Collection location (bucket/prefix or local path)")
+    folder_path: Optional[str] = Field(
+        None,
+        description="Inventory folder path (from InventoryFolder mapping)"
+    )
+    connector_guid: Optional[str] = Field(
+        None,
+        description="Connector GUID if remote collection"
+    )
+    file_info: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Stored FileInfo entries (from inventory import or cloud API)"
+    )
+    file_info_source: Optional[str] = Field(
+        None,
+        description="Source of FileInfo: 'api' or 'inventory'"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "name": "Vacation Photos 2024",
+                "location": "s3://my-bucket/2020/vacation",
+                "folder_path": "2020/vacation/",
+                "connector_guid": "con_01hgw2bbg0000000000000001",
+                "file_info": [
+                    {"key": "2020/vacation/IMG_001.CR3", "size": 25000000, "last_modified": "2026-01-15T10:00:00Z"}
+                ],
+                "file_info_source": "inventory"
             }
         }
     }
@@ -1420,6 +1516,10 @@ class InventoryFoldersRequest(BaseModel):
         ge=0,
         description="Total size in bytes"
     )
+    latest_manifest: Optional[str] = Field(
+        default=None,
+        description="Display path of the manifest used for this import (e.g., '2026-01-26T01-00Z/manifest.json')"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -1431,7 +1531,8 @@ class InventoryFoldersRequest(BaseModel):
                     "2020/Vacation/": {"file_count": 100, "total_size": 2500000000}
                 },
                 "total_files": 250,
-                "total_size": 6250000000
+                "total_size": 6250000000,
+                "latest_manifest": "2026-01-26T01-00Z/manifest.json"
             }
         }
     }
@@ -1867,6 +1968,439 @@ class InventoryDeltaResponse(BaseModel):
                 "status": "success",
                 "message": "Stored delta for 5 collections",
                 "collections_updated": 5
+            }
+        }
+    }
+
+
+# ============================================================================
+# Agent Collection Schemas (Issue #108)
+# Tasks: T004, T005
+# ============================================================================
+
+class TestResultSummary(BaseModel):
+    """Optional test results from the agent's local test cache."""
+
+    tested_at: datetime = Field(..., description="When the test was executed")
+    file_count: int = Field(..., ge=0, description="Total files found")
+    photo_count: int = Field(..., ge=0, description="Files matching photo extensions")
+    sidecar_count: int = Field(..., ge=0, description="Files matching metadata extensions")
+    tools_tested: List[str] = Field(
+        default_factory=list,
+        description="Tools that were run"
+    )
+    issues_found: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Summary of issues per tool"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "tested_at": "2026-01-28T12:00:00.000Z",
+                "file_count": 5000,
+                "photo_count": 4500,
+                "sidecar_count": 450,
+                "tools_tested": ["photostats", "photo_pairing"],
+                "issues_found": {"photostats": {"orphaned_files": 3}}
+            }
+        }
+    }
+
+
+class AgentCreateCollectionRequest(BaseModel):
+    """Request schema for agent-initiated collection creation."""
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Collection display name"
+    )
+    location: str = Field(
+        ...,
+        min_length=1,
+        description="Absolute path to the local directory"
+    )
+    test_results: Optional[TestResultSummary] = Field(
+        None,
+        description="Optional test results from the local test cache"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "name": "Vacation Photos 2024",
+                "location": "/photos/2024",
+                "test_results": {
+                    "tested_at": "2026-01-28T12:00:00.000Z",
+                    "file_count": 5000,
+                    "photo_count": 4500,
+                    "sidecar_count": 450,
+                    "tools_tested": ["photostats"],
+                    "issues_found": None
+                }
+            }
+        }
+    }
+
+
+class AgentCreateCollectionResponse(BaseModel):
+    """Response schema for successful agent collection creation."""
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    name: str = Field(..., description="Collection display name")
+    type: str = Field(..., description="Collection type (always LOCAL)")
+    location: str = Field(..., description="Absolute path")
+    bound_agent_guid: str = Field(..., description="Agent GUID (agt_xxx)")
+    web_url: str = Field(
+        ...,
+        description="URL to view this collection in the web UI"
+    )
+    created_at: datetime = Field(..., description="Creation timestamp")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "name": "Vacation Photos 2024",
+                "type": "LOCAL",
+                "location": "/photos/2024",
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
+                "web_url": "https://app.shuttersense.ai/collections/col_01hgw2bbg0000000000000001",
+                "created_at": "2026-01-28T12:00:00.000Z"
+            }
+        }
+    }
+
+
+class AgentCollectionItem(BaseModel):
+    """Item in the agent collection list response."""
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    name: str = Field(..., description="Collection display name")
+    type: str = Field(..., description="Collection type: LOCAL, S3, GCS, SMB")
+    location: str = Field(..., description="Path or bucket/prefix")
+    bound_agent_guid: Optional[str] = Field(
+        None, description="Agent GUID for LOCAL collections"
+    )
+    connector_guid: Optional[str] = Field(
+        None, description="Connector GUID for remote collections"
+    )
+    connector_name: Optional[str] = Field(
+        None, description="Connector display name"
+    )
+    is_accessible: Optional[bool] = Field(
+        None, description="Last known accessibility status"
+    )
+    last_analysis_at: Optional[datetime] = Field(
+        None, description="When last analysis completed"
+    )
+    supports_offline: bool = Field(
+        ..., description="True only for LOCAL collections"
+    )
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "name": "Vacation Photos 2024",
+                "type": "LOCAL",
+                "location": "/photos/2024",
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
+                "connector_guid": None,
+                "connector_name": None,
+                "is_accessible": True,
+                "last_analysis_at": "2026-01-28T12:00:00.000Z",
+                "supports_offline": True
+            }
+        }
+    }
+
+
+class AgentCollectionListResponse(BaseModel):
+    """Response schema for listing agent-bound collections."""
+
+    collections: List[AgentCollectionItem] = Field(
+        default_factory=list,
+        description="List of bound collections"
+    )
+    total_count: int = Field(..., description="Total number of bound collections")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collections": [],
+                "total_count": 0
+            }
+        }
+    }
+
+
+class AgentCollectionTestRequest(BaseModel):
+    """Request schema for reporting collection accessibility test results."""
+
+    is_accessible: bool = Field(
+        ...,
+        description="Whether the path is currently accessible"
+    )
+    error_message: Optional[str] = Field(
+        None,
+        max_length=1000,
+        description="Error details if not accessible"
+    )
+    file_count: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Number of files found (if accessible)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "is_accessible": True,
+                "error_message": None,
+                "file_count": 5000
+            }
+        }
+    }
+
+
+class AgentCollectionTestResponse(BaseModel):
+    """Response schema for collection accessibility test update."""
+
+    guid: str = Field(..., description="Collection GUID (col_xxx)")
+    is_accessible: bool = Field(
+        ..., description="Updated accessibility status"
+    )
+    updated_at: datetime = Field(..., description="When status was updated")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "col_01hgw2bbg0000000000000001",
+                "is_accessible": True,
+                "updated_at": "2026-01-28T12:00:00.000Z"
+            }
+        }
+    }
+
+
+# ============================================================================
+# Agent Offline Result Upload Schemas (Issue #108)
+# Task: T006
+# ============================================================================
+
+class AgentPrepareResultUploadRequest(BaseModel):
+    """Request schema for preparing a chunked offline result upload.
+
+    Creates a placeholder Job so the agent can use the existing chunked
+    upload infrastructure (POST /jobs/{guid}/uploads/initiate) before
+    submitting the final result via POST /results/upload.
+    """
+
+    result_id: str = Field(
+        ...,
+        min_length=1,
+        description="Locally generated UUID for idempotent upload"
+    )
+    collection_guid: str = Field(
+        ...,
+        min_length=1,
+        description="GUID of the collection analyzed (col_xxx)"
+    )
+    tool: str = Field(
+        ...,
+        min_length=1,
+        description="Tool used: photostats, photo_pairing, pipeline_validation"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "result_id": "550e8400-e29b-41d4-a716-446655440000",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "tool": "photostats",
+            }
+        }
+    }
+
+
+class AgentPrepareResultUploadResponse(BaseModel):
+    """Response schema for prepare result upload (returns job_guid for chunked uploads)."""
+
+    job_guid: str = Field(
+        ..., description="GUID of the placeholder Job (job_xxx) — use for chunked uploads"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "job_guid": "job_01hgw2bbg0000000000000001",
+            }
+        }
+    }
+
+
+class AgentUploadResultRequest(BaseModel):
+    """Request schema for uploading an offline analysis result.
+
+    Supports two modes:
+    1. Inline: Provide analysis_data and optional html_report directly.
+    2. Chunked: Provide analysis_data_upload_id and/or report_upload_id
+       from pre-uploaded chunked content (requires prior /results/upload/prepare).
+    """
+
+    result_id: str = Field(
+        ...,
+        min_length=1,
+        description="Locally generated UUID for idempotent upload"
+    )
+    collection_guid: str = Field(
+        ...,
+        min_length=1,
+        description="GUID of the collection analyzed (col_xxx)"
+    )
+    tool: str = Field(
+        ...,
+        min_length=1,
+        description="Tool used: photostats, photo_pairing, pipeline_validation"
+    )
+    executed_at: datetime = Field(
+        ...,
+        description="When the analysis was executed on the agent"
+    )
+    # Inline mode fields
+    analysis_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Full analysis output (inline mode)"
+    )
+    html_report: Optional[str] = Field(
+        None,
+        description="HTML report string (inline mode)"
+    )
+    # Chunked mode fields
+    analysis_data_upload_id: Optional[str] = Field(
+        None,
+        description="Upload ID for chunked analysis data (from chunked upload)"
+    )
+    report_upload_id: Optional[str] = Field(
+        None,
+        description="Upload ID for chunked HTML report (from chunked upload)"
+    )
+    # Storage Optimization (Issue #92 + Issue #108)
+    input_state_hash: Optional[str] = Field(
+        None,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hash of Input State for no-change detection"
+    )
+
+    @model_validator(mode='after')
+    def validate_data_source(self) -> 'AgentUploadResultRequest':
+        """Ensure analysis_data is provided either inline or via upload_id."""
+        has_inline = self.analysis_data is not None
+        has_upload = self.analysis_data_upload_id is not None
+        if not has_inline and not has_upload:
+            raise ValueError(
+                "Must provide either 'analysis_data' (inline) or "
+                "'analysis_data_upload_id' (chunked upload)"
+            )
+        if has_inline and has_upload:
+            raise ValueError(
+                "Cannot provide both 'analysis_data' and 'analysis_data_upload_id'"
+            )
+        # html_report and report_upload_id are mutually exclusive
+        if self.html_report is not None and self.report_upload_id is not None:
+            raise ValueError(
+                "Cannot provide both 'html_report' and 'report_upload_id'"
+            )
+        return self
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "result_id": "550e8400-e29b-41d4-a716-446655440000",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "tool": "photostats",
+                "executed_at": "2026-01-28T10:00:00.000Z",
+                "analysis_data": {
+                    "total_files": 5000,
+                    "orphaned_files": 12,
+                    "missing_sidecars": 5
+                },
+                "html_report": None
+            }
+        }
+    }
+
+
+class AgentNoChangeResultRequest(BaseModel):
+    """Request schema for recording a NO_CHANGE result from CLI.
+
+    Used when the agent CLI detects the Input State hash matches a previous
+    result, indicating no changes to the collection since the last analysis.
+    No HMAC signature required — the agent is already authenticated via API key.
+    """
+
+    collection_guid: str = Field(
+        ...,
+        min_length=1,
+        description="Collection GUID (col_xxx)"
+    )
+    tool: str = Field(
+        ...,
+        min_length=1,
+        description="Tool name: photostats, photo_pairing, pipeline_validation"
+    )
+    input_state_hash: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 hash of Input State (64 char hex string)"
+    )
+    source_result_guid: str = Field(
+        ...,
+        pattern=r"^res_[0-9a-hjkmnp-tv-z]{26}$",
+        description="GUID of the previous result being referenced (res_xxx)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "tool": "photostats",
+                "input_state_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "source_result_guid": "res_01hgw2bbg0000000000000001",
+            }
+        }
+    }
+
+
+class AgentUploadResultResponse(BaseModel):
+    """Response schema for successful offline result upload."""
+
+    job_guid: str = Field(
+        ..., description="GUID of the created Job record (job_xxx)"
+    )
+    result_guid: str = Field(
+        ..., description="GUID of the created AnalysisResult (res_xxx)"
+    )
+    collection_guid: str = Field(
+        ..., description="Collection GUID (col_xxx)"
+    )
+    status: str = Field(
+        ..., description="Upload status (uploaded)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "job_guid": "job_01hgw2bbg0000000000000001",
+                "result_guid": "res_01hgw2bbg0000000000000001",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "status": "uploaded"
             }
         }
     }

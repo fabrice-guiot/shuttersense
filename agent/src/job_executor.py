@@ -1300,8 +1300,7 @@ class JobExecutor:
         """
         Create a PipelineConfig from API pipeline data.
 
-        Converts the database format (nodes_json, edges_json) to
-        the PipelineConfig format expected by pipeline_processor.
+        Delegates to the shared pipeline_config_builder module.
 
         Args:
             pipeline_data: Dict with 'nodes' and 'edges' from API
@@ -1309,85 +1308,12 @@ class JobExecutor:
         Returns:
             PipelineConfig instance
         """
-        from utils.pipeline_processor import (
-            PipelineConfig,
-            CaptureNode,
-            FileNode,
-            ProcessNode,
-            PairingNode,
-            BranchingNode,
-            TerminationNode,
+        from src.analysis.pipeline_config_builder import build_pipeline_config
+
+        return build_pipeline_config(
+            nodes_json=pipeline_data.get("nodes", []),
+            edges_json=pipeline_data.get("edges", []),
         )
-
-        nodes_data = pipeline_data.get("nodes", [])
-        edges_data = pipeline_data.get("edges", [])
-
-        # Build output map from edges
-        output_map: Dict[str, list] = {}
-        for edge in edges_data:
-            from_id = edge.get("from") or edge.get("source")
-            to_id = edge.get("to") or edge.get("target")
-            if from_id and to_id:
-                if from_id not in output_map:
-                    output_map[from_id] = []
-                output_map[from_id].append(to_id)
-
-        # Parse nodes
-        nodes = []
-        for node_dict in nodes_data:
-            node_id = node_dict.get("id")
-            node_type = node_dict.get("type", "").lower()
-            properties = node_dict.get("properties", {})
-            name = properties.get("name", node_dict.get("name", ""))
-            output = output_map.get(node_id, [])
-
-            if node_type == "capture":
-                nodes.append(CaptureNode(id=node_id, name=name, output=output))
-            elif node_type == "file":
-                extension = properties.get("extension", "")
-                nodes.append(FileNode(id=node_id, name=name, output=output, extension=extension))
-            elif node_type == "process":
-                method_ids = properties.get("method_ids", properties.get("methodIds", []))
-                if not isinstance(method_ids, list):
-                    method_ids = [method_ids] if method_ids else []
-                nodes.append(ProcessNode(id=node_id, name=name, output=output, method_ids=method_ids))
-            elif node_type == "pairing":
-                pairing_type = properties.get("pairing_type", properties.get("pairingType", ""))
-                input_count = properties.get("input_count", properties.get("inputCount", 2))
-                nodes.append(PairingNode(
-                    id=node_id, name=name, output=output,
-                    pairing_type=pairing_type, input_count=input_count
-                ))
-            elif node_type == "branching":
-                condition = properties.get("condition_description", properties.get("conditionDescription", ""))
-                nodes.append(BranchingNode(
-                    id=node_id, name=name, output=output,
-                    condition_description=condition
-                ))
-            elif node_type == "termination":
-                term_type = properties.get("termination_type", properties.get("terminationType", ""))
-                nodes.append(TerminationNode(
-                    id=node_id, name=name, output=output,
-                    termination_type=term_type
-                ))
-
-        # Create PipelineConfig and categorize nodes
-        pipeline_config = PipelineConfig(nodes=nodes)
-        for node in nodes:
-            if isinstance(node, CaptureNode):
-                pipeline_config.capture_nodes.append(node)
-            elif isinstance(node, FileNode):
-                pipeline_config.file_nodes.append(node)
-            elif isinstance(node, ProcessNode):
-                pipeline_config.process_nodes.append(node)
-            elif isinstance(node, PairingNode):
-                pipeline_config.pairing_nodes.append(node)
-            elif isinstance(node, BranchingNode):
-                pipeline_config.branching_nodes.append(node)
-            elif isinstance(node, TerminationNode):
-                pipeline_config.termination_nodes.append(node)
-
-        return pipeline_config
 
     async def _run_collection_test(self, job: Dict[str, Any]) -> JobResult:
         """
@@ -2195,7 +2121,8 @@ class JobExecutor:
                     folders=list(result.folders),
                     folder_stats=result.folder_stats,
                     total_files=result.total_files,
-                    total_size=result.total_size
+                    total_size=result.total_size,
+                    latest_manifest=result.latest_manifest
                 )
 
                 logger.info(
@@ -2272,7 +2199,8 @@ class JobExecutor:
         folders: List[str],
         folder_stats: Dict[str, Dict[str, Any]],
         total_files: int,
-        total_size: int
+        total_size: int,
+        latest_manifest: Optional[str] = None
     ) -> None:
         """
         Report discovered inventory folders to the server.
@@ -2284,6 +2212,7 @@ class JobExecutor:
             folder_stats: Dict mapping folder path to stats
             total_files: Total files processed
             total_size: Total size in bytes
+            latest_manifest: Display path of the manifest used for this import
         """
         try:
             await self._api_client.report_inventory_folders(
@@ -2292,7 +2221,8 @@ class JobExecutor:
                 folders=folders,
                 folder_stats=folder_stats,
                 total_files=total_files,
-                total_size=total_size
+                total_size=total_size,
+                latest_manifest=latest_manifest
             )
             logger.info(
                 f"Reported {len(folders)} inventory folders",
@@ -2692,195 +2622,10 @@ class JobExecutor:
         """
         Generate HTML report for PhotoStats results using Jinja2 templates.
 
-        Unified report generation for both local and remote collections.
-
-        Args:
-            results: PhotoStats results dictionary
-            location: Collection path (display string)
-            connector: Optional connector info (None for local collections)
-
-        Returns:
-            HTML report string
+        Delegates to the shared report generator module.
         """
-        from utils.report_renderer import (
-            ReportRenderer,
-            ReportContext,
-            KPICard,
-            ReportSection,
-            WarningMessage
-        )
-        from version import __version__ as TOOL_VERSION
-        from datetime import datetime
-
-        def format_size(size_bytes: int) -> str:
-            """Format bytes to human-readable size."""
-            size = float(size_bytes)
-            for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-                if size < 1024.0:
-                    return f"{size:.2f} {unit}"
-                size /= 1024.0
-            return f"{size:.2f} PB"
-
-        is_remote = connector is not None
-
-        try:
-            # Use location as-is (already formatted by caller)
-            display_location = location
-
-            # Build KPI cards
-            total_images = sum(
-                count for ext, count in results.get('file_counts', {}).items()
-                if ext not in {'.xmp'}
-            )
-            total_size = results.get('total_size', 0)
-            kpis = [
-                KPICard(
-                    title="Total Images",
-                    value=str(total_images),
-                    status="success",
-                    unit="files"
-                ),
-                KPICard(
-                    title="Total Size",
-                    value=format_size(total_size),
-                    status="info"
-                ),
-                KPICard(
-                    title="Orphaned Images",
-                    value=str(len(results.get('orphaned_images', []))),
-                    status="warning" if results.get('orphaned_images') else "success",
-                    unit="files"
-                ),
-                KPICard(
-                    title="Orphaned Sidecars",
-                    value=str(len(results.get('orphaned_xmp', []))),
-                    status="warning" if results.get('orphaned_xmp') else "success",
-                    unit="files"
-                )
-            ]
-
-            # Build chart sections
-            file_counts = results.get('file_counts', {})
-            image_labels = [ext.upper() for ext in file_counts.keys() if ext != '.xmp']
-            image_counts = [file_counts[ext] for ext in file_counts.keys() if ext != '.xmp']
-
-            sections = [
-                ReportSection(
-                    title="Image Type Distribution",
-                    type="chart_pie",
-                    data={
-                        "labels": image_labels,
-                        "values": image_counts
-                    },
-                    description="Number of images by file type"
-                )
-            ]
-
-            # Add Storage Distribution bar chart (storage by type in MB)
-            storage_by_type = results.get('storage_by_type', {})
-            if storage_by_type:
-                storage_labels = [ext.upper() for ext in storage_by_type.keys()]
-                # Convert bytes to MB for display
-                storage_values_mb = [
-                    round(size_bytes / (1024 * 1024), 2)
-                    for size_bytes in storage_by_type.values()
-                ]
-                sections.append(
-                    ReportSection(
-                        title="Storage Distribution",
-                        type="chart_bar",
-                        data={
-                            "labels": storage_labels,
-                            "values": storage_values_mb
-                        },
-                        description="Storage usage by image type (including paired sidecars) in MB"
-                    )
-                )
-
-            # Add file pairing status
-            orphaned_count = len(results.get('orphaned_images', [])) + len(results.get('orphaned_xmp', []))
-            if orphaned_count > 0:
-                rows = []
-                for file_path in results.get('orphaned_images', [])[:100]:
-                    filename = file_path.rsplit('/', 1)[-1] if '/' in file_path else file_path
-                    rows.append([filename, "Missing XMP sidecar"])
-                for file_path in results.get('orphaned_xmp', [])[:100]:
-                    filename = file_path.rsplit('/', 1)[-1] if '/' in file_path else file_path
-                    rows.append([filename, "Missing image file"])
-
-                sections.append(
-                    ReportSection(
-                        title="File Pairing Status",
-                        type="table",
-                        data={
-                            "headers": ["File", "Issue"],
-                            "rows": rows
-                        },
-                        description=f"Found {orphaned_count} orphaned files"
-                    )
-                )
-            else:
-                sections.append(
-                    ReportSection(
-                        title="File Pairing Status",
-                        type="html",
-                        html_content='<div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;"><strong>All image files have corresponding XMP metadata files!</strong></div>'
-                    )
-                )
-
-            # Build warnings
-            warnings = []
-            if orphaned_count > 0:
-                orphaned_details = []
-                if results.get('orphaned_images'):
-                    orphaned_details.append(f"{len(results['orphaned_images'])} images without XMP files")
-                if results.get('orphaned_xmp'):
-                    orphaned_details.append(f"{len(results['orphaned_xmp'])} XMP files without images")
-                warnings.append(
-                    WarningMessage(
-                        message=f"Found {orphaned_count} orphaned files",
-                        details=orphaned_details,
-                        severity="medium"
-                    )
-                )
-
-            # Build context and render using ReportRenderer
-            footer_note = "Remote collection analysis" if is_remote else "Local collection analysis"
-            context = ReportContext(
-                tool_name="PhotoStats",
-                tool_version=TOOL_VERSION,
-                scan_path=display_location,
-                scan_timestamp=datetime.now(),
-                scan_duration=results.get('scan_time', 0),
-                kpis=kpis,
-                sections=sections,
-                warnings=warnings,
-                errors=[],
-                footer_note=footer_note
-            )
-
-            renderer = ReportRenderer()
-            return renderer.render_to_string(context, "photo_stats.html.j2")
-
-        except Exception as e:
-            logger.warning(f"Failed to render PhotoStats template: {e}", exc_info=True)
-
-        # Fallback: simple HTML report
-        orphaned_images = results.get('orphaned_images', [])
-        orphaned_xmp = results.get('orphaned_xmp', [])
-        collection_type = "Remote" if is_remote else "Local"
-        return f"""
-        <html>
-        <head><title>PhotoStats Report</title></head>
-        <body>
-            <h1>PhotoStats Report ({collection_type} Collection)</h1>
-            <p>Location: {location}</p>
-            <p>Total Files: {results.get('total_files', 0)}</p>
-            <p>Orphaned Images: {len(orphaned_images)}</p>
-            <p>Orphaned XMP: {len(orphaned_xmp)}</p>
-        </body>
-        </html>
-        """
+        from src.analysis.report_generators import generate_photostats_report
+        return generate_photostats_report(results, location, connector)
 
     def _generate_photo_pairing_report(
         self,
@@ -2892,162 +2637,10 @@ class JobExecutor:
         """
         Generate HTML report for Photo Pairing results using Jinja2 templates.
 
-        Unified report generation for both local and remote collections.
-
-        Args:
-            results: Photo Pairing results dictionary
-            invalid_files: List of invalid file paths
-            location: Collection path (display string)
-            connector: Optional connector info (None for local collections)
-
-        Returns:
-            HTML report string
+        Delegates to the shared report generator module.
         """
-        is_remote = connector is not None
-        from utils.report_renderer import (
-            ReportRenderer,
-            ReportContext,
-            KPICard,
-            ReportSection,
-            WarningMessage
-        )
-        from version import __version__ as TOOL_VERSION
-
-        try:
-            # Use location as-is (already formatted by caller)
-            display_location = location
-
-            camera_usage = results.get('camera_usage', {})
-            method_usage = results.get('method_usage', {})
-
-            # Build KPI cards
-            kpis = [
-                KPICard(
-                    title="Total Groups",
-                    value=str(results.get('group_count', 0)),
-                    status="success",
-                    unit="groups"
-                ),
-                KPICard(
-                    title="Total Images",
-                    value=str(results.get('image_count', 0)),
-                    status="success",
-                    unit="images"
-                ),
-                KPICard(
-                    title="Cameras Used",
-                    value=str(len(camera_usage)),
-                    status="info",
-                    unit="cameras"
-                ),
-                KPICard(
-                    title="Processing Methods",
-                    value=str(len(method_usage)),
-                    status="info",
-                    unit="methods"
-                ),
-                KPICard(
-                    title="Invalid Files",
-                    value=str(results.get('invalid_files_count', 0)),
-                    status="danger" if invalid_files else "success",
-                    unit="files"
-                )
-            ]
-
-            # Build sections
-            sections = []
-
-            # Camera usage chart - labels already resolved to camera names
-            if camera_usage:
-                sections.append(
-                    ReportSection(
-                        title="Camera Usage",
-                        type="chart_pie",
-                        data={
-                            "labels": list(camera_usage.keys()),
-                            "values": list(camera_usage.values())
-                        },
-                        description="Images captured by each camera"
-                    )
-                )
-
-            # Processing methods chart - labels already resolved to method descriptions
-            if method_usage:
-                sections.append(
-                    ReportSection(
-                        title="Processing Methods",
-                        type="chart_bar",
-                        data={
-                            "labels": list(method_usage.keys()),
-                            "values": list(method_usage.values())
-                        },
-                        description="Usage of processing methods"
-                    )
-                )
-
-            # Invalid files table
-            if invalid_files:
-                rows = [[f.rsplit('/', 1)[-1] if '/' in f else f, "Invalid filename pattern"]
-                        for f in invalid_files[:100]]
-                sections.append(
-                    ReportSection(
-                        title="⚠️ Invalid Filenames",
-                        type="table",
-                        data={
-                            "headers": ["File", "Issue"],
-                            "rows": rows
-                        },
-                        description=f"Found {len(invalid_files)} files with non-standard filenames"
-                    )
-                )
-
-            # Warnings
-            warnings = []
-            if invalid_files:
-                warnings.append(
-                    WarningMessage(
-                        message=f"Found {len(invalid_files)} files with invalid filenames",
-                        details=["These files don't match the expected naming pattern"],
-                        severity="medium"
-                    )
-                )
-
-            # Build context and render
-            from datetime import datetime
-            footer_note = "Remote collection analysis" if is_remote else "Local collection analysis"
-            context = ReportContext(
-                tool_name="Photo Pairing",
-                tool_version=TOOL_VERSION,
-                scan_path=display_location,
-                scan_timestamp=datetime.now(),
-                scan_duration=results.get('scan_time', 0),
-                kpis=kpis,
-                sections=sections,
-                warnings=warnings,
-                errors=[],
-                footer_note=footer_note
-            )
-
-            renderer = ReportRenderer()
-            return renderer.render_to_string(context, "photo_pairing.html.j2")
-
-        except Exception as e:
-            logger.warning(f"Failed to render Photo Pairing template: {e}", exc_info=True)
-
-        # Fallback: simple HTML report
-        collection_type = "Remote" if is_remote else "Local"
-        return f"""
-        <html>
-        <head><title>Photo Pairing Report</title></head>
-        <body>
-            <h1>Photo Pairing Report ({collection_type} Collection)</h1>
-            <p>Location: {location}</p>
-            <p>Total Images: {results.get('image_count', 0)}</p>
-            <p>Image Groups: {results.get('group_count', 0)}</p>
-            <p>Invalid Files: {len(invalid_files)}</p>
-        </body>
-        </html>
-        """
+        from src.analysis.report_generators import generate_photo_pairing_report
+        return generate_photo_pairing_report(results, invalid_files, location, connector)
 
     def _generate_pipeline_validation_report(
         self,
@@ -3059,204 +2652,7 @@ class JobExecutor:
         """
         Generate HTML report for pipeline validation results.
 
-        Unified report generation for both local and remote collections.
-
-        Args:
-            results: Summary results dict
-            validation_result: Full validation result from run_pipeline_validation()
-            location: Collection path (display string)
-            connector: Optional connector info (None for local collections)
-
-        Returns:
-            HTML report string
+        Delegates to the shared report generator module.
         """
-        is_remote = connector is not None
-        from utils.report_renderer import (
-            ReportRenderer,
-            ReportContext,
-            KPICard,
-            ReportSection,
-            WarningMessage
-        )
-        from version import __version__ as TOOL_VERSION
-        from datetime import datetime
-
-        try:
-            # Use location as-is (already formatted by caller)
-            display_location = location
-
-            overall_status = results.get('overall_status', {})
-            consistent = overall_status.get('CONSISTENT', 0)
-            partial = overall_status.get('PARTIAL', 0)
-            inconsistent = overall_status.get('INCONSISTENT', 0)
-            total_images = results.get('total_images', 0)
-
-            # Determine overall validation status
-            if inconsistent > 0:
-                validation_status = "FAILED"
-                status_style = "danger"
-            elif partial > 0:
-                validation_status = "PARTIAL"
-                status_style = "warning"
-            else:
-                validation_status = "PASSED"
-                status_style = "success"
-
-            # Build KPI cards
-            kpis = [
-                KPICard(
-                    title="Total Images",
-                    value=str(total_images),
-                    status="success",
-                    unit="images"
-                ),
-                KPICard(
-                    title="Consistent",
-                    value=str(consistent),
-                    status="success" if consistent > 0 else "muted",
-                    unit="images"
-                ),
-                KPICard(
-                    title="Partial",
-                    value=str(partial),
-                    status="warning" if partial > 0 else "success",
-                    unit="images"
-                ),
-                KPICard(
-                    title="Inconsistent",
-                    value=str(inconsistent),
-                    status="danger" if inconsistent > 0 else "success",
-                    unit="images"
-                ),
-            ]
-
-            # Build sections
-            sections = []
-
-            # Validation status summary
-            if validation_status == "PASSED":
-                sections.append(
-                    ReportSection(
-                        title="Validation Result",
-                        type="html",
-                        html_content='<div class="message-box" style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; border-radius: 8px;"><strong>Pipeline validation PASSED!</strong><br>All images meet the pipeline requirements.</div>'
-                    )
-                )
-            elif validation_status == "PARTIAL":
-                sections.append(
-                    ReportSection(
-                        title="Validation Result",
-                        type="html",
-                        html_content=f'<div class="message-box" style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; border-radius: 8px;"><strong>Pipeline validation PARTIAL</strong><br>{partial} images have partial compliance with the pipeline.</div>'
-                    )
-                )
-            else:
-                sections.append(
-                    ReportSection(
-                        title="Validation Result",
-                        type="html",
-                        html_content=f'<div class="message-box" style="background: #f8d7da; border-left: 4px solid #dc3545; padding: 20px; border-radius: 8px;"><strong>Pipeline validation FAILED!</strong><br>{inconsistent} images are inconsistent with the pipeline requirements.</div>'
-                    )
-                )
-
-            # Status distribution chart (overall)
-            if total_images > 0:
-                sections.append(
-                    ReportSection(
-                        title="Overall Status Distribution",
-                        type="chart_pie",
-                        data={
-                            "labels": ["Consistent", "Partial", "Inconsistent"],
-                            "values": [consistent, partial, inconsistent]
-                        },
-                        description="Distribution of validation statuses across all images"
-                    )
-                )
-
-            # Per-termination type pie charts (for Trends tab compatibility)
-            by_termination = results.get('by_termination', {})
-            for term_type, counts in sorted(by_termination.items()):
-                term_consistent = counts.get('CONSISTENT', 0)
-                term_partial = counts.get('PARTIAL', 0)
-                term_inconsistent = counts.get('INCONSISTENT', 0)
-                term_total = term_consistent + term_partial + term_inconsistent
-
-                if term_total > 0:
-                    sections.append(
-                        ReportSection(
-                            title=f"{term_type} Status",
-                            type="chart_pie",
-                            data={
-                                "labels": ["Consistent", "Partial", "Inconsistent"],
-                                "values": [term_consistent, term_partial, term_inconsistent]
-                            },
-                            description=f"Validation status for {term_type} termination type ({term_total} images)"
-                        )
-                    )
-
-            # Warnings
-            warnings = []
-            if inconsistent > 0:
-                warnings.append(
-                    WarningMessage(
-                        message=f"{inconsistent} images are inconsistent with the pipeline",
-                        details=["Review the validation results to identify missing files"],
-                        severity="high"
-                    )
-                )
-            if partial > 0:
-                warnings.append(
-                    WarningMessage(
-                        message=f"{partial} images have partial compliance",
-                        details=["Some expected outputs may be missing"],
-                        severity="medium"
-                    )
-                )
-
-            # Build context and render
-            footer_note = "Remote collection validation" if is_remote else "Local collection validation"
-            context = ReportContext(
-                tool_name="Pipeline Validation",
-                tool_version=TOOL_VERSION,
-                scan_path=display_location,
-                scan_timestamp=datetime.now(),
-                scan_duration=results.get('scan_time', 0),
-                kpis=kpis,
-                sections=sections,
-                warnings=warnings,
-                errors=[],
-                footer_note=footer_note
-            )
-
-            renderer = ReportRenderer()
-            return renderer.render_to_string(context, "pipeline_validation.html.j2")
-
-        except Exception as e:
-            logger.warning(f"Failed to render Pipeline Validation template: {e}", exc_info=True)
-
-        # Fallback: simple HTML report
-        overall_status = results.get('overall_status', {})
-        collection_type = "Remote" if is_remote else "Local"
-
-        return f"""<!DOCTYPE html>
-<html>
-<head>
-    <title>Pipeline Validation Report - {collection_type} Collection</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px; }}
-        h1, h2 {{ color: #333; }}
-        .summary {{ background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
-    </style>
-</head>
-<body>
-    <h1>Pipeline Validation Report ({collection_type} Collection)</h1>
-    <div class="summary">
-        <p><strong>Path:</strong> {location}</p>
-        <p><strong>Total Images:</strong> {results.get('total_images', 0)}</p>
-        <p><strong>Consistent:</strong> {overall_status.get('CONSISTENT', 0)}</p>
-        <p><strong>Partial:</strong> {overall_status.get('PARTIAL', 0)}</p>
-        <p><strong>Inconsistent:</strong> {overall_status.get('INCONSISTENT', 0)}</p>
-    </div>
-    <p><em>Generated by ShutterSense Agent</em></p>
-</body>
-</html>"""
+        from src.analysis.report_generators import generate_pipeline_validation_report
+        return generate_pipeline_validation_report(results, validation_result, location, connector)

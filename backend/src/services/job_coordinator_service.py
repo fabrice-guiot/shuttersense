@@ -764,6 +764,9 @@ class JobCoordinatorService:
         # Increment storage metrics
         self._increment_storage_metrics_on_completion(job.team_id)
 
+        # Create scheduled follow-up job if TTL is configured
+        scheduled_job = self._maybe_create_scheduled_job(job)
+
         self.db.commit()
 
         logger.info(
@@ -772,7 +775,8 @@ class JobCoordinatorService:
                 "job_guid": job.guid,
                 "result_guid": result.guid,
                 "source_result_guid": previous_result.guid,
-                "intermediate_copies_cleaned": cleanup_count
+                "intermediate_copies_cleaned": cleanup_count,
+                "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
             }
         )
 
@@ -1787,6 +1791,13 @@ class JobCoordinatorService:
                 )
                 continue
 
+            # Build required capabilities: tool + connector (if agent-side credentials)
+            from backend.src.models.connector import CredentialLocation
+            required_capabilities = [tool]
+            if (collection.connector and
+                    collection.connector.credential_location == CredentialLocation.AGENT):
+                required_capabilities.append(f"connector:{collection.connector.guid}")
+
             # Create refresh job
             refresh_job = Job(
                 team_id=job.team_id,
@@ -1797,7 +1808,7 @@ class JobCoordinatorService:
                 mode="collection",
                 status=JobStatus.PENDING,
                 bound_agent_id=collection.bound_agent_id,
-                required_capabilities=[tool],
+                required_capabilities=required_capabilities,
             )
             self.db.add(refresh_job)
 

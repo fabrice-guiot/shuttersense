@@ -14,11 +14,11 @@ Base path: /api/agent/v1
 import asyncio
 import logging
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from backend.src.utils.websocket import get_connection_manager
@@ -69,6 +69,8 @@ from backend.src.api.agent.schemas import (
     AgentConnectorResponse,
     AgentConnectorListResponse,
     AgentConnectorMetadataResponse,
+    AgentConnectorDebugInfoResponse,
+    CollectionDebugInfoResponse,
     ReportConnectorCapabilityRequest,
     ReportConnectorCapabilityResponse,
     # Chunked upload schemas (Phase 15)
@@ -93,6 +95,21 @@ from backend.src.api.agent.schemas import (
     # Inventory delta schemas (Issue #107 - Phase C)
     InventoryDeltaRequest,
     InventoryDeltaResponse,
+    # Agent collection management (Issue #108)
+    AgentCreateCollectionRequest,
+    AgentCreateCollectionResponse,
+    AgentCollectionItem,
+    AgentCollectionListResponse,
+    AgentCollectionTestRequest,
+    AgentCollectionTestResponse,
+    # Agent offline result upload (Issue #108)
+    AgentPrepareResultUploadRequest,
+    AgentPrepareResultUploadResponse,
+    AgentUploadResultRequest,
+    AgentUploadResultResponse,
+    AgentNoChangeResultRequest,
+    # Team config (Issue #108 - config caching)
+    TeamConfigResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -967,6 +984,62 @@ async def get_job_config(
 
 
 # ============================================================================
+# Team Config Endpoint (Agent Auth Required - Issue #108 Config Caching)
+# ============================================================================
+
+
+@router.get(
+    "/config",
+    response_model=TeamConfigResponse,
+    summary="Get team configuration",
+    description="Get the team's tool configuration (extensions, cameras, processing "
+                "methods, default pipeline). Lightweight alternative to job-specific "
+                "config for agent CLI commands like test and run.",
+)
+async def get_team_config(
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the authenticated agent's team configuration.
+
+    Used by agent CLI commands (test, run) to get real config without
+    needing a job. Includes the default pipeline if one exists.
+    """
+    from backend.src.services.config_loader import DatabaseConfigLoader
+    from backend.src.models.pipeline import Pipeline
+
+    loader = DatabaseConfigLoader(team_id=ctx.team_id, db=db)
+
+    # Get default pipeline if one exists
+    default_pipeline = None
+    pipeline = db.query(Pipeline).filter(
+        Pipeline.team_id == ctx.team_id,
+        Pipeline.is_default == True,  # noqa: E712
+    ).first()
+
+    if pipeline:
+        default_pipeline = PipelineData(
+            guid=pipeline.guid,
+            name=pipeline.name,
+            version=pipeline.version,
+            nodes=pipeline.nodes_json or [],
+            edges=pipeline.edges_json or [],
+        )
+
+    return TeamConfigResponse(
+        config=JobConfigData(
+            photo_extensions=loader.photo_extensions,
+            metadata_extensions=loader.metadata_extensions,
+            cameras=loader.camera_mappings,
+            processing_methods=loader.processing_methods,
+            require_sidecar=loader.require_sidecar,
+        ),
+        default_pipeline=default_pipeline,
+    )
+
+
+# ============================================================================
 # Chunked Upload Endpoints (Agent Auth Required - Phase 15)
 # ============================================================================
 
@@ -1576,6 +1649,110 @@ async def get_connector_metadata(
     )
 
 
+@router.get(
+    "/connectors/{guid}/debug-info",
+    response_model=AgentConnectorDebugInfoResponse,
+    summary="Get connector debug info",
+    description="Get connector details including inventory configuration for debug diagnostics."
+)
+async def get_connector_debug_info(
+    guid: str,
+    agent_ctx: AgentContext = Depends(require_online_agent),
+    connector_service: ConnectorService = Depends(get_connector_service),
+):
+    """
+    Get connector debug info including inventory configuration.
+
+    Used by agent debug commands to access connector details needed for
+    inventory manifest comparison and diagnostics.
+
+    Path Parameters:
+        guid: Connector GUID (con_xxx)
+
+    Returns:
+        Connector details with inventory_config
+    """
+    connector = connector_service.get_by_guid(guid, team_id=agent_ctx.agent.team_id)
+
+    if not connector:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Connector not found: {guid}"
+        )
+
+    return AgentConnectorDebugInfoResponse(
+        guid=connector.guid,
+        name=connector.name,
+        type=connector.type.value,
+        credential_location=connector.credential_location.value,
+        inventory_config=connector.inventory_config,
+    )
+
+
+@router.get(
+    "/collections/{guid}/debug-info",
+    response_model=CollectionDebugInfoResponse,
+    summary="Get collection debug info",
+    description="Get collection details including stored FileInfo and location for debug diagnostics."
+)
+async def get_collection_debug_info(
+    guid: str,
+    agent_ctx: AgentContext = Depends(require_online_agent),
+    db: Session = Depends(get_db),
+):
+    """
+    Get collection debug info including stored FileInfo and location.
+
+    Used by agent debug commands to replicate the same hash computation
+    as tool execution (URL-decode keys, strip collection path prefix).
+
+    Path Parameters:
+        guid: Collection GUID (col_xxx)
+
+    Returns:
+        Collection details with file_info, location, and folder_path
+    """
+    from backend.src.models.collection import Collection
+    from backend.src.models.inventory_folder import InventoryFolder
+
+    # Find collection by GUID within agent's team
+    try:
+        collection_uuid = Collection.parse_guid(guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {guid}"
+        )
+    collection = db.query(Collection).filter(
+        Collection.team_id == agent_ctx.agent.team_id,
+        Collection.uuid == collection_uuid,
+    ).first()
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection not found: {guid}"
+        )
+
+    # Get folder_path from InventoryFolder mapping (if exists)
+    folder_path = None
+    inventory_folder = db.query(InventoryFolder).filter(
+        InventoryFolder.collection_guid == guid
+    ).first()
+    if inventory_folder:
+        folder_path = inventory_folder.path
+
+    return CollectionDebugInfoResponse(
+        guid=collection.guid,
+        name=collection.name,
+        location=collection.location,
+        folder_path=folder_path,
+        connector_guid=collection.connector.guid if collection.connector else None,
+        file_info=collection.file_info,
+        file_info_source=collection.file_info_source,
+    )
+
+
 @router.post(
     "/connectors/{guid}/report-capability",
     response_model=ReportConnectorCapabilityResponse,
@@ -1721,278 +1898,6 @@ async def pool_status_websocket(
         manager.disconnect(channel, websocket)
 
 
-@router.get(
-    "/{guid}/detail",
-    response_model=AgentDetailResponse,
-    summary="Get agent detail view",
-    description="Get detailed information about an agent including job statistics and recent history."
-)
-async def get_agent_detail(
-    guid: str,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-    db: Session = Depends(get_db),
-):
-    """
-    Get detailed information about a specific agent.
-
-    Includes:
-    - Basic agent info (name, hostname, status, etc.)
-    - System metrics (CPU, memory, disk)
-    - Bound collections count
-    - Job statistics (completed, failed)
-    - Recent job history (last 10 jobs)
-    """
-    from sqlalchemy import func
-    from backend.src.models.job import Job, JobStatus
-
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    # Get bound collections count
-    bound_collections_count = agent.bound_collections.count()
-
-    # Get job statistics
-    total_jobs_completed = db.query(func.count(Job.id)).filter(
-        Job.agent_id == agent.id,
-        Job.status == JobStatus.COMPLETED
-    ).scalar() or 0
-
-    total_jobs_failed = db.query(func.count(Job.id)).filter(
-        Job.agent_id == agent.id,
-        Job.status == JobStatus.FAILED
-    ).scalar() or 0
-
-    # Get recent jobs (last 10)
-    recent_jobs_query = db.query(Job).filter(
-        Job.agent_id == agent.id
-    ).order_by(Job.created_at.desc()).limit(10).all()
-
-    recent_jobs = []
-    for job in recent_jobs_query:
-        recent_jobs.append(AgentJobHistoryItem(
-            guid=job.guid,
-            tool=job.tool,
-            collection_guid=job.collection.guid if job.collection else None,
-            collection_name=job.collection.name if job.collection else None,
-            status=job.status.value,
-            started_at=job.started_at,
-            completed_at=job.completed_at,
-            error_message=job.error_message,
-        ))
-
-    # Convert metrics to schema if present
-    metrics = None
-    if agent.metrics:
-        metrics_data = {k: v for k, v in agent.metrics.items() if k != "metrics_updated_at"}
-        metrics = AgentMetrics(**metrics_data) if metrics_data else None
-
-    # Get current job GUID if running
-    current_job = db.query(Job).filter(
-        Job.agent_id == agent.id,
-        Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
-    ).first()
-
-    return AgentDetailResponse(
-        guid=agent.guid,
-        name=agent.name,
-        hostname=agent.hostname,
-        os_info=agent.os_info,
-        status=agent.status,
-        error_message=agent.error_message,
-        last_heartbeat=agent.last_heartbeat,
-        capabilities=agent.capabilities,
-        authorized_roots=agent.authorized_roots,
-        version=agent.version,
-        created_at=agent.created_at,
-        team_guid=agent.team.guid if agent.team else "",
-        current_job_guid=current_job.guid if current_job else None,
-        metrics=metrics,
-        bound_collections_count=bound_collections_count,
-        total_jobs_completed=total_jobs_completed,
-        total_jobs_failed=total_jobs_failed,
-        recent_jobs=recent_jobs,
-    )
-
-
-@router.get(
-    "/{guid}/jobs",
-    response_model=AgentJobHistoryResponse,
-    summary="Get agent job history",
-    description="Get paginated job history for a specific agent."
-)
-async def get_agent_jobs(
-    guid: str,
-    offset: int = 0,
-    limit: int = 20,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-    db: Session = Depends(get_db),
-):
-    """
-    Get paginated job history for a specific agent.
-
-    Args:
-        guid: Agent GUID
-        offset: Number of items to skip (default 0)
-        limit: Maximum items to return (default 20, max 100)
-    """
-    from sqlalchemy import func
-    from backend.src.models.job import Job
-
-    # Clamp limit
-    limit = min(limit, 100)
-
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    # Get total count
-    total_count = db.query(func.count(Job.id)).filter(
-        Job.agent_id == agent.id
-    ).scalar() or 0
-
-    # Get paginated jobs
-    jobs_query = db.query(Job).filter(
-        Job.agent_id == agent.id
-    ).order_by(Job.created_at.desc()).offset(offset).limit(limit).all()
-
-    jobs = []
-    for job in jobs_query:
-        jobs.append(AgentJobHistoryItem(
-            guid=job.guid,
-            tool=job.tool,
-            collection_guid=job.collection.guid if job.collection else None,
-            collection_name=job.collection.name if job.collection else None,
-            status=job.status.value,
-            started_at=job.started_at,
-            completed_at=job.completed_at,
-            error_message=job.error_message,
-        ))
-
-    return AgentJobHistoryResponse(
-        jobs=jobs,
-        total_count=total_count,
-        offset=offset,
-        limit=limit,
-    )
-
-
-@router.get(
-    "/{guid}",
-    response_model=AgentResponse,
-    summary="Get agent by GUID",
-    description="Get details of a specific agent."
-)
-async def get_agent(
-    guid: str,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-):
-    """Get details of a specific agent."""
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    return agent_to_response(agent)
-
-
-@router.patch(
-    "/{guid}",
-    response_model=AgentResponse,
-    summary="Update agent",
-    description="Update agent name."
-)
-async def update_agent(
-    guid: str,
-    data: AgentUpdateRequest,
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-):
-    """Update agent name."""
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    agent = service.rename_agent(agent, data.name)
-    return agent_to_response(agent)
-
-
-@router.delete(
-    "/{guid}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Revoke agent",
-    description="Revoke an agent's access. The agent will no longer be able to connect."
-)
-async def revoke_agent(
-    guid: str,
-    reason: str = "Revoked by administrator",
-    ctx: TenantContext = Depends(get_tenant_context),
-    service: AgentService = Depends(get_agent_service),
-):
-    """Revoke an agent's access."""
-    try:
-        agent = service.get_agent_by_guid(guid, ctx.team_id)
-    except (ValueError, NotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    service.revoke_agent(agent, reason)
-
-    # Broadcast pool status update after revocation
-    pool_status = service.get_pool_status(ctx.team_id)
-    manager = get_connection_manager()
-    asyncio.create_task(
-        manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
-    )
-
-    return None
-
-
 # ============================================================================
 # Inventory Validation Endpoints (Issue #107)
 # ============================================================================
@@ -2124,7 +2029,7 @@ async def report_inventory_validation(
     message = "Inventory configuration validated successfully" if data.success else f"Validation failed: {data.error_message}"
 
     logger.info(
-        f"Inventory validation completed",
+        "Inventory validation completed",
         extra={
             "job_guid": job_guid,
             "connector_guid": connector.guid if connector else connector_guid,
@@ -2245,7 +2150,8 @@ async def report_inventory_folders(
             folders=data.folders,
             folder_stats=data.folder_stats,
             total_files=data.total_files,
-            total_size=data.total_size
+            total_size=data.total_size,
+            latest_manifest=data.latest_manifest
         )
     except Exception as e:
         logger.error(f"Error storing inventory folders: {str(e)}", exc_info=True)
@@ -2263,7 +2169,7 @@ async def report_inventory_folders(
     # by the standard completion flow.
 
     logger.info(
-        f"Inventory import completed",
+        "Inventory import completed",
         extra={
             "job_guid": job_guid,
             "connector_guid": data.connector_guid,
@@ -2818,3 +2724,962 @@ async def report_inventory_delta(
         message=f"Stored delta for {collections_updated} collections",
         collections_updated=collections_updated
     )
+
+
+# ============================================================================
+# Agent Collection Management (Issue #108)
+# ============================================================================
+
+
+def _get_collection_service(
+    db: Session = Depends(get_db),
+    connector_service: ConnectorService = Depends(get_connector_service),
+):
+    """Dependency to get CollectionService for agent routes."""
+    from backend.src.services.collection_service import CollectionService
+    from backend.src.utils.cache import FileListingCache
+    file_cache = FileListingCache()
+    return CollectionService(db=db, file_cache=file_cache, connector_service=connector_service)
+
+
+@router.post(
+    "/collections",
+    response_model=AgentCreateCollectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a LOCAL collection",
+    description="Create a new LOCAL collection bound to the authenticated agent. "
+                "The collection is automatically bound to the creating agent.",
+)
+async def agent_create_collection(
+    data: AgentCreateCollectionRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+    connector_svc: ConnectorService = Depends(get_connector_service),
+):
+    """
+    Create a LOCAL collection from the agent.
+
+    The collection is created with type=LOCAL and bound to the authenticated agent.
+    Accessibility testing is deferred to the agent (is_accessible=None).
+    """
+    from backend.src.services.collection_service import CollectionService
+    from backend.src.utils.cache import FileListingCache
+
+    file_cache = FileListingCache()
+    collection_service = CollectionService(
+        db=db, file_cache=file_cache, connector_service=connector_svc
+    )
+
+    # Convert test_results to dict if provided
+    test_results_dict = None
+    if data.test_results:
+        test_results_dict = data.test_results.model_dump(mode="json")
+
+    try:
+        collection = collection_service.agent_create_collection(
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            name=data.name,
+            location=data.location,
+            test_results=test_results_dict,
+        )
+    except ValueError as e:
+        error_msg = str(e)
+        if "already exists" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=error_msg,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        )
+    except Exception as e:
+        logger.exception(f"Failed to create collection for agent {ctx.agent_guid}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create collection: {str(e)}",
+        )
+
+    # Build web URL
+    web_url = f"/collections/{collection.guid}"
+
+    return AgentCreateCollectionResponse(
+        guid=collection.guid,
+        name=collection.name,
+        type=collection.type.value.upper(),
+        location=collection.location,
+        bound_agent_guid=ctx.agent_guid,
+        web_url=web_url,
+        created_at=collection.created_at,
+    )
+
+
+@router.get(
+    "/collections",
+    response_model=AgentCollectionListResponse,
+    summary="List agent-bound collections",
+    description="List all Collections bound to the authenticated agent. "
+                "Supports optional type and status filters.",
+)
+async def agent_list_collections(
+    type: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    List all Collections directly bound to this agent.
+
+    Returns collections where bound_agent_id matches this agent.
+    """
+    from backend.src.models.collection import Collection, CollectionType
+
+    query = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.bound_agent_id == ctx.agent_id,
+    )
+
+    # Apply type filter
+    if type:
+        type_upper = type.upper()
+        try:
+            collection_type = CollectionType(type_upper.lower())
+            query = query.filter(Collection.type == collection_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid type filter: {type}. Must be one of: LOCAL, S3, GCS, SMB",
+            )
+
+    # Apply status filter
+    if status_filter:
+        sf = status_filter.lower()
+        if sf == "accessible":
+            query = query.filter(Collection.is_accessible == True)  # noqa: E712
+        elif sf == "inaccessible":
+            query = query.filter(Collection.is_accessible == False)  # noqa: E712
+        elif sf == "pending":
+            query = query.filter(Collection.is_accessible == None)  # noqa: E711
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status filter: {status_filter}. Must be: accessible, inaccessible, pending",
+            )
+
+    collections = query.order_by(Collection.name).all()
+
+    items = []
+    for col in collections:
+        items.append(AgentCollectionItem(
+            guid=col.guid,
+            name=col.name,
+            type=col.type.value.upper(),
+            location=col.location,
+            bound_agent_guid=ctx.agent_guid if col.bound_agent_id == ctx.agent_id else None,
+            connector_guid=col.connector.guid if col.connector else None,
+            connector_name=col.connector.name if col.connector else None,
+            is_accessible=col.is_accessible,
+            last_analysis_at=col.last_refresh_at,
+            supports_offline=col.type.value.lower() == "local",
+        ))
+
+    return AgentCollectionListResponse(
+        collections=items,
+        total_count=len(items),
+    )
+
+
+@router.post(
+    "/collections/{guid}/test",
+    response_model=AgentCollectionTestResponse,
+    summary="Report collection accessibility test",
+    description="Update a Collection's accessibility status from agent test results.",
+)
+async def agent_test_collection(
+    guid: str,
+    data: AgentCollectionTestRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Update collection accessibility status.
+
+    The agent tests the local path and reports whether it's accessible.
+    Only collections bound to this agent can be updated.
+    """
+    from backend.src.models.collection import Collection
+
+    collection = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.bound_agent_id == ctx.agent_id,
+    ).first()
+
+    # Find collection by GUID within agent's scope
+    try:
+        collection_uuid = Collection.parse_guid(guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {guid}"
+        )
+    collection = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.bound_agent_id == ctx.agent_id,
+        Collection.uuid == collection_uuid,
+    ).first()
+
+    if not collection:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {guid} not found or not bound to this agent",
+        )
+
+    # Update accessibility status
+    collection.is_accessible = data.is_accessible
+    if data.error_message:
+        collection.last_error = data.error_message
+    elif data.is_accessible:
+        collection.last_error = None
+
+    if data.file_count is not None:
+        collection.file_count = data.file_count
+
+    db.commit()
+    db.refresh(collection)
+
+    logger.info(
+        "Collection accessibility updated",
+        extra={
+            "collection_guid": guid,
+            "is_accessible": data.is_accessible,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentCollectionTestResponse(
+        guid=collection.guid,
+        is_accessible=collection.is_accessible,
+        updated_at=collection.updated_at or datetime.utcnow(),
+    )
+
+
+# ============================================================================
+# Offline Result Upload (Issue #108 - Phase 6)
+# ============================================================================
+
+
+@router.post(
+    "/results/upload/prepare",
+    response_model=AgentPrepareResultUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Prepare chunked offline result upload",
+    description="Create a placeholder Job for chunked upload of large offline results. "
+                "Returns a job_guid that can be used with the chunked upload endpoints "
+                "(POST /jobs/{guid}/uploads/initiate) before calling POST /results/upload.",
+)
+async def agent_prepare_result_upload(
+    data: AgentPrepareResultUploadRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Create a placeholder Job for chunked offline result upload."""
+    import json as json_module
+    from backend.src.models.collection import Collection
+    from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+
+    # Validate collection_guid belongs to this agent's team
+    try:
+        collection_uuid = Collection.parse_guid(data.collection_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {data.collection_guid}"
+        )
+    collection = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.uuid == collection_uuid,
+    ).first()
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {data.collection_guid} not found",
+        )
+
+    # Verify collection is bound to this agent (for LOCAL collections)
+    if collection.bound_agent_id and collection.bound_agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Collection is bound to a different agent",
+        )
+
+    # Check for idempotent prepare: look for existing placeholder with same result_id
+    existing_jobs = db.query(Job).filter(
+        Job.team_id == ctx.team_id,
+        Job.collection_id == collection.id,
+    ).all()
+    for ej in existing_jobs:
+        if ej.progress and isinstance(ej.progress, dict):
+            if ej.progress.get("offline_result_id") == data.result_id:
+                # Already prepared or uploaded — return existing job_guid
+                return AgentPrepareResultUploadResponse(job_guid=ej.guid)
+
+    # Validate tool name
+    valid_tools = {"photostats", "photo_pairing", "pipeline_validation"}
+    if data.tool not in valid_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool '{data.tool}'. Must be one of: {sorted(valid_tools)}",
+        )
+
+    # Create placeholder Job with ASSIGNED status (agent is uploading data)
+    from datetime import datetime
+    now = datetime.utcnow()
+    job = Job(
+        team_id=ctx.team_id,
+        collection_id=collection.id,
+        tool=data.tool,
+        status=PersistentJobStatus.ASSIGNED,
+        agent_id=ctx.agent_id,
+        assigned_at=now,
+        priority=0,
+        required_capabilities_json=json_module.dumps([data.tool]),
+        progress_json=json_module.dumps({"offline_result_id": data.result_id}),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    logger.info(
+        "Prepared placeholder job for chunked offline result upload",
+        extra={
+            "result_id": data.result_id,
+            "job_guid": job.guid,
+            "collection_guid": data.collection_guid,
+            "tool": data.tool,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentPrepareResultUploadResponse(job_guid=job.guid)
+
+
+@router.post(
+    "/results/upload",
+    response_model=AgentUploadResultResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload offline analysis result",
+    description="Upload an analysis result from offline agent execution. "
+                "Creates both a Job (COMPLETED) and AnalysisResult in a single transaction. "
+                "Supports idempotent upload via result_id (returns 409 if already uploaded). "
+                "Supports chunked mode: provide analysis_data_upload_id and/or report_upload_id "
+                "from pre-uploaded content via /results/upload/prepare + chunked upload endpoints.",
+)
+async def agent_upload_result(
+    data: AgentUploadResultRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Upload an offline analysis result from an agent."""
+    from backend.src.services.tool_service import agent_upload_offline_result
+    from backend.src.models.collection import Collection
+    from backend.src.models.analysis_result import AnalysisResult as AnalysisResultModel
+
+    # Validate collection_guid belongs to this agent's team
+    try:
+        collection_uuid = Collection.parse_guid(data.collection_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {data.collection_guid}"
+        )
+    collection = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.uuid == collection_uuid,
+    ).first()
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {data.collection_guid} not found",
+        )
+
+    # Verify collection is bound to this agent (for LOCAL collections)
+    if collection.bound_agent_id and collection.bound_agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Collection is bound to a different agent",
+        )
+
+    # Check for idempotent upload: look for existing COMPLETED result with same result_id
+    from backend.src.models.job import Job, JobStatus as PersistentJobStatus
+    existing_jobs = db.query(Job).filter(
+        Job.team_id == ctx.team_id,
+        Job.collection_id == collection.id,
+    ).all()
+    for ej in existing_jobs:
+        if ej.progress and isinstance(ej.progress, dict):
+            if ej.progress.get("offline_result_id") == data.result_id:
+                if ej.status == PersistentJobStatus.COMPLETED:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Result {data.result_id} has already been uploaded",
+                    )
+                # ASSIGNED placeholder from prepare — will be reused below
+
+    # Validate tool name
+    valid_tools = {"photostats", "photo_pairing", "pipeline_validation"}
+    if data.tool not in valid_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool '{data.tool}'. Must be one of: {sorted(valid_tools)}",
+        )
+
+    # --- Resolve chunked uploads if present ---
+    analysis_data = data.analysis_data
+    html_report = data.html_report
+
+    if data.analysis_data_upload_id or data.report_upload_id:
+        from backend.src.services.chunked_upload_service import ChunkedUploadService
+        upload_service = ChunkedUploadService()
+
+        if data.analysis_data_upload_id:
+            import json as json_mod
+            content = upload_service.get_finalized_content(
+                upload_id=data.analysis_data_upload_id,
+                agent_id=ctx.agent_id,
+                team_id=ctx.team_id,
+            )
+            if content is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Analysis data upload not found or not finalized: "
+                           f"{data.analysis_data_upload_id}",
+                )
+            analysis_data = json_mod.loads(content.decode('utf-8'))
+
+        if data.report_upload_id:
+            content = upload_service.get_finalized_content(
+                upload_id=data.report_upload_id,
+                agent_id=ctx.agent_id,
+                team_id=ctx.team_id,
+            )
+            if content is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Report upload not found or not finalized: "
+                           f"{data.report_upload_id}",
+                )
+            html_report = content.decode('utf-8')
+
+    try:
+        # Delete any ASSIGNED placeholder job from prepare step
+        placeholder_job = None
+        for ej in existing_jobs:
+            if ej.progress and isinstance(ej.progress, dict):
+                if (ej.progress.get("offline_result_id") == data.result_id
+                        and ej.status == PersistentJobStatus.ASSIGNED):
+                    placeholder_job = ej
+                    break
+        if placeholder_job:
+            db.delete(placeholder_job)
+            db.flush()
+
+        job, result = agent_upload_offline_result(
+            db=db,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            collection_id=collection.id,
+            tool=data.tool,
+            executed_at=data.executed_at,
+            analysis_data=analysis_data,
+            html_report=html_report,
+            input_state_hash=data.input_state_hash,
+        )
+
+        # Store the offline_result_id in job's progress_json for idempotency tracking
+        import json as json_module
+        job.progress_json = json_module.dumps({"offline_result_id": data.result_id})
+        db.commit()
+
+    except Exception as e:
+        logger.exception(
+            "Failed to upload offline result for collection=%s tool=%s result_id=%s: %s",
+            data.collection_guid,
+            data.tool,
+            data.result_id,
+            e,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload result: {str(e)}",
+        )
+
+    logger.info(
+        "Offline result uploaded",
+        extra={
+            "result_id": data.result_id,
+            "job_guid": job.guid,
+            "result_guid": result.guid,
+            "collection_guid": data.collection_guid,
+            "tool": data.tool,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentUploadResultResponse(
+        job_guid=job.guid,
+        result_guid=result.guid,
+        collection_guid=data.collection_guid,
+        status="uploaded",
+    )
+
+
+@router.post(
+    "/results/no-change",
+    response_model=AgentUploadResultResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record NO_CHANGE result from CLI",
+    description="Record a NO_CHANGE Job+AnalysisResult when the agent CLI detects "
+                "no changes (input_state_hash matches previous result). "
+                "Mirrors POST /results/upload but creates NO_CHANGE status. "
+                "No HMAC signature required — the agent is already authenticated via API key.",
+)
+async def agent_record_no_change_result(
+    data: AgentNoChangeResultRequest,
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Record a NO_CHANGE result from an agent CLI no-change detection."""
+    from backend.src.services.tool_service import agent_record_no_change_result as record_no_change
+    from backend.src.models.collection import Collection
+
+    # Validate collection_guid belongs to this agent's team
+    try:
+        collection_uuid = Collection.parse_guid(data.collection_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {data.collection_guid}"
+        )
+    collection = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.uuid == collection_uuid,
+    ).first()
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {data.collection_guid} not found",
+        )
+
+    # Verify collection is bound to this agent (for LOCAL collections)
+    if collection.bound_agent_id and collection.bound_agent_id != ctx.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Collection is bound to a different agent",
+        )
+
+    # Validate tool name
+    valid_tools = {"photostats", "photo_pairing", "pipeline_validation"}
+    if data.tool not in valid_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tool '{data.tool}'. Must be one of: {sorted(valid_tools)}",
+        )
+
+    try:
+        job, result = record_no_change(
+            db=db,
+            agent_id=ctx.agent_id,
+            team_id=ctx.team_id,
+            collection_id=collection.id,
+            tool=data.tool,
+            input_state_hash=data.input_state_hash,
+            source_result_guid=data.source_result_guid,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    logger.info(
+        "CLI no-change result recorded",
+        extra={
+            "job_guid": job.guid,
+            "result_guid": result.guid,
+            "collection_guid": data.collection_guid,
+            "tool": data.tool,
+            "source_result_guid": data.source_result_guid,
+            "agent_guid": ctx.agent_guid,
+        }
+    )
+
+    return AgentUploadResultResponse(
+        job_guid=job.guid,
+        result_guid=result.guid,
+        collection_guid=data.collection_guid,
+        status="no_change",
+    )
+
+
+@router.get(
+    "/collections/{guid}/previous-result",
+    response_model=PreviousResultData,
+    summary="Get previous result for no-change comparison",
+    description="Returns the most recent COMPLETED or NO_CHANGE AnalysisResult "
+                "for a collection+tool combination. Used by agents to detect "
+                "when a collection has not changed since the last analysis.",
+)
+async def get_previous_result_for_collection(
+    guid: str,
+    tool: str = Query(..., description="Tool name (photostats, photo_pairing, pipeline_validation)"),
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """Get previous result for no-change comparison (Issue #92 + Issue #108)."""
+    from backend.src.models.collection import Collection
+    from backend.src.models.analysis_result import AnalysisResult as AnalysisResultModel
+    from backend.src.models.analysis_result import ResultStatus
+
+    # Find collection by GUID within agent's team
+    try:
+        collection_uuid = Collection.parse_guid(guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {guid}"
+        )
+    collection = db.query(Collection).filter(
+        Collection.team_id == ctx.team_id,
+        Collection.uuid == collection_uuid,
+    ).first()
+
+    if collection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection {guid} not found",
+        )
+
+    # Query most recent COMPLETED or NO_CHANGE result for this collection+tool
+    previous = (
+        db.query(AnalysisResultModel)
+        .filter(
+            AnalysisResultModel.collection_id == collection.id,
+            AnalysisResultModel.team_id == ctx.team_id,
+            AnalysisResultModel.tool == tool,
+            AnalysisResultModel.status.in_([
+                ResultStatus.COMPLETED,
+                ResultStatus.NO_CHANGE,
+            ]),
+        )
+        .order_by(AnalysisResultModel.completed_at.desc())
+        .first()
+    )
+
+    if previous is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No previous result found for {tool} on {guid}",
+        )
+
+    return PreviousResultData(
+        guid=previous.guid,
+        input_state_hash=previous.input_state_hash,
+        completed_at=previous.completed_at,
+    )
+
+
+# ============================================================================
+# Agent CRUD Endpoints (wildcard /{guid} routes) — MUST BE LAST
+# ============================================================================
+# WARNING: These routes use /{guid} path parameters which match ANY single
+# path segment. FastAPI evaluates routes in registration order, so if these
+# appear before a literal route like /collections, a request to
+# GET /collections will match /{guid} with guid="collections" instead.
+#
+# ALL new routes with literal paths MUST be added ABOVE this section.
+# DO NOT add any routes after this block.
+
+
+@router.get(
+    "/{guid}/detail",
+    response_model=AgentDetailResponse,
+    summary="Get agent detail view",
+    description="Get detailed information about an agent including job statistics and recent history."
+)
+async def get_agent_detail(
+    guid: str,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Get detailed information about a specific agent.
+
+    Includes:
+    - Basic agent info (name, hostname, status, etc.)
+    - System metrics (CPU, memory, disk)
+    - Bound collections count
+    - Job statistics (completed, failed)
+    - Recent job history (last 10 jobs)
+    """
+    from sqlalchemy import func
+    from backend.src.models.job import Job, JobStatus
+
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    # Get bound collections count
+    bound_collections_count = agent.bound_collections.count()
+
+    # Get job statistics
+    total_jobs_completed = db.query(func.count(Job.id)).filter(
+        Job.agent_id == agent.id,
+        Job.status == JobStatus.COMPLETED
+    ).scalar() or 0
+
+    total_jobs_failed = db.query(func.count(Job.id)).filter(
+        Job.agent_id == agent.id,
+        Job.status == JobStatus.FAILED
+    ).scalar() or 0
+
+    # Get recent jobs (last 10)
+    recent_jobs_query = db.query(Job).filter(
+        Job.agent_id == agent.id
+    ).order_by(Job.created_at.desc()).limit(10).all()
+
+    recent_jobs = []
+    for job in recent_jobs_query:
+        recent_jobs.append(AgentJobHistoryItem(
+            guid=job.guid,
+            tool=job.tool,
+            collection_guid=job.collection.guid if job.collection else None,
+            collection_name=job.collection.name if job.collection else None,
+            status=job.status.value,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            error_message=job.error_message,
+        ))
+
+    # Convert metrics to schema if present
+    metrics = None
+    if agent.metrics:
+        metrics_data = {k: v for k, v in agent.metrics.items() if k != "metrics_updated_at"}
+        metrics = AgentMetrics(**metrics_data) if metrics_data else None
+
+    # Get current job GUID if running
+    current_job = db.query(Job).filter(
+        Job.agent_id == agent.id,
+        Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
+    ).first()
+
+    return AgentDetailResponse(
+        guid=agent.guid,
+        name=agent.name,
+        hostname=agent.hostname,
+        os_info=agent.os_info,
+        status=agent.status,
+        error_message=agent.error_message,
+        last_heartbeat=agent.last_heartbeat,
+        capabilities=agent.capabilities,
+        authorized_roots=agent.authorized_roots,
+        version=agent.version,
+        created_at=agent.created_at,
+        team_guid=agent.team.guid if agent.team else "",
+        current_job_guid=current_job.guid if current_job else None,
+        metrics=metrics,
+        bound_collections_count=bound_collections_count,
+        total_jobs_completed=total_jobs_completed,
+        total_jobs_failed=total_jobs_failed,
+        recent_jobs=recent_jobs,
+    )
+
+
+@router.get(
+    "/{guid}/jobs",
+    response_model=AgentJobHistoryResponse,
+    summary="Get agent job history",
+    description="Get paginated job history for a specific agent."
+)
+async def get_agent_jobs(
+    guid: str,
+    offset: int = 0,
+    limit: int = 20,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+    db: Session = Depends(get_db),
+):
+    """
+    Get paginated job history for a specific agent.
+
+    Args:
+        guid: Agent GUID
+        offset: Number of items to skip (default 0)
+        limit: Maximum items to return (default 20, max 100)
+    """
+    from sqlalchemy import func
+    from backend.src.models.job import Job
+
+    # Clamp limit
+    limit = min(limit, 100)
+
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    # Get total count
+    total_count = db.query(func.count(Job.id)).filter(
+        Job.agent_id == agent.id
+    ).scalar() or 0
+
+    # Get paginated jobs
+    jobs_query = db.query(Job).filter(
+        Job.agent_id == agent.id
+    ).order_by(Job.created_at.desc()).offset(offset).limit(limit).all()
+
+    jobs = []
+    for job in jobs_query:
+        jobs.append(AgentJobHistoryItem(
+            guid=job.guid,
+            tool=job.tool,
+            collection_guid=job.collection.guid if job.collection else None,
+            collection_name=job.collection.name if job.collection else None,
+            status=job.status.value,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            error_message=job.error_message,
+        ))
+
+    return AgentJobHistoryResponse(
+        jobs=jobs,
+        total_count=total_count,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/{guid}",
+    response_model=AgentResponse,
+    summary="Get agent by GUID",
+    description="Get details of a specific agent."
+)
+async def get_agent(
+    guid: str,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+):
+    """Get details of a specific agent."""
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    return agent_to_response(agent)
+
+
+@router.patch(
+    "/{guid}",
+    response_model=AgentResponse,
+    summary="Update agent",
+    description="Update agent name."
+)
+async def update_agent(
+    guid: str,
+    data: AgentUpdateRequest,
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+):
+    """Update agent name."""
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    agent = service.rename_agent(agent, data.name)
+    return agent_to_response(agent)
+
+
+@router.delete(
+    "/{guid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke agent",
+    description="Revoke an agent's access. The agent will no longer be able to connect."
+)
+async def revoke_agent(
+    guid: str,
+    reason: str = "Revoked by administrator",
+    ctx: TenantContext = Depends(get_tenant_context),
+    service: AgentService = Depends(get_agent_service),
+):
+    """Revoke an agent's access."""
+    try:
+        agent = service.get_agent_by_guid(guid, ctx.team_id)
+    except (ValueError, NotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found"
+        )
+
+    service.revoke_agent(agent, reason)
+
+    # Broadcast pool status update after revocation
+    pool_status = service.get_pool_status(ctx.team_id)
+    manager = get_connection_manager()
+    asyncio.create_task(
+        manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
+    )
+
+    return None
+
+
+# ============================================================================
+# END OF ROUTES — DO NOT ADD NEW ROUTES BELOW THIS LINE
+# ============================================================================
+# The /{guid} wildcard routes above will shadow any literal routes registered
+# after them (e.g., /collections, /results, /config). Add new routes ABOVE
+# the "Agent CRUD Endpoints (wildcard /{guid} routes)" section instead.

@@ -111,6 +111,7 @@ class InventoryImportResult:
         total_size: Total size of all files in bytes
         all_entries: All inventory entries (for Phase B processing)
         error_message: Error message if import failed
+        latest_manifest: Display path of the manifest used (e.g., "2026-01-26T01-00Z/manifest.json")
     """
     success: bool
     folders: Set[str]
@@ -119,6 +120,7 @@ class InventoryImportResult:
     total_size: int
     all_entries: Optional[List[InventoryEntry]] = None  # For Phase B
     error_message: Optional[str] = None
+    latest_manifest: Optional[str] = None  # Display path of the manifest used (e.g., "2026-01-26T01-00Z/manifest.json")
 
 
 @dataclass
@@ -398,6 +400,10 @@ class InventoryImportTool:
         latest_manifest_key = manifest_files[0]
         logger.info(f"Using manifest: {latest_manifest_key}")
 
+        # Extract display path (last 2 segments: "timestamp/manifest.json")
+        manifest_parts = latest_manifest_key.split("/")
+        latest_manifest_display = "/".join(manifest_parts[-2:]) if len(manifest_parts) >= 2 else latest_manifest_key
+
         self._report_progress("parsing_manifest", 10, "Parsing inventory manifest...")
 
         # Fetch and parse manifest
@@ -415,7 +421,9 @@ class InventoryImportTool:
         )
 
         # Parse data files and extract folders
-        return await self._process_s3_data_files(manifest, destination_bucket)
+        result = await self._process_s3_data_files(manifest, destination_bucket)
+        result.latest_manifest = latest_manifest_display
+        return result
 
     async def _execute_gcs_import(self) -> InventoryImportResult:
         """Execute GCS Storage Insights import."""
@@ -461,6 +469,10 @@ class InventoryImportTool:
         latest_manifest_key = manifest_files[0]
         logger.info(f"Using manifest: {latest_manifest_key}")
 
+        # Extract display path (last 2 segments: "timestamp/manifest.json")
+        manifest_parts = latest_manifest_key.split("/")
+        latest_manifest_display = "/".join(manifest_parts[-2:]) if len(manifest_parts) >= 2 else latest_manifest_key
+
         self._report_progress("parsing_manifest", 10, "Parsing inventory manifest...")
 
         # Fetch and parse manifest
@@ -478,7 +490,9 @@ class InventoryImportTool:
         )
 
         # Parse data files and extract folders
-        return await self._process_gcs_data_files(manifest, destination_bucket, latest_manifest_key)
+        result = await self._process_gcs_data_files(manifest, destination_bucket, latest_manifest_key)
+        result.latest_manifest = latest_manifest_display
+        return result
 
     async def _process_s3_data_files(
         self,

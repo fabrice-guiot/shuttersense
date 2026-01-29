@@ -1,66 +1,36 @@
 # Configuration
 
-**Configuration is required** to run this tool. The tool uses a YAML configuration file to specify which file types should be treated as photos and which should have XMP sidecars.
+ShutterSense uses configuration to specify which file types should be treated as photos and which should have XMP sidecars. Configuration is managed through the agent and web application.
 
-## First-Time Setup
+## Agent Configuration
 
-When you run the tool for the first time without a configuration file, it will:
-
-1. **Automatically detect** that no configuration exists
-2. **Prompt you** to create one from the template
-3. **Create the config file** for you if you accept (just press Enter)
-
-Example:
-```
-$ python photo_stats.py /path/to/photos
-
-No configuration file found.
-Template found at: config/template-config.yaml
-
-Would you like to create a configuration file at: config/config.yaml
-Create config file? [Y/n]:
-
-✓ Configuration file created: config/config.yaml
-
-You can now modify this file to customize file type settings for your needs.
-The tool will use this configuration for all future runs.
-```
-
-## Manual Configuration Setup
-
-You can also manually create your configuration:
+The agent stores its configuration in a platform-specific data directory managed by `platformdirs`. Configuration is created automatically during agent registration.
 
 ```bash
-cp config/template-config.yaml config/config.yaml
+# Register the agent (creates config automatically)
+shuttersense-agent register \
+  --server http://localhost:8000 \
+  --token art_xxxxx... \
+  --name "My Agent"
+
+# Verify configuration
+shuttersense-agent self-test
 ```
 
-Then edit `config/config.yaml` to customize the file extensions for your needs.
+See [Agent Installation Guide](agent-installation.md) for detailed agent setup.
 
-**Note:** The `config/config.yaml` file is ignored by git, so your personal configuration won't be committed.
+## Analysis Configuration
 
-## Configuration File Locations
+Analysis tools (PhotoStats, Photo Pairing, Pipeline Validation) use YAML-formatted configuration to specify file type settings. This configuration is managed at the team level on the ShutterSense server and automatically synced to agents.
 
-The tool will automatically look for configuration files in the following locations (in order):
-1. `config/config.yaml` in the current directory
-2. `config.yaml` in the current directory
-3. `~/.photo_stats_config.yaml` in your home directory
-4. `config/config.yaml` in the script directory
+### How Configuration Works
 
-You can also explicitly specify a configuration file as the third command-line argument:
+1. **Server-Side Management**: Configuration is defined for your team through the web application under Team Settings.
+2. **Automatic Sync**: The agent fetches your team's configuration from the server before each analysis run.
+3. **Local Cache**: Configuration is cached locally for offline operation (24-hour TTL).
+4. **Validation**: Use `shuttersense-agent self-test` to verify the agent can reach the server and load configuration.
 
-```bash
-python photo_stats.py /path/to/photos report.html config/custom-config.yaml
-```
-
-## Configuration File Format
-
-The configuration file uses YAML format with three key sections:
-
-1. **photo_extensions**: All file types to scan and count
-2. **require_sidecar**: File types that MUST have XMP sidecars (orphaned if missing)
-3. **metadata_extensions**: Valid sidecar file extensions
-
-See `config/template-config.yaml` for a complete example:
+### Configuration Format
 
 ```yaml
 # Photo Statistics Configuration
@@ -86,6 +56,26 @@ metadata_extensions:
   - .xmp
 ```
 
+### Camera Mappings and Processing Methods
+
+For Photo Pairing analysis, you can configure camera mappings and processing method descriptions:
+
+```yaml
+camera_mappings:
+  AB3D:
+    - name: Canon EOS R5
+      serial_number: "12345"
+  XYZW:
+    - name: Sony A7R5
+      serial_number: "67890"
+
+processing_methods:
+  HDR: High Dynamic Range
+  BW: Black and White
+  Pano: Panorama
+  Focus Stack: Focus Stacking
+```
+
 ## Understanding File Pairing
 
 **Key Concept**: Not all photo files need XMP sidecars!
@@ -95,19 +85,12 @@ metadata_extensions:
 
 The `require_sidecar` setting lets you specify which formats need sidecars in YOUR workflow. Only files listed there will be flagged as "orphaned" when they lack an XMP file.
 
-## Template Configuration
-
-The template file (`config/template-config.yaml`) provides default settings:
-- **Photo extensions**: `.dng`, `.tiff`, `.tif`, `.cr3`
-- **Require sidecar**: `.cr3` only
-- **Metadata extensions**: `.xmp`
-
-You can uncomment additional format options in the template or add your own custom extensions.
-
 ## Supported File Types
 
-The tool is configurable and can support any RAW or image format. Additional formats that can be added via the configuration file include:
+The tool is configurable and can support any RAW or image format:
 
+- **DNG** (Adobe Digital Negative)
+- **CR3** (Canon RAW)
 - **NEF** (Nikon RAW)
 - **ARW** (Sony RAW)
 - **ORF** (Olympus RAW)
@@ -115,8 +98,23 @@ The tool is configurable and can support any RAW or image format. Additional for
 - **PEF** (Pentax RAW)
 - **RAF** (Fujifilm RAW)
 - **CR2** (Canon RAW, older format)
-- **RAW**, **CRW**, and other manufacturer-specific formats
+- **TIFF/TIF** (Tagged Image File Format)
+
+## Running Analysis
+
+Analysis tools are executed through the agent:
+
+```bash
+# Test a local path with PhotoStats
+shuttersense-agent test /path/to/photos --tool photostats
+
+# Run analysis against a registered collection
+shuttersense-agent run <collection-guid> --tool photostats
+
+# Available tools: photostats, photo_pairing, pipeline_validation
+```
 
 ## Next Steps
 
-After configuring the tool, see the [PhotoStats documentation](photostats.md) to learn how to use it.
+- See the [Agent Installation Guide](agent-installation.md) for agent setup
+- See the [Installation Guide](installation.md) for web application setup

@@ -212,9 +212,6 @@ __marimo__/
 # Ignore HTML reports generated at the root of the repository
 /*.html
 
-# User configuration (use config/template-config.yaml as template)
-config/config.yaml
-
 # Master encryption key (NEVER commit this!)
 .photo_admin_master_key.txt
 
@@ -229,6 +226,7 @@ backend/alembic.ini
 
 # Agent-specific
 agent/src/_version.py
+debug-dump_*.md
 
 # Frontend-specific
 frontend/node_modules/

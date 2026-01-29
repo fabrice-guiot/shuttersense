@@ -142,11 +142,13 @@ Previous Amendment (v1.1.0 - CLI Standards):
 
 ## Core Principles
 
-### I. Independent CLI Tools
+### I. Agent-Only Tool Execution
 
-Every tool in the photo-admin toolbox MUST be an independent Python script that can run standalone. Tools MUST use the shared `PhotoAdminConfig` class from `config_manager.py` for configuration management. Tools MAY share modules, utilities, and libraries but MUST NOT require other tools to function.
+All analysis tool execution MUST occur through authenticated ShutterSense agents. Standalone CLI scripts (photo_stats.py, photo_pairing.py, pipeline_validation.py) have been removed. Analysis logic resides in shared modules under `agent/src/analysis/` and is invoked exclusively via agent CLI commands (`shuttersense-agent test`, `shuttersense-agent run`, `shuttersense-agent sync`).
 
-**Rationale**: This architecture enables users to adopt individual tools without installing the entire toolbox, simplifies testing, and allows tools to evolve independently while maintaining consistency through shared infrastructure.
+Agents MUST authenticate with the server before executing tools. Offline mode (`--offline`) is permitted for LOCAL collections, with results stored locally and synced later via `shuttersense-agent sync`. All tool execution produces structured JSON results and optional HTML reports that are uploaded to the server.
+
+**Rationale**: Centralizing execution through agents provides authentication, audit logging, result tracking, and consistent behavior across local and remote collections. Shared analysis modules in `agent/src/analysis/` ensure a single source of truth for analysis logic.
 
 ### II. Testing & Quality
 

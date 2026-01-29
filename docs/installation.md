@@ -1,39 +1,20 @@
 # Installation
 
-This guide covers installing the ShutterSense toolbox, including CLI tools and the web application.
+This guide covers installing the ShutterSense web application and agent.
 
 ## Requirements
 
-### CLI Tools
-- Python 3.10 or higher
-- pip package manager
+### Web Application
+- Python 3.10 or higher (backend)
+- Node.js 18+ and npm (frontend)
+- PostgreSQL 12+ (database)
 - Git (for cloning the repository)
 
-### Web Application (Optional)
-- Node.js 18+ and npm (for frontend)
-- PostgreSQL 12+ (for backend database)
+### Agent
+- Python 3.10 or higher (for building from source)
+- Or: pre-built binary for your platform (macOS, Linux, Windows)
 
-## Quick Start - CLI Tools Only
-
-If you only need the CLI tools (PhotoStats, Photo Pairing, Pipeline Validation):
-
-```bash
-# Clone the repository
-git clone https://github.com/fabrice-guiot/photo-admin.git
-cd photo-admin
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Verify installation
-python photo_stats.py --help
-python photo_pairing.py --help
-python pipeline_validation.py --help
-```
-
-## Full Installation - Web Application
-
-For the complete web application with remote collection management:
+## Web Application Setup
 
 ### 1. Clone the Repository
 
@@ -87,6 +68,53 @@ npm run dev
 
 The frontend will be available at http://localhost:3000
 
+## Agent Setup
+
+The agent executes photo analysis jobs on your machine. Without an agent, jobs cannot be processed.
+
+### Option A: Pre-built Binary
+
+Download the latest agent binary for your platform from the releases page, then proceed to [Register the Agent](#register-the-agent).
+
+### Option B: Build from Source
+
+```bash
+cd agent
+pip install -e ".[build]"
+./packaging/build_macos.sh  # or build_linux.sh, build_windows.sh
+```
+
+The binary will be in `./dist/<platform>/shuttersense-agent`.
+
+### Register the Agent
+
+```bash
+# 1. Get a registration token from the web UI
+# Navigate to Settings > Agents > Generate Token
+
+# 2. Register the agent
+shuttersense-agent register \
+  --server http://localhost:8000 \
+  --token art_xxxxx... \
+  --name "My Agent"
+
+# 3. Verify registration
+shuttersense-agent self-test
+```
+
+### Start the Agent
+
+```bash
+# Start the agent (polls server for jobs)
+shuttersense-agent start
+
+# Or run analysis directly
+shuttersense-agent test /path/to/photos --tool photostats
+shuttersense-agent run <collection-guid> --tool photostats
+```
+
+See [Agent Installation Guide](agent-installation.md) for detailed agent setup instructions.
+
 ## Environment Variables
 
 ### Required for Backend
@@ -105,27 +133,23 @@ The frontend will be available at http://localhost:3000
 
 ## Verify Installation
 
-### CLI Tools
-
-```bash
-python photo_stats.py --version
-python photo_pairing.py --version
-python pipeline_validation.py --version
-```
-
 ### Web Application
 
 1. Backend health check: `curl http://localhost:8000/health`
 2. Frontend: Open http://localhost:3000 in your browser
+
+### Agent
+
+```bash
+shuttersense-agent --version
+shuttersense-agent self-test
+```
 
 ## Development Installation
 
 For contributing or running tests:
 
 ```bash
-# CLI tool tests
-python -m pytest tests/ -v
-
 # Backend tests
 cd backend
 python -m pytest tests/ -v
@@ -133,6 +157,11 @@ python -m pytest tests/ -v
 # Frontend tests
 cd frontend
 npm test
+
+# Agent tests
+cd agent
+pip install -e ".[dev]"
+python -m pytest tests/ -v
 ```
 
 ## Troubleshooting
@@ -157,6 +186,6 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 
 ## Next Steps
 
-- **CLI Users**: See the [Configuration Guide](configuration.md) for setting up your config file
+- **Agent Users**: See the [Agent Installation Guide](agent-installation.md) for detailed agent setup
 - **Web Application**: See [backend/README.md](../backend/README.md) for detailed backend setup
-- **Tool Documentation**: [PhotoStats](photostats.md), [Photo Pairing](photo-pairing.md), [Pipeline Validation](pipeline-validation.md)
+- **Configuration**: See the [Configuration Guide](configuration.md) for file type settings

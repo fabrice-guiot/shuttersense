@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
-from platformdirs import user_config_dir
+from platformdirs import user_config_dir, user_data_dir
 
 
 # ============================================================================
@@ -69,6 +69,36 @@ class ConfigValidationError(ConfigError):
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+
+def get_default_data_dir() -> Path:
+    """
+    Get the default data directory for the current platform.
+
+    Used for cache storage (test results, collection cache, offline results).
+
+    Returns:
+        Path to the platform-appropriate data directory
+    """
+    return Path(user_data_dir(APP_NAME, APP_AUTHOR))
+
+
+def get_cache_paths() -> dict:
+    """
+    Get paths for all agent cache directories and files.
+
+    Returns:
+        Dict with keys: data_dir, test_cache_dir, collection_cache_file,
+        team_config_cache_file, results_dir
+    """
+    data_dir = get_default_data_dir()
+    return {
+        "data_dir": data_dir,
+        "test_cache_dir": data_dir / "test-cache",
+        "collection_cache_file": data_dir / "collection-cache.json",
+        "team_config_cache_file": data_dir / "team-config-cache.json",
+        "results_dir": data_dir / "results",
+    }
 
 
 def get_default_config_dir() -> Path:

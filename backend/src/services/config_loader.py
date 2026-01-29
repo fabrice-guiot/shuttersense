@@ -2,12 +2,12 @@
 ConfigLoader protocol and implementations for tool configuration.
 
 Provides a unified interface for loading tool configuration from different
-sources (file, database, API). Used by tool execution services to access
+sources (database, API, dict). Used by tool execution services to access
 camera mappings, file extensions, and processing methods.
 
 The ConfigLoader protocol allows tools to be agnostic of where configuration
-comes from - it could be a local file for CLI tools, or database records
-for web-based execution.
+comes from - database records for web-based execution, API responses for
+agent execution, or pre-loaded dictionaries for testing.
 
 Issue #90 - Distributed Agent Architecture (Phase 5)
 Tasks: T071, T086, T087, T088
@@ -33,7 +33,7 @@ class ConfigLoader(Protocol):
         require_sidecar: List of extensions that require sidecar files
 
     Example:
-        >>> config: ConfigLoader = FileConfigLoader("config.yaml")
+        >>> config: ConfigLoader = DictConfigLoader({"photo_extensions": [".dng"]})
         >>> for ext in config.photo_extensions:
         ...     print(ext)
     """
@@ -101,58 +101,6 @@ class BaseConfigLoader(ABC):
     def require_sidecar(self) -> List[str]:
         """Get list of extensions that require sidecar files."""
         pass
-
-
-class FileConfigLoader(BaseConfigLoader):
-    """
-    Config loader that reads from a YAML configuration file.
-
-    Wraps the existing PhotoAdminConfig class to provide the ConfigLoader
-    interface. Used for CLI tool execution and local agent configurations.
-
-    Args:
-        config_path: Optional path to config file. If None, uses default locations.
-
-    Example:
-        >>> loader = FileConfigLoader("/path/to/config.yaml")
-        >>> print(loader.photo_extensions)
-        ['.dng', '.cr3', '.tiff']
-    """
-
-    def __init__(self, config_path: Optional[str] = None):
-        """
-        Initialize the file config loader.
-
-        Args:
-            config_path: Optional path to YAML config file
-        """
-        from utils.config_manager import PhotoAdminConfig
-        self._config = PhotoAdminConfig(config_path=config_path)
-
-    @property
-    def photo_extensions(self) -> List[str]:
-        """Get list of recognized photo file extensions."""
-        return self._config.photo_extensions
-
-    @property
-    def metadata_extensions(self) -> List[str]:
-        """Get list of metadata file extensions."""
-        return self._config.metadata_extensions
-
-    @property
-    def camera_mappings(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Get camera ID to camera info mappings."""
-        return self._config.camera_mappings
-
-    @property
-    def processing_methods(self) -> Dict[str, str]:
-        """Get processing method code to description mappings."""
-        return self._config.processing_methods
-
-    @property
-    def require_sidecar(self) -> List[str]:
-        """Get list of extensions that require sidecar files."""
-        return self._config.require_sidecar
 
 
 class DatabaseConfigLoader(BaseConfigLoader):

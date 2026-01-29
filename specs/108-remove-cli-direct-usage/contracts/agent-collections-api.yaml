@@ -1,0 +1,347 @@
+openapi: 3.1.0
+info:
+  title: ShutterSense Agent Collections API
+  description: |
+    Agent-facing API endpoints for collection management and offline result upload.
+    These endpoints are authenticated via agent API key (Bearer token).
+    All operations are scoped to the agent's team (tenant isolation).
+  version: 1.0.0
+
+servers:
+  - url: /api/agent/v1
+    description: Agent API v1
+
+paths:
+  /collections:
+    post:
+      operationId: agentCreateCollection
+      summary: Create a Collection bound to this agent
+      description: |
+        Creates a new LOCAL Collection on the server, automatically bound to the
+        requesting agent. The Collection inherits the agent's team_id for tenant
+        isolation. Optionally includes test results from the agent's local test cache.
+      tags:
+        - Agent Collections
+      security:
+        - AgentApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentCreateCollectionRequest'
+      responses:
+        '201':
+          description: Collection created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCreateCollectionResponse'
+        '400':
+          description: Validation error (invalid path, missing name, etc.)
+        '401':
+          description: Agent not authenticated or API key invalid
+        '409':
+          description: Collection with this path already exists for this team
+
+    get:
+      operationId: agentListCollections
+      summary: List Collections bound to this agent
+      description: |
+        Returns all Collections where this agent is the bound_agent (LOCAL) or
+        where the agent has connector credentials (remote). Used by the agent
+        to populate its local collection cache.
+      tags:
+        - Agent Collections
+      security:
+        - AgentApiKey: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [LOCAL, S3, GCS, SMB]
+          description: Filter by collection type
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [accessible, inaccessible, pending]
+          description: Filter by accessibility status
+      responses:
+        '200':
+          description: List of bound collections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCollectionListResponse'
+        '401':
+          description: Agent not authenticated
+
+  /collections/{guid}/test:
+    post:
+      operationId: agentTestCollection
+      summary: Update Collection accessibility status
+      description: |
+        Reports the result of an accessibility test performed by the agent
+        on the Collection's local path. Updates is_accessible and last_error
+        fields on the server.
+      tags:
+        - Agent Collections
+      security:
+        - AgentApiKey: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Collection GUID (e.g., col_01hgw2bbg...)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentCollectionTestRequest'
+      responses:
+        '200':
+          description: Accessibility status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCollectionTestResponse'
+        '401':
+          description: Agent not authenticated
+        '404':
+          description: Collection not found or not bound to this agent
+
+  /results/upload:
+    post:
+      operationId: agentUploadOfflineResult
+      summary: Upload an offline analysis result
+      description: |
+        Uploads an analysis result that was produced during offline execution.
+        Creates both a Job record (status=COMPLETED) and an AnalysisResult on
+        the server. The result appears identically to an online job result in
+        the web UI. Supports idempotent uploads via result_id.
+      tags:
+        - Agent Results
+      security:
+        - AgentApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUploadResultRequest'
+      responses:
+        '201':
+          description: Result uploaded and Job record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentUploadResultResponse'
+        '400':
+          description: Validation error (unknown collection, invalid tool, etc.)
+        '401':
+          description: Agent not authenticated
+        '404':
+          description: Collection not found or not bound to this agent
+        '409':
+          description: Result with this result_id already uploaded (idempotent)
+
+components:
+  securitySchemes:
+    AgentApiKey:
+      type: http
+      scheme: bearer
+      description: Agent API key obtained during registration
+
+  schemas:
+    AgentCreateCollectionRequest:
+      type: object
+      required:
+        - name
+        - location
+      properties:
+        name:
+          type: string
+          description: Collection display name
+          example: "Vacation Photos 2024"
+        location:
+          type: string
+          description: Absolute path to the local directory
+          example: "/photos/2024"
+        test_results:
+          $ref: '#/components/schemas/TestResultSummary'
+          description: Optional test results from the local test cache
+
+    AgentCreateCollectionResponse:
+      type: object
+      properties:
+        guid:
+          type: string
+          description: Collection GUID
+          example: "col_01hgw2bbg0000000000000001"
+        name:
+          type: string
+          example: "Vacation Photos 2024"
+        type:
+          type: string
+          example: "LOCAL"
+        location:
+          type: string
+          example: "/photos/2024"
+        bound_agent_guid:
+          type: string
+          example: "agt_01hgw2bbg0000000000000001"
+        web_url:
+          type: string
+          description: URL to view this collection in the web UI
+          example: "https://app.shuttersense.ai/collections/col_01hgw2bbg0000000000000001"
+        created_at:
+          type: string
+          format: date-time
+
+    TestResultSummary:
+      type: object
+      properties:
+        tested_at:
+          type: string
+          format: date-time
+        file_count:
+          type: integer
+        photo_count:
+          type: integer
+        sidecar_count:
+          type: integer
+        tools_tested:
+          type: array
+          items:
+            type: string
+        issues_found:
+          type: object
+          additionalProperties: true
+
+    AgentCollectionListResponse:
+      type: object
+      properties:
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCollectionItem'
+        total_count:
+          type: integer
+
+    AgentCollectionItem:
+      type: object
+      properties:
+        guid:
+          type: string
+          example: "col_01hgw2bbg0000000000000001"
+        name:
+          type: string
+          example: "Vacation Photos 2024"
+        type:
+          type: string
+          enum: [LOCAL, S3, GCS, SMB]
+        location:
+          type: string
+        bound_agent_guid:
+          type: string
+          nullable: true
+        connector_guid:
+          type: string
+          nullable: true
+        connector_name:
+          type: string
+          nullable: true
+        is_accessible:
+          type: boolean
+          nullable: true
+        last_analysis_at:
+          type: string
+          format: date-time
+          nullable: true
+        supports_offline:
+          type: boolean
+          description: True only for LOCAL collections
+
+    AgentCollectionTestRequest:
+      type: object
+      required:
+        - is_accessible
+      properties:
+        is_accessible:
+          type: boolean
+          description: Whether the path is currently accessible
+        error_message:
+          type: string
+          nullable: true
+          description: Error details if not accessible
+        file_count:
+          type: integer
+          nullable: true
+          description: Number of files found (if accessible)
+
+    AgentCollectionTestResponse:
+      type: object
+      properties:
+        guid:
+          type: string
+        is_accessible:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+
+    AgentUploadResultRequest:
+      type: object
+      required:
+        - result_id
+        - collection_guid
+        - tool
+        - executed_at
+        - analysis_data
+      properties:
+        result_id:
+          type: string
+          format: uuid
+          description: Locally generated UUID for idempotent upload
+        collection_guid:
+          type: string
+          description: GUID of the collection analyzed
+        tool:
+          type: string
+          enum: [photostats, photo_pairing, pipeline_validation]
+        executed_at:
+          type: string
+          format: date-time
+          description: When the analysis was executed on the agent
+        analysis_data:
+          type: object
+          additionalProperties: true
+          description: Full analysis output (tool-specific JSON)
+        html_report:
+          type: string
+          nullable: true
+          description: Base64-encoded HTML report
+
+    AgentUploadResultResponse:
+      type: object
+      properties:
+        job_guid:
+          type: string
+          description: GUID of the created Job record
+          example: "job_01hgw2bbg0000000000000001"
+        result_guid:
+          type: string
+          description: GUID of the created AnalysisResult
+          example: "res_01hgw2bbg0000000000000001"
+        collection_guid:
+          type: string
+        status:
+          type: string
+          example: "uploaded"
