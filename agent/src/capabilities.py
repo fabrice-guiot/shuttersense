@@ -4,14 +4,12 @@ Agent capability detection.
 Detects available tools and storage capabilities for the agent.
 
 Issue #90 - Distributed Agent Architecture (Phase 5)
+Issue #108 - Analysis tools are now built into the agent package
 """
 
 import os
 import re
 import subprocess
-import sys
-from pathlib import Path
-from typing import Optional
 
 
 def _get_base_version() -> str:
@@ -54,67 +52,6 @@ def _get_base_version() -> str:
     return "v0.0.0"
 
 
-def _find_repo_root() -> Optional[Path]:
-    """
-    Find the repository root directory.
-
-    Returns:
-        Path to repo root or None if not found
-    """
-    try:
-        result = subprocess.run(
-            ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5
-        )
-        return Path(result.stdout.strip())
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-
-
-def _is_tool_available(module_name: str, tool_filename: str) -> bool:
-    """
-    Check if a tool is available.
-
-    Tries multiple detection methods:
-    1. Direct module import (if in Python path)
-    2. Check if tool file exists in repo root
-    3. Check if tool file exists relative to agent package
-
-    Args:
-        module_name: Python module name to try importing
-        tool_filename: Filename of the tool (e.g., "photo_stats.py")
-
-    Returns:
-        True if tool is available
-    """
-    # Method 1: Try direct import
-    try:
-        __import__(module_name)
-        return True
-    except ImportError:
-        pass
-
-    # Method 2: Check repo root
-    repo_root = _find_repo_root()
-    if repo_root:
-        tool_path = repo_root / tool_filename
-        if tool_path.exists():
-            # Add repo root to path so import will work
-            if str(repo_root) not in sys.path:
-                sys.path.insert(0, str(repo_root))
-            # Try import again
-            try:
-                __import__(module_name)
-                return True
-            except ImportError:
-                pass
-
-    return False
-
-
 def detect_capabilities() -> list[str]:
     """
     Detect agent capabilities.
@@ -122,6 +59,10 @@ def detect_capabilities() -> list[str]:
     Checks for available tools and storage access. This function is called:
     - During registration to report initial capabilities
     - On agent startup to update capabilities (in case of upgrades)
+
+    All analysis tools (photostats, photo_pairing, pipeline_validation)
+    are built into the agent package under src/analysis/ and are always
+    available. Cloud storage adapters are optional runtime dependencies.
 
     Returns:
         List of capability strings in format:
@@ -152,16 +93,10 @@ def detect_capabilities() -> list[str]:
     except ImportError:
         pass
 
-    # Check for tool availability
-    tools = [
-        ("photostats", "photo_stats", "photo_stats.py"),
-        ("photo_pairing", "photo_pairing", "photo_pairing.py"),
-        ("pipeline_validation", "pipeline_validation", "pipeline_validation.py"),
-    ]
-
-    for tool_name, module_name, filename in tools:
-        if _is_tool_available(module_name, filename):
-            capabilities.append(f"tool:{tool_name}:{version}")
+    # Built-in analysis tools (always available — bundled in agent/src/analysis/)
+    capabilities.append(f"tool:photostats:{version}")
+    capabilities.append(f"tool:photo_pairing:{version}")
+    capabilities.append(f"tool:pipeline_validation:{version}")
 
     # Built-in agent tools (always available)
     # inventory_import and inventory_validate work with S3/GCS connectors
