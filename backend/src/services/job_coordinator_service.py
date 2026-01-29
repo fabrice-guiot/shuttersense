@@ -764,6 +764,9 @@ class JobCoordinatorService:
         # Increment storage metrics
         self._increment_storage_metrics_on_completion(job.team_id)
 
+        # Create scheduled follow-up job if TTL is configured
+        scheduled_job = self._maybe_create_scheduled_job(job)
+
         self.db.commit()
 
         logger.info(
@@ -772,7 +775,8 @@ class JobCoordinatorService:
                 "job_guid": job.guid,
                 "result_guid": result.guid,
                 "source_result_guid": previous_result.guid,
-                "intermediate_copies_cleaned": cleanup_count
+                "intermediate_copies_cleaned": cleanup_count,
+                "scheduled_job_guid": scheduled_job.guid if scheduled_job else None
             }
         )
 
