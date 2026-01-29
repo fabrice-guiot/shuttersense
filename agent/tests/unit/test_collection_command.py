@@ -306,14 +306,27 @@ class TestSuccessOutput:
         assert "Location:" in result.output
         assert "Web URL:" in result.output
 
-    def test_analyze_flag_acknowledged(self, runner, mock_config, valid_cache_entry, mock_api_success):
+    def test_analyze_flag_accepted(self, runner, mock_config, valid_cache_entry, mock_api_success):
+        """The --analyze flag is accepted without error."""
         with patch("cli.collection.load_valid", return_value=valid_cache_entry), \
              patch("cli.collection._create_collection_async", new_callable=AsyncMock, return_value=mock_api_success):
             result = runner.invoke(
                 collection, ["create", "/tmp/photos", "--name", "Test", "--analyze"]
             )
         assert result.exit_code == 0
-        assert "--analyze" in result.output
+        assert "Collection created successfully" in result.output
+
+    def test_next_steps_shown(self, runner, mock_config, valid_cache_entry, mock_api_success):
+        """After creation, next steps with run commands are displayed."""
+        with patch("cli.collection.load_valid", return_value=valid_cache_entry), \
+             patch("cli.collection._create_collection_async", new_callable=AsyncMock, return_value=mock_api_success):
+            result = runner.invoke(
+                collection, ["create", "/tmp/photos", "--name", "Test"]
+            )
+        assert result.exit_code == 0
+        assert "Next steps:" in result.output
+        assert "shuttersense-agent run" in result.output
+        assert "--tool photostats" in result.output
 
 
 # ============================================================================

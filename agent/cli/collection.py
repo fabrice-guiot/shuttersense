@@ -206,18 +206,51 @@ def create(
         )
         sys.exit(2)
 
-    # --- Step 6: Display result ---
+    # --- Step 6: Add to local collection cache ---
+    guid = result['guid']
+    try:
+        new_entry = CachedCollection(
+            guid=guid,
+            name=result['name'],
+            type=result['type'],
+            location=result['location'],
+            bound_agent_guid=result.get('bound_agent_guid'),
+            is_accessible=True,  # Just tested accessible
+            supports_offline=True,  # Always LOCAL
+        )
+        existing_cache = col_cache.load()
+        if existing_cache is not None:
+            # Append to existing cache (replace if GUID already present)
+            updated = [c for c in existing_cache.collections if c.guid != guid]
+            updated.append(new_entry)
+            existing_cache.collections = updated
+            col_cache.save(existing_cache)
+        else:
+            # Create a new cache with just this collection
+            cache = col_cache.make_cache(
+                agent_guid=config.agent_guid,
+                collections=[new_entry],
+            )
+            col_cache.save(cache)
+    except Exception:
+        pass  # Cache update is best-effort
+
+    # --- Step 7: Display result ---
     click.echo()
     click.echo(click.style("Collection created successfully!", fg="green", bold=True))
-    click.echo(f"  GUID:     {result['guid']}")
+    click.echo(f"  GUID:     {guid}")
     click.echo(f"  Name:     {result['name']}")
     click.echo(f"  Type:     {result['type']}")
     click.echo(f"  Location: {result['location']}")
     click.echo(f"  Web URL:  {result['web_url']}")
 
-    if analyze:
-        click.echo()
-        click.echo("Note: --analyze flag acknowledged. Job creation will be available in a future release.")
+    # --- Step 8: Next steps ---
+    click.echo()
+    click.echo("Next steps:")
+    click.echo(f"  Run analysis tools for this collection:")
+    click.echo(f"    shuttersense-agent run {guid} --tool photostats")
+    click.echo(f"    shuttersense-agent run {guid} --tool photo_pairing")
+    click.echo(f"    shuttersense-agent run {guid} --tool pipeline_validation")
 
 
 async def _create_collection_async(
