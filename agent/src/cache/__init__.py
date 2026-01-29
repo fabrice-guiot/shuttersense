@@ -310,6 +310,9 @@ class OfflineResult(BaseModel):
     html_report_path: Optional[str] = Field(
         None, description="Path to locally saved HTML report"
     )
+    input_state_hash: Optional[str] = Field(
+        None, description="SHA-256 hash of Input State for no-change detection"
+    )
     synced: bool = Field(
         False, description="Whether this result has been uploaded"
     )

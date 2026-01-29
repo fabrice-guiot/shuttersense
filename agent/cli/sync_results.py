@@ -162,4 +162,5 @@ async def _upload_result_async(
             executed_at=result.executed_at.isoformat(),
             analysis_data=result.analysis_data,
             html_report=None,  # HTML report stays local
+            input_state_hash=result.input_state_hash,
         )
