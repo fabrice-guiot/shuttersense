@@ -1422,6 +1422,10 @@ class InventoryFoldersRequest(BaseModel):
         ge=0,
         description="Total size in bytes"
     )
+    latest_manifest: Optional[str] = Field(
+        default=None,
+        description="Display path of the manifest used for this import (e.g., '2026-01-26T01-00Z/manifest.json')"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -1433,7 +1437,8 @@ class InventoryFoldersRequest(BaseModel):
                     "2020/Vacation/": {"file_count": 100, "total_size": 2500000000}
                 },
                 "total_files": 250,
-                "total_size": 6250000000
+                "total_size": 6250000000,
+                "latest_manifest": "2026-01-26T01-00Z/manifest.json"
             }
         }
     }

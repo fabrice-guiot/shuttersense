@@ -703,7 +703,8 @@ class InventoryService:
         folders: List[str],
         folder_stats: Dict[str, Dict[str, Any]],
         total_files: int,
-        total_size: int
+        total_size: int,
+        latest_manifest: Optional[str] = None
     ) -> int:
         """
         Store discovered folders from inventory import.
@@ -718,6 +719,7 @@ class InventoryService:
             folder_stats: Dict mapping path to stats (file_count, total_size)
             total_files: Total files processed in inventory
             total_size: Total size of all files in bytes
+            latest_manifest: Display path of the manifest used for this import
 
         Returns:
             Number of folders stored/updated
@@ -765,8 +767,10 @@ class InventoryService:
 
             stored_count += 1
 
-        # Update connector's last import timestamp
+        # Update connector's last import timestamp and manifest path
         connector.inventory_last_import_at = now
+        if latest_manifest:
+            connector.inventory_latest_manifest = latest_manifest
         self.db.commit()
 
         logger.info(

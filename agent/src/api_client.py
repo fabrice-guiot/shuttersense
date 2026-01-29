@@ -774,6 +774,7 @@ class AgentApiClient:
         folder_stats: dict[str, dict[str, Any]],
         total_files: int,
         total_size: int,
+        latest_manifest: str | None = None,
     ) -> dict[str, Any]:
         """
         Report discovered inventory folders to the server.
@@ -785,6 +786,7 @@ class AgentApiClient:
             folder_stats: Dict mapping folder path to stats (file_count, total_size)
             total_files: Total files processed
             total_size: Total size in bytes
+            latest_manifest: Display path of the manifest used for this import
 
         Returns:
             Response with status confirmation
@@ -801,6 +803,8 @@ class AgentApiClient:
             "total_files": total_files,
             "total_size": total_size,
         }
+        if latest_manifest:
+            payload["latest_manifest"] = latest_manifest
 
         try:
             response = await self._client.post(

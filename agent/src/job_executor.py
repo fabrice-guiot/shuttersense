@@ -2195,7 +2195,8 @@ class JobExecutor:
                     folders=list(result.folders),
                     folder_stats=result.folder_stats,
                     total_files=result.total_files,
-                    total_size=result.total_size
+                    total_size=result.total_size,
+                    latest_manifest=result.latest_manifest
                 )
 
                 logger.info(
@@ -2272,7 +2273,8 @@ class JobExecutor:
         folders: List[str],
         folder_stats: Dict[str, Dict[str, Any]],
         total_files: int,
-        total_size: int
+        total_size: int,
+        latest_manifest: Optional[str] = None
     ) -> None:
         """
         Report discovered inventory folders to the server.
@@ -2284,6 +2286,7 @@ class JobExecutor:
             folder_stats: Dict mapping folder path to stats
             total_files: Total files processed
             total_size: Total size in bytes
+            latest_manifest: Display path of the manifest used for this import
         """
         try:
             await self._api_client.report_inventory_folders(
@@ -2292,7 +2295,8 @@ class JobExecutor:
                 folders=folders,
                 folder_stats=folder_stats,
                 total_files=total_files,
-                total_size=total_size
+                total_size=total_size,
+                latest_manifest=latest_manifest
             )
             logger.info(
                 f"Reported {len(folders)} inventory folders",

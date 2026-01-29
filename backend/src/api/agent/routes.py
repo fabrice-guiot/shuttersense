@@ -14,7 +14,7 @@ Base path: /api/agent/v1
 import asyncio
 import logging
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -2257,7 +2257,8 @@ async def report_inventory_folders(
             folders=data.folders,
             folder_stats=data.folder_stats,
             total_files=data.total_files,
-            total_size=data.total_size
+            total_size=data.total_size,
+            latest_manifest=data.latest_manifest
         )
     except Exception as e:
         logger.error(f"Error storing inventory folders: {str(e)}", exc_info=True)
