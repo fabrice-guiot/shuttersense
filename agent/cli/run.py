@@ -25,10 +25,11 @@ from src.api_client import (
     AuthenticationError,
     ConnectionError as AgentConnectionError,
 )
-from src.cache import VALID_TOOLS, OfflineResult
+from src.cache import VALID_TOOLS, OfflineResult, TeamConfigCache
 from src.cache import collection_cache as col_cache
 from src.cache import result_store
 from src.config import AgentConfig
+from src.config_resolver import resolve_team_config
 
 
 @click.command("run")
@@ -124,7 +125,28 @@ def run(
         )
         sys.exit(1)
 
-    # --- Step 4: Execute analysis ---
+    # --- Step 4: Resolve team config ---
+    click.echo("Fetching team config... ", nl=False)
+    result = resolve_team_config()
+
+    if result.config is None:
+        click.echo(click.style("FAIL", fg="red", bold=True))
+        click.echo(
+            click.style("Error: ", fg="red", bold=True)
+            + f"{result.message}\n"
+            "  Team configuration is required to run analysis tools."
+        )
+        sys.exit(1)
+
+    team_config = result.config
+    if result.source == "expired_cache":
+        click.echo(click.style("WARN", fg="yellow", bold=True) + f" ({result.message})")
+    elif result.source == "cache":
+        click.echo(click.style("OK", fg="green", bold=True) + f" ({result.message})")
+    else:
+        click.echo(click.style("OK", fg="green", bold=True) + f" ({result.message})")
+
+    # --- Step 5: Execute analysis ---
     location = collection_entry.location
     click.echo(f"Running {tool} on: {location}")
     click.echo(f"Collection: {collection_entry.name} ({collection_guid})")
@@ -135,7 +157,7 @@ def run(
     executed_at = datetime.now(timezone.utc)
 
     try:
-        analysis_data, report_html = _execute_tool(tool, location)
+        analysis_data, report_html = _execute_tool(tool, location, team_config)
     except FileNotFoundError as e:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
@@ -243,13 +265,18 @@ def run(
         click.echo(f"  Result GUID: {upload_response.get('result_guid', 'N/A')}")
 
 
-def _execute_tool(tool: str, location: str) -> tuple[Dict[str, Any], Optional[str]]:
+def _execute_tool(
+    tool: str,
+    location: str,
+    team_config: TeamConfigCache,
+) -> tuple[Dict[str, Any], Optional[str]]:
     """
     Execute an analysis tool against a local path.
 
     Args:
         tool: Tool name (photostats, photo_pairing, pipeline_validation)
         location: Local filesystem path to analyze
+        team_config: Team configuration with extensions, cameras, pipeline
 
     Returns:
         Tuple of (analysis_data dict, optional HTML report string)
@@ -269,30 +296,32 @@ def _execute_tool(tool: str, location: str) -> tuple[Dict[str, Any], Optional[st
     adapter = LocalAdapter({})
     file_infos = adapter.list_files_with_metadata(location)
 
+    photo_extensions = set(team_config.photo_extensions)
+    metadata_extensions = set(team_config.metadata_extensions)
+    require_sidecar = set(team_config.require_sidecar)
+
     if tool == "photostats":
-        return _run_photostats(file_infos, location)
+        return _run_photostats(
+            file_infos, photo_extensions, metadata_extensions, require_sidecar
+        )
     elif tool == "photo_pairing":
-        return _run_photo_pairing(file_infos, location)
+        return _run_photo_pairing(file_infos, photo_extensions)
     elif tool == "pipeline_validation":
-        return _run_pipeline_validation(file_infos, location)
+        return _run_pipeline_validation(
+            file_infos, photo_extensions, metadata_extensions, team_config
+        )
     else:
         raise ValueError(f"Unknown tool: {tool}")
 
 
 def _run_photostats(
-    file_infos: list, location: str
+    file_infos: list,
+    photo_extensions: set[str],
+    metadata_extensions: set[str],
+    require_sidecar: set[str],
 ) -> tuple[Dict[str, Any], Optional[str]]:
     """Run PhotoStats analysis."""
     from src.analysis.photostats_analyzer import analyze_pairing, calculate_stats
-
-    # Use default extensions
-    photo_extensions = {
-        ".dng", ".cr3", ".cr2", ".nef", ".arw", ".orf", ".rw2",
-        ".raf", ".pef", ".srw", ".tiff", ".tif", ".jpg", ".jpeg",
-        ".png", ".heic", ".heif",
-    }
-    metadata_extensions = {".xmp"}
-    require_sidecar = {".cr3", ".cr2", ".nef", ".arw", ".dng"}
 
     stats = calculate_stats(file_infos, photo_extensions, metadata_extensions)
     pairing = analyze_pairing(
@@ -325,19 +354,14 @@ def _run_photostats(
 
 
 def _run_photo_pairing(
-    file_infos: list, location: str
+    file_infos: list,
+    photo_extensions: set[str],
 ) -> tuple[Dict[str, Any], Optional[str]]:
     """Run Photo Pairing analysis."""
     from src.analysis.photo_pairing_analyzer import (
         build_imagegroups,
         calculate_analytics,
     )
-
-    photo_extensions = {
-        ".dng", ".cr3", ".cr2", ".nef", ".arw", ".orf", ".rw2",
-        ".raf", ".pef", ".srw", ".tiff", ".tif", ".jpg", ".jpeg",
-        ".png", ".heic", ".heif",
-    }
 
     # Filter to photo files only
     photo_files = [f for f in file_infos if f.extension in photo_extensions]
@@ -371,22 +395,68 @@ def _run_photo_pairing(
 
 
 def _run_pipeline_validation(
-    file_infos: list, location: str
+    file_infos: list,
+    photo_extensions: set[str],
+    metadata_extensions: set[str],
+    team_config: TeamConfigCache,
 ) -> tuple[Dict[str, Any], Optional[str]]:
-    """Run Pipeline Validation analysis."""
-    # Pipeline validation requires a pipeline definition which is not
-    # available in offline/CLI mode. Return a basic scan result.
+    """Run Pipeline Validation analysis using cached pipeline config."""
+    if team_config.default_pipeline is None:
+        click.echo(
+            click.style("Warning: ", fg="yellow")
+            + "No default pipeline configured on the server. "
+            "Skipping pipeline validation."
+        )
+        results = {
+            "total_files": len(file_infos),
+            "files_scanned": len(file_infos),
+            "issues_found": 0,
+            "issues_count": 0,
+            "skipped": True,
+            "results": {
+                "total_files": len(file_infos),
+                "note": "No default pipeline definition available. "
+                        "Configure a default pipeline on the server.",
+            },
+        }
+        return results, None
+
+    from src.analysis.pipeline_analyzer import run_pipeline_validation
+    from src.analysis.pipeline_config_builder import build_pipeline_config
+
+    pipeline = team_config.default_pipeline
+    pipeline_config = build_pipeline_config(
+        nodes_json=pipeline.nodes,
+        edges_json=pipeline.edges,
+    )
+
+    result = run_pipeline_validation(
+        file_infos,
+        pipeline_config=pipeline_config,
+        photo_extensions=photo_extensions,
+        metadata_extensions=metadata_extensions,
+    )
+
+    status_counts = result.get("status_counts", {})
+    issues = status_counts.get("partial", 0) + status_counts.get("inconsistent", 0)
+
     results = {
         "total_files": len(file_infos),
         "files_scanned": len(file_infos),
-        "issues_found": 0,
-        "issues_count": 0,
+        "total_images": result.get("total_images", 0),
+        "status_counts": status_counts,
+        "by_termination": result.get("by_termination", {}),
+        "issues_found": issues,
+        "issues_count": issues,
         "results": {
-            "total_files": len(file_infos),
-            "note": "Pipeline validation requires a pipeline definition. "
-                    "Use the web UI to configure and run pipeline validation.",
+            "total_images": result.get("total_images", 0),
+            "total_groups": result.get("total_groups", 0),
+            "status_counts": status_counts,
+            "by_termination": result.get("by_termination", {}),
+            "invalid_files_count": result.get("invalid_files_count", 0),
         },
     }
+
     return results, None
 
 

@@ -5,7 +5,9 @@ Checks accessibility of a local directory, lists and categorizes files,
 and optionally runs analysis tools (photostats, photo_pairing,
 pipeline_validation). Results are cached for 24 hours.
 
-No server communication required.
+When running analysis tools, team configuration is required (extensions,
+camera mappings, processing methods, pipeline definition). Config is
+fetched from the server if available, or loaded from cache.
 
 Issue #108 - Remove CLI Direct Usage
 Task: T009
@@ -18,13 +20,14 @@ from typing import Optional
 import click
 
 from src import __version__
-from src.cache import VALID_TOOLS
+from src.cache import VALID_TOOLS, TeamConfigCache
 from src.cache.test_cache import load_valid, make_entry, save
 from src.config import AgentConfig
+from src.config_resolver import resolve_team_config
 from src.remote.base import FileInfo
 from src.remote.local_adapter import LocalAdapter
 
-# Default extensions used when no server config is available
+# Default extensions used only for --check-only mode (file categorization)
 DEFAULT_PHOTO_EXTENSIONS = {".dng", ".cr3", ".tiff", ".tif"}
 DEFAULT_METADATA_EXTENSIONS = {".xmp"}
 DEFAULT_REQUIRE_SIDECAR = {".cr3"}
@@ -67,11 +70,16 @@ def _run_photostats(
     return {"stats": stats, "pairing": pairing}
 
 
-def _run_photo_pairing(files: list[FileInfo]) -> dict:
+def _run_photo_pairing(
+    files: list[FileInfo],
+    photo_extensions: set[str],
+) -> dict:
     """Run photo pairing analysis and return results."""
     from src.analysis.photo_pairing_analyzer import build_imagegroups
 
-    result = build_imagegroups(files)
+    # Filter to photo files using team config extensions
+    photo_files = [f for f in files if f.extension in photo_extensions]
+    result = build_imagegroups(photo_files)
     return result
 
 
@@ -79,13 +87,33 @@ def _run_pipeline_validation(
     files: list[FileInfo],
     photo_extensions: set[str],
     metadata_extensions: set[str],
+    team_config: Optional[TeamConfigCache],
 ) -> dict:
-    """Run pipeline validation analysis and return results."""
+    """Run pipeline validation analysis and return results.
+
+    Requires a cached pipeline definition from the team config.
+    If no pipeline is available, returns a skipped result.
+    """
+    if team_config is None or team_config.default_pipeline is None:
+        return {
+            "skipped": True,
+            "reason": "No default pipeline definition available. "
+                      "Configure a default pipeline on the server.",
+            "status_counts": {},
+        }
+
     from src.analysis.pipeline_analyzer import run_pipeline_validation
+    from src.analysis.pipeline_config_builder import build_pipeline_config
+
+    pipeline = team_config.default_pipeline
+    pipeline_config = build_pipeline_config(
+        nodes_json=pipeline.nodes,
+        edges_json=pipeline.edges,
+    )
 
     result = run_pipeline_validation(
         files,
-        pipeline_config=None,
+        pipeline_config=pipeline_config,
         photo_extensions=photo_extensions,
         metadata_extensions=metadata_extensions,
     )
@@ -102,8 +130,10 @@ def _count_issues(tool: str, result: dict) -> int:
     elif tool == "photo_pairing":
         return len(result.get("invalid_files", []))
     elif tool == "pipeline_validation":
+        if result.get("skipped"):
+            return 0
         status_counts = result.get("status_counts", {})
-        return status_counts.get("invalid", 0) + status_counts.get("incomplete", 0)
+        return status_counts.get("partial", 0) + status_counts.get("inconsistent", 0)
     return 0
 
 
@@ -136,7 +166,10 @@ def test(path: str, tool: Optional[str], check_only: bool, output: Optional[str]
     runs photostats, photo_pairing, or pipeline_validation analysis.
     Results are cached locally for 24 hours.
 
-    No server communication required.
+    Analysis tools require team configuration from the server (extensions,
+    camera mappings, processing methods, pipeline definition). Use
+    --check-only to skip analysis when the server is unavailable and no
+    cached config exists.
 
     \b
     Examples:
@@ -167,28 +200,55 @@ def test(path: str, tool: Optional[str], check_only: bool, output: Optional[str]
         click.echo(f"  Error: {e}")
         sys.exit(1)
 
-    # Categorize files
-    photo_extensions = DEFAULT_PHOTO_EXTENSIONS
-    metadata_extensions = DEFAULT_METADATA_EXTENSIONS
-    require_sidecar = DEFAULT_REQUIRE_SIDECAR
-
-    file_count, photo_count, sidecar_count = _categorize_files(
-        files, photo_extensions, metadata_extensions
-    )
     click.echo(
         click.style("OK", fg="green", bold=True)
-        + f" (readable, {file_count:,} files found)"
+        + f" (readable, {len(files):,} files found)"
     )
 
     if check_only:
-        # Cache and output summary
+        # Use default extensions for basic categorization
+        file_count, photo_count, sidecar_count = _categorize_files(
+            files, DEFAULT_PHOTO_EXTENSIONS, DEFAULT_METADATA_EXTENSIONS
+        )
         _save_cache(
             resolved_path, True, file_count, photo_count, sidecar_count, [], None
         )
         _print_summary(file_count, photo_count, sidecar_count, {})
         sys.exit(0)
 
-    # --- Step 2: Run analysis tools ---
+    # --- Step 2: Resolve team config for analysis tools ---
+    click.echo("  Fetching team config... ", nl=False)
+    result = resolve_team_config()
+
+    if result.config is None:
+        click.echo(click.style("FAIL", fg="red", bold=True))
+        click.echo(
+            click.style("  Error: ", fg="red", bold=True)
+            + f"{result.message}\n"
+            "  Team configuration is required to run analysis tools.\n"
+            "  Use --check-only for accessibility testing without analysis."
+        )
+        sys.exit(1)
+
+    team_config = result.config
+    if result.source == "expired_cache":
+        click.echo(click.style("WARN", fg="yellow", bold=True) + f" ({result.message})")
+    elif result.source == "cache":
+        click.echo(click.style("OK", fg="green", bold=True) + f" ({result.message})")
+    else:
+        click.echo(click.style("OK", fg="green", bold=True) + f" ({result.message})")
+
+    # Use team config for extensions
+    photo_extensions = set(team_config.photo_extensions)
+    metadata_extensions = set(team_config.metadata_extensions)
+    require_sidecar = set(team_config.require_sidecar)
+
+    # Categorize files with real config
+    file_count, photo_count, sidecar_count = _categorize_files(
+        files, photo_extensions, metadata_extensions
+    )
+
+    # --- Step 3: Run analysis tools ---
     tools_to_run = [tool] if tool else sorted(VALID_TOOLS)
     tools_tested: list[str] = []
     issues_found: dict = {}
@@ -202,10 +262,10 @@ def test(path: str, tool: Optional[str], check_only: bool, output: Optional[str]
                     files, photo_extensions, metadata_extensions, require_sidecar
                 )
             elif t == "photo_pairing":
-                result = _run_photo_pairing(files)
+                result = _run_photo_pairing(files, photo_extensions)
             elif t == "pipeline_validation":
                 result = _run_pipeline_validation(
-                    files, photo_extensions, metadata_extensions
+                    files, photo_extensions, metadata_extensions, team_config
                 )
             else:
                 click.echo(click.style("SKIP", fg="yellow"))
@@ -213,6 +273,16 @@ def test(path: str, tool: Optional[str], check_only: bool, output: Optional[str]
 
             all_results[t] = result
             tools_tested.append(t)
+
+            # Handle skipped tools (e.g., pipeline_validation without pipeline)
+            if result.get("skipped"):
+                reason = result.get("reason", "")
+                click.echo(
+                    click.style("SKIP", fg="yellow")
+                    + f" ({reason})"
+                )
+                continue
+
             issue_count = _count_issues(t, result)
             if issue_count > 0:
                 issues_found[t] = issue_count

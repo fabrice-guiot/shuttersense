@@ -105,6 +105,8 @@ from backend.src.api.agent.schemas import (
     AgentPrepareResultUploadResponse,
     AgentUploadResultRequest,
     AgentUploadResultResponse,
+    # Team config (Issue #108 - config caching)
+    TeamConfigResponse,
 )
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
@@ -975,6 +977,62 @@ async def get_job_config(
         pipeline_guid=pipeline_guid,
         pipeline=pipeline_data,
         connector=connector_data,
+    )
+
+
+# ============================================================================
+# Team Config Endpoint (Agent Auth Required - Issue #108 Config Caching)
+# ============================================================================
+
+
+@router.get(
+    "/config",
+    response_model=TeamConfigResponse,
+    summary="Get team configuration",
+    description="Get the team's tool configuration (extensions, cameras, processing "
+                "methods, default pipeline). Lightweight alternative to job-specific "
+                "config for agent CLI commands like test and run.",
+)
+async def get_team_config(
+    ctx: AgentContext = Depends(get_agent_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the authenticated agent's team configuration.
+
+    Used by agent CLI commands (test, run) to get real config without
+    needing a job. Includes the default pipeline if one exists.
+    """
+    from backend.src.services.config_loader import DatabaseConfigLoader
+    from backend.src.models.pipeline import Pipeline
+
+    loader = DatabaseConfigLoader(team_id=ctx.team_id, db=db)
+
+    # Get default pipeline if one exists
+    default_pipeline = None
+    pipeline = db.query(Pipeline).filter(
+        Pipeline.team_id == ctx.team_id,
+        Pipeline.is_default == True,  # noqa: E712
+    ).first()
+
+    if pipeline:
+        default_pipeline = PipelineData(
+            guid=pipeline.guid,
+            name=pipeline.name,
+            version=pipeline.version,
+            nodes=pipeline.nodes_json or [],
+            edges=pipeline.edges_json or [],
+        )
+
+    return TeamConfigResponse(
+        config=JobConfigData(
+            photo_extensions=loader.photo_extensions,
+            metadata_extensions=loader.metadata_extensions,
+            cameras=loader.camera_mappings,
+            processing_methods=loader.processing_methods,
+            require_sidecar=loader.require_sidecar,
+        ),
+        default_pipeline=default_pipeline,
     )
 
 

@@ -1147,6 +1147,37 @@ class AgentApiClient:
             raise ConnectionError(f"Connection timed out: {e}")
 
     # -------------------------------------------------------------------------
+    # Team Config (Issue #108 - Config Caching)
+    # -------------------------------------------------------------------------
+
+    def get_team_config(self) -> dict[str, Any]:
+        """
+        Get team configuration from server (synchronous).
+
+        Returns the team's tool configuration (extensions, cameras,
+        processing methods) and default pipeline definition.
+
+        Returns:
+            Dict with 'config' and optional 'default_pipeline' keys.
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ApiError: If request fails
+            ConnectionError: If connection to server fails
+        """
+        response = self.get("/config")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        else:
+            raise ApiError(
+                f"Get team config failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    # -------------------------------------------------------------------------
     # Collection Management (Issue #108, Task T007)
     # -------------------------------------------------------------------------
 

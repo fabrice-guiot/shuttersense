@@ -1300,8 +1300,7 @@ class JobExecutor:
         """
         Create a PipelineConfig from API pipeline data.
 
-        Converts the database format (nodes_json, edges_json) to
-        the PipelineConfig format expected by pipeline_processor.
+        Delegates to the shared pipeline_config_builder module.
 
         Args:
             pipeline_data: Dict with 'nodes' and 'edges' from API
@@ -1309,85 +1308,12 @@ class JobExecutor:
         Returns:
             PipelineConfig instance
         """
-        from utils.pipeline_processor import (
-            PipelineConfig,
-            CaptureNode,
-            FileNode,
-            ProcessNode,
-            PairingNode,
-            BranchingNode,
-            TerminationNode,
+        from src.analysis.pipeline_config_builder import build_pipeline_config
+
+        return build_pipeline_config(
+            nodes_json=pipeline_data.get("nodes", []),
+            edges_json=pipeline_data.get("edges", []),
         )
-
-        nodes_data = pipeline_data.get("nodes", [])
-        edges_data = pipeline_data.get("edges", [])
-
-        # Build output map from edges
-        output_map: Dict[str, list] = {}
-        for edge in edges_data:
-            from_id = edge.get("from") or edge.get("source")
-            to_id = edge.get("to") or edge.get("target")
-            if from_id and to_id:
-                if from_id not in output_map:
-                    output_map[from_id] = []
-                output_map[from_id].append(to_id)
-
-        # Parse nodes
-        nodes = []
-        for node_dict in nodes_data:
-            node_id = node_dict.get("id")
-            node_type = node_dict.get("type", "").lower()
-            properties = node_dict.get("properties", {})
-            name = properties.get("name", node_dict.get("name", ""))
-            output = output_map.get(node_id, [])
-
-            if node_type == "capture":
-                nodes.append(CaptureNode(id=node_id, name=name, output=output))
-            elif node_type == "file":
-                extension = properties.get("extension", "")
-                nodes.append(FileNode(id=node_id, name=name, output=output, extension=extension))
-            elif node_type == "process":
-                method_ids = properties.get("method_ids", properties.get("methodIds", []))
-                if not isinstance(method_ids, list):
-                    method_ids = [method_ids] if method_ids else []
-                nodes.append(ProcessNode(id=node_id, name=name, output=output, method_ids=method_ids))
-            elif node_type == "pairing":
-                pairing_type = properties.get("pairing_type", properties.get("pairingType", ""))
-                input_count = properties.get("input_count", properties.get("inputCount", 2))
-                nodes.append(PairingNode(
-                    id=node_id, name=name, output=output,
-                    pairing_type=pairing_type, input_count=input_count
-                ))
-            elif node_type == "branching":
-                condition = properties.get("condition_description", properties.get("conditionDescription", ""))
-                nodes.append(BranchingNode(
-                    id=node_id, name=name, output=output,
-                    condition_description=condition
-                ))
-            elif node_type == "termination":
-                term_type = properties.get("termination_type", properties.get("terminationType", ""))
-                nodes.append(TerminationNode(
-                    id=node_id, name=name, output=output,
-                    termination_type=term_type
-                ))
-
-        # Create PipelineConfig and categorize nodes
-        pipeline_config = PipelineConfig(nodes=nodes)
-        for node in nodes:
-            if isinstance(node, CaptureNode):
-                pipeline_config.capture_nodes.append(node)
-            elif isinstance(node, FileNode):
-                pipeline_config.file_nodes.append(node)
-            elif isinstance(node, ProcessNode):
-                pipeline_config.process_nodes.append(node)
-            elif isinstance(node, PairingNode):
-                pipeline_config.pairing_nodes.append(node)
-            elif isinstance(node, BranchingNode):
-                pipeline_config.branching_nodes.append(node)
-            elif isinstance(node, TerminationNode):
-                pipeline_config.termination_nodes.append(node)
-
-        return pipeline_config
 
     async def _run_collection_test(self, job: Dict[str, Any]) -> JobResult:
         """

@@ -934,6 +934,21 @@ class JobConfigResponse(BaseModel):
     )
 
 
+class TeamConfigResponse(BaseModel):
+    """Standalone team configuration (not job-specific).
+
+    Used by agent CLI commands (test, run) to get the team's tool
+    configuration without needing a job. Includes the default pipeline
+    definition if one exists.
+    """
+
+    config: JobConfigData = Field(..., description="Team tool configuration")
+    default_pipeline: Optional[PipelineData] = Field(
+        None,
+        description="Default pipeline definition (if one exists)"
+    )
+
+
 # ============================================================================
 # Connector Schemas (for agent credential configuration)
 # ============================================================================

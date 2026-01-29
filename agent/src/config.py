@@ -88,13 +88,15 @@ def get_cache_paths() -> dict:
     Get paths for all agent cache directories and files.
 
     Returns:
-        Dict with keys: data_dir, test_cache_dir, collection_cache_file, results_dir
+        Dict with keys: data_dir, test_cache_dir, collection_cache_file,
+        team_config_cache_file, results_dir
     """
     data_dir = get_default_data_dir()
     return {
         "data_dir": data_dir,
         "test_cache_dir": data_dir / "test-cache",
         "collection_cache_file": data_dir / "collection-cache.json",
+        "team_config_cache_file": data_dir / "team-config-cache.json",
         "results_dir": data_dir / "results",
     }
 

@@ -4,6 +4,7 @@ Agent local cache module.
 Provides Pydantic models and storage for agent-side cached data:
 - TestCacheEntry: Cached result of a local path test (24h TTL)
 - CollectionCache / CachedCollection: Local snapshot of bound collections (7d TTL)
+- TeamConfigCache / CachedPipeline: Team tool configuration from server (24h TTL)
 - OfflineResult: Analysis result pending upload to server (no TTL)
 
 All cache data is stored as JSON files in the platform-appropriate data
@@ -25,6 +26,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 TEST_CACHE_TTL_HOURS = 24
 COLLECTION_CACHE_TTL_DAYS = 7
+TEAM_CONFIG_CACHE_TTL_HOURS = 24
 
 VALID_TOOLS = frozenset(["photostats", "photo_pairing", "pipeline_validation"])
 VALID_COLLECTION_TYPES = frozenset(["LOCAL", "S3", "GCS", "SMB"])
@@ -201,6 +203,78 @@ class CollectionCache(BaseModel):
 
 
 # ============================================================================
+# CachedPipeline (embedded in TeamConfigCache)
+# ============================================================================
+
+
+class CachedPipeline(BaseModel):
+    """
+    Cached pipeline definition from the server.
+
+    Embedded within TeamConfigCache. Mirrors the PipelineData schema
+    from the backend agent API.
+    """
+
+    guid: str = Field(..., description="Pipeline GUID (pip_xxx)")
+    name: str = Field(..., description="Pipeline name")
+    version: int = Field(..., description="Pipeline version number")
+    nodes: List[Dict[str, Any]] = Field(..., description="Pipeline node definitions")
+    edges: List[Dict[str, Any]] = Field(..., description="Pipeline edge connections")
+
+
+# ============================================================================
+# TeamConfigCache
+# ============================================================================
+
+
+class TeamConfigCache(BaseModel):
+    """
+    Cached team configuration for tool execution.
+
+    Stored at {data_dir}/team-config-cache.json with a 24-hour TTL.
+    Created by ``test`` and ``run`` commands when the server is available.
+    Read when the server is unavailable for offline tool execution.
+    """
+
+    agent_guid: str = Field(..., description="GUID of the agent")
+    fetched_at: datetime = Field(..., description="When config was fetched from server")
+    expires_at: datetime = Field(..., description="fetched_at + 24 hours")
+
+    # Tool config (matches JobConfigData on server)
+    photo_extensions: List[str] = Field(..., description="Recognized photo file extensions")
+    metadata_extensions: List[str] = Field(..., description="Metadata file extensions")
+    cameras: Dict[str, List[Dict[str, Any]]] = Field(
+        default_factory=dict, description="Camera ID to camera info mappings"
+    )
+    processing_methods: Dict[str, str] = Field(
+        default_factory=dict, description="Processing method code to description"
+    )
+    require_sidecar: List[str] = Field(..., description="Extensions requiring sidecars")
+
+    # Default pipeline
+    default_pipeline: Optional[CachedPipeline] = Field(
+        None, description="Default pipeline definition (if one exists)"
+    )
+
+    @model_validator(mode="after")
+    def validate_expiry(self) -> "TeamConfigCache":
+        expected_expires = self.fetched_at + timedelta(hours=TEAM_CONFIG_CACHE_TTL_HOURS)
+        if abs((self.expires_at - expected_expires).total_seconds()) > 1:
+            raise ValueError(
+                "expires_at must be exactly 24 hours after fetched_at"
+            )
+        return self
+
+    def is_valid(self) -> bool:
+        """Check if this cache has not expired."""
+        return datetime.now(timezone.utc) < self.expires_at
+
+    def is_expired(self) -> bool:
+        """Check if this cache has expired (inverse of is_valid)."""
+        return not self.is_valid()
+
+
+# ============================================================================
 # OfflineResult
 # ============================================================================
 
@@ -253,10 +327,13 @@ class OfflineResult(BaseModel):
 __all__ = [
     "TEST_CACHE_TTL_HOURS",
     "COLLECTION_CACHE_TTL_DAYS",
+    "TEAM_CONFIG_CACHE_TTL_HOURS",
     "VALID_TOOLS",
     "VALID_COLLECTION_TYPES",
     "TestCacheEntry",
     "CachedCollection",
     "CollectionCache",
+    "CachedPipeline",
+    "TeamConfigCache",
     "OfflineResult",
 ]
