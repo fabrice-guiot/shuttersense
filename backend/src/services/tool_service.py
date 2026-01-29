@@ -18,7 +18,7 @@ queue architecture is retained for potential future server-side tools.
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
@@ -181,7 +181,6 @@ def agent_upload_offline_result(
     executed_at: datetime,
     analysis_data: Dict[str, Any],
     html_report: Optional[str] = None,
-    result_id: Optional[str] = None,
     input_state_hash: Optional[str] = None,
 ) -> tuple:
     """
@@ -200,7 +199,6 @@ def agent_upload_offline_result(
         executed_at: When the analysis was executed on the agent
         analysis_data: Full analysis output (tool-specific JSON)
         html_report: Optional pre-rendered HTML report
-        result_id: Optional locally generated UUID for idempotency
         input_state_hash: Optional SHA-256 hash of Input State for no-change detection
 
     Returns:
@@ -211,21 +209,31 @@ def agent_upload_offline_result(
     """
     now = datetime.utcnow()
 
-    # Resolve pipeline for this collection (same logic as ToolService._get_pipeline_for_collection)
+    # Resolve pipeline for this collection (scoped to team)
     pipeline_id = None
     pipeline_version = None
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if collection:
-        if collection.pipeline_id:
-            pipeline = db.query(Pipeline).filter(Pipeline.id == collection.pipeline_id).first()
-            if pipeline:
-                pipeline_version = collection.pipeline_version or pipeline.version
-                pipeline_id = pipeline.id
-        if pipeline_id is None:
-            default_pipeline = db.query(Pipeline).filter(Pipeline.is_default == True).first()
-            if default_pipeline:
-                pipeline_id = default_pipeline.id
-                pipeline_version = default_pipeline.version
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.team_id == team_id,
+    ).first()
+    if collection is None:
+        raise ValueError(f"Collection {collection_id} not found for team {team_id}")
+    if collection.pipeline_id:
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.id == collection.pipeline_id,
+            Pipeline.team_id == team_id,
+        ).first()
+        if pipeline:
+            pipeline_version = collection.pipeline_version or pipeline.version
+            pipeline_id = pipeline.id
+    if pipeline_id is None:
+        default_pipeline = db.query(Pipeline).filter(
+            Pipeline.is_default == True,
+            Pipeline.team_id == team_id,
+        ).first()
+        if default_pipeline:
+            pipeline_id = default_pipeline.id
+            pipeline_version = default_pipeline.version
 
     # Create Job record with COMPLETED status (retroactive record of offline execution)
     job = Job(
@@ -246,8 +254,11 @@ def agent_upload_offline_result(
     db.flush()  # Get job.id without committing
 
     # Create AnalysisResult
-    # Strip timezone info to match naive `now` from utcnow()
-    executed_at_naive = executed_at.replace(tzinfo=None) if executed_at and executed_at.tzinfo else executed_at
+    # Convert to UTC naive datetime to match naive `now` from utcnow()
+    if executed_at and executed_at.tzinfo:
+        executed_at_naive = executed_at.astimezone(timezone.utc).replace(tzinfo=None)
+    else:
+        executed_at_naive = executed_at
     duration = (now - executed_at_naive).total_seconds() if executed_at_naive else 0
     result = AnalysisResult(
         team_id=team_id,
@@ -350,14 +361,14 @@ def agent_record_no_change_result(
     now = datetime.utcnow()
 
     # Look up source result by GUID + team_id
-    source_result = None
-    source_results = db.query(AnalysisResult).filter(
+    try:
+        source_uuid = AnalysisResult.parse_guid(source_result_guid)
+    except ValueError:
+        raise ValueError(f"Invalid source result GUID: {source_result_guid}")
+    source_result = db.query(AnalysisResult).filter(
         AnalysisResult.team_id == team_id,
-    ).all()
-    for r in source_results:
-        if r.guid == source_result_guid:
-            source_result = r
-            break
+        AnalysisResult.uuid == source_uuid,
+    ).first()
 
     if source_result is None:
         raise ValueError(f"Source result {source_result_guid} not found")
@@ -373,21 +384,31 @@ def agent_record_no_change_result(
     if source_result.download_report_from:
         download_from_guid = source_result.download_report_from
 
-    # Resolve pipeline (same logic as upload)
+    # Resolve pipeline (scoped to team)
     pipeline_id = None
     pipeline_version = None
-    collection = db.query(Collection).filter(Collection.id == collection_id).first()
-    if collection:
-        if collection.pipeline_id:
-            pipeline = db.query(Pipeline).filter(Pipeline.id == collection.pipeline_id).first()
-            if pipeline:
-                pipeline_version = collection.pipeline_version or pipeline.version
-                pipeline_id = pipeline.id
-        if pipeline_id is None:
-            default_pipeline = db.query(Pipeline).filter(Pipeline.is_default == True).first()
-            if default_pipeline:
-                pipeline_id = default_pipeline.id
-                pipeline_version = default_pipeline.version
+    collection = db.query(Collection).filter(
+        Collection.id == collection_id,
+        Collection.team_id == team_id,
+    ).first()
+    if collection is None:
+        raise ValueError(f"Collection {collection_id} not found for team {team_id}")
+    if collection.pipeline_id:
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.id == collection.pipeline_id,
+            Pipeline.team_id == team_id,
+        ).first()
+        if pipeline:
+            pipeline_version = collection.pipeline_version or pipeline.version
+            pipeline_id = pipeline.id
+    if pipeline_id is None:
+        default_pipeline = db.query(Pipeline).filter(
+            Pipeline.is_default == True,
+            Pipeline.team_id == team_id,
+        ).first()
+        if default_pipeline:
+            pipeline_id = default_pipeline.id
+            pipeline_version = default_pipeline.version
 
     # Create Job record with COMPLETED status (retroactive record of no-change detection)
     job = Job(

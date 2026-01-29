@@ -174,7 +174,7 @@ class TestTestThenCreateFlow:
             )
 
         # The auto-test should have been invoked
-        assert mock_invoke.called or result.exit_code == 0
+        assert mock_invoke.called
 
     def test_create_with_skip_test_bypasses_auto_test(
         self, runner, mock_api_create_response,

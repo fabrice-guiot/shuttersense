@@ -155,10 +155,10 @@ def run(
 
     try:
         file_infos, input_state_hash = _prepare_analysis(location, tool, team_config)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, PermissionError, ValueError) as e:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
-            + f"Path not accessible: {e}"
+            + str(e)
         )
         sys.exit(1)
 
@@ -241,7 +241,7 @@ def run(
 
         import uuid
 
-        result_id = str(uuid.uuid4())
+        result_id = f"res_{uuid.uuid4().hex}"
         try:
             upload_response = asyncio.run(
                 _upload_result_async(

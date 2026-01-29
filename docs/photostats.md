@@ -6,7 +6,7 @@ PhotoStats analyzes photo collections, providing detailed statistics and reports
 
 ## Features
 
-- **Configurable File Types**: Support for customizable photo and metadata file extensions via YAML configuration
+- **Configurable File Types**: Support for customizable photo and metadata file extensions via server-managed team configuration
 - **File Scanning**: Recursively scans folders for configured photo and XMP files
 - **Statistics Collection**: Counts files by type and calculates storage usage
 - **File Pairing Analysis**: Identifies orphaned images and XMP metadata files
@@ -91,7 +91,7 @@ XMP sidecar files that don't have a matching image file. This might indicate del
 
 - **Large Collections**: For very large photo collections, the scan may take several minutes. The tool provides progress updates.
 - **Network Drives**: Scanning network drives will be slower than local drives.
-- **Configuration**: Adjust your configuration file to match your specific workflow and file types.
+- **Configuration**: Adjust your team configuration on the server to match your specific workflow and file types.
 - **Regular Checks**: Run PhotoStats periodically to ensure your photo collection integrity.
 
 ## Next Steps

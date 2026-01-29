@@ -424,7 +424,7 @@ def _write_dump_file(
         lines.append(text)
 
     # --- Header ---
-    w(f"# Debug Dump: Inventory Hash Comparison")
+    w("# Debug Dump: Inventory Hash Comparison")
     w()
     w(f"**Generated:** {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     w(f"**Collection:** `{collection_guid}` ({collection_name})")
@@ -531,8 +531,8 @@ def _write_dump_file(
     w("## Input State Hash Formula")
     w()
     w("```")
-    w(f"SHA256(\"{tool}|{{file_list_hash}}|{{config_hash}}\")")
-    w(f"")
+    w("SHA256(\"...|{file_list_hash}|{config_hash}\")")
+    w("")
     w(f"Manifest A: SHA256(\"{tool}|{file_hash_a}|{config_hash}\") = {input_hash_a}")
     w(f"Manifest B: SHA256(\"{tool}|{file_hash_b}|{config_hash}\") = {input_hash_b}")
     if stored_file_hash and stored_input_hash:
@@ -1048,7 +1048,7 @@ def compare_inventory(
 
         click.echo()
         click.echo("=== Hash Diagnosis ===")
-        click.echo(f"  No entries were added or removed.")
+        click.echo("  No entries were added or removed.")
         click.echo(f"  {len(changed)} entries have differences:")
         if size_changes:
             click.echo(f"    - {size_changes} with size changes")

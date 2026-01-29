@@ -142,7 +142,7 @@ class TestDryRun:
         with patch("cli.sync_results.result_store") as mock_store, \
              patch("cli.sync_results._upload_result_async") as mock_upload:
             mock_store.list_pending.return_value = sample_pending_results
-            result = runner.invoke(sync, ["--dry-run"])
+            runner.invoke(sync, ["--dry-run"])
         mock_upload.assert_not_called()
 
 

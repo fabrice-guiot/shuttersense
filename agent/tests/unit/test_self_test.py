@@ -30,7 +30,7 @@ class TestSelfTestAllPass:
     def mock_config(self, tmp_path):
         config = MagicMock()
         config.server_url = "http://localhost:8000"
-        config.api_key = "agt_key_test_1234567890abcdef"
+        config.api_key = "TEST_API_KEY"
         config.agent_guid = "agt_01hgw2bbg0000000000000001"
         config.authorized_roots = [str(tmp_path)]
         return config
@@ -147,7 +147,7 @@ class TestServerConnectivity:
     def mock_config(self, tmp_path):
         config = MagicMock()
         config.server_url = "http://localhost:8000"
-        config.api_key = "agt_key_test_1234567890abcdef"
+        config.api_key = "TEST_API_KEY"
         config.agent_guid = "agt_01hgw2bbg0000000000000001"
         config.authorized_roots = [str(tmp_path)]
         return config
@@ -397,7 +397,7 @@ class TestToolAvailability:
     def mock_config(self, tmp_path):
         config = MagicMock()
         config.server_url = "http://localhost:8000"
-        config.api_key = "agt_key_test_1234567890abcdef"
+        config.api_key = "TEST_API_KEY"
         config.agent_guid = "agt_01hgw2bbg0000000000000001"
         config.authorized_roots = [str(tmp_path)]
         return config

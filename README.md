@@ -105,7 +105,6 @@ shuttersense/
 │   └── tests/                  # Agent tests
 ├── utils/                      # Shared Python utilities
 ├── templates/                  # Jinja2 HTML report templates
-├── config/                     # Configuration files
 ├── docs/                       # Documentation
 │   ├── prd/                    # Product requirement documents
 │   └── ...                     # Tool and setup documentation

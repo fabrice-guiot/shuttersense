@@ -111,6 +111,7 @@ class InventoryImportResult:
         total_size: Total size of all files in bytes
         all_entries: All inventory entries (for Phase B processing)
         error_message: Error message if import failed
+        latest_manifest: Display path of the manifest used (e.g., "2026-01-26T01-00Z/manifest.json")
     """
     success: bool
     folders: Set[str]

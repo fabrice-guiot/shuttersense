@@ -8,6 +8,7 @@ with a plain HTML fallback on template errors.
 Issue #108 - Remove CLI Direct Usage
 """
 
+import html
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -16,7 +17,14 @@ logger = logging.getLogger("shuttersense.agent.report_generators")
 
 
 def _format_size(size_bytes: int) -> str:
-    """Format bytes to human-readable size."""
+    """Format bytes to human-readable size.
+
+    Args:
+        size_bytes: Number of bytes to format.
+
+    Returns:
+        Human-readable size string (e.g., '1.23 MB').
+    """
     size = float(size_bytes)
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
         if size < 1024.0:
@@ -200,8 +208,8 @@ def generate_photostats_report(
     <html>
     <head><title>PhotoStats Report</title></head>
     <body>
-        <h1>PhotoStats Report ({collection_type} Collection)</h1>
-        <p>Location: {location}</p>
+        <h1>PhotoStats Report ({html.escape(collection_type)} Collection)</h1>
+        <p>Location: {html.escape(str(location))}</p>
         <p>Total Files: {results.get('total_files', 0)}</p>
         <p>Orphaned Images: {len(orphaned_images)}</p>
         <p>Orphaned XMP: {len(orphaned_xmp)}</p>
@@ -363,8 +371,8 @@ def generate_photo_pairing_report(
     <html>
     <head><title>Photo Pairing Report</title></head>
     <body>
-        <h1>Photo Pairing Report ({collection_type} Collection)</h1>
-        <p>Location: {location}</p>
+        <h1>Photo Pairing Report ({html.escape(collection_type)} Collection)</h1>
+        <p>Location: {html.escape(str(location))}</p>
         <p>Total Images: {results.get('image_count', 0)}</p>
         <p>Image Groups: {results.get('group_count', 0)}</p>
         <p>Invalid Files: {len(invalid_files)}</p>
@@ -557,7 +565,7 @@ def generate_pipeline_validation_report(
     return f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>Pipeline Validation Report - {collection_type} Collection</title>
+    <title>Pipeline Validation Report - {html.escape(collection_type)} Collection</title>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px; }}
         h1, h2 {{ color: #333; }}
@@ -565,9 +573,9 @@ def generate_pipeline_validation_report(
     </style>
 </head>
 <body>
-    <h1>Pipeline Validation Report ({collection_type} Collection)</h1>
+    <h1>Pipeline Validation Report ({html.escape(collection_type)} Collection)</h1>
     <div class="summary">
-        <p><strong>Path:</strong> {location}</p>
+        <p><strong>Path:</strong> {html.escape(str(location))}</p>
         <p><strong>Total Images:</strong> {results.get('total_images', 0)}</p>
         <p><strong>Consistent:</strong> {overall_status.get('CONSISTENT', 0)}</p>
         <p><strong>Partial:</strong> {overall_status.get('PARTIAL', 0)}</p>

@@ -103,7 +103,11 @@ def load_valid(path: str) -> Optional[TestCacheEntry]:
     if entry is None:
         return None
     if not entry.is_valid():
-        logger.debug("Test cache expired for %s", path)
+        logger.debug("Test cache expired for %s, deleting", path)
+        try:
+            delete(path)
+        except OSError:
+            logger.debug("Failed to delete expired cache for %s", path)
         return None
     return entry
 

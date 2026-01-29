@@ -21,9 +21,16 @@ See [Agent Installation Guide](agent-installation.md) for detailed agent setup.
 
 ## Analysis Configuration
 
-Analysis tools (PhotoStats, Photo Pairing, Pipeline Validation) use a YAML configuration file to specify file type settings. The configuration file is loaded by the agent's analysis modules.
+Analysis tools (PhotoStats, Photo Pairing, Pipeline Validation) use YAML-formatted configuration to specify file type settings. This configuration is managed at the team level on the ShutterSense server and automatically synced to agents.
 
-### Configuration File Format
+### How Configuration Works
+
+1. **Server-Side Management**: Configuration is defined for your team through the web application under Team Settings.
+2. **Automatic Sync**: The agent fetches your team's configuration from the server before each analysis run.
+3. **Local Cache**: Configuration is cached locally for offline operation (24-hour TTL).
+4. **Validation**: Use `shuttersense-agent self-test` to verify the agent can reach the server and load configuration.
+
+### Configuration Format
 
 ```yaml
 # Photo Statistics Configuration

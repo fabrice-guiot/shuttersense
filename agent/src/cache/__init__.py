@@ -289,8 +289,8 @@ class OfflineResult(BaseModel):
     """
 
     result_id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()),
-        description="Locally generated UUID",
+        default_factory=lambda: f"res_{uuid.uuid4().hex}",
+        description="Locally generated result identifier with res_ prefix",
     )
     collection_guid: str = Field(
         ..., description="GUID of the collection analyzed"

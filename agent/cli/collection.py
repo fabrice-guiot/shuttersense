@@ -136,7 +136,10 @@ def create(
         # Run the test command inline via Click's invoke
         from cli.test import test as test_cmd
 
-        result = ctx.invoke(test_cmd, path=resolved_path, tool=None, check_only=True, output=None)
+        try:
+            ctx.invoke(test_cmd, path=resolved_path, tool=None, check_only=True, output=None)
+        except SystemExit:
+            pass  # test command may call sys.exit; ignore and check cache
         # Re-load the cache after test
         test_entry = load_valid(resolved_path)
         if test_entry is None or not test_entry.accessible:
@@ -245,9 +248,16 @@ def create(
     click.echo(f"  Web URL:  {result['web_url']}")
 
     # --- Step 8: Next steps ---
-    click.echo()
-    click.echo("Next steps:")
-    click.echo(f"  Run analysis tools for this collection:")
+    if analyze:
+        click.echo()
+        click.echo(
+            click.style("Note: ", fg="yellow")
+            + "--analyze is not yet implemented. Run analysis manually:"
+        )
+    else:
+        click.echo()
+        click.echo("Next steps:")
+    click.echo("  Run analysis tools for this collection:")
     click.echo(f"    shuttersense-agent run {guid} --tool photostats")
     click.echo(f"    shuttersense-agent run {guid} --tool photo_pairing")
     click.echo(f"    shuttersense-agent run {guid} --tool pipeline_validation")

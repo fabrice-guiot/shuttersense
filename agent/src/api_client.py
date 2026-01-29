@@ -1199,7 +1199,9 @@ class AgentApiClient:
         response = self.get(f"/collections/{collection_guid}/previous-result?tool={tool}")
         if response.status_code == 200:
             return response.json()
-        return None
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
 
     # -------------------------------------------------------------------------
     # No-Change Result Recording (Issue #108)

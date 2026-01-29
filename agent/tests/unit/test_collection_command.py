@@ -48,7 +48,7 @@ def mock_config():
     with patch("cli.collection.AgentConfig") as mock_cls:
         config = MagicMock()
         config.is_registered = True
-        config.agent_guid = "agt_test"
+        config.agent_guid = "agt_01hgw2bbg0000000000000001"
         config.server_url = "http://localhost:8000"
         config.api_key = "agt_key_test123"
         mock_cls.return_value = config
@@ -80,7 +80,7 @@ def valid_cache_entry():
         sidecar_count=15,
         tools_tested=["photostats"],
         issues_found=None,
-        agent_id="agt_test",
+        agent_id="agt_01hgw2bbg0000000000000001",
         agent_version="v1.0.0",
     )
 
@@ -100,7 +100,7 @@ def inaccessible_cache_entry():
         sidecar_count=0,
         tools_tested=[],
         issues_found=None,
-        agent_id="agt_test",
+        agent_id="agt_01hgw2bbg0000000000000001",
         agent_version="v1.0.0",
     )
 
@@ -113,7 +113,7 @@ def mock_api_success():
         "name": "Test Photos",
         "type": "LOCAL",
         "location": "/tmp/photos",
-        "bound_agent_guid": "agt_test",
+        "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
         "web_url": "/collections/col_01hgw2bbg0000000000000001",
         "created_at": "2026-01-28T12:00:00.000Z",
     }
@@ -190,7 +190,7 @@ class TestAutoTest:
             adapter.list_files_with_metadata.return_value = []
             mock_adapter_cls.return_value = adapter
             test_cfg = MagicMock()
-            test_cfg.agent_guid = "agt_test"
+            test_cfg.agent_guid = "agt_01hgw2bbg0000000000000001"
             mock_test_config.return_value = test_cfg
 
             result = runner.invoke(collection, ["create", "/tmp/photos", "--name", "Test Photos"])
@@ -375,7 +375,7 @@ def mock_list_response():
                 "name": "Vacation 2024",
                 "type": "LOCAL",
                 "location": "/photos/2024",
-                "bound_agent_guid": "agt_test",
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
                 "connector_guid": None,
                 "connector_name": None,
                 "is_accessible": True,
@@ -387,7 +387,7 @@ def mock_list_response():
                 "name": "Wedding Photos",
                 "type": "LOCAL",
                 "location": "/photos/wedding",
-                "bound_agent_guid": "agt_test",
+                "bound_agent_guid": "agt_01hgw2bbg0000000000000001",
                 "connector_guid": None,
                 "connector_name": None,
                 "is_accessible": False,
@@ -404,7 +404,7 @@ def sample_collection_cache():
     """A valid collection cache with two entries."""
     now = datetime.now(timezone.utc)
     return CollectionCache(
-        agent_guid="agt_test",
+        agent_guid="agt_01hgw2bbg0000000000000001",
         synced_at=now,
         expires_at=now + timedelta(days=COLLECTION_CACHE_TTL_DAYS),
         collections=[
@@ -413,7 +413,7 @@ def sample_collection_cache():
                 name="Vacation 2024",
                 type="LOCAL",
                 location="/photos/2024",
-                bound_agent_guid="agt_test",
+                bound_agent_guid="agt_01hgw2bbg0000000000000001",
                 is_accessible=True,
                 supports_offline=True,
             ),
@@ -422,7 +422,7 @@ def sample_collection_cache():
                 name="Wedding Photos",
                 type="LOCAL",
                 location="/photos/wedding",
-                bound_agent_guid="agt_test",
+                bound_agent_guid="agt_01hgw2bbg0000000000000001",
                 is_accessible=False,
                 supports_offline=True,
             ),
@@ -435,7 +435,7 @@ def expired_collection_cache():
     """An expired collection cache."""
     past = datetime(2020, 1, 1, tzinfo=timezone.utc)
     return CollectionCache(
-        agent_guid="agt_test",
+        agent_guid="agt_01hgw2bbg0000000000000001",
         synced_at=past,
         expires_at=past + timedelta(days=COLLECTION_CACHE_TTL_DAYS),
         collections=[
@@ -444,7 +444,7 @@ def expired_collection_cache():
                 name="Old Photos",
                 type="LOCAL",
                 location="/photos/old",
-                bound_agent_guid="agt_test",
+                bound_agent_guid="agt_01hgw2bbg0000000000000001",
                 is_accessible=True,
                 supports_offline=True,
             ),
@@ -598,16 +598,16 @@ class TestTestCommand:
 
         # Patch the cache to return collection with test_dir as location
         cache = CollectionCache(
-            agent_guid="agt_test",
+            agent_guid="agt_01hgw2bbg0000000000000001",
             synced_at=datetime.now(timezone.utc),
             expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             collections=[
                 CachedCollection(
-                    guid="col_test123",
+                    guid="col_01hgw2bbg0000000000000001",
                     name="Test Collection",
                     type="LOCAL",
                     location=str(test_dir),
-                    bound_agent_guid="agt_test",
+                    bound_agent_guid="agt_01hgw2bbg0000000000000001",
                     is_accessible=True,
                     supports_offline=True,
                 ),
@@ -615,7 +615,7 @@ class TestTestCommand:
         )
 
         mock_test_response = {
-            "guid": "col_test123",
+            "guid": "col_01hgw2bbg0000000000000001",
             "is_accessible": True,
             "updated_at": "2026-01-28T12:00:00.000Z",
         }
@@ -623,7 +623,7 @@ class TestTestCommand:
         with patch("cli.collection.col_cache") as mock_cache, \
              patch("cli.collection._test_collection_async", new_callable=AsyncMock, return_value=mock_test_response):
             mock_cache.load.return_value = cache
-            result = runner.invoke(collection, ["test", "col_test123"])
+            result = runner.invoke(collection, ["test", "col_01hgw2bbg0000000000000001"])
         assert result.exit_code == 0
         assert "Accessible:" in result.output
         assert "yes" in result.output
@@ -632,16 +632,16 @@ class TestTestCommand:
     def test_test_inaccessible_path(self, runner, mock_config):
         """Test reports inaccessible path to server."""
         cache = CollectionCache(
-            agent_guid="agt_test",
+            agent_guid="agt_01hgw2bbg0000000000000001",
             synced_at=datetime.now(timezone.utc),
             expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             collections=[
                 CachedCollection(
-                    guid="col_missing",
+                    guid="col_01hgw2bbg0000000000000002",
                     name="Missing Collection",
                     type="LOCAL",
                     location="/nonexistent/path/to/photos",
-                    bound_agent_guid="agt_test",
+                    bound_agent_guid="agt_01hgw2bbg0000000000000001",
                     is_accessible=True,
                     supports_offline=True,
                 ),
@@ -649,7 +649,7 @@ class TestTestCommand:
         )
 
         mock_test_response = {
-            "guid": "col_missing",
+            "guid": "col_01hgw2bbg0000000000000002",
             "is_accessible": False,
             "updated_at": "2026-01-28T12:00:00.000Z",
         }
@@ -657,7 +657,7 @@ class TestTestCommand:
         with patch("cli.collection.col_cache") as mock_cache, \
              patch("cli.collection._test_collection_async", new_callable=AsyncMock, return_value=mock_test_response):
             mock_cache.load.return_value = cache
-            result = runner.invoke(collection, ["test", "col_missing"])
+            result = runner.invoke(collection, ["test", "col_01hgw2bbg0000000000000002"])
         assert result.exit_code == 0
         assert "no" in result.output
         assert "does not exist" in result.output
@@ -666,7 +666,7 @@ class TestTestCommand:
         """Unknown GUID shows error."""
         with patch("cli.collection.col_cache") as mock_cache:
             mock_cache.load.return_value = sample_collection_cache
-            result = runner.invoke(collection, ["test", "col_unknown"])
+            result = runner.invoke(collection, ["test", "col_01hgw2bbg0000000000000099"])
         assert result.exit_code == 1
         assert "not found in local cache" in result.output
 
@@ -674,23 +674,23 @@ class TestTestCommand:
         """No cache shows error."""
         with patch("cli.collection.col_cache") as mock_cache:
             mock_cache.load.return_value = None
-            result = runner.invoke(collection, ["test", "col_test123"])
+            result = runner.invoke(collection, ["test", "col_01hgw2bbg0000000000000001"])
         assert result.exit_code == 1
         assert "not found in local cache" in result.output
 
     def test_test_remote_collection_rejected(self, runner, mock_config):
         """Remote (non-LOCAL) collections cannot be tested."""
         cache = CollectionCache(
-            agent_guid="agt_test",
+            agent_guid="agt_01hgw2bbg0000000000000001",
             synced_at=datetime.now(timezone.utc),
             expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             collections=[
                 CachedCollection(
-                    guid="col_s3bucket",
+                    guid="col_01hgw2bbg0000000000000003",
                     name="S3 Bucket",
                     type="S3",
                     location="s3://bucket/prefix",
-                    connector_guid="con_test",
+                    connector_guid="con_01hgw2bbg0000000000000001",
                     is_accessible=True,
                     supports_offline=False,
                 ),
@@ -699,7 +699,7 @@ class TestTestCommand:
 
         with patch("cli.collection.col_cache") as mock_cache:
             mock_cache.load.return_value = cache
-            result = runner.invoke(collection, ["test", "col_s3bucket"])
+            result = runner.invoke(collection, ["test", "col_01hgw2bbg0000000000000003"])
         assert result.exit_code == 1
         assert "Only LOCAL collections" in result.output
 
@@ -711,16 +711,16 @@ class TestTestCommand:
         test_dir.mkdir()
 
         cache = CollectionCache(
-            agent_guid="agt_test",
+            agent_guid="agt_01hgw2bbg0000000000000001",
             synced_at=datetime.now(timezone.utc),
             expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             collections=[
                 CachedCollection(
-                    guid="col_test123",
+                    guid="col_01hgw2bbg0000000000000001",
                     name="Test Collection",
                     type="LOCAL",
                     location=str(test_dir),
-                    bound_agent_guid="agt_test",
+                    bound_agent_guid="agt_01hgw2bbg0000000000000001",
                     is_accessible=True,
                     supports_offline=True,
                 ),
@@ -731,12 +731,12 @@ class TestTestCommand:
              patch("cli.collection._test_collection_async", new_callable=AsyncMock,
                    side_effect=AgentConnectionError("Connection refused")):
             mock_cache.load.return_value = cache
-            result = runner.invoke(collection, ["test", "col_test123"])
+            result = runner.invoke(collection, ["test", "col_01hgw2bbg0000000000000001"])
         assert result.exit_code == 2
         assert "Connection failed" in result.output
 
     def test_test_unregistered_agent(self, runner, mock_config_unregistered):
         """Unregistered agent fails for test."""
-        result = runner.invoke(collection, ["test", "col_test123"])
+        result = runner.invoke(collection, ["test", "col_01hgw2bbg0000000000000001"])
         assert result.exit_code == 1
         assert "not registered" in result.output

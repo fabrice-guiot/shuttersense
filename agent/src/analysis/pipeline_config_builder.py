@@ -7,9 +7,12 @@ pipeline JSON into the PipelineConfig dataclass used by the validator.
 Issue #108 - Remove CLI Direct Usage (Config Caching)
 """
 
+import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
+
+logger = logging.getLogger("shuttersense.agent.pipeline_config_builder")
 
 # Import from repository root
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -57,39 +60,45 @@ def build_pipeline_config(
     for node_dict in nodes_json:
         node_id = node_dict.get("id")
         node_type = node_dict.get("type", "").lower()
+        if not node_id or not node_type:
+            logger.warning("Skipping node with missing id or type: %s", node_dict)
+            continue
         properties = node_dict.get("properties", {})
         name = properties.get("name", node_dict.get("name", ""))
         output = output_map.get(node_id, [])
 
-        if node_type == "capture":
-            nodes.append(CaptureNode(id=node_id, name=name, output=output))
-        elif node_type == "file":
-            extension = properties.get("extension", "")
-            nodes.append(FileNode(id=node_id, name=name, output=output, extension=extension))
-        elif node_type == "process":
-            method_ids = properties.get("method_ids", properties.get("methodIds", []))
-            if not isinstance(method_ids, list):
-                method_ids = [method_ids] if method_ids else []
-            nodes.append(ProcessNode(id=node_id, name=name, output=output, method_ids=method_ids))
-        elif node_type == "pairing":
-            pairing_type = properties.get("pairing_type", properties.get("pairingType", ""))
-            input_count = properties.get("input_count", properties.get("inputCount", 2))
-            nodes.append(PairingNode(
-                id=node_id, name=name, output=output,
-                pairing_type=pairing_type, input_count=input_count
-            ))
-        elif node_type == "branching":
-            condition = properties.get("condition_description", properties.get("conditionDescription", ""))
-            nodes.append(BranchingNode(
-                id=node_id, name=name, output=output,
-                condition_description=condition
-            ))
-        elif node_type == "termination":
-            term_type = properties.get("termination_type", properties.get("terminationType", ""))
-            nodes.append(TerminationNode(
-                id=node_id, name=name, output=output,
-                termination_type=term_type
-            ))
+        match node_type:
+            case "capture":
+                nodes.append(CaptureNode(id=node_id, name=name, output=output))
+            case "file":
+                extension = properties.get("extension", "")
+                nodes.append(FileNode(id=node_id, name=name, output=output, extension=extension))
+            case "process":
+                method_ids = properties.get("method_ids", properties.get("methodIds", []))
+                if not isinstance(method_ids, list):
+                    method_ids = [method_ids] if method_ids else []
+                nodes.append(ProcessNode(id=node_id, name=name, output=output, method_ids=method_ids))
+            case "pairing":
+                pairing_type = properties.get("pairing_type", properties.get("pairingType", ""))
+                input_count = properties.get("input_count", properties.get("inputCount", 2))
+                nodes.append(PairingNode(
+                    id=node_id, name=name, output=output,
+                    pairing_type=pairing_type, input_count=input_count
+                ))
+            case "branching":
+                condition = properties.get("condition_description", properties.get("conditionDescription", ""))
+                nodes.append(BranchingNode(
+                    id=node_id, name=name, output=output,
+                    condition_description=condition
+                ))
+            case "termination":
+                term_type = properties.get("termination_type", properties.get("terminationType", ""))
+                nodes.append(TerminationNode(
+                    id=node_id, name=name, output=output,
+                    termination_type=term_type
+                ))
+            case _:
+                logger.warning("Unsupported node type '%s' for node '%s', skipping", node_type, node_id)
 
     # Create PipelineConfig and categorize nodes
     pipeline_config = PipelineConfig(nodes=nodes)

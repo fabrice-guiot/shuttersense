@@ -180,7 +180,7 @@ To create a new release:
 shuttersense-agent test /path/to/photos
 
 # Register a collection
-shuttersense-agent collection create "My Photos" /path/to/photos
+shuttersense-agent collection create /path/to/photos --name "My Photos"
 
 # Run analysis (online - uploads results to server)
 shuttersense-agent run col_GUID --tool photostats

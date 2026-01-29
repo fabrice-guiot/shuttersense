@@ -171,7 +171,7 @@ def _check_registration(config: AgentConfig) -> list[CheckResult]:
 
     # Validate API key by sending heartbeat
     try:
-        response = asyncio.run(_heartbeat_check(config))
+        asyncio.run(_heartbeat_check(config))
         results.append(CheckResult("Status", "OK", "ONLINE"))
     except AuthenticationError:
         results.append(CheckResult(

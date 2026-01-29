@@ -1716,14 +1716,17 @@ async def get_collection_debug_info(
     from backend.src.models.inventory_folder import InventoryFolder
 
     # Find collection by GUID within agent's team
-    collection = None
-    collections = db.query(Collection).filter(
+    try:
+        collection_uuid = Collection.parse_guid(guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {guid}"
+        )
+    collection = db.query(Collection).filter(
         Collection.team_id == agent_ctx.agent.team_id,
-    ).all()
-    for col in collections:
-        if col.guid == guid:
-            collection = col
-            break
+        Collection.uuid == collection_uuid,
+    ).first()
 
     if collection is None:
         raise HTTPException(
@@ -2026,7 +2029,7 @@ async def report_inventory_validation(
     message = "Inventory configuration validated successfully" if data.success else f"Validation failed: {data.error_message}"
 
     logger.info(
-        f"Inventory validation completed",
+        "Inventory validation completed",
         extra={
             "job_guid": job_guid,
             "connector_guid": connector.guid if connector else connector_guid,
@@ -2166,7 +2169,7 @@ async def report_inventory_folders(
     # by the standard completion flow.
 
     logger.info(
-        f"Inventory import completed",
+        "Inventory import completed",
         extra={
             "job_guid": job_guid,
             "connector_guid": data.connector_guid,
@@ -2827,10 +2830,9 @@ async def agent_list_collections(
     db: Session = Depends(get_db),
 ):
     """
-    List all Collections bound to this agent.
+    List all Collections directly bound to this agent.
 
-    Returns LOCAL collections bound to this agent, plus remote collections
-    accessible via the agent's connectors.
+    Returns collections where bound_agent_id matches this agent.
     """
     from backend.src.models.collection import Collection, CollectionType
 
@@ -2915,17 +2917,18 @@ async def agent_test_collection(
     ).first()
 
     # Find collection by GUID within agent's scope
-    # Need to match on the guid property which is derived from uuid
-    all_agent_collections = db.query(Collection).filter(
+    try:
+        collection_uuid = Collection.parse_guid(guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {guid}"
+        )
+    collection = db.query(Collection).filter(
         Collection.team_id == ctx.team_id,
         Collection.bound_agent_id == ctx.agent_id,
-    ).all()
-
-    collection = None
-    for col in all_agent_collections:
-        if col.guid == guid:
-            collection = col
-            break
+        Collection.uuid == collection_uuid,
+    ).first()
 
     if not collection:
         raise HTTPException(
@@ -2987,14 +2990,17 @@ async def agent_prepare_result_upload(
     from backend.src.models.job import Job, JobStatus as PersistentJobStatus
 
     # Validate collection_guid belongs to this agent's team
-    collection = None
-    collections = db.query(Collection).filter(
+    try:
+        collection_uuid = Collection.parse_guid(data.collection_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {data.collection_guid}"
+        )
+    collection = db.query(Collection).filter(
         Collection.team_id == ctx.team_id,
-    ).all()
-    for col in collections:
-        if col.guid == data.collection_guid:
-            collection = col
-            break
+        Collection.uuid == collection_uuid,
+    ).first()
 
     if collection is None:
         raise HTTPException(
@@ -3082,14 +3088,17 @@ async def agent_upload_result(
     from backend.src.models.analysis_result import AnalysisResult as AnalysisResultModel
 
     # Validate collection_guid belongs to this agent's team
-    collection = None
-    collections = db.query(Collection).filter(
+    try:
+        collection_uuid = Collection.parse_guid(data.collection_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {data.collection_guid}"
+        )
+    collection = db.query(Collection).filter(
         Collection.team_id == ctx.team_id,
-    ).all()
-    for col in collections:
-        if col.guid == data.collection_guid:
-            collection = col
-            break
+        Collection.uuid == collection_uuid,
+    ).first()
 
     if collection is None:
         raise HTTPException(
@@ -3187,7 +3196,6 @@ async def agent_upload_result(
             executed_at=data.executed_at,
             analysis_data=analysis_data,
             html_report=html_report,
-            result_id=data.result_id,
             input_state_hash=data.input_state_hash,
         )
 
@@ -3249,14 +3257,17 @@ async def agent_record_no_change_result(
     from backend.src.models.collection import Collection
 
     # Validate collection_guid belongs to this agent's team
-    collection = None
-    collections = db.query(Collection).filter(
+    try:
+        collection_uuid = Collection.parse_guid(data.collection_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {data.collection_guid}"
+        )
+    collection = db.query(Collection).filter(
         Collection.team_id == ctx.team_id,
-    ).all()
-    for col in collections:
-        if col.guid == data.collection_guid:
-            collection = col
-            break
+        Collection.uuid == collection_uuid,
+    ).first()
 
     if collection is None:
         raise HTTPException(
@@ -3316,7 +3327,7 @@ async def agent_record_no_change_result(
 
 
 @router.get(
-    "/collections/{collection_guid}/previous-result",
+    "/collections/{guid}/previous-result",
     response_model=PreviousResultData,
     summary="Get previous result for no-change comparison",
     description="Returns the most recent COMPLETED or NO_CHANGE AnalysisResult "
@@ -3324,7 +3335,7 @@ async def agent_record_no_change_result(
                 "when a collection has not changed since the last analysis.",
 )
 async def get_previous_result_for_collection(
-    collection_guid: str,
+    guid: str,
     tool: str = Query(..., description="Tool name (photostats, photo_pairing, pipeline_validation)"),
     ctx: AgentContext = Depends(get_agent_context),
     db: Session = Depends(get_db),
@@ -3335,19 +3346,22 @@ async def get_previous_result_for_collection(
     from backend.src.models.analysis_result import ResultStatus
 
     # Find collection by GUID within agent's team
-    collection = None
-    collections = db.query(Collection).filter(
+    try:
+        collection_uuid = Collection.parse_guid(guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid collection GUID: {guid}"
+        )
+    collection = db.query(Collection).filter(
         Collection.team_id == ctx.team_id,
-    ).all()
-    for col in collections:
-        if col.guid == collection_guid:
-            collection = col
-            break
+        Collection.uuid == collection_uuid,
+    ).first()
 
     if collection is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Collection {collection_guid} not found",
+            detail=f"Collection {guid} not found",
         )
 
     # Query most recent COMPLETED or NO_CHANGE result for this collection+tool
@@ -3369,7 +3383,7 @@ async def get_previous_result_for_collection(
     if previous is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No previous result found for {tool} on {collection_guid}",
+            detail=f"No previous result found for {tool} on {guid}",
         )
 
     return PreviousResultData(

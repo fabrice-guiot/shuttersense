@@ -58,7 +58,7 @@ def upload_response():
     return {
         "job_guid": "job_01hgw2bbg0000000000000001",
         "result_guid": "res_01hgw2bbg0000000000000001",
-        "collection_guid": "col_test",
+        "collection_guid": "col_01hgw2bbg0000000000000001",
         "status": "uploaded",
     }
 
@@ -66,7 +66,7 @@ def upload_response():
 @pytest.fixture
 def prepare_response():
     """Standard prepare response."""
-    return {"job_guid": "job_placeholder_001"}
+    return {"job_guid": "job_01hgw2bbg0000000000000001"}
 
 
 def _make_api_client():
@@ -95,8 +95,8 @@ class TestInlineUpload:
         client_instance.post.return_value = mock_response
 
         result = asyncio.run(api.upload_result(
-            result_id="uuid-001",
-            collection_guid="col_test",
+            result_id="res_01hgw2bbg0000000000000001",
+            collection_guid="col_01hgw2bbg0000000000000001",
             tool="photostats",
             executed_at="2026-01-28T10:00:00Z",
             analysis_data=small_analysis_data,
@@ -120,8 +120,8 @@ class TestInlineUpload:
         client_instance.post.return_value = mock_response
 
         asyncio.run(api.upload_result(
-            result_id="uuid-001",
-            collection_guid="col_test",
+            result_id="res_01hgw2bbg0000000000000001",
+            collection_guid="col_01hgw2bbg0000000000000001",
             tool="photostats",
             executed_at="2026-01-28T10:00:00Z",
             analysis_data=small_analysis_data,
@@ -168,8 +168,8 @@ class TestChunkedUpload:
             client_instance.post.side_effect = [mock_prepare_resp, mock_upload_resp]
 
             result = asyncio.run(api.upload_result(
-                result_id="uuid-001",
-                collection_guid="col_test",
+                result_id="res_01hgw2bbg0000000000000001",
+                collection_guid="col_01hgw2bbg0000000000000001",
                 tool="photostats",
                 executed_at="2026-01-28T10:00:00Z",
                 analysis_data=large_analysis_data,
@@ -215,8 +215,8 @@ class TestChunkedUpload:
             client_instance.post.side_effect = [mock_prepare_resp, mock_upload_resp]
 
             result = asyncio.run(api.upload_result(
-                result_id="uuid-001",
-                collection_guid="col_test",
+                result_id="res_01hgw2bbg0000000000000001",
+                collection_guid="col_01hgw2bbg0000000000000001",
                 tool="photostats",
                 executed_at="2026-01-28T10:00:00Z",
                 analysis_data=small_analysis_data,
@@ -272,8 +272,8 @@ class TestChunkedUpload:
             client_instance.post.side_effect = [mock_prepare_resp, mock_upload_resp]
 
             result = asyncio.run(api.upload_result(
-                result_id="uuid-001",
-                collection_guid="col_test",
+                result_id="res_01hgw2bbg0000000000000001",
+                collection_guid="col_01hgw2bbg0000000000000001",
                 tool="photostats",
                 executed_at="2026-01-28T10:00:00Z",
                 analysis_data=large_analysis_data,
@@ -323,8 +323,8 @@ class TestChunkedUploadErrors:
 
             with pytest.raises(ApiError) as exc_info:
                 asyncio.run(api.upload_result(
-                    result_id="uuid-001",
-                    collection_guid="col_test",
+                    result_id="res_01hgw2bbg0000000000000001",
+                    collection_guid="col_01hgw2bbg0000000000000001",
                     tool="photostats",
                     executed_at="2026-01-28T10:00:00Z",
                     analysis_data=large_analysis_data,
@@ -354,8 +354,8 @@ class TestChunkedUploadErrors:
 
             with pytest.raises(ApiError) as exc_info:
                 asyncio.run(api.upload_result(
-                    result_id="uuid-001",
-                    collection_guid="col_test",
+                    result_id="res_01hgw2bbg0000000000000001",
+                    collection_guid="col_01hgw2bbg0000000000000001",
                     tool="photostats",
                     executed_at="2026-01-28T10:00:00Z",
                     analysis_data=small_analysis_data,
@@ -375,8 +375,8 @@ class TestChunkedUploadErrors:
 
         with pytest.raises(ApiError) as exc_info:
             asyncio.run(api.upload_result(
-                result_id="uuid-001",
-                collection_guid="col_test",
+                result_id="res_01hgw2bbg0000000000000001",
+                collection_guid="col_01hgw2bbg0000000000000001",
                 tool="photostats",
                 executed_at="2026-01-28T10:00:00Z",
                 analysis_data=large_analysis_data,
