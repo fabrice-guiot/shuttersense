@@ -387,7 +387,7 @@ class TestExecutionErrors:
             mock_cache.load.return_value = local_collection_cache
             result = runner.invoke(run, ["col_local123", "--tool", "photostats"])
         assert result.exit_code == 1
-        assert "Path not accessible" in result.output
+        assert "Path does not exist" in result.output
 
     def test_analysis_failure(
         self, runner, mock_config, local_collection_cache,
