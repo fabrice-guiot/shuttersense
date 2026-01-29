@@ -2896,12 +2896,14 @@ async def report_inventory_delta(
 # ============================================================================
 
 
-def _get_collection_service(db: Session = Depends(get_db)):
+def _get_collection_service(
+    db: Session = Depends(get_db),
+    connector_service: ConnectorService = Depends(get_connector_service),
+):
     """Dependency to get CollectionService for agent routes."""
     from backend.src.services.collection_service import CollectionService
     from backend.src.utils.cache import FileListingCache
     file_cache = FileListingCache()
-    connector_service = ConnectorService(db)
     return CollectionService(db=db, file_cache=file_cache, connector_service=connector_service)
 
 
@@ -2918,6 +2920,7 @@ async def agent_create_collection(
     ctx: AgentContext = Depends(get_agent_context),
     service: AgentService = Depends(get_agent_service),
     db: Session = Depends(get_db),
+    connector_svc: ConnectorService = Depends(get_connector_service),
 ):
     """
     Create a LOCAL collection from the agent.
@@ -2929,7 +2932,6 @@ async def agent_create_collection(
     from backend.src.utils.cache import FileListingCache
 
     file_cache = FileListingCache()
-    connector_svc = ConnectorService(db)
     collection_service = CollectionService(
         db=db, file_cache=file_cache, connector_service=connector_svc
     )
