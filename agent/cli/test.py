@@ -385,8 +385,16 @@ def _print_summary(
     else:
         click.echo("  Issues: None")
 
-    ready = total_issues == 0 and not any(
+    has_errors = any(
         isinstance(v, dict) and "error" in v for v in issues_found.values()
     )
-    ready_text = click.style("Yes", fg="green") if ready else click.style("No", fg="yellow")
+    if has_errors:
+        ready_text = click.style("No", fg="red") + " (tool errors must be resolved first)"
+    elif total_issues > 0:
+        ready_text = (
+            click.style("Yes", fg="green")
+            + ", but consider resolving the issues first"
+        )
+    else:
+        ready_text = click.style("Yes", fg="green")
     click.echo(f"  Ready to create Collection: {ready_text}")
