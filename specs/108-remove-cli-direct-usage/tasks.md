@@ -178,11 +178,11 @@
 
 **Purpose**: Integration tests, documentation consistency, and final validation.
 
-- [ ] T056 [P] Write integration test for test-then-create workflow (test path → create collection → verify on server) in agent/tests/integration/test_test_create_flow.py
-- [ ] T057 [P] Write integration test for offline-sync workflow (sync cache → run offline → sync results → verify on server) in agent/tests/integration/test_offline_sync_flow.py
-- [ ] T058 Run all agent tests (pytest agent/tests/) to verify no regressions across all new and existing tests
-- [ ] T059 Run all backend tests (pytest backend/tests/) to verify no regressions with new agent endpoints
-- [ ] T060 Run quickstart.md validation: execute each verification command from quickstart.md and confirm expected output
+- [x] T056 [P] Write integration test for test-then-create workflow (test path → create collection → verify on server) in agent/tests/integration/test_test_create_flow.py
+- [x] T057 [P] Write integration test for offline-sync workflow (sync cache → run offline → sync results → verify on server) in agent/tests/integration/test_offline_sync_flow.py
+- [x] T058 Run all agent tests (pytest agent/tests/) to verify no regressions across all new and existing tests
+- [x] T059 Run all backend tests (pytest backend/tests/) to verify no regressions with new agent endpoints
+- [x] T060 Run quickstart.md validation: execute each verification command from quickstart.md and confirm expected output
 
 ---
 
