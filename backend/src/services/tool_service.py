@@ -271,6 +271,19 @@ def agent_upload_offline_result(
     # Link job to result
     job.result_id = result.id
 
+    # Update collection statistics from results
+    # (mirrors JobCoordinatorService._update_collection_stats_from_results)
+    if collection and tool in ("photostats", "photo_pairing"):
+        if tool == "photostats":
+            if "total_files" in analysis_data:
+                collection.file_count = analysis_data["total_files"]
+            if "total_size" in analysis_data:
+                collection.storage_bytes = analysis_data["total_size"]
+        elif tool == "photo_pairing":
+            if "image_count" in analysis_data:
+                collection.image_count = analysis_data["image_count"]
+        collection.last_refresh_at = now
+
     # Cancel existing scheduled jobs and schedule next run.
     # An offline upload is a force-run: it supersedes any scheduled job
     # for the same collection/tool, then schedules the next one per TTL.
