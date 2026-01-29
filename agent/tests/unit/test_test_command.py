@@ -9,6 +9,7 @@ Task: T012
 """
 
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +19,8 @@ from click.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cli.test import test
+from src.cache import TeamConfigCache
+from src.config_resolver import ConfigResult
 from src.remote.base import FileInfo
 
 
@@ -69,6 +72,34 @@ def mock_config():
         config.agent_guid = "agt_test"
         mock_cls.return_value = config
         yield config
+
+
+def _make_team_config():
+    """Create a minimal TeamConfigCache for tests."""
+    now = datetime.now(timezone.utc)
+    return TeamConfigCache(
+        agent_guid="agt_test",
+        fetched_at=now,
+        expires_at=now + timedelta(hours=24),
+        photo_extensions=[".dng", ".cr3"],
+        metadata_extensions=[".xmp"],
+        require_sidecar=[".cr3"],
+        cameras={},
+        processing_methods={},
+        default_pipeline=None,
+    )
+
+
+@pytest.fixture(autouse=True)
+def mock_team_config():
+    """Mock resolve_team_config so tests don't need a server or cache file."""
+    with patch("cli.test.resolve_team_config") as mock_resolve:
+        mock_resolve.return_value = ConfigResult(
+            config=_make_team_config(),
+            source="cache",
+            message="from cache (test)",
+        )
+        yield mock_resolve
 
 
 # ============================================================================

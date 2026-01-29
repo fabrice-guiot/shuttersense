@@ -23,7 +23,9 @@ from src.cache import (
     COLLECTION_CACHE_TTL_DAYS,
     CachedCollection,
     CollectionCache,
+    TeamConfigCache,
 )
+from src.config_resolver import ConfigResult
 
 
 # ============================================================================
@@ -116,6 +118,34 @@ def mock_upload_success():
 
 
 FAKE_INPUT_STATE_HASH = "a" * 64
+
+
+def _make_team_config():
+    """Create a minimal TeamConfigCache for tests."""
+    now = datetime.now(timezone.utc)
+    return TeamConfigCache(
+        agent_guid="agt_test",
+        fetched_at=now,
+        expires_at=now + timedelta(hours=24),
+        photo_extensions=[".dng", ".cr3"],
+        metadata_extensions=[".xmp"],
+        require_sidecar=[".cr3"],
+        cameras={},
+        processing_methods={},
+        default_pipeline=None,
+    )
+
+
+@pytest.fixture(autouse=True)
+def mock_team_config():
+    """Mock resolve_team_config so tests don't need a server or cache file."""
+    with patch("cli.run.resolve_team_config") as mock_resolve:
+        mock_resolve.return_value = ConfigResult(
+            config=_make_team_config(),
+            source="cache",
+            message="from cache (test)",
+        )
+        yield mock_resolve
 
 
 @pytest.fixture

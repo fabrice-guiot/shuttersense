@@ -26,7 +26,9 @@ from src.cache import (
     CachedCollection,
     CollectionCache,
     OfflineResult,
+    TeamConfigCache,
 )
+from src.config_resolver import ConfigResult
 
 
 # ============================================================================
@@ -35,6 +37,31 @@ from src.cache import (
 
 
 FAKE_INPUT_STATE_HASH = "a" * 64
+
+
+def _make_team_config():
+    """Create a minimal TeamConfigCache for tests."""
+    now = datetime.now(timezone.utc)
+    return TeamConfigCache(
+        agent_guid="agt_test",
+        fetched_at=now,
+        expires_at=now + timedelta(hours=24),
+        photo_extensions=[".dng", ".cr3"],
+        metadata_extensions=[".xmp"],
+        require_sidecar=[".cr3"],
+        cameras={},
+        processing_methods={},
+        default_pipeline=None,
+    )
+
+
+def _mock_team_config_result():
+    """Return a ConfigResult with a valid team config."""
+    return ConfigResult(
+        config=_make_team_config(),
+        source="cache",
+        message="from cache (test)",
+    )
 
 
 @pytest.fixture
@@ -113,6 +140,7 @@ class TestOfflineSyncFlow:
         # Step 1: Run offline
         with patch("cli.run.AgentConfig") as mock_cfg_cls, \
              patch("cli.run.col_cache") as mock_cache, \
+             patch("cli.run.resolve_team_config", return_value=_mock_team_config_result()), \
              patch("cli.run._prepare_analysis", return_value=([], FAKE_INPUT_STATE_HASH)), \
              patch("cli.run._execute_tool", return_value=({"total_files": 10, "results": {}}, None)), \
              patch("cli.run.result_store") as mock_store:
