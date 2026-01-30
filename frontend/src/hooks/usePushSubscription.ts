@@ -123,9 +123,10 @@ export const usePushSubscription = (
 
   const isIosNotInstalled = isIos() && !isStandalone()
 
-  // Track if component is still mounted
+  // Track if component is still mounted (must set true on mount for StrictMode remount)
   const mountedRef = useRef(true)
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
     }

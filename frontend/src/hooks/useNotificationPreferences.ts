@@ -48,9 +48,10 @@ export const useNotificationPreferences = (
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Track if component is still mounted
+  // Track if component is still mounted (must set true on mount for StrictMode remount)
   const mountedRef = useRef(true)
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
     }
