@@ -63,6 +63,7 @@ export interface NotificationPreferencesResponse {
   retry_warning: boolean
   deadline_days_before: number
   timezone: string
+  retention_days: number
 }
 
 /**
@@ -77,6 +78,7 @@ export interface NotificationPreferencesUpdateRequest {
   retry_warning?: boolean
   deadline_days_before?: number
   timezone?: string
+  retention_days?: number
 }
 
 // ============================================================================

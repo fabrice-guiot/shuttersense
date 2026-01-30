@@ -59,6 +59,7 @@ const CATEGORY_TOGGLES: {
 ]
 
 const DEADLINE_DAYS_OPTIONS = [1, 2, 3, 5, 7, 14, 30]
+const RETENTION_DAYS_OPTIONS = [7, 14, 30, 60, 90, 180, 365]
 
 // ============================================================================
 // Sub-components
@@ -180,6 +181,16 @@ export function NotificationPreferences() {
   const handleTimezoneChange = useCallback(
     async (value: string) => {
       await updatePreferences({ timezone: value })
+    },
+    [updatePreferences]
+  )
+
+  /**
+   * Handle retention days change
+   */
+  const handleRetentionDaysChange = useCallback(
+    async (value: string) => {
+      await updatePreferences({ retention_days: parseInt(value, 10) })
     },
     [updatePreferences]
   )
@@ -345,6 +356,40 @@ export function NotificationPreferences() {
                     </div>
                   </div>
                 )}
+
+                {/* History retention */}
+                <div className="border-t pt-4 space-y-4">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    History retention
+                  </p>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="retention-days" className="text-sm">
+                        Keep read notifications for
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Read notifications older than this are automatically
+                        removed
+                      </p>
+                    </div>
+                    <Select
+                      value={String(preferences.retention_days)}
+                      onValueChange={handleRetentionDaysChange}
+                      disabled={loading}
+                    >
+                      <SelectTrigger id="retention-days" className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RETENTION_DAYS_OPTIONS.map((d) => (
+                          <SelectItem key={d} value={String(d)}>
+                            {d} {d === 1 ? 'day' : 'days'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
                 {/* Device list — when subscriptions exist */}
                 {subscriptions.length > 0 && (

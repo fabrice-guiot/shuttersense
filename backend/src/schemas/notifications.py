@@ -109,6 +109,7 @@ class NotificationPreferencesResponse(BaseModel):
     retry_warning: bool = False
     deadline_days_before: int = Field(3, ge=1, le=30)
     timezone: str = Field("UTC", description="IANA timezone identifier")
+    retention_days: int = Field(30, ge=7, le=365, description="Days to keep read notifications")
 
 
 class NotificationPreferencesUpdate(BaseModel):
@@ -129,6 +130,7 @@ class NotificationPreferencesUpdate(BaseModel):
         default=None,
         description="IANA timezone identifier (e.g., 'America/New_York')"
     )
+    retention_days: Optional[int] = Field(default=None, ge=7, le=365, description="Days to keep read notifications")
 
 
 # ============================================================================

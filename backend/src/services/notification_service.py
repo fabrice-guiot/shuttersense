@@ -39,6 +39,7 @@ DEFAULT_PREFERENCES = {
     "retry_warning": False,
     "deadline_days_before": 3,
     "timezone": "UTC",
+    "retention_days": 30,
 }
 
 # Categories that map to preference keys
@@ -191,6 +192,9 @@ class NotificationService:
         Returns:
             Tuple of (notifications list, total count)
         """
+        # Opportunistic cleanup of expired read notifications
+        self.cleanup_read_notifications(user_id, team_id)
+
         query = self.db.query(Notification).filter(
             Notification.user_id == user_id,
             Notification.team_id == team_id,
@@ -351,6 +355,53 @@ class NotificationService:
 
         if count > 0:
             logger.info(f"Deleted {count} old notifications (>{days} days)")
+
+        return count
+
+    def cleanup_read_notifications(self, user_id: int, team_id: int) -> int:
+        """
+        Purge read notifications that exceed the user's retention_days preference.
+
+        Only deletes notifications where read_at is not NULL and
+        read_at is older than the user's configured retention period.
+        Unread notifications are never purged.
+
+        Args:
+            user_id: User's internal ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Number of read notifications deleted
+        """
+        # Resolve user to read retention_days preference
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return 0
+
+        prefs = self.get_user_preferences(user)
+        retention_days = prefs.get("retention_days", 30)
+
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        count = (
+            self.db.query(Notification)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.team_id == team_id,
+                Notification.read_at.isnot(None),
+                Notification.read_at < cutoff,
+            )
+            .delete(synchronize_session=False)
+        )
+        self.db.commit()
+
+        if count > 0:
+            logger.info(
+                f"Cleaned up {count} expired read notifications",
+                extra={
+                    "user_id": user_id,
+                    "retention_days": retention_days,
+                },
+            )
 
         return count
 

@@ -149,8 +149,8 @@
 
 ### Implementation for User Story 5
 
-- [ ] T031 [US5] Add default preference initialization logic in `backend/src/services/notification_service.py`: when user first enables notifications (enabled goes from false→true), populate all default values per data-model.md (all categories true except retry_warning false, deadline_days_before=3, timezone from request or fallback to "UTC")
-- [ ] T032 [US5] Add preference validation in PUT /preferences endpoint in `backend/src/api/notifications.py`: validate deadline_days_before range (1-30), validate timezone is a valid IANA timezone identifier (use `zoneinfo.available_timezones()` from Python 3.9+ stdlib), ensure partial updates merge with existing preferences (not replace), return updated preferences
+- [x] T031 [US5] Add default preference initialization logic in `backend/src/services/notification_service.py`: when user first enables notifications (enabled goes from false→true), populate all default values per data-model.md (all categories true except retry_warning false, deadline_days_before=3, timezone from request or fallback to "UTC")
+- [x] T032 [US5] Add preference validation in PUT /preferences endpoint in `backend/src/api/notifications.py`: validate deadline_days_before range (1-30), validate timezone is a valid IANA timezone identifier (use `zoneinfo.available_timezones()` from Python 3.9+ stdlib), ensure partial updates merge with existing preferences (not replace), return updated preferences
 
 **Checkpoint**: Notification preferences fully functional with defaults, validation, and cross-device sync.
 
