@@ -66,7 +66,7 @@ npm run dev
 
 ### 5. Test PWA Installation
 
-1. Open `https://localhost:3000` in Chrome (HTTPS required for service workers in production; localhost is exempt in dev)
+1. Open `http://localhost:3000` in Chrome (localhost is exempt from HTTPS in dev; HTTPS is only available if the Vite dev server is explicitly configured with the `https` option)
 2. Open DevTools → Application → Service Workers → verify registered
 3. Open DevTools → Application → Manifest → verify manifest loads
 4. Look for the install indicator in the browser URL bar
@@ -93,7 +93,7 @@ npm run dev
 ### Backend
 
 | File | Purpose |
-|------|---------|
+| ---- | ------- |
 | `backend/src/models/push_subscription.py` | PushSubscription ORM model |
 | `backend/src/models/notification.py` | Notification ORM model |
 | `backend/src/schemas/notifications.py` | Pydantic request/response schemas |
@@ -105,7 +105,7 @@ npm run dev
 ### Frontend
 
 | File | Purpose |
-|------|---------|
+| ---- | ------- |
 | `frontend/src/custom-sw.ts` | Custom service worker additions (push handler, click handler) |
 | `frontend/src/hooks/useNotifications.ts` | Notification history, unread count, mark-as-read |
 | `frontend/src/hooks/useNotificationPreferences.ts` | Preferences CRUD hook |
@@ -117,7 +117,7 @@ npm run dev
 ### Modified Files
 
 | File | Change |
-|------|--------|
+| ---- | ------ |
 | `frontend/vite.config.ts` | Add `vite-plugin-pwa` configuration |
 | `frontend/index.html` | Add PWA meta tags (theme-color, apple-mobile-web-app-capable) |
 | `frontend/src/components/layout/TopHeader.tsx` | Replace static bell badge with dynamic unread count + panel |
@@ -158,7 +158,7 @@ npx vitest run src/components/profile/NotificationPreferences.test.tsx
 ## Environment Variables Reference
 
 | Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
+| -------- | -------- | ------- | ----------- |
 | `VAPID_PUBLIC_KEY` | Yes | — | Web Push VAPID public key (Base64url) |
 | `VAPID_PRIVATE_KEY` | Yes | — | Web Push VAPID private key (Base64url) |
 | `VAPID_SUBJECT` | Yes | — | VAPID subject (mailto: or https: URL) |
