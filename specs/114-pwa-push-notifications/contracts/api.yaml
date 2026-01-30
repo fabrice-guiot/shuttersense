@@ -4,6 +4,14 @@ info:
   description: Push notification subscription, preferences, and history endpoints for the PWA push notifications feature.
   version: 1.0.0
 
+servers:
+  - url: https://{host}
+    description: Production server (HTTPS required for session cookies and service workers)
+    variables:
+      host:
+        default: api.shuttersense.ai
+        description: API host
+
 paths:
   /api/notifications/subscribe:
     post:
