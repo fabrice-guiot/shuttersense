@@ -136,19 +136,19 @@ function QueueOverviewCard({
       icon: CalendarClock,
       label: 'Scheduled',
       value: queueStatus.scheduled_count,
-      color: 'text-blue-500',
+      color: 'text-info',
     },
     {
       icon: Activity,
       label: 'Running',
       value: queueStatus.running_count,
-      color: 'text-green-500',
+      color: 'text-success',
     },
     {
       icon: Clock,
       label: 'Queued',
       value: queueStatus.queued_count,
-      color: 'text-amber-500',
+      color: 'text-warning',
     },
     {
       icon: CheckCircle,
@@ -160,7 +160,7 @@ function QueueOverviewCard({
       icon: XCircle,
       label: 'Failed',
       value: queueStatus.failed_count,
-      color: queueStatus.failed_count > 0 ? 'text-red-500' : 'text-muted-foreground',
+      color: queueStatus.failed_count > 0 ? 'text-destructive' : 'text-muted-foreground',
     },
   ]
 
