@@ -17,14 +17,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { useCategories, useCategoryStats } from '@/hooks/useCategories'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
@@ -117,62 +110,75 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
     )
   }
 
+  const categoryColumns: ColumnDef<Category>[] = [
+    {
+      header: '',
+      headerClassName: 'w-12',
+      cell: (category) => <CategoryIcon icon={category.icon} color={category.color} size="sm" />,
+      cardRole: 'badge',
+    },
+    {
+      header: 'Name',
+      cell: (category) => category.name,
+      cellClassName: 'font-medium',
+      cardRole: 'title',
+    },
+    {
+      header: 'Icon',
+      cell: (category) => category.icon || '-',
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'detail',
+    },
+    {
+      header: 'Status',
+      cell: (category) => (
+        <Badge variant={category.is_active ? 'default' : 'secondary'}>
+          {category.is_active ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Created',
+      cell: (category) => formatRelativeTime(category.created_at),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (category) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(category)}
+            title="Edit category"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleDeleteClick(category)}
+            title="Delete category"
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-12"></TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Icon</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {categories.map((category) => (
-            <TableRow key={category.guid}>
-              <TableCell>
-                <CategoryIcon icon={category.icon} color={category.color} size="sm" />
-              </TableCell>
-              <TableCell className="font-medium">{category.name}</TableCell>
-              <TableCell className="text-muted-foreground">
-                {category.icon || '-'}
-              </TableCell>
-              <TableCell>
-                <Badge variant={category.is_active ? 'default' : 'secondary'}>
-                  {category.is_active ? 'Active' : 'Inactive'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatRelativeTime(category.created_at)}
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(category)}
-                    title="Edit category"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteClick(category)}
-                    title="Delete category"
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <ResponsiveTable
+        data={categories}
+        columns={categoryColumns}
+        keyField="guid"
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog

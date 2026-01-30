@@ -89,7 +89,7 @@ function MainLayoutInner({
       />
 
       {/* Main Content Area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-w-0">
         {/* TopHeader: Page title, stats, notifications, user profile */}
         <TopHeader
           pageTitle={pageTitle}

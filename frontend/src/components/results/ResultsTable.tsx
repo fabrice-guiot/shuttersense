@@ -14,14 +14,7 @@ import {
   ChevronRight,
   Copy
 } from 'lucide-react'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -157,6 +150,146 @@ export function ResultsTable({
   }
 
 
+  const resultColumns: ColumnDef<AnalysisResultSummary>[] = [
+    {
+      header: 'Collection',
+      cell: (result) => result.collection_name ?? (
+        <span className="text-muted-foreground text-sm">-</span>
+      ),
+      cellClassName: 'font-medium',
+      cardRole: 'title',
+    },
+    {
+      header: 'Connector',
+      cell: (result) => result.connector_name ?? (
+        <span className="text-muted-foreground text-sm">-</span>
+      ),
+      cellClassName: 'font-medium',
+      cardRole: 'subtitle',
+    },
+    {
+      header: 'Tool',
+      cell: (result) => (
+        <Badge variant="secondary">
+          {TOOL_LABELS[result.tool]}
+        </Badge>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Pipeline',
+      cell: (result) => result.pipeline_name ? (
+        <span className="text-sm" title={`v${result.pipeline_version}`}>
+          {result.pipeline_name}
+          <span className="text-muted-foreground text-xs ml-1">
+            v{result.pipeline_version}
+          </span>
+        </span>
+      ) : (
+        <span className="text-muted-foreground text-sm">-</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Status',
+      cell: (result) => (
+        <div className="flex items-center gap-1.5">
+          <Badge variant={STATUS_CONFIG[result.status].variant}>
+            {STATUS_CONFIG[result.status].label}
+          </Badge>
+          {result.no_change_copy && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  References a previous result (storage optimized)
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Files',
+      cell: (result) => result.files_scanned ?? '-',
+      cardRole: 'detail',
+    },
+    {
+      header: 'Issues',
+      cell: (result) => result.issues_found ?? '-',
+      cardRole: 'detail',
+    },
+    {
+      header: 'Duration',
+      cell: (result) => formatDuration(result.duration_seconds),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Completed',
+      cell: (result) => formatRelativeTime(result.completed_at),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (result) => (
+        <div className="flex justify-end gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onView(result)}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>View Details</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {result.has_report && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDownloadReport(result)}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Download Report</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDeleteClick(result)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete Result</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   if (loading) {
     return (
       <div className="flex justify-center py-8">
@@ -208,141 +341,21 @@ export function ResultsTable({
       </div>
 
       {/* Table */}
-      {results.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <FileText className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-muted-foreground">No analysis results found</p>
-        </div>
-      ) : (
-        <div className="rounded-md border border-border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Collection</TableHead>
-                <TableHead>Connector</TableHead>
-                <TableHead>Tool</TableHead>
-                <TableHead>Pipeline</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Files</TableHead>
-                <TableHead>Issues</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Completed</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {results.map((result) => (
-                <TableRow key={result.guid}>
-                  <TableCell className="font-medium">
-                    {result.collection_name ?? (
-                      <span className="text-muted-foreground text-sm">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {result.connector_name ?? (
-                      <span className="text-muted-foreground text-sm">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {TOOL_LABELS[result.tool]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {result.pipeline_name ? (
-                      <span className="text-sm" title={`v${result.pipeline_version}`}>
-                        {result.pipeline_name}
-                        <span className="text-muted-foreground text-xs ml-1">
-                          v{result.pipeline_version}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant={STATUS_CONFIG[result.status].variant}>
-                        {STATUS_CONFIG[result.status].label}
-                      </Badge>
-                      {result.no_change_copy && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              References a previous result (storage optimized)
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>{result.files_scanned ?? '-'}</TableCell>
-                  <TableCell>{result.issues_found ?? '-'}</TableCell>
-                  <TableCell>{formatDuration(result.duration_seconds)}</TableCell>
-                  <TableCell>{formatRelativeTime(result.completed_at)}</TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => onView(result)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>View Details</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      {result.has_report && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => onDownloadReport(result)}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Download Report</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteClick(result)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete Result</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <ResponsiveTable
+        data={results}
+        columns={resultColumns}
+        keyField="guid"
+        emptyState={
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">No analysis results found</p>
+          </div>
+        }
+      />
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Rows per page:</span>
             <Select

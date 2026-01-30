@@ -42,14 +42,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import {
   useReleaseManifests,
@@ -264,6 +257,119 @@ export function ReleaseManifestsTab() {
     }
   }
 
+  const manifestColumns: ColumnDef<ReleaseManifest>[] = [
+    {
+      header: 'Version',
+      cell: (manifest) => (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{manifest.version}</span>
+          <GuidBadge guid={manifest.guid} />
+        </div>
+      ),
+      cardRole: 'title',
+    },
+    {
+      header: 'Platforms',
+      cell: (manifest) => (
+        <div className="flex flex-wrap gap-1">
+          {manifest.platforms.map(platform => (
+            <Badge
+              key={platform}
+              variant="outline"
+              className="text-xs"
+            >
+              {platform}
+            </Badge>
+          ))}
+        </div>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Checksum',
+      cell: (manifest) => (
+        <div className="flex items-center gap-2">
+          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+            {truncateChecksum(manifest.checksum)}
+          </code>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => handleCopyChecksum(manifest)}
+            title="Copy full checksum"
+          >
+            {copiedGuid === manifest.guid ? (
+              <Check className="h-3 w-3 text-green-600" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button>
+        </div>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Status',
+      cell: (manifest) => manifest.is_active ? (
+        <Badge variant="default" className="bg-green-600">
+          Active
+        </Badge>
+      ) : (
+        <Badge variant="secondary">Inactive</Badge>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Notes',
+      cell: (manifest) => manifest.notes || (
+        <span className="text-muted-foreground">—</span>
+      ),
+      cellClassName: 'max-w-[200px] truncate',
+      cardRole: 'detail',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (manifest) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => handleToggleActive(manifest)}
+            title={manifest.is_active ? 'Deactivate' : 'Activate'}
+          >
+            {manifest.is_active ? (
+              <PowerOff className="h-4 w-4 text-destructive" />
+            ) : (
+              <Power className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => handleOpenEditDialog(manifest)}
+            title="Edit notes"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive hover:text-destructive"
+            onClick={() => handleOpenDeleteDialog(manifest)}
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <div className="flex flex-col gap-6">
       {/* Action Row */}
@@ -282,139 +388,23 @@ export function ReleaseManifestsTab() {
       )}
 
       {/* Manifests Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Version</TableHead>
-              <TableHead>Platforms</TableHead>
-              <TableHead>Checksum</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Notes</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="text-center text-muted-foreground py-8"
-                >
-                  Loading release manifests...
-                </TableCell>
-              </TableRow>
-            ) : manifests.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="text-center text-muted-foreground py-8"
-                >
-                  <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  No release manifests found
-                </TableCell>
-              </TableRow>
-            ) : (
-              manifests.map(manifest => (
-                <TableRow key={manifest.guid}>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span className="font-medium">{manifest.version}</span>
-                      <GuidBadge guid={manifest.guid} />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {manifest.platforms.map(platform => (
-                        <Badge
-                          key={platform}
-                          variant="outline"
-                          className="text-xs"
-                        >
-                          {platform}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                        {truncateChecksum(manifest.checksum)}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => handleCopyChecksum(manifest)}
-                        title="Copy full checksum"
-                      >
-                        {copiedGuid === manifest.guid ? (
-                          <Check className="h-3 w-3 text-green-600" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {manifest.is_active ? (
-                      <Badge variant="default" className="bg-green-600">
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate">
-                    {manifest.notes || (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => handleToggleActive(manifest)}
-                        title={
-                          manifest.is_active
-                            ? 'Deactivate'
-                            : 'Activate'
-                        }
-                      >
-                        {manifest.is_active ? (
-                          <PowerOff className="h-4 w-4 text-destructive" />
-                        ) : (
-                          <Power className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => handleOpenEditDialog(manifest)}
-                        title="Edit notes"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleOpenDeleteDialog(manifest)}
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-muted-foreground">Loading release manifests...</div>
+        </div>
+      ) : (
+        <ResponsiveTable
+          data={manifests}
+          columns={manifestColumns}
+          keyField="guid"
+          emptyState={
+            <div className="text-center py-8 text-muted-foreground">
+              <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              No release manifests found
+            </div>
+          }
+        />
+      )}
 
       {/* Create Manifest Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

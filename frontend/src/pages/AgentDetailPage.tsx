@@ -30,14 +30,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
@@ -155,6 +148,63 @@ function JobStatusBadge({ status }: { status: string }) {
 }
 
 // ============================================================================
+// Job Table Columns
+// ============================================================================
+
+const jobColumns: ColumnDef<AgentJobHistoryItem>[] = [
+  {
+    header: 'Tool',
+    cell: (job) => job.tool,
+    cellClassName: 'font-medium',
+    cardRole: 'title',
+  },
+  {
+    header: 'Collection',
+    cell: (job) =>
+      job.collection_name ? (
+        <Link
+          to={`/collections/${job.collection_guid}`}
+          className="text-primary hover:underline"
+        >
+          {job.collection_name}
+        </Link>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    cardRole: 'subtitle',
+  },
+  {
+    header: 'Status',
+    cell: (job) => <JobStatusBadge status={job.status} />,
+    cardRole: 'badge',
+  },
+  {
+    header: 'Started',
+    cell: (job) =>
+      job.started_at ? (
+        <span className="text-sm text-muted-foreground">
+          {formatRelativeTime(job.started_at)}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    cardRole: 'detail',
+  },
+  {
+    header: 'Completed',
+    cell: (job) =>
+      job.completed_at ? (
+        <span className="text-sm text-muted-foreground">
+          {formatRelativeTime(job.completed_at)}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    cardRole: 'detail',
+  },
+]
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -261,14 +311,14 @@ export default function AgentDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/agents')}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4 min-w-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate('/agents')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold">{agent.name}</h1>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="text-2xl font-bold truncate">{agent.name}</h1>
               <AgentStatusBadge status={agent.status} />
               {wsConnected && (
                 <Badge variant="outline" className="text-xs">
@@ -277,14 +327,14 @@ export default function AgentDetailPage() {
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
               <GuidBadge guid={agent.guid} />
-              <span className="text-sm text-muted-foreground">•</span>
-              <span className="text-sm text-muted-foreground">{agent.hostname}</span>
+              <span className="text-sm text-muted-foreground hidden sm:inline">•</span>
+              <span className="text-sm text-muted-foreground truncate">{agent.hostname}</span>
             </div>
           </div>
         </div>
-        <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+        <Button variant="outline" className="shrink-0 self-start sm:self-auto" onClick={handleRefresh} disabled={isRefreshing}>
           {isRefreshing ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
@@ -369,7 +419,7 @@ export default function AgentDetailPage() {
             </div>
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Agent Version</dt>
-              <dd className="text-sm mt-1">{agent.version}</dd>
+              <dd className="text-sm mt-1 truncate" title={agent.version}>{agent.version}</dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Last Heartbeat</dt>
@@ -413,7 +463,7 @@ export default function AgentDetailPage() {
                 <h4 className="text-sm font-medium text-muted-foreground mb-2">Authorized Roots</h4>
                 <ul className="space-y-1">
                   {agent.authorized_roots.map((root) => (
-                    <li key={root} className="text-sm font-mono text-muted-foreground">
+                    <li key={root} className="text-sm font-mono text-muted-foreground truncate" title={root}>
                       {root}
                     </li>
                   ))}
@@ -434,11 +484,11 @@ export default function AgentDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Job:</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm text-muted-foreground shrink-0">Job:</span>
               <Link
                 to={`/jobs?guid=${agent.current_job_guid}`}
-                className="text-sm font-mono text-primary hover:underline"
+                className="text-sm font-mono text-primary hover:underline truncate"
               >
                 {agent.current_job_guid}
               </Link>
@@ -465,55 +515,22 @@ export default function AgentDetailPage() {
               <div className="h-10 w-full rounded bg-muted animate-pulse" />
               <div className="h-10 w-full rounded bg-muted animate-pulse" />
             </div>
-          ) : jobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No jobs have been executed by this agent
-            </p>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tool</TableHead>
-                    <TableHead>Collection</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Started</TableHead>
-                    <TableHead>Completed</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {jobs.map((job: AgentJobHistoryItem) => (
-                    <TableRow key={job.guid}>
-                      <TableCell className="font-medium">{job.tool}</TableCell>
-                      <TableCell>
-                        {job.collection_name ? (
-                          <Link
-                            to={`/collections/${job.collection_guid}`}
-                            className="text-primary hover:underline"
-                          >
-                            {job.collection_name}
-                          </Link>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <JobStatusBadge status={job.status} />
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {job.started_at ? formatRelativeTime(job.started_at) : '—'}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {job.completed_at ? formatRelativeTime(job.completed_at) : '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ResponsiveTable<AgentJobHistoryItem>
+                data={jobs}
+                columns={jobColumns}
+                keyField="guid"
+                emptyState={
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    No jobs have been executed by this agent
+                  </p>
+                }
+              />
 
               {/* Pagination */}
               {totalJobs > jobsLimit && (
-                <div className="flex items-center justify-between mt-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
                     Showing {jobsOffset + 1} - {Math.min(jobsOffset + jobsLimit, totalJobs)} of{' '}
                     {totalJobs}

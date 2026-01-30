@@ -17,14 +17,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { usePerformers, usePerformerStats } from '@/hooks/usePerformers'
@@ -111,96 +104,105 @@ function PerformerList({ performers, loading, onEdit, onDelete }: PerformerListP
     )
   }
 
+  const performerColumns: ColumnDef<Performer>[] = [
+    {
+      header: 'Name',
+      cell: (performer) => (
+        <div className="flex flex-col">
+          <span>{performer.name}</span>
+          {performer.additional_info && (
+            <span className="text-xs text-muted-foreground line-clamp-1">
+              {performer.additional_info}
+            </span>
+          )}
+        </div>
+      ),
+      cellClassName: 'font-medium',
+      cardRole: 'title',
+    },
+    {
+      header: 'Category',
+      cell: (performer) => <CategoryBadge category={performer.category} />,
+      cardRole: 'badge',
+    },
+    {
+      header: 'Instagram',
+      cell: (performer) => performer.instagram_handle ? (
+        <a
+          href={performer.instagram_url || '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-primary hover:underline"
+        >
+          <Instagram className="h-3 w-3" />
+          <span>@{performer.instagram_handle}</span>
+        </a>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Website',
+      cell: (performer) => performer.website ? (
+        <a
+          href={performer.website}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-primary hover:underline"
+          title={performer.website}
+        >
+          <Globe className="h-3 w-3" />
+          <span className="max-w-[120px] truncate">
+            {new URL(performer.website).hostname}
+          </span>
+        </a>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Created',
+      cell: (performer) => formatRelativeTime(performer.created_at),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (performer) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(performer)}
+            title="Edit performer"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleDeleteClick(performer)}
+            title="Delete performer"
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Instagram</TableHead>
-            <TableHead>Website</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {performers.map((performer) => (
-            <TableRow key={performer.guid}>
-              <TableCell className="font-medium">
-                <div className="flex flex-col">
-                  <span>{performer.name}</span>
-                  {performer.additional_info && (
-                    <span className="text-xs text-muted-foreground line-clamp-1">
-                      {performer.additional_info}
-                    </span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                <CategoryBadge category={performer.category} />
-              </TableCell>
-              <TableCell>
-                {performer.instagram_handle ? (
-                  <a
-                    href={performer.instagram_url || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-primary hover:underline"
-                  >
-                    <Instagram className="h-3 w-3" />
-                    <span>@{performer.instagram_handle}</span>
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-              <TableCell>
-                {performer.website ? (
-                  <a
-                    href={performer.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-primary hover:underline"
-                    title={performer.website}
-                  >
-                    <Globe className="h-3 w-3" />
-                    <span className="max-w-[120px] truncate">
-                      {new URL(performer.website).hostname}
-                    </span>
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatRelativeTime(performer.created_at)}
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(performer)}
-                    title="Edit performer"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteClick(performer)}
-                    title="Delete performer"
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <ResponsiveTable
+        data={performers}
+        columns={performerColumns}
+        keyField="guid"
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog

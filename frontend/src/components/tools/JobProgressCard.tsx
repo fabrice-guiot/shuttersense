@@ -30,6 +30,7 @@ import { useJobProgress } from '@/hooks/useTools'
 import type { Job, JobStatus, ProgressData } from '@/contracts/api/tools-api'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/utils/dateFormat'
+import { GuidBadge } from '@/components/GuidBadge'
 
 // ============================================================================
 // Types
@@ -135,7 +136,7 @@ export function JobProgressCard({
   const hasResult = currentStatus === 'completed' && job.result_guid !== null
 
   return (
-    <Card className={cn('relative', className)}>
+    <Card className={cn('relative overflow-hidden', className)}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-medium flex items-center gap-2">
@@ -215,9 +216,15 @@ export function JobProgressCard({
         )}
 
         {/* Job details */}
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-2 gap-2 text-sm min-w-0">
           <div className="text-muted-foreground">Collection:</div>
-          <div className="font-medium">{job.collection_guid || 'N/A'}</div>
+          <div className="min-w-0">
+            {job.collection_guid ? (
+              <GuidBadge guid={job.collection_guid} />
+            ) : (
+              <span className="text-muted-foreground">N/A</span>
+            )}
+          </div>
 
           {job.agent_name && (
             <>

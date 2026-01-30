@@ -10,7 +10,8 @@ import type { PipelineSummary } from '@/contracts/api/pipelines-api'
 import { PipelineCard } from './PipelineCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { Tabs, TabsTrigger } from '@/components/ui/tabs'
+import { ResponsiveTabsList, type TabOption } from '@/components/ui/responsive-tabs-list'
 
 interface PipelineListProps {
   pipelines: PipelineSummary[]
@@ -49,6 +50,14 @@ export const PipelineList: React.FC<PipelineListProps> = ({
   const [filterStatus, setFilterStatus] = React.useState<'all' | 'valid' | 'invalid' | 'active' | 'default'>(
     'all'
   )
+
+  const filterTabOptions: TabOption[] = [
+    { value: 'all', label: 'All' },
+    { value: 'default', label: 'Default' },
+    { value: 'active', label: 'Active' },
+    { value: 'valid', label: 'Valid' },
+    { value: 'invalid', label: 'Invalid' },
+  ]
 
   // Filter pipelines
   const filteredPipelines = React.useMemo(() => {
@@ -104,63 +113,19 @@ export const PipelineList: React.FC<PipelineListProps> = ({
           </div>
 
           {/* Status Filter */}
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-            <button
-              onClick={() => setFilterStatus('all')}
-              className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-colors',
-                filterStatus === 'all'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
+          <Tabs value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
+            <ResponsiveTabsList
+              tabs={filterTabOptions}
+              value={filterStatus}
+              onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}
             >
-              All
-            </button>
-            <button
-              onClick={() => setFilterStatus('default')}
-              className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-colors',
-                filterStatus === 'default'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              Default
-            </button>
-            <button
-              onClick={() => setFilterStatus('active')}
-              className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-colors',
-                filterStatus === 'active'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              Active
-            </button>
-            <button
-              onClick={() => setFilterStatus('valid')}
-              className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-colors',
-                filterStatus === 'valid'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              Valid
-            </button>
-            <button
-              onClick={() => setFilterStatus('invalid')}
-              className={cn(
-                'px-3 py-1.5 text-sm rounded-md transition-colors',
-                filterStatus === 'invalid'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              Invalid
-            </button>
-          </div>
+              {filterTabOptions.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </ResponsiveTabsList>
+          </Tabs>
         </div>
 
         {/* Action Buttons */}

@@ -1,13 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Bot, CloudCheck, Edit, Trash2, Archive } from 'lucide-react'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -167,6 +160,177 @@ export function ConnectorList({
     return type === 's3' || type === 'gcs'
   }
 
+  const connectorColumns: ColumnDef<Connector>[] = [
+    {
+      header: 'Name',
+      cell: (connector) => connector.name,
+      cellClassName: 'font-medium',
+      cardRole: 'title',
+    },
+    {
+      header: 'Type',
+      cell: (connector) => (
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">
+            {getConnectorTypeLabel(connector.type)}
+          </Badge>
+          {isBetaConnectorType(connector.type) && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              Beta
+            </span>
+          )}
+        </div>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Credentials',
+      cell: (connector) => {
+        const { label, variant } = getCredentialLocationDisplay(connector.credential_location)
+        const agentsWithCreds = connector.credential_location !== 'server'
+          ? getAgentsWithCredentials(connector.guid, agents)
+          : []
+
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant={variant}>{label}</Badge>
+            {connector.credential_location === 'agent' && agentsWithCreds.length > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground cursor-help">
+                      <Bot className="h-3 w-3" />
+                      {agentsWithCreds.length}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <div className="text-sm">
+                      <div className="font-medium mb-1">Agents with credentials:</div>
+                      <ul className="list-none space-y-0.5">
+                        {agentsWithCreds.map(agent => (
+                          <li key={agent.guid} className="flex items-center gap-1">
+                            <span className={cn(
+                              "h-2 w-2 rounded-full",
+                              agent.status === 'online' ? "bg-green-500" : "bg-gray-400"
+                            )} />
+                            {agent.name}
+                            <span className="text-muted-foreground">({agent.hostname})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {connector.credential_location === 'pending' && (
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                Needs config
+              </span>
+            )}
+          </div>
+        )
+      },
+      cardRole: 'detail',
+    },
+    {
+      header: 'Status',
+      cell: (connector) => (
+        <Badge variant={connector.is_active ? 'default' : 'outline'}>
+          {connector.is_active ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Created',
+      cell: (connector) => formatDateTime(connector.created_at),
+      cellClassName: 'text-sm text-muted-foreground',
+      cardRole: 'detail',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (connector) => (
+        <div className="flex justify-end gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onTest(connector)}
+                  disabled={connector.credential_location !== 'server'}
+                  aria-label="Test Connection"
+                >
+                  <CloudCheck className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {connector.credential_location === 'server'
+                  ? 'Test Connection'
+                  : connector.credential_location === 'pending'
+                    ? 'Cannot test: credentials not configured'
+                    : 'Cannot test from server: credentials on agent'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {supportsInventory(connector.type) && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleInventoryClick(connector)}
+                    aria-label="Inventory Configuration"
+                  >
+                    <Archive className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Bucket Inventory</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onEdit(connector)}
+                  aria-label="Edit Connector"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Edit Connector</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDeleteClick(connector)}
+                  aria-label="Delete Connector"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete Connector</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   if (loading) {
     return (
       <div className="flex justify-center py-8">
@@ -256,179 +420,16 @@ export function ConnectorList({
         </div>
 
         {/* Table */}
-        <div className="rounded-md border border-border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Credentials</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredConnectors.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No connectors match the current filters
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredConnectors.map((connector) => (
-                  <TableRow key={connector.guid}>
-                    <TableCell className="font-medium">{connector.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">
-                          {getConnectorTypeLabel(connector.type)}
-                        </Badge>
-                        {isBetaConnectorType(connector.type) && (
-                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                            Beta
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const { label, variant } = getCredentialLocationDisplay(connector.credential_location)
-                        const agentsWithCreds = connector.credential_location !== 'server'
-                          ? getAgentsWithCredentials(connector.guid, agents)
-                          : []
-
-                        return (
-                          <div className="flex items-center gap-2">
-                            <Badge variant={variant}>{label}</Badge>
-                            {connector.credential_location === 'agent' && agentsWithCreds.length > 0 && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="flex items-center gap-1 text-xs text-muted-foreground cursor-help">
-                                      <Bot className="h-3 w-3" />
-                                      {agentsWithCreds.length}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right" className="max-w-xs">
-                                    <div className="text-sm">
-                                      <div className="font-medium mb-1">Agents with credentials:</div>
-                                      <ul className="list-none space-y-0.5">
-                                        {agentsWithCreds.map(agent => (
-                                          <li key={agent.guid} className="flex items-center gap-1">
-                                            <span className={cn(
-                                              "h-2 w-2 rounded-full",
-                                              agent.status === 'online' ? "bg-green-500" : "bg-gray-400"
-                                            )} />
-                                            {agent.name}
-                                            <span className="text-muted-foreground">({agent.hostname})</span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                            {connector.credential_location === 'pending' && (
-                              <span className="text-xs text-amber-600 dark:text-amber-400">
-                                Needs config
-                              </span>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={connector.is_active ? 'default' : 'outline'}>
-                        {connector.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDateTime(connector.created_at)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => onTest(connector)}
-                                disabled={connector.credential_location !== 'server'}
-                                aria-label="Test Connection"
-                              >
-                                <CloudCheck className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {connector.credential_location === 'server'
-                                ? 'Test Connection'
-                                : connector.credential_location === 'pending'
-                                  ? 'Cannot test: credentials not configured'
-                                  : 'Cannot test from server: credentials on agent'}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-
-                        {supportsInventory(connector.type) && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleInventoryClick(connector)}
-                                  aria-label="Inventory Configuration"
-                                >
-                                  <Archive className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Bucket Inventory</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => onEdit(connector)}
-                                aria-label="Edit Connector"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Edit Connector</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteClick(connector)}
-                                aria-label="Delete Connector"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Delete Connector</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <ResponsiveTable
+          data={filteredConnectors}
+          columns={connectorColumns}
+          keyField="guid"
+          emptyState={
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-muted-foreground">No connectors match the current filters</p>
+            </div>
+          }
+        />
       </div>
 
       {/* Delete Confirmation Dialog */}
