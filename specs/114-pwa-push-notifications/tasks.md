@@ -115,8 +115,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Add notify_job_failure() method to NotificationService in `backend/src/services/notification_service.py`: accept job object, build title/body/data per push-payload.md job_failure schema, resolve all team members (collection belongs to team; all members have access), check preferences, create notification record, async deliver push
-- [ ] T028 [US3] Integrate notification trigger into JobCoordinatorService.fail_job() in `backend/src/services/job_coordinator_service.py`: after job status set to FAILED, call notification_service.notify_job_failure() via asyncio.create_task() (non-blocking)
+- [x] T027 [US3] Add notify_job_failure() method to NotificationService in `backend/src/services/notification_service.py`: accept job object, build title/body/data per push-payload.md job_failure schema, resolve all team members (collection belongs to team; all members have access), check preferences, create notification record, async deliver push
+- [x] T028 [US3] Integrate notification trigger into JobCoordinatorService.fail_job() in `backend/src/services/job_coordinator_service.py`: after job status set to FAILED, call notification_service.notify_job_failure() via asyncio.create_task() (non-blocking)
 
 **Checkpoint**: Job failures trigger push notifications to relevant users.
 
@@ -132,8 +132,8 @@
 
 ### Implementation for User Story 4
 
-- [ ] T029 [US4] Add notify_inflection_point() method to NotificationService in `backend/src/services/notification_service.py`: accept job and result objects, calculate issue_delta from previous result if available, build title/body/data per push-payload.md inflection_point schema, resolve all team members, check preferences, create notification record, async deliver push
-- [ ] T030 [US4] Integrate notification trigger into JobCoordinatorService.complete_job() in `backend/src/services/job_coordinator_service.py`: ONLY when result has status=COMPLETED and no_change_copy=false, call notification_service.notify_inflection_point() via asyncio.create_task(). Do NOT trigger in complete_job_no_change().
+- [x] T029 [US4] Add notify_inflection_point() method to NotificationService in `backend/src/services/notification_service.py`: accept job and result objects, calculate issue_delta from previous result if available, build title/body/data per push-payload.md inflection_point schema, resolve all team members, check preferences, create notification record, async deliver push
+- [x] T030 [US4] Integrate notification trigger into JobCoordinatorService.complete_job() in `backend/src/services/job_coordinator_service.py`: ONLY when result has status=COMPLETED and no_change_copy=false, call notification_service.notify_inflection_point() via asyncio.create_task(). Do NOT trigger in complete_job_no_change().
 
 **Checkpoint**: Inflection point notifications work. No-change results do not trigger notifications.
 

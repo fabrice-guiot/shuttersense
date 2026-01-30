@@ -644,6 +644,136 @@ class NotificationService:
 
         return sent_count
 
+    def notify_inflection_point(self, job: Any, result: Any) -> int:
+        """
+        Send inflection point notifications when analysis detects changes.
+
+        Only called for COMPLETED results where no_change_copy=False, meaning
+        a new report was generated with potentially different findings.
+
+        Calculates issue_delta from the previous result (if available) and
+        builds notification content per push-payload.md inflection_point schema.
+
+        Args:
+            job: Completed Job instance (must have collection relationship loaded)
+            result: New AnalysisResult instance
+
+        Returns:
+            Number of notifications actually sent (preference-filtered)
+        """
+        from backend.src.models.analysis_result import AnalysisResult
+        from backend.src.models import ResultStatus
+        from backend.src.services.user_service import UserService
+
+        # Build notification content per contract
+        tool_name = job.tool.replace("_", " ").title()
+        collection_name = job.collection.name if job.collection else "Unknown"
+        collection_guid = job.collection.guid if job.collection else None
+
+        # Calculate issue delta from previous result
+        issue_delta_summary = self._build_issue_delta_summary(
+            job, result, AnalysisResult, ResultStatus
+        )
+
+        title = "New Analysis Results"
+        body = f'{tool_name} found changes in "{collection_name}": {issue_delta_summary}'
+
+        # Use analytics report page URL (consistent with job failure notifications)
+        url = f"/analytics?tab=reports&id={result.guid}"
+
+        data = {
+            "url": url,
+            "result_guid": result.guid,
+            "collection_guid": collection_guid,
+        }
+
+        push_payload = {
+            "title": title,
+            "body": body,
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+            "tag": f"inflection_point_{result.guid}",
+            "data": {
+                **data,
+                "category": "inflection_point",
+            },
+        }
+
+        # Resolve all active team members
+        user_service = UserService(db=self.db)
+        team_members = user_service.list_by_team(
+            team_id=job.team_id, active_only=True
+        )
+
+        sent_count = 0
+        for user in team_members:
+            notification = self.send_notification(
+                user=user,
+                team_id=job.team_id,
+                category="inflection_point",
+                title=title,
+                body=body,
+                data=data,
+                push_payload=push_payload,
+            )
+            if notification is not None:
+                sent_count += 1
+
+        logger.info(
+            "Inflection point notifications sent",
+            extra={
+                "job_guid": job.guid,
+                "result_guid": result.guid,
+                "sent_count": sent_count,
+                "team_members": len(team_members),
+            },
+        )
+
+        return sent_count
+
+    def _build_issue_delta_summary(
+        self, job: Any, result: Any, AnalysisResult: type, ResultStatus: type
+    ) -> str:
+        """
+        Build a human-readable issue delta summary by comparing with the
+        previous result for the same collection and tool.
+
+        Args:
+            job: Completed Job instance
+            result: New AnalysisResult instance
+            AnalysisResult: The AnalysisResult model class
+            ResultStatus: The ResultStatus enum class
+
+        Returns:
+            Summary string like "5 issues found (+2 from previous)"
+        """
+        current_issues = result.issues_found or 0
+        current_files = result.files_scanned or 0
+
+        # Find the previous completed result for the same collection + tool
+        previous = (
+            self.db.query(AnalysisResult)
+            .filter(
+                AnalysisResult.collection_id == job.collection_id,
+                AnalysisResult.tool == job.tool,
+                AnalysisResult.status == ResultStatus.COMPLETED,
+                AnalysisResult.id != result.id,
+            )
+            .order_by(AnalysisResult.created_at.desc())
+            .first()
+        )
+
+        if previous and previous.issues_found is not None:
+            delta = current_issues - previous.issues_found
+            if delta > 0:
+                return f"{current_issues} issues found (+{delta} new) across {current_files} files"
+            elif delta < 0:
+                return f"{current_issues} issues found ({delta} resolved) across {current_files} files"
+            else:
+                return f"{current_issues} issues found (unchanged) across {current_files} files"
+
+        return f"{current_issues} issues found across {current_files} files"
+
     # ========================================================================
     # Orchestration
     # ========================================================================
