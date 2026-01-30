@@ -460,6 +460,8 @@ async def lifespan(app: FastAPI):
         await safety_net_task
     except asyncio.CancelledError:
         logger.info("Dead agent safety net background task stopped")
+    except Exception as e:
+        logger.error(f"Dead agent safety net failed: {e}")
 
     # Cancel deadline check scheduler
     deadline_task.cancel()
@@ -467,6 +469,8 @@ async def lifespan(app: FastAPI):
         await deadline_task
     except asyncio.CancelledError:
         logger.info("Deadline check scheduler background task stopped")
+    except Exception as e:
+        logger.error(f"Deadline check scheduler failed: {e}")
 
 
 # Initialize logging before creating app
