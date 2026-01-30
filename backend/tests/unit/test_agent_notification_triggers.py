@@ -6,15 +6,12 @@ Tests agent status notifications: pool_offline, agent_error, pool_recovery,
 debounce, and retry warning on final attempt.
 """
 
-import json
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
 import pytest
 
 from backend.src.models import Agent, AgentStatus, JobStatus
-from backend.src.models.team import Team
-from backend.src.models.user import User, UserStatus
 from backend.src.services.agent_service import AgentService
 
 
@@ -29,26 +26,6 @@ def agent_service(test_db_session):
     return AgentService(db=test_db_session)
 
 
-@pytest.fixture
-def create_agent(test_db_session, test_team):
-    """Factory for creating test agents."""
-    _counter = [0]
-
-    def _create(name=None, status=AgentStatus.ONLINE):
-        _counter[0] += 1
-        agent = Agent(
-            team_id=test_team.id,
-            name=name or f"Agent {_counter[0]}",
-            status=status,
-            last_heartbeat=datetime.utcnow(),
-        )
-        test_db_session.add(agent)
-        test_db_session.commit()
-        test_db_session.refresh(agent)
-        return agent
-    return _create
-
-
 # ============================================================================
 # Test: Retry warning on final attempt
 # ============================================================================
@@ -57,8 +34,8 @@ def create_agent(test_db_session, test_team):
 class TestRetryWarningTrigger:
     """Tests for retry warning notifications (FR-043, FR-044)."""
 
-    @patch("backend.src.services.agent_service.NotificationService")
-    @patch("backend.src.services.agent_service.get_settings")
+    @patch("backend.src.services.notification_service.NotificationService")
+    @patch("backend.src.config.settings.get_settings")
     def test_retry_warning_on_final_attempt(
         self, mock_settings, mock_ns_class,
         agent_service, test_db_session, test_team, create_agent, sample_collection,
@@ -98,8 +75,8 @@ class TestRetryWarningTrigger:
         # Verify the notify_retry_warning was called
         mock_ns_instance.notify_retry_warning.assert_called_once()
 
-    @patch("backend.src.services.agent_service.NotificationService")
-    @patch("backend.src.services.agent_service.get_settings")
+    @patch("backend.src.services.notification_service.NotificationService")
+    @patch("backend.src.config.settings.get_settings")
     def test_no_retry_warning_on_non_final_attempt(
         self, mock_settings, mock_ns_class,
         agent_service, test_db_session, test_team, create_agent, sample_collection,

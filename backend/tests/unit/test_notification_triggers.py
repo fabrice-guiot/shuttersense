@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from backend.src.models import JobStatus, ResultStatus
+from backend.src.models import JobStatus, AgentStatus, ResultStatus
 
 
 # ============================================================================
@@ -42,12 +42,12 @@ def coordinator_service(test_db_session):
 class TestFailJobNotification:
     """Tests for fail_job() notification trigger (FR-023)."""
 
-    @patch("backend.src.services.job_coordinator_service.NotificationService")
-    @patch("backend.src.services.job_coordinator_service.get_settings")
+    @patch("backend.src.services.notification_service.NotificationService")
+    @patch("backend.src.config.settings.get_settings")
     def test_fail_job_calls_notify_job_failure(
         self, mock_settings, mock_ns_class,
         coordinator_service, test_db_session, test_team, test_user,
-        sample_collection,
+        create_agent, sample_collection,
     ):
         """fail_job() should call notify_job_failure on the notification service."""
         mock_settings.return_value = MagicMock(
@@ -68,15 +68,8 @@ class TestFailJobNotification:
         test_db_session.add(job)
         test_db_session.commit()
 
-        # Create agent and assign job
-        from backend.src.models import Agent, AgentStatus
-        agent = Agent(
-            team_id=test_team.id,
-            name="Test Agent",
-            status=AgentStatus.ONLINE,
-        )
-        test_db_session.add(agent)
-        test_db_session.commit()
+        # Use conftest create_agent (handles system_user_id)
+        agent = create_agent(status=AgentStatus.ONLINE)
         job.agent_id = agent.id
         job.status = JobStatus.RUNNING
         test_db_session.commit()
@@ -100,12 +93,12 @@ class TestFailJobNotification:
 class TestCompleteJobNotification:
     """Tests for complete_job() notification trigger (FR-026, FR-027)."""
 
-    @patch("backend.src.services.job_coordinator_service.NotificationService")
-    @patch("backend.src.services.job_coordinator_service.get_settings")
+    @patch("backend.src.services.notification_service.NotificationService")
+    @patch("backend.src.config.settings.get_settings")
     def test_complete_job_calls_notify_inflection_point(
         self, mock_settings, mock_ns_class,
         coordinator_service, test_db_session, test_team,
-        sample_collection,
+        create_agent, sample_collection,
     ):
         """complete_job() should call notify_inflection_point for new results."""
         mock_settings.return_value = MagicMock(
@@ -125,26 +118,24 @@ class TestCompleteJobNotification:
         test_db_session.add(job)
         test_db_session.commit()
 
-        from backend.src.models import Agent, AgentStatus
-        agent = Agent(
-            team_id=test_team.id,
-            name="Test Agent",
-            status=AgentStatus.ONLINE,
-        )
-        test_db_session.add(agent)
-        test_db_session.commit()
+        # Use conftest create_agent (handles system_user_id)
+        agent = create_agent(status=AgentStatus.ONLINE)
         job.agent_id = agent.id
         test_db_session.commit()
 
         # Complete the job with results
+        from backend.src.services.job_coordinator_service import JobCompletionData
+        completion_data = JobCompletionData(
+            results={"summary": "test"},
+            report_html="<html>test</html>",
+            files_scanned=100,
+            issues_found=5,
+        )
         coordinator_service.complete_job(
             job_guid=job.guid,
             agent_id=agent.id,
             team_id=test_team.id,
-            files_scanned=100,
-            issues_found=5,
-            results_json={"summary": "test"},
-            report_html="<html>test</html>",
+            completion_data=completion_data,
         )
 
         # Inflection point notification should have been called

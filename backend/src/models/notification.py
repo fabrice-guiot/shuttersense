@@ -11,7 +11,7 @@ Issue #114 - PWA with Push Notifications
 
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -57,7 +57,7 @@ class Notification(Base, GuidMixin):
     category = Column(String(30), nullable=False)
     title = Column(String(200), nullable=False)
     body = Column(String(500), nullable=False)
-    data = Column(JSONB, nullable=True)
+    data = Column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
 
     # Read tracking
     read_at = Column(DateTime, nullable=True)
