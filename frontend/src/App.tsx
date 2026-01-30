@@ -67,6 +67,7 @@ const routes: RouteConfig[] = [
     element: <DashboardPage />,
     pageTitle: 'Dashboard',
     pageIcon: LayoutGrid,
+    pageHelp: 'Overview of collections, analysis trends, queue status, and recent activity',
   },
   {
     path: '/events',
