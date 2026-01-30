@@ -7,9 +7,12 @@
  */
 
 import { renderHook, waitFor, act } from '@testing-library/react'
+import { vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../mocks/server'
 import { useNotifications } from '@/hooks/useNotifications'
+import type { NotificationResponse } from '@/contracts/api/notification-api'
+import * as notificationService from '@/services/notifications'
 
 // ============================================================================
 // Test Data
@@ -169,10 +172,12 @@ describe('useNotifications', () => {
         http.get('*/notifications/unread-count', () =>
           HttpResponse.json({ unread_count: 1 })
         ),
-        http.post('*/notifications/:guid/read', () =>
-          HttpResponse.json(updatedNotification)
-        )
       )
+
+      // Spy on the service to return the updated notification directly
+      const markAsReadSpy = vi
+        .spyOn(notificationService, 'markAsRead')
+        .mockResolvedValue(updatedNotification as NotificationResponse)
 
       const { result } = renderHook(() => useNotifications(false))
 
@@ -197,25 +202,30 @@ describe('useNotifications', () => {
         expect(result.current.notifications[0].read_at).toBeTruthy()
         // Unread count should be decremented
         expect(result.current.unreadCount).toBe(0)
+        // No error
+        expect(result.current.error).toBeNull()
       })
+
+      expect(markAsReadSpy).toHaveBeenCalledWith(mockNotification.guid)
+      markAsReadSpy.mockRestore()
     })
 
     it('should set error on mark-as-read failure', async () => {
-      server.use(
-        http.post('*/notifications/:guid/read', () =>
-          HttpResponse.json({ error: 'Not found' }, { status: 404 })
-        )
-      )
+      const markAsReadSpy = vi
+        .spyOn(notificationService, 'markAsRead')
+        .mockRejectedValue({ userMessage: 'Not found' })
 
       const { result } = renderHook(() => useNotifications(false))
 
       await act(async () => {
-        await result.current.markAsRead('ntf_nonexistent')
+        await result.current.markAsRead(mockNotification.guid)
       })
 
       await waitFor(() => {
         expect(result.current.error).toBeTruthy()
       })
+
+      markAsReadSpy.mockRestore()
     })
   })
 })
