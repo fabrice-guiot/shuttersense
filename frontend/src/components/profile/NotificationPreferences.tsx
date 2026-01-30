@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select'
 import { TimezoneCombobox } from '@/components/ui/timezone-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { formatDate, formatRelativeTime } from '@/utils/dateFormat'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
 import type { NotificationCategory } from '@/contracts/domain-labels'
@@ -364,8 +365,8 @@ export function NotificationPreferences() {
                           </span>
                           <span className="text-muted-foreground">
                             {sub.last_used_at
-                              ? `Last used ${new Date(sub.last_used_at).toLocaleDateString()}`
-                              : 'Never used'}
+                              ? `Last used ${formatRelativeTime(sub.last_used_at)}`
+                              : `Added ${formatDate(sub.created_at)}`}
                           </span>
                         </div>
                       )

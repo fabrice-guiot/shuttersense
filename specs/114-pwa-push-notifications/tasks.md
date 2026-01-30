@@ -219,10 +219,10 @@
 
 ### Implementation for User Story 9
 
-- [ ] T041 [P] [US9] Create useNotifications hook in `frontend/src/hooks/useNotifications.ts`: fetch notification list (GET /notifications with pagination), fetch unread count (GET /unread-count), mark as read (POST /{guid}/read), auto-refresh unread count on interval (30 seconds), loading/error states
-- [ ] T042 [US9] Create NotificationPanel component in `frontend/src/components/notifications/NotificationPanel.tsx`: Popover/dropdown triggered by bell icon click, renders list of notifications with category icon, title, body, relative timestamp, read/unread indicator. Click navigates to data.url and marks as read. Empty state when no notifications. Uses shadcn/ui Popover, ScrollArea, Badge.
-- [ ] T043 [US9] Integrate NotificationPanel into TopHeader in `frontend/src/components/layout/TopHeader.tsx`: replace hardcoded bell badge with dynamic unread count from useNotifications hook, attach NotificationPanel popover to bell button, hide badge when count is 0
-- [ ] T044 [US9] Add notification cleanup logic in `backend/src/services/notification_service.py`: delete_old_notifications() method that removes notifications WHERE created_at < NOW() - 30 days, called from the dead agent safety net loop (piggyback on existing periodic task) or as a separate daily cleanup
+- [x] T041 [P] [US9] Create useNotifications hook in `frontend/src/hooks/useNotifications.ts`: fetch notification list (GET /notifications with pagination), fetch unread count (GET /unread-count), mark as read (POST /{guid}/read), auto-refresh unread count on interval (30 seconds), loading/error states
+- [x] T042 [US9] Create NotificationPanel component in `frontend/src/components/notifications/NotificationPanel.tsx`: Popover/dropdown triggered by bell icon click, renders list of notifications with category icon, title, body, relative timestamp, read/unread indicator. Click navigates to data.url and marks as read. Empty state when no notifications. Uses shadcn/ui Popover, ScrollArea, Badge.
+- [x] T043 [US9] Integrate NotificationPanel into TopHeader in `frontend/src/components/layout/TopHeader.tsx`: replace hardcoded bell badge with dynamic unread count from useNotifications hook, attach NotificationPanel popover to bell button, hide badge when count is 0
+- [x] T044 [US9] Add notification cleanup logic in `backend/src/services/notification_service.py`: delete_old_notifications() method that removes notifications WHERE created_at < NOW() - 30 days, called from the dead agent safety net loop (piggyback on existing periodic task) or as a separate daily cleanup
 
 **Checkpoint**: Full notification history UI working. Bell badge dynamic. Read/unread tracking. Auto-cleanup.
 

@@ -96,12 +96,20 @@ async def create_push_subscription(
     body: PushSubscriptionCreate,
     ctx: TenantContext = Depends(require_auth),
     service: PushSubscriptionService = Depends(get_push_subscription_service),
+    notif_service: NotificationService = Depends(get_notification_service),
 ):
     """
     Register a Web Push subscription for the authenticated user's current device.
 
     If a subscription with the same endpoint already exists, it is replaced.
+    On first subscription, sends a welcome notification to confirm delivery works.
     """
+    # Check if this is the user's first subscription
+    existing = service.list_subscriptions(
+        user_id=ctx.user_id, team_id=ctx.team_id
+    )
+    is_first = len(existing) == 0
+
     subscription = service.create_subscription(
         team_id=ctx.team_id,
         user_id=ctx.user_id,
@@ -110,6 +118,37 @@ async def create_push_subscription(
         auth_key=body.auth_key,
         device_name=body.device_name,
     )
+
+    # Send welcome notification on first subscription
+    if is_first:
+        notif_service.create_notification(
+            team_id=ctx.team_id,
+            user_id=ctx.user_id,
+            category="agent_status",
+            title="Notifications enabled",
+            body=(
+                "You've successfully enabled push notifications. "
+                "You'll be notified about job failures, analysis changes, "
+                "agent status, and upcoming deadlines."
+            ),
+            data={"url": "/profile"},
+        )
+        # Deliver push to the newly created subscription
+        notif_service.deliver_push(
+            user_id=ctx.user_id,
+            team_id=ctx.team_id,
+            payload={
+                "title": "Notifications enabled",
+                "body": (
+                    "You've successfully enabled push notifications. "
+                    "All future notifications will appear here."
+                ),
+                "icon": "/icons/icon-192x192.png",
+                "badge": "/icons/badge-72x72.png",
+                "data": {"url": "/profile"},
+            },
+        )
+
     return PushSubscriptionResponse.model_validate(subscription)
 
 
