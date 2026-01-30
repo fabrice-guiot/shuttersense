@@ -737,6 +737,31 @@ class AgentService:
                         "retry_count": job.retry_count
                     }
                 )
+
+                # Send retry warning on final attempt (Issue #114, Phase 10 T040)
+                if job.retry_count == job.max_retries - 1:
+                    try:
+                        from backend.src.services.notification_service import NotificationService
+                        from backend.src.config.settings import get_settings
+
+                        settings = get_settings()
+                        vapid_claims = (
+                            {"sub": settings.vapid_subject}
+                            if settings.vapid_subject
+                            else {}
+                        )
+                        notification_service = NotificationService(
+                            db=self.db,
+                            vapid_private_key=settings.vapid_private_key,
+                            vapid_claims=vapid_claims,
+                        )
+                        notification_service.notify_retry_warning(job)
+                    except Exception as e:
+                        # Non-blocking: notification failure must not affect job processing
+                        logger.error(
+                            f"Failed to send retry warning notifications: {e}",
+                            extra={"job_guid": job.guid},
+                        )
             else:
                 job.fail(f"Agent went offline after {job.max_retries} retries")
                 logger.warning(

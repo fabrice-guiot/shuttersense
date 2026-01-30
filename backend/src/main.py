@@ -301,6 +301,78 @@ async def dead_agent_safety_net() -> None:
                 db.close()
 
 
+async def deadline_check_scheduler() -> None:
+    """
+    Background task that periodically checks for approaching event deadlines.
+
+    Runs every hour, querying all teams with deadline events and sending
+    reminder push notifications to users based on their deadline_days_before
+    and timezone preferences.
+
+    Deduplication is handled in check_deadlines() — hourly runs are safe
+    and handle server restarts and timezone edge cases without complex
+    "last run" tracking.
+
+    Issue #114 - Phase 9 (T036)
+    """
+    deadline_logger = get_logger("notifications")
+    deadline_logger.info("Deadline check scheduler background task started")
+
+    while True:
+        await asyncio.sleep(3600)  # Hourly
+
+        db = None
+        try:
+            db = SessionLocal()
+
+            # Find distinct team_ids that have events with deadlines
+            from backend.src.models import Event
+            team_ids = (
+                db.query(Event.team_id)
+                .filter(
+                    Event.deadline_date.isnot(None),
+                    Event.deleted_at.is_(None),
+                )
+                .distinct()
+                .all()
+            )
+
+            total_sent = 0
+            team_count = len(team_ids)
+
+            for (team_id,) in team_ids:
+                try:
+                    from backend.src.services.notification_service import NotificationService
+                    from backend.src.config.settings import get_settings
+
+                    settings = get_settings()
+                    vapid_claims = (
+                        {"sub": settings.vapid_subject}
+                        if settings.vapid_subject
+                        else {}
+                    )
+                    notification_service = NotificationService(
+                        db=db,
+                        vapid_private_key=settings.vapid_private_key,
+                        vapid_claims=vapid_claims,
+                    )
+                    sent = notification_service.check_deadlines(team_id=team_id)
+                    total_sent += sent
+                except Exception as e:
+                    deadline_logger.error(
+                        f"Error checking deadlines for team: {e}",
+                        extra={"team_id": team_id},
+                    )
+            deadline_logger.info(
+                f"Deadline check completed: {total_sent} reminders across {team_count} teams"
+            )
+        except Exception as e:
+            deadline_logger.error(f"Deadline check scheduler iteration error: {e}")
+        finally:
+            if db:
+                db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -374,6 +446,9 @@ async def lifespan(app: FastAPI):
     # Start dead agent safety net background task (Phase 8, T035)
     safety_net_task = asyncio.create_task(dead_agent_safety_net())
 
+    # Start deadline check scheduler background task (Phase 9, T036)
+    deadline_task = asyncio.create_task(deadline_check_scheduler())
+
     yield
 
     # Shutdown
@@ -385,6 +460,13 @@ async def lifespan(app: FastAPI):
         await safety_net_task
     except asyncio.CancelledError:
         logger.info("Dead agent safety net background task stopped")
+
+    # Cancel deadline check scheduler
+    deadline_task.cancel()
+    try:
+        await deadline_task
+    except asyncio.CancelledError:
+        logger.info("Deadline check scheduler background task stopped")
 
 
 # Initialize logging before creating app

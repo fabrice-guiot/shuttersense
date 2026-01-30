@@ -389,6 +389,31 @@ async def mark_notification_read(
 
 
 # ============================================================================
+# Deadline Check Endpoint (Phase 9 — T038)
+# ============================================================================
+
+
+@router.post(
+    "/deadline-check",
+    summary="Run deadline reminder check",
+    description="Manually trigger deadline reminder check for the current team. "
+                "Sends notifications for approaching event deadlines. Idempotent.",
+)
+async def run_deadline_check(
+    ctx: TenantContext = Depends(require_auth),
+    service: NotificationService = Depends(get_notification_service),
+) -> dict:
+    """
+    Run a deadline reminder check for the authenticated user's team.
+
+    Returns the number of new deadline reminder notifications sent.
+    Idempotent — calling again will not produce duplicate notifications.
+    """
+    sent_count = service.check_deadlines(team_id=ctx.team_id)
+    return {"sent_count": sent_count}
+
+
+# ============================================================================
 # VAPID Key Endpoint
 # ============================================================================
 

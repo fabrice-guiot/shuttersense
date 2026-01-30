@@ -184,9 +184,9 @@
 
 ### Implementation for User Story 7
 
-- [ ] T036 [US7] Add deadline_check job type support: register `deadline_check` as valid job type in `backend/src/services/job_service.py`, create daily scheduling logic that creates one deadline_check job per team per day
-- [ ] T037 [US7] Implement deadline check execution logic in `backend/src/services/notification_service.py`: query events WHERE team_id=? AND is_deadline=true AND deadline_date BETWEEN now AND now+backfill_window AND status NOT IN (COMPLETED, CANCELLED), calculate days until deadline per user's deadline_days_before preference and timezone (read IANA timezone from user's notification preferences, convert deadline_date to user's local date for comparison), track sent reminders by (event_guid, reminder_days_before) composite key to prevent duplicates, create notification records, async deliver push
-- [ ] T038 [US7] Add deadline check API endpoint (internal) in `backend/src/api/notifications.py`: POST /api/notifications/deadline-check — called by agent after claiming deadline_check job, executes the deadline query and notification logic, returns count of reminders sent
+- [x] T036 [US7] Add deadline_check job type support: register `DEADLINE_CHECK` in `ToolType` enum (`backend/src/schemas/tools.py`), add hourly `deadline_check_scheduler()` background task in `backend/src/main.py` following `dead_agent_safety_net()` pattern
+- [x] T037 [US7] Implement deadline check execution logic in `backend/src/services/notification_service.py`: `check_deadlines(team_id)` queries events WHERE team_id=? AND deadline_date BETWEEN today AND today+30 AND status NOT IN (completed, cancelled) AND deleted_at IS NULL, calculates days until deadline per user's deadline_days_before preference and timezone, deduplicates via existing notification data->>event_guid + data->>days_before, sends push via `send_notification()`
+- [x] T038 [US7] Add deadline check API endpoint in `backend/src/api/notifications.py`: POST /api/notifications/deadline-check — authenticated endpoint that calls `check_deadlines(team_id)`, returns `{"sent_count": N}`, idempotent
 
 **Checkpoint**: Deadline reminders work via agent job system. Idempotent. Backfill window catches missed checks.
 
@@ -202,8 +202,8 @@
 
 ### Implementation for User Story 8
 
-- [ ] T039 [US8] Add notify_retry_warning() method to NotificationService in `backend/src/services/notification_service.py`: accept job object, build title/body/data per push-payload.md retry_warning schema, resolve all team members, check preferences (category must be explicitly enabled), create notification record, async deliver push
-- [ ] T040 [US8] Integrate retry warning trigger into job retry logic in `backend/src/services/job_coordinator_service.py`: detect when retry_count reaches max_retries - 1 (final attempt), call notification_service.notify_retry_warning() via asyncio.create_task()
+- [x] T039 [US8] Add notify_retry_warning() method to NotificationService in `backend/src/services/notification_service.py`: accepts job object, builds title/body/data per push-payload.md retry_warning schema, resolves all team members, checks preferences (retry_warning disabled by default), creates notification record, delivers push
+- [x] T040 [US8] Integrate retry warning trigger into agent job release logic in `backend/src/services/agent_service.py`: in `_release_agent_jobs()`, after `prepare_retry()`, detects when `retry_count == max_retries - 1` (final attempt), calls `notify_retry_warning(job)` with non-blocking error handling
 
 **Checkpoint**: Retry warnings delivered on final attempt. Default-off respected.
 

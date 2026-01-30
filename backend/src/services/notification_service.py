@@ -957,6 +957,226 @@ class NotificationService:
 
         return sent_count
 
+    def notify_retry_warning(self, job: Any) -> int:
+        """
+        Send retry warning notifications when a job enters its final retry attempt.
+
+        Builds notification content per push-payload.md retry_warning schema
+        and delegates to send_notification() for per-user preference checks.
+        The retry_warning preference is disabled by default.
+
+        Args:
+            job: Job instance on its final retry (must have collection relationship loaded)
+
+        Returns:
+            Number of notifications actually sent (preference-filtered)
+        """
+        from backend.src.services.user_service import UserService
+
+        tool_name = job.tool.replace("_", " ").title()
+        collection_name = job.collection.name if job.collection else "Unknown"
+
+        title = "Job Retry Warning"
+        body = f'{tool_name} analysis of "{collection_name}" is on final retry attempt'
+
+        data = {
+            "url": f"/tools?job={job.guid}",
+            "job_guid": job.guid,
+            "collection_guid": job.collection.guid if job.collection else None,
+        }
+
+        push_payload = {
+            "title": title,
+            "body": body,
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+            "tag": f"retry_warning_{job.guid}",
+            "data": {
+                **data,
+                "category": "retry_warning",
+            },
+        }
+
+        # Resolve all active team members
+        user_service = UserService(db=self.db)
+        team_members = user_service.list_by_team(
+            team_id=job.team_id, active_only=True
+        )
+
+        sent_count = 0
+        for user in team_members:
+            notification = self.send_notification(
+                user=user,
+                team_id=job.team_id,
+                category="retry_warning",
+                title=title,
+                body=body,
+                data=data,
+                push_payload=push_payload,
+            )
+            if notification is not None:
+                sent_count += 1
+
+        logger.info(
+            "Retry warning notifications sent",
+            extra={
+                "job_guid": job.guid,
+                "retry_count": job.retry_count,
+                "max_retries": job.max_retries,
+                "sent_count": sent_count,
+                "team_members": len(team_members),
+            },
+        )
+
+        return sent_count
+
+    # ========================================================================
+    # Deadline Reminders (Phase 9 — T037)
+    # ========================================================================
+
+    def check_deadlines(self, team_id: int) -> int:
+        """
+        Check for approaching event deadlines and send reminder notifications.
+
+        Queries events with deadline_date within the next 30 days, respects
+        per-user deadline_days_before and timezone preferences, and deduplicates
+        via existing notification records.
+
+        Args:
+            team_id: Team ID to check deadlines for
+
+        Returns:
+            Total number of new deadline reminders sent
+        """
+        from zoneinfo import ZoneInfo
+        from backend.src.models import Event, EventStatus
+        from backend.src.services.user_service import UserService
+
+        # 1. Query upcoming deadlines for this team
+        today_utc = date.today()
+        max_window = today_utc + timedelta(days=30)
+
+        events = (
+            self.db.query(Event)
+            .filter(
+                Event.team_id == team_id,
+                Event.deadline_date.isnot(None),
+                Event.deadline_date >= today_utc,
+                Event.deadline_date <= max_window,
+                Event.status.notin_([
+                    EventStatus.COMPLETED.value,
+                    EventStatus.CANCELLED.value,
+                ]),
+                Event.deleted_at.is_(None),
+            )
+            .all()
+        )
+
+        if not events:
+            return 0
+
+        # 2. Resolve active team members
+        user_service = UserService(db=self.db)
+        team_members = user_service.list_by_team(
+            team_id=team_id, active_only=True
+        )
+
+        if not team_members:
+            return 0
+
+        sent_count = 0
+
+        # 3. Per-user processing
+        for user in team_members:
+            prefs = self.get_user_preferences(user)
+            deadline_days_before = prefs.get("deadline_days_before", 3)
+            user_tz_str = prefs.get("timezone", "UTC")
+
+            try:
+                user_tz = ZoneInfo(user_tz_str)
+            except (KeyError, Exception):
+                user_tz = ZoneInfo("UTC")
+
+            # Compute user's "today" in their local timezone
+            user_today = datetime.now(user_tz).date()
+
+            for event in events:
+                days_remaining = (event.deadline_date - user_today).days
+
+                # Only send if within the user's configured window
+                if days_remaining < 0 or days_remaining > deadline_days_before:
+                    continue
+
+                # 4. Deduplication check
+                existing = (
+                    self.db.query(Notification)
+                    .filter(
+                        Notification.user_id == user.id,
+                        Notification.category == "deadline",
+                        Notification.data["event_guid"].as_string() == event.guid,
+                        Notification.data["days_before"].as_string() == str(days_remaining),
+                    )
+                    .first()
+                )
+
+                if existing:
+                    continue
+
+                # 5. Build notification content
+                if days_remaining == 0:
+                    days_text = "today"
+                elif days_remaining == 1:
+                    days_text = "tomorrow"
+                else:
+                    days_text = f"in {days_remaining} days"
+
+                title = "Deadline Approaching"
+                body = f'"{event.title}" deadline {days_text}'
+                tag = f"deadline_{event.guid}_{days_remaining}"
+                data = {
+                    "url": f"/events/{event.guid}",
+                    "category": "deadline",
+                    "event_guid": event.guid,
+                    "days_before": str(days_remaining),
+                }
+
+                push_payload = {
+                    "title": title,
+                    "body": body,
+                    "icon": "/icons/icon-192x192.png",
+                    "badge": "/icons/badge-72x72.png",
+                    "tag": tag,
+                    "data": {
+                        **data,
+                        "category": "deadline",
+                    },
+                }
+
+                # 6. Send via orchestration (checks preferences + creates record + pushes)
+                notification = self.send_notification(
+                    user=user,
+                    team_id=team_id,
+                    category="deadline",
+                    title=title,
+                    body=body,
+                    data=data,
+                    push_payload=push_payload,
+                )
+                if notification is not None:
+                    sent_count += 1
+
+        logger.info(
+            "Deadline check completed",
+            extra={
+                "team_id": team_id,
+                "events_checked": len(events),
+                "users_checked": len(team_members),
+                "sent_count": sent_count,
+            },
+        )
+
+        return sent_count
+
     # ========================================================================
     # Orchestration
     # ========================================================================

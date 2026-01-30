@@ -28,6 +28,7 @@ class ToolType(str, Enum):
     COLLECTION_TEST = "collection_test"  # Accessibility test for LOCAL collections
     INVENTORY_VALIDATE = "inventory_validate"  # Validate inventory configuration
     INVENTORY_IMPORT = "inventory_import"  # Import folders from bucket inventory
+    DEADLINE_CHECK = "deadline_check"  # Daily deadline reminder check
 
 
 class ToolMode(str, Enum):
