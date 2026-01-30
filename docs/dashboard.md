@@ -11,7 +11,7 @@ The Dashboard displays key performance indicators, recent activity, job queue st
 The top section shows aggregated statistics across all collections and tools:
 
 | KPI | Description | Source |
-|-----|-------------|--------|
+| ----- | ------------- | -------- |
 | Total Collections | Number of registered collections | `/api/collections/stats` |
 | Total Files | Sum of files across all collections | `/api/collections/stats` |
 | Active Agents | Number of online agents | `/api/agent/v1/pool-status` |
@@ -55,7 +55,7 @@ The feed is assembled from existing endpoints (`/api/tools/jobs`, `/api/agent/v1
 The queue status section shows the current state of the job processing pipeline:
 
 | Status | Description |
-|--------|-------------|
+| -------- | ------------- |
 | Queued | Jobs waiting for an agent to claim them |
 | Running | Jobs currently being executed by agents |
 | Completed | Jobs finished in the current session |
@@ -78,7 +78,7 @@ Trend data is fetched from `/api/trends` endpoints. Each chart supports date ran
 The agent pool indicator shows the health of the distributed processing system:
 
 | State | Indicator | Meaning |
-|-------|-----------|---------|
+| ------- | ----------- | --------- |
 | All Online | Green badge | All registered agents are connected |
 | Partial | Yellow badge | Some agents are offline |
 | All Offline | Red badge | No agents available for processing |
@@ -90,7 +90,7 @@ This indicator appears in both the Dashboard and the application header. When al
 Dashboard data is fetched using the following hooks and endpoints:
 
 | Hook | Endpoint | Purpose |
-|------|----------|---------|
+| ------ | ---------- | --------- |
 | `useHeaderStats` | Multiple | KPI aggregation for header display |
 | `useAnalyticsStorage` | `/api/analytics/storage` | Storage metrics |
 | `useQueueStatus` | `/api/tools/queue-status` | Job queue state |

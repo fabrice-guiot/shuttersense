@@ -11,10 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Dashboard landing page with KPIs** - Aggregated statistics and quick-access widgets on the home page ([#127])
 
-### Calendar & Events
-
-- **Filter inactive categories from EventForm** - Inactive categories no longer appear in event creation dropdowns ([#77])
-
 ### Identity & Security
 
 - **Multi-tenant user authentication** - OAuth 2.0 login (Google, Microsoft), session-based auth, API tokens, and team-scoped data isolation ([#86])

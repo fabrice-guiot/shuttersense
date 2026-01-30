@@ -418,7 +418,7 @@ Useful for diagnosing Input State hash mismatches between inventory import runs.
 
 ## Source Structure
 
-```
+```text
 agent/
 ├── cli/                              # CLI commands (Click)
 │   ├── main.py                       # Entry point, registers all subcommands

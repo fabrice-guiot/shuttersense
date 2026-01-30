@@ -39,7 +39,7 @@ FastAPI backend for the ShutterSense.ai web application. Provides a comprehensiv
 
 ## Project Structure
 
-```
+```text
 backend/
 ├── src/
 │   ├── api/                           # FastAPI route handlers (20 files)
@@ -260,12 +260,12 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API will be available at:
-- **API**: http://localhost:8000/api
-- **OpenAPI docs (Swagger UI)**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI JSON**: http://localhost:8000/openapi.json
-- **Health check**: http://localhost:8000/health
-- **Version**: http://localhost:8000/api/version
+- **API**: [http://localhost:8000/api](http://localhost:8000/api)
+- **OpenAPI docs (Swagger UI)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **OpenAPI JSON**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
+- **Health check**: [http://localhost:8000/health](http://localhost:8000/health)
+- **Version**: [http://localhost:8000/api/version](http://localhost:8000/api/version)
 
 ### Production Server
 
@@ -673,9 +673,9 @@ source backend/.env  # Or use python-dotenv (automatically loaded by pydantic-se
 
 ### Interactive Documentation
 
-- **Swagger UI**: http://localhost:8000/docs (with Bearer token authorization)
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI JSON**: http://localhost:8000/openapi.json
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs) (with Bearer token authorization)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **OpenAPI JSON**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
 
 ### Authentication
 
