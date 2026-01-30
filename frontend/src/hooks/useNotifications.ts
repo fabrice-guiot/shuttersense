@@ -24,6 +24,13 @@ import type {
 
 const UNREAD_POLL_INTERVAL = 30_000 // 30 seconds
 
+function formatError(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message
+  const msg = (err as { userMessage?: unknown }).userMessage
+  if (typeof msg === 'string' && msg) return msg
+  return fallback
+}
+
 /**
  * Sync the PWA app badge (dock/taskbar icon) with the unread count.
  * Uses the Badging API — no-ops gracefully on unsupported browsers.
@@ -94,10 +101,7 @@ export const useNotifications = (
         }
       } catch (err: unknown) {
         if (mountedRef.current) {
-          const errorMessage =
-            (err as { userMessage?: string }).userMessage ||
-            'Failed to load notifications'
-          setError(errorMessage)
+          setError(formatError(err, 'Failed to load notifications'))
         }
       } finally {
         if (mountedRef.current) {
@@ -144,10 +148,7 @@ export const useNotifications = (
         }
       } catch (err: unknown) {
         if (mountedRef.current) {
-          const errorMessage =
-            (err as { userMessage?: string }).userMessage ||
-            'Failed to mark notification as read'
-          setError(errorMessage)
+          setError(formatError(err, 'Failed to mark notification as read'))
         }
       }
     },
@@ -218,10 +219,7 @@ export const useNotificationStats = (): UseNotificationStatsReturn => {
       }
     } catch (err: unknown) {
       if (mountedRef.current) {
-        const errorMessage =
-          (err as { userMessage?: string }).userMessage ||
-          'Failed to load notification stats'
-        setError(errorMessage)
+        setError(formatError(err, 'Failed to load notification stats'))
       }
     } finally {
       if (mountedRef.current) {
