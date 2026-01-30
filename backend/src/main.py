@@ -257,6 +257,33 @@ async def lifespan(app: FastAPI):
     # Log CORS configuration
     logger.info(f"CORS allowed origins: {cors_origins}")
 
+    # Validate Web Push (VAPID) configuration
+    from backend.src.config.settings import get_settings
+    _settings = get_settings()
+    if _settings.vapid_configured:
+        try:
+            from pywebpush import webpush  # noqa: F401
+            logger.info(
+                "Web Push (VAPID) configured — push notifications enabled"
+            )
+        except ImportError:
+            logger.warning(
+                "VAPID keys configured but pywebpush is not installed. "
+                "Push notifications will fail. Install with: pip install pywebpush>=2.0.0"
+            )
+    else:
+        missing = []
+        if not _settings.vapid_public_key:
+            missing.append("VAPID_PUBLIC_KEY")
+        if not _settings.vapid_private_key:
+            missing.append("VAPID_PRIVATE_KEY")
+        if not _settings.vapid_subject:
+            missing.append("VAPID_SUBJECT")
+        logger.warning(
+            f"Web Push (VAPID) not configured — push notifications disabled. "
+            f"Missing: {', '.join(missing)}"
+        )
+
     # NOTE: Default configuration seeding (extensions) is now team-specific
     # and should be done when a team is created, not on application startup.
     # The seed_default_extensions(team_id) method requires a team_id parameter
