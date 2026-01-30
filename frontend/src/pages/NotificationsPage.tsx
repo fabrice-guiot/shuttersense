@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 import { BellOff, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -80,6 +81,13 @@ const READ_STATUS_OPTIONS = [
 // Helpers
 // ============================================================================
 
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function getDateRangeFromPreset(preset: string): { from?: string; to?: string } {
   if (preset === 'all' || preset === 'custom') {
     return {}
@@ -89,8 +97,8 @@ function getDateRangeFromPreset(preset: string): { from?: string; to?: string } 
   const from = new Date(now)
   from.setDate(from.getDate() - days)
   return {
-    from: from.toISOString().slice(0, 10),
-    to: now.toISOString().slice(0, 10),
+    from: formatLocalDate(from),
+    to: formatLocalDate(now),
   }
 }
 
@@ -116,6 +124,7 @@ export default function NotificationsPage() {
   const [selected, setSelected] = useState<NotificationResponse | null>(null)
 
   // Hooks
+  const { isAuthenticated } = useAuth()
   const { stats } = useNotificationStats()
   const { setStats } = useHeaderStats()
   const {
@@ -128,7 +137,7 @@ export default function NotificationsPage() {
 
   // TopHeader KPI stats
   useEffect(() => {
-    if (stats) {
+    if (isAuthenticated && stats) {
       setStats([
         { label: 'Total', value: stats.total_count },
         { label: 'Unread', value: stats.unread_count },
@@ -136,7 +145,7 @@ export default function NotificationsPage() {
       ])
     }
     return () => setStats([])
-  }, [stats, setStats])
+  }, [isAuthenticated, stats, setStats])
 
   // Debounce search input
   useEffect(() => {
@@ -157,6 +166,8 @@ export default function NotificationsPage() {
 
   // Fetch notifications when filters or pagination change
   const doFetch = useCallback(() => {
+    if (!isAuthenticated) return
+
     const params: Record<string, unknown> = {
       limit,
       offset: (page - 1) * limit,
@@ -169,7 +180,7 @@ export default function NotificationsPage() {
     if (dateRange.to) params.to_date = dateRange.to
 
     fetchNotifications(params)
-  }, [limit, page, searchTerm, category, readStatus, dateRange, fetchNotifications])
+  }, [isAuthenticated, limit, page, searchTerm, category, readStatus, dateRange, fetchNotifications])
 
   useEffect(() => {
     doFetch()
@@ -411,6 +422,7 @@ export default function NotificationsPage() {
               size="icon"
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
+              aria-label="Previous page"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -422,6 +434,7 @@ export default function NotificationsPage() {
               size="icon"
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
+              aria-label="Next page"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

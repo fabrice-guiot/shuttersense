@@ -13,8 +13,6 @@ Issue #114 - PWA with Push Notifications
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
@@ -42,8 +40,8 @@ from backend.src.utils.logging_config import get_logger
 
 logger = get_logger("api")
 
-# Rate limiter for notification endpoints
-limiter = Limiter(key_func=get_remote_address)
+# Use the shared limiter from main module
+from backend.src.main import limiter
 
 router = APIRouter(
     prefix="/notifications",

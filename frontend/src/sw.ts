@@ -69,21 +69,28 @@ registerRoute(
 self.addEventListener('push', (event: PushEvent) => {
   if (!event.data) return
 
-  const payload = event.data.json()
+  let payload: Record<string, unknown>
+  try {
+    payload = event.data.json()
+  } catch {
+    // Malformed JSON — silently ignore
+    return
+  }
 
-  const { title, body, icon, badge, tag, data } = payload
+  const safeTitle = (payload.title as string) || 'Notification'
+  const { body, icon, badge, tag, data } = payload as Record<string, unknown>
 
   const options: NotificationOptions = {
-    body,
-    icon: icon || '/icons/icon-192x192.png',
-    badge: badge || '/icons/badge-72x72.png',
-    tag,
+    body: (body as string) || '',
+    icon: (icon as string) || '/icons/icon-192x192.png',
+    badge: (badge as string) || '/icons/badge-72x72.png',
+    tag: tag as string | undefined,
     data,
   }
 
   event.waitUntil(
     Promise.all([
-      self.registration.showNotification(title, options),
+      self.registration.showNotification(safeTitle, options),
       // Set app badge on dock/taskbar icon (Badging API)
       self.navigator.setAppBadge?.(),
     ])
@@ -97,7 +104,17 @@ self.addEventListener('push', (event: PushEvent) => {
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
   event.notification.close()
 
-  const url = event.notification.data?.url || '/'
+  // Validate same-origin before navigating
+  const rawUrl = event.notification.data?.url || '/'
+  let safeUrl = '/'
+  try {
+    const parsed = new URL(rawUrl, self.location.href)
+    if (parsed.origin === self.location.origin) {
+      safeUrl = parsed.href
+    }
+  } catch {
+    // Invalid URL — fall back to root
+  }
 
   // Focus an existing window or open a new one
   event.waitUntil(
@@ -109,7 +126,7 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
           if ('focus' in client) {
             return client.focus().then((focused) => {
               if ('navigate' in focused) {
-                return (focused as WindowClient).navigate(url)
+                return (focused as WindowClient).navigate(safeUrl)
               }
               return focused
             })
@@ -117,7 +134,7 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
         }
 
         // No existing window — open a new one
-        return self.clients.openWindow(url)
+        return self.clients.openWindow(safeUrl)
       })
   )
 })

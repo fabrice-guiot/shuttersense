@@ -346,22 +346,36 @@ class NotificationService:
 
         return notification
 
-    def delete_old_notifications(self, days: int = 30) -> int:
+    def delete_old_notifications(self, days: int = 30, team_id: Optional[int] = None) -> int:
         """
         Delete notifications older than the specified number of days.
 
         Args:
             days: Age threshold in days (default 30)
+            team_id: Team ID for tenant isolation. Falls back to
+                      self.tenant_context.team_id if not provided.
 
         Returns:
             Number of notifications deleted
+
+        Raises:
+            ValueError: If no team_id is available from arguments or tenant_context
         """
+        resolved_team_id = team_id
+        if resolved_team_id is None and self.tenant_context is not None:
+            resolved_team_id = self.tenant_context.team_id
+        if resolved_team_id is None:
+            raise ValueError("team_id is required for delete_old_notifications")
+
         from datetime import timedelta
 
         cutoff = datetime.utcnow() - timedelta(days=days)
         count = (
             self.db.query(Notification)
-            .filter(Notification.created_at < cutoff)
+            .filter(
+                Notification.team_id == resolved_team_id,
+                Notification.created_at < cutoff,
+            )
             .delete(synchronize_session=False)
         )
         self.db.commit()
@@ -865,10 +879,11 @@ class NotificationService:
         current_issues = result.issues_found or 0
         current_files = result.files_scanned or 0
 
-        # Find the previous completed result for the same collection + tool
+        # Find the previous completed result for the same collection + tool (team-scoped)
         previous = (
             self.db.query(AnalysisResult)
             .filter(
+                AnalysisResult.team_id == job.team_id,
                 AnalysisResult.collection_id == job.collection_id,
                 AnalysisResult.tool == job.tool,
                 AnalysisResult.status == ResultStatus.COMPLETED,
