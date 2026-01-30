@@ -91,7 +91,13 @@ self.addEventListener('push', (event: PushEvent) => {
     data,
   }
 
-  event.waitUntil(self.registration.showNotification(title, options))
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Set app badge on dock/taskbar icon (Badging API)
+      self.navigator.setAppBadge?.(),
+    ])
+  )
 })
 
 // ============================================================================

@@ -126,6 +126,19 @@ export interface NotificationListParams {
   offset?: number
   category?: NotificationCategory
   unread_only?: boolean
+  search?: string
+  from_date?: string
+  to_date?: string
+  read_only?: boolean
+}
+
+/**
+ * Notification stats response for TopHeader KPIs
+ */
+export interface NotificationStatsResponse {
+  total_count: number
+  unread_count: number
+  this_week_count: number
 }
 
 /**

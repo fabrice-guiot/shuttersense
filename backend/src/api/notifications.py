@@ -26,6 +26,7 @@ from backend.src.schemas.notifications import (
     NotificationPreferencesUpdate,
     NotificationResponse,
     NotificationListResponse,
+    NotificationStatsResponse,
     UnreadCountResponse,
     VapidKeyResponse,
 )
@@ -283,6 +284,23 @@ async def list_notifications(
         description="Filter by category",
     ),
     unread_only: bool = Query(default=False),
+    search: Optional[str] = Query(
+        default=None,
+        max_length=100,
+        description="Search text in title and body",
+    ),
+    from_date: Optional[str] = Query(
+        default=None,
+        description="ISO date string, filter created_at >=",
+    ),
+    to_date: Optional[str] = Query(
+        default=None,
+        description="ISO date string, filter created_at <= end of day",
+    ),
+    read_only: bool = Query(
+        default=False,
+        description="Filter for read-only notifications",
+    ),
     ctx: TenantContext = Depends(require_auth),
     service: NotificationService = Depends(get_notification_service),
 ):
@@ -296,6 +314,10 @@ async def list_notifications(
         offset=offset,
         category=category,
         unread_only=unread_only,
+        search=search,
+        from_date=from_date,
+        to_date=to_date,
+        read_only=read_only,
     )
     return NotificationListResponse(
         items=[
@@ -305,6 +327,23 @@ async def list_notifications(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get(
+    "/stats",
+    response_model=NotificationStatsResponse,
+    summary="Get notification stats",
+)
+async def get_notification_stats(
+    ctx: TenantContext = Depends(require_auth),
+    service: NotificationService = Depends(get_notification_service),
+):
+    """
+    Returns notification statistics for the TopHeader KPIs:
+    total count, unread count, and this week's count.
+    """
+    stats = service.get_stats(user_id=ctx.user_id, team_id=ctx.team_id)
+    return NotificationStatsResponse(**stats)
 
 
 @router.get(

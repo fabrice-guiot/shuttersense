@@ -19,6 +19,7 @@ import type {
   NotificationResponse,
   NotificationListResponse,
   NotificationListParams,
+  NotificationStatsResponse,
   UnreadCountResponse,
   VapidKeyResponse,
 } from '@/contracts/api/notification-api'
@@ -102,10 +103,24 @@ export const listNotifications = async (
   if (params.offset !== undefined) queryParams.offset = params.offset
   if (params.category) queryParams.category = params.category
   if (params.unread_only !== undefined) queryParams.unread_only = params.unread_only
+  if (params.search) queryParams.search = params.search
+  if (params.from_date) queryParams.from_date = params.from_date
+  if (params.to_date) queryParams.to_date = params.to_date
+  if (params.read_only !== undefined) queryParams.read_only = params.read_only
 
   const response = await api.get<NotificationListResponse>('/notifications', {
     params: queryParams,
   })
+  return response.data
+}
+
+/**
+ * Get notification stats for TopHeader KPIs
+ */
+export const getNotificationStats = async (): Promise<NotificationStatsResponse> => {
+  const response = await api.get<NotificationStatsResponse>(
+    '/notifications/stats'
+  )
   return response.data
 }
 

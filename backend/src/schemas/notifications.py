@@ -184,6 +184,14 @@ class UnreadCountResponse(BaseModel):
     unread_count: int = Field(..., ge=0, description="Number of unread notifications")
 
 
+class NotificationStatsResponse(BaseModel):
+    """Response schema for notification stats (TopHeader KPIs)."""
+
+    total_count: int = Field(..., ge=0, description="Total notifications")
+    unread_count: int = Field(..., ge=0, description="Unread notifications")
+    this_week_count: int = Field(..., ge=0, description="Notifications in the last 7 days")
+
+
 class VapidKeyResponse(BaseModel):
     """Response schema for VAPID public key."""
 

@@ -2,34 +2,27 @@
  * Notification Panel Component
  *
  * Popover panel triggered by the bell icon in TopHeader.
- * Shows recent notifications with category icon, title, body,
+ * Shows recent notifications (capped at 10) with category icon, title, body,
  * relative timestamp, and read/unread indicator.
  * Clicking a notification opens a detail dialog with the full content.
+ * "View all" link navigates to the full /notifications page.
  *
  * Issue #114 - PWA with Push Notifications (US9)
  */
 
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowRight, Bell, BellOff } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Bell, BellOff } from 'lucide-react'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { formatRelativeTime } from '@/utils/dateFormat'
 import { useNotifications } from '@/hooks/useNotifications'
+import { NotificationDetailDialog } from '@/components/notifications/NotificationDetailDialog'
 import type { NotificationResponse } from '@/contracts/api/notification-api'
 import {
   NOTIFICATION_CATEGORY_ICONS,
@@ -122,16 +115,14 @@ export function NotificationPanel({ unreadCount }: NotificationPanelProps) {
   const [popoverOpen, setPopoverOpen] = useState(false)
 
   /**
-   * Fetch notifications when popover opens
+   * Fetch notifications when popover opens (capped at 10)
    */
   const handlePopoverChange = (open: boolean) => {
     setPopoverOpen(open)
     if (open) {
-      fetchNotifications({ limit: 20 })
+      fetchNotifications({ limit: 10 })
     }
   }
-
-  const location = useLocation()
 
   /**
    * Handle notification click: mark as read and open detail dialog
@@ -145,13 +136,11 @@ export function NotificationPanel({ unreadCount }: NotificationPanelProps) {
   }
 
   /**
-   * Navigate to the notification's URL from the detail dialog
+   * Navigate to the full notifications page
    */
-  const handleNavigate = () => {
-    if (selected?.data?.url) {
-      navigate(selected.data.url)
-    }
-    setSelected(null)
+  const handleViewAll = () => {
+    setPopoverOpen(false)
+    navigate('/notifications')
   }
 
   return (
@@ -183,14 +172,15 @@ export function NotificationPanel({ unreadCount }: NotificationPanelProps) {
           className="w-80 p-0 sm:w-96"
           sideOffset={8}
         >
-          {/* Header */}
+          {/* Header with View all link */}
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Notifications</h3>
-            {unreadCount > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {unreadCount} unread
-              </span>
-            )}
+            <button
+              onClick={handleViewAll}
+              className="text-xs text-primary hover:underline"
+            >
+              View all
+            </button>
           </div>
 
           {/* Notification list */}
@@ -215,40 +205,10 @@ export function NotificationPanel({ unreadCount }: NotificationPanelProps) {
       </Popover>
 
       {/* Notification detail dialog */}
-      <Dialog open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null) }}>
-        <DialogContent className="sm:max-w-md">
-          {selected && (() => {
-            const Icon = NOTIFICATION_CATEGORY_ICONS[selected.category]
-            const categoryLabel = NOTIFICATION_CATEGORY_LABELS[selected.category]
-            return (
-              <>
-                <DialogHeader>
-                  <div className="flex items-center gap-2">
-                    {Icon && <Icon className="h-5 w-5 text-muted-foreground" />}
-                    <DialogTitle>{selected.title}</DialogTitle>
-                  </div>
-                  <DialogDescription className="flex items-center gap-2">
-                    <span>{categoryLabel}</span>
-                    <span>&middot;</span>
-                    <span>{formatRelativeTime(selected.created_at)}</span>
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="text-sm text-foreground whitespace-pre-wrap">
-                  {selected.body}
-                </div>
-                {selected.data?.url && selected.data.url !== location.pathname && (
-                  <DialogFooter>
-                    <Button onClick={handleNavigate} size="sm">
-                      <ArrowRight className="mr-1.5 h-4 w-4" />
-                      Take action
-                    </Button>
-                  </DialogFooter>
-                )}
-              </>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
+      <NotificationDetailDialog
+        notification={selected}
+        onClose={() => setSelected(null)}
+      />
     </>
   )
 }

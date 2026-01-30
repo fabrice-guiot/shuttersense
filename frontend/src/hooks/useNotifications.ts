@@ -15,6 +15,7 @@ import * as notificationService from '@/services/notifications'
 import type {
   NotificationResponse,
   NotificationListParams,
+  NotificationStatsResponse,
 } from '@/contracts/api/notification-api'
 
 // ============================================================================
@@ -22,6 +23,19 @@ import type {
 // ============================================================================
 
 const UNREAD_POLL_INTERVAL = 30_000 // 30 seconds
+
+/**
+ * Sync the PWA app badge (dock/taskbar icon) with the unread count.
+ * Uses the Badging API — no-ops gracefully on unsupported browsers.
+ */
+function syncAppBadge(count: number): void {
+  if (!navigator.setAppBadge) return
+  if (count > 0) {
+    navigator.setAppBadge(count).catch(() => {})
+  } else {
+    navigator.clearAppBadge?.().catch(() => {})
+  }
+}
 
 interface UseNotificationsReturn {
   /** Notification list (most recent first) */
@@ -102,6 +116,7 @@ export const useNotifications = (
       const data = await notificationService.getUnreadCount()
       if (mountedRef.current) {
         setUnreadCount(data.unread_count)
+        syncAppBadge(data.unread_count)
       }
     } catch {
       // Silently fail for background poll — don't disrupt UI
@@ -121,7 +136,11 @@ export const useNotifications = (
             prev.map((n) => (n.guid === guid ? updated : n))
           )
           // Decrement unread count if it was previously unread
-          setUnreadCount((prev) => Math.max(0, prev - 1))
+          setUnreadCount((prev) => {
+            const next = Math.max(0, prev - 1)
+            syncAppBadge(next)
+            return next
+          })
         }
       } catch (err: unknown) {
         if (mountedRef.current) {
@@ -160,4 +179,60 @@ export const useNotifications = (
     refreshUnreadCount,
     markAsRead,
   }
+}
+
+// ============================================================================
+// Stats Hook
+// ============================================================================
+
+interface UseNotificationStatsReturn {
+  stats: NotificationStatsResponse | null
+  loading: boolean
+  error: string | null
+  refetch: () => Promise<void>
+}
+
+/**
+ * Hook for fetching notification stats (TopHeader KPIs).
+ */
+export const useNotificationStats = (): UseNotificationStatsReturn => {
+  const [stats, setStats] = useState<NotificationStatsResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const refetch = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await notificationService.getNotificationStats()
+      if (mountedRef.current) {
+        setStats(data)
+      }
+    } catch (err: unknown) {
+      if (mountedRef.current) {
+        const errorMessage =
+          (err as { userMessage?: string }).userMessage ||
+          'Failed to load notification stats'
+        setError(errorMessage)
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    refetch()
+  }, [refetch])
+
+  return { stats, loading, error, refetch }
 }

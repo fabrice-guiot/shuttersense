@@ -12,11 +12,11 @@ Issue #114 - PWA with Push Notifications
 """
 
 import json
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from backend.src.models.notification import Notification
 from backend.src.models.push_subscription import PushSubscription
@@ -168,6 +168,10 @@ class NotificationService:
         offset: int = 0,
         category: Optional[str] = None,
         unread_only: bool = False,
+        search: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        read_only: bool = False,
     ) -> tuple:
         """
         List notifications for a user with pagination and filtering.
@@ -179,6 +183,10 @@ class NotificationService:
             offset: Number to skip
             category: Optional category filter
             unread_only: If True, only return unread notifications
+            search: Optional text search on title and body (ILIKE)
+            from_date: Optional ISO date string, filter created_at >=
+            to_date: Optional ISO date string, filter created_at <= end of day
+            read_only: If True, only return read notifications
 
         Returns:
             Tuple of (notifications list, total count)
@@ -193,6 +201,35 @@ class NotificationService:
 
         if unread_only:
             query = query.filter(Notification.read_at.is_(None))
+
+        if read_only:
+            query = query.filter(Notification.read_at.isnot(None))
+
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Notification.title.ilike(pattern),
+                    Notification.body.ilike(pattern),
+                )
+            )
+
+        if from_date:
+            try:
+                parsed = date.fromisoformat(from_date)
+                query = query.filter(
+                    Notification.created_at >= datetime(parsed.year, parsed.month, parsed.day)
+                )
+            except ValueError:
+                pass  # Ignore invalid date
+
+        if to_date:
+            try:
+                parsed = date.fromisoformat(to_date)
+                end_of_day = datetime(parsed.year, parsed.month, parsed.day, 23, 59, 59)
+                query = query.filter(Notification.created_at <= end_of_day)
+            except ValueError:
+                pass  # Ignore invalid date
 
         total = query.count()
 
@@ -227,6 +264,47 @@ class NotificationService:
             )
             .scalar()
         )
+
+    def get_stats(self, user_id: int, team_id: int) -> dict:
+        """
+        Get notification stats for the TopHeader KPIs.
+
+        Args:
+            user_id: User's internal ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Dict with total_count, unread_count, this_week_count
+        """
+        base_filter = [
+            Notification.user_id == user_id,
+            Notification.team_id == team_id,
+        ]
+
+        total_count = (
+            self.db.query(func.count(Notification.id))
+            .filter(*base_filter)
+            .scalar()
+        )
+
+        unread_count = (
+            self.db.query(func.count(Notification.id))
+            .filter(*base_filter, Notification.read_at.is_(None))
+            .scalar()
+        )
+
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        this_week_count = (
+            self.db.query(func.count(Notification.id))
+            .filter(*base_filter, Notification.created_at >= seven_days_ago)
+            .scalar()
+        )
+
+        return {
+            "total_count": total_count,
+            "unread_count": unread_count,
+            "this_week_count": this_week_count,
+        }
 
     def mark_as_read(self, guid: str, team_id: int) -> Notification:
         """
@@ -481,6 +559,90 @@ class NotificationService:
             return False
 
         return prefs.get(pref_key, False)
+
+    # ========================================================================
+    # Domain Event Notifications
+    # ========================================================================
+
+    def notify_job_failure(self, job: Any) -> int:
+        """
+        Send job failure notifications to all active team members.
+
+        Builds notification content per push-payload.md job_failure schema
+        and delegates to send_notification() for per-user preference checks.
+
+        Args:
+            job: Failed Job instance (must have collection relationship loaded)
+
+        Returns:
+            Number of notifications actually sent (preference-filtered)
+        """
+        from backend.src.services.user_service import UserService
+
+        # Build notification content per contract
+        tool_name = job.tool.replace("_", " ").title()
+        collection_name = job.collection.name if job.collection else "Unknown"
+        error_summary = (job.error_message or "Unknown error")[:200]
+
+        title = "Analysis Failed"
+        body = f'{tool_name} analysis of "{collection_name}" failed: {error_summary}'
+
+        result_guid = job.result.guid if job.result else None
+        url = (
+            f"/analytics?tab=reports&id={result_guid}"
+            if result_guid
+            else "/analytics?tab=reports"
+        )
+
+        data = {
+            "url": url,
+            "job_guid": job.guid,
+            "collection_guid": job.collection.guid if job.collection else None,
+            "result_guid": result_guid,
+        }
+
+        push_payload = {
+            "title": title,
+            "body": body,
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+            "tag": f"job_failure_{job.guid}",
+            "data": {
+                **data,
+                "category": "job_failure",
+            },
+        }
+
+        # Resolve all active team members
+        user_service = UserService(db=self.db)
+        team_members = user_service.list_by_team(
+            team_id=job.team_id, active_only=True
+        )
+
+        sent_count = 0
+        for user in team_members:
+            notification = self.send_notification(
+                user=user,
+                team_id=job.team_id,
+                category="job_failure",
+                title=title,
+                body=body,
+                data=data,
+                push_payload=push_payload,
+            )
+            if notification is not None:
+                sent_count += 1
+
+        logger.info(
+            "Job failure notifications sent",
+            extra={
+                "job_guid": job.guid,
+                "sent_count": sent_count,
+                "team_members": len(team_members),
+            },
+        )
+
+        return sent_count
 
     # ========================================================================
     # Orchestration

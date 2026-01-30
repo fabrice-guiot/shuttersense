@@ -19,6 +19,7 @@ import {
   BookOpen,
   User,
   Bot,
+  Bell,
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
@@ -44,6 +45,7 @@ import LoginPage from './pages/LoginPage'
 import ProfilePage from './pages/ProfilePage'
 import AgentsPage from './pages/AgentsPage'
 import AgentDetailPage from './pages/AgentDetailPage'
+import NotificationsPage from './pages/NotificationsPage'
 
 // ============================================================================
 // Route Configuration
@@ -187,6 +189,18 @@ function App() {
                 <ProtectedRoute>
                   <MainLayout pageTitle="Agent Details" pageIcon={Bot} pageHelp="View detailed agent information and job history">
                     <AgentDetailPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Notifications page - NOT in sidebar, accessed via bell popover (Issue #114) */}
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <MainLayout pageTitle="Notifications" pageIcon={Bell} pageHelp="View and manage all your notifications">
+                    <NotificationsPage />
                   </MainLayout>
                 </ProtectedRoute>
               }
