@@ -262,7 +262,7 @@ export function CollectionList({
                       if (delta.is_first_import || netChange > 0) {
                         return <TrendingUp className="h-3.5 w-3.5 text-success" />
                       } else if (netChange < 0) {
-                        return <TrendingDown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        return <TrendingDown className="h-3.5 w-3.5 text-warning" />
                       } else {
                         return <ArrowRight className="h-3.5 w-3.5 text-info" />
                       }
@@ -293,7 +293,7 @@ export function CollectionList({
                             </div>
                           )}
                           {collection.file_info.delta.modified_count > 0 && (
-                            <div className="text-amber-600 dark:text-amber-400">
+                            <div className="text-warning">
                               ~{collection.file_info.delta.modified_count.toLocaleString()} modified
                             </div>
                           )}

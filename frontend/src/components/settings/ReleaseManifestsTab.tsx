@@ -298,6 +298,7 @@ export function ReleaseManifestsTab() {
             className="h-6 w-6"
             onClick={() => handleCopyChecksum(manifest)}
             title="Copy full checksum"
+            aria-label="Copy full checksum"
           >
             {copiedGuid === manifest.guid ? (
               <Check className="h-3 w-3 text-success" />
@@ -339,6 +340,8 @@ export function ReleaseManifestsTab() {
             className="h-8 w-8"
             onClick={() => handleToggleActive(manifest)}
             title={manifest.is_active ? 'Deactivate' : 'Activate'}
+            aria-label={manifest.is_active ? 'Deactivate manifest' : 'Activate manifest'}
+            aria-pressed={manifest.is_active}
           >
             {manifest.is_active ? (
               <PowerOff className="h-4 w-4 text-destructive" />
@@ -352,6 +355,7 @@ export function ReleaseManifestsTab() {
             className="h-8 w-8"
             onClick={() => handleOpenEditDialog(manifest)}
             title="Edit notes"
+            aria-label="Edit notes"
           >
             <Pencil className="h-4 w-4" />
           </Button>
@@ -361,6 +365,7 @@ export function ReleaseManifestsTab() {
             className="h-8 w-8 text-destructive hover:text-destructive"
             onClick={() => handleOpenDeleteDialog(manifest)}
             title="Delete"
+            aria-label="Delete manifest"
           >
             <Trash2 className="h-4 w-4" />
           </Button>

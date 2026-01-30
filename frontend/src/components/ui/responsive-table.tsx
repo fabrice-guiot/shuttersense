@@ -140,7 +140,7 @@ export function ResponsiveTable<T>({
                     <span className="text-muted-foreground shrink-0">
                       {col.header}
                     </span>
-                    <span className="text-right truncate">{col.cell(item)}</span>
+                    <div className="text-right truncate">{col.cell(item)}</div>
                   </div>
                 ))}
               </div>
