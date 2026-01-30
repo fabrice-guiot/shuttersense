@@ -19,8 +19,8 @@ This guide covers installing the ShutterSense web application and agent.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/fabrice-guiot/photo-admin.git
-cd photo-admin
+git clone https://github.com/fabrice-guiot/shuttersense.git
+cd shuttersense
 ```
 
 ### 2. Backend Setup
@@ -130,6 +130,84 @@ See [Agent Installation Guide](agent-installation.md) for detailed agent setup i
 |----------|-------------|---------|
 | `SHUSAI_ENV` | Environment name | `development` |
 | `SHUSAI_LOG_LEVEL` | Logging level | `INFO` |
+
+### OAuth Provider Setup (Required for Authentication)
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `SESSION_SECRET_KEY` | Secret for signing session cookies (min 32 chars) | Generate with `python3 -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `SESSION_MAX_AGE` | Session duration in seconds | `86400` (24 hours, default) |
+| `SESSION_HTTPS_ONLY` | Require HTTPS for cookies | `true` (production), `false` (development) |
+
+#### Google OAuth
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create or select a project
+3. Navigate to **APIs & Services > Credentials**
+4. Create an **OAuth 2.0 Client ID** (Web application)
+5. Add authorized redirect URI: `http://localhost:8000/api/auth/google/callback`
+6. Set environment variables:
+   ```bash
+   export GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+   export GOOGLE_CLIENT_SECRET="your-client-secret"
+   ```
+
+#### Microsoft OAuth
+
+1. Go to [Azure Portal](https://portal.azure.com/) > **App registrations**
+2. Register a new application
+3. Add redirect URI: `http://localhost:8000/api/auth/microsoft/callback`
+4. Create a client secret under **Certificates & secrets**
+5. Set environment variables:
+   ```bash
+   export MICROSOFT_CLIENT_ID="your-application-id"
+   export MICROSOFT_CLIENT_SECRET="your-client-secret"
+   ```
+
+### Push Notifications (Optional)
+
+To enable Web Push notifications, generate VAPID keys:
+
+```bash
+# Install the web-push library
+pip install py-vapid
+
+# Generate VAPID keys
+python3 -c "
+from py_vapid import Vapid
+v = Vapid()
+v.generate_keys()
+print('VAPID_PUBLIC_KEY=' + v.public_key)
+print('VAPID_PRIVATE_KEY=' + v.private_key)
+"
+```
+
+Set the environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `VAPID_PUBLIC_KEY` | Base64url-encoded public key |
+| `VAPID_PRIVATE_KEY` | Base64url-encoded private key |
+| `VAPID_SUBJECT` | Contact URI (e.g., `mailto:admin@example.com`) |
+
+### Complete Environment Variables Reference
+
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `SHUSAI_MASTER_KEY` | Yes | Fernet encryption key | - |
+| `SHUSAI_DB_URL` | Yes | PostgreSQL connection URL | - |
+| `SESSION_SECRET_KEY` | Yes (for OAuth) | Session cookie signing key | - |
+| `JWT_SECRET_KEY` | Yes (for API tokens) | JWT signing key | - |
+| `SHUSAI_ENV` | No | Environment name | `development` |
+| `SHUSAI_LOG_LEVEL` | No | Logging level | `INFO` |
+| `SHUSAI_SPA_DIST_PATH` | No | Path to frontend dist | `frontend/dist` |
+| `SHUSAI_AUTHORIZED_LOCAL_ROOTS` | No | Comma-separated authorized local paths | - |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins | `http://localhost:3000,...` |
+| `VAPID_PUBLIC_KEY` | No | Web Push public key | - |
+| `VAPID_PRIVATE_KEY` | No | Web Push private key | - |
+| `VAPID_SUBJECT` | No | Web Push contact URI | - |
+
+> **Note:** In production, the FastAPI server serves both the API and the React SPA frontend from the same origin. Set `SHUSAI_SPA_DIST_PATH` to point to the built frontend `dist/` directory.
 
 ## Verify Installation
 

@@ -1,6 +1,6 @@
 # Component Documentation
 
-Guide to using shadcn/ui components in the Photo Admin frontend application.
+Guide to using shadcn/ui components in the ShutterSense frontend application.
 
 > **Important**: Before using components, review the [Design System](./design-system.md) for color guidelines, button usage patterns, and UI consistency requirements.
 

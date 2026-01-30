@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dashboard
+
+- **Dashboard landing page with KPIs** - Aggregated statistics and quick-access widgets on the home page ([#127])
+
+### Calendar & Events
+
+- **Calendar Events feature** - Full event management with locations, organizers, performers, and configurable statuses ([#70])
+- **Event deadline in Calendar view** - Deadlines now appear directly on the calendar ([#82])
+- **Instagram handle for Locations/Organizers** - Social media link support for event entities ([#81])
+- **Compact calendar view for mobile** - Responsive calendar layout optimized for small screens ([#80])
+- **Filter inactive categories from EventForm** - Inactive categories no longer appear in event creation dropdowns ([#77])
+
+### Identity & Security
+
+- **Multi-tenant user authentication** - OAuth 2.0 login (Google, Microsoft), session-based auth, API tokens, and team-scoped data isolation ([#86])
+- **Global Unique Identifiers (GUIDs)** - All entities use prefixed GUIDs in APIs and URLs; numeric IDs are internal-only ([#64])
+
+### UI/UX Polish
+
+- **Single Title Pattern for page layout** - Page titles rendered exclusively in TopHeader for consistency ([#79])
+- **Dark theme compliance** - Full dark mode support across all components and pages ([#65])
+- **User timezone display** - Dates and times rendered in the user's local timezone ([#66])
+- **ShutterSense.ai rebrand** - Project renamed from photo-admin to ShutterSense.ai across all components ([#88])
+- **Serve SPA and APIs from same server** - Frontend and backend served from a single FastAPI process ([#84])
+
+### Agent Architecture
+
+- **Distributed Agent Architecture** - Lightweight agents claim and execute jobs from the server queue; server acts as coordinator only ([#96])
+- **Remove CLI direct usage** - Standalone CLI tools removed; all tool execution consolidated through the ShutterSense agent binary ([#121])
+
+### Storage & Analytics
+
+- **Storage Optimization for Analysis Results** - Efficient JSONB storage, GIN indexes, and pagination for large result sets ([#104])
+- **Fix trend aggregation** - Corrected metric extraction and time-series aggregation for trend charts ([#108])
+- **Normalize OpenAPI specification structure** - Consistent API schema naming and organization ([#116])
+
+### Cloud Integration
+
+- **Cloud Storage Bucket Inventory Import MVP** - S3 Inventory and GCS Storage Insights integration for bulk file discovery ([#112])
+- **Bucket inventory import phases 6-9** - Incremental import, conflict resolution, progress tracking, and scheduling ([#117])
+
+### Mobile & PWA
+
+- **Mobile responsive tables and tabs** - Adaptive table layouts and tab navigation for small screens ([#125])
+- **PWA with push notifications** - Installable Progressive Web App with push notification support for job completion alerts ([#129])
+
 ## [1.0.0] - 2026-01-09
 
 ### Added
@@ -75,29 +121,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Python 3.10+ required** - For match/case syntax and modern type hints
 - **Centralized version management** - Git tag-based versioning across all components
 
-### CLI Tools
+## [0.5] - 2026-01-14
 
-These standalone CLI tools were available prior to v1.0.0:
+### Added
 
-- **PhotoStats** - Analyze photo collections for statistics and orphaned files
-- **Photo Pairing** - Group files by filename patterns, track camera usage
-- **Pipeline Validation** - Validate collections against processing pipelines
+- **Calendar Events feature** - Full event lifecycle with CRUD, multi-day events, locations, organizers, performers, and configurable statuses ([#70])
+- **Event deadline in Calendar view** - Workflow deadlines displayed on the calendar ([#82])
+- **Instagram handle for Locations/Organizers** - Social media integration for event entities ([#81])
+- **Compact calendar view for mobile** - Responsive calendar layout for small screens ([#80])
+- **Single Title Pattern** - Consistent page layout with titles only in TopHeader ([#79])
+- **Global Unique Identifiers (GUIDs)** - Prefixed GUID system for all entities ([#64])
+- **Dark theme compliance** - Complete dark mode support across the application ([#65])
+- **User timezone display** - Localized date and time rendering ([#66])
 
-## Migration from CLI-only Usage
+### Fixed
 
-If you were using ShutterSense as CLI tools only:
+- **Filter inactive categories from EventForm** - Inactive categories excluded from dropdowns ([#77])
 
-1. **No changes required** - CLI tools continue to work as before
-2. **Optional database** - CLI tools can now read config from PostgreSQL
-3. **YAML fallback** - If database unavailable, CLI uses YAML config as before
+## [0.4] - 2026-01-09
 
-To enable database configuration for CLI tools:
+### Added
 
-```bash
-export SHUSAI_DB_URL="postgresql://user:pass@localhost:5432/shuttersense"
-```
+- **Complete Epic 007** - Remote Photos Completion with production-ready application ([#63])
+  - Trend analysis with historical metrics and visualization
+  - Configuration migration from YAML to database
+  - Display graph enhancements with termination type analysis
+  - WebSocket job completion callbacks
+  - Analytics page consolidating Results and Tools
+  - Production security hardening (Phase 7 & 8)
+
+## [0.3] - 2026-01-03
+
+### Added
+
+- **UI Migration to Modern Design System** - Migrated from MUI to shadcn/ui with TypeScript, Tailwind CSS, and Radix UI primitives ([#44])
+- **UX Polish: KPI Metrics, Search, Sidebar Collapse** - TopHeader KPI stats, collection search, and collapsible sidebar ([#47])
+- **Centralized version management** - Git tag-based version synchronization across agent, backend, and frontend ([#48])
+
+## [0.2] - 2026-01-01
+
+### Added
+
+- **Remote photos persistence** - Backend web application foundation with FastAPI, PostgreSQL, SQLAlchemy ORM, and React frontend ([#32])
+
+## [0.1] - 2025-12-29
+
+### Added
+
+- **CI/CD status badge** - GitHub Actions build status in README ([#1])
+- **AGPL v3 license** - GNU Affero General Public License ([#2])
+- **Improved report content** - Reports focused on image analysis rather than raw file stats ([#6])
+- **Config management refactoring** - Reusable PhotoAdminConfig class with interactive prompts ([#8])
+- **Photo Pairing Tool** - Group files by filename patterns, track camera usage and processing methods ([#15])
+- **HTML Report Consistency & Tool Improvements** - Shared Jinja2 base template, --help flags, graceful CTRL+C, atomic writes, timestamped filenames ([#17])
+- **Pipeline Validation Tool** - Validate photo collections against processing pipelines with display graph mode ([#23])
 
 ---
 
-[Unreleased]: https://github.com/fabrice-guiot/photo-admin/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/fabrice-guiot/photo-admin/releases/tag/v1.0.0
+[Unreleased]: https://github.com/fabrice-guiot/shuttersense/compare/v0.5...HEAD
+[1.0.0]: https://github.com/fabrice-guiot/shuttersense/releases/tag/v0.4
+[0.5]: https://github.com/fabrice-guiot/shuttersense/compare/v0.4...v0.5
+[0.4]: https://github.com/fabrice-guiot/shuttersense/compare/v0.3...v0.4
+[0.3]: https://github.com/fabrice-guiot/shuttersense/compare/v0.2...v0.3
+[0.2]: https://github.com/fabrice-guiot/shuttersense/compare/v0.1...v0.2
+[0.1]: https://github.com/fabrice-guiot/shuttersense/releases/tag/v0.1
+
+[#1]: https://github.com/fabrice-guiot/shuttersense/pull/1
+[#2]: https://github.com/fabrice-guiot/shuttersense/pull/2
+[#6]: https://github.com/fabrice-guiot/shuttersense/pull/6
+[#8]: https://github.com/fabrice-guiot/shuttersense/pull/8
+[#15]: https://github.com/fabrice-guiot/shuttersense/pull/15
+[#17]: https://github.com/fabrice-guiot/shuttersense/pull/17
+[#23]: https://github.com/fabrice-guiot/shuttersense/pull/23
+[#32]: https://github.com/fabrice-guiot/shuttersense/pull/32
+[#44]: https://github.com/fabrice-guiot/shuttersense/pull/44
+[#47]: https://github.com/fabrice-guiot/shuttersense/pull/47
+[#48]: https://github.com/fabrice-guiot/shuttersense/pull/48
+[#63]: https://github.com/fabrice-guiot/shuttersense/pull/63
+[#64]: https://github.com/fabrice-guiot/shuttersense/pull/64
+[#65]: https://github.com/fabrice-guiot/shuttersense/pull/65
+[#66]: https://github.com/fabrice-guiot/shuttersense/pull/66
+[#70]: https://github.com/fabrice-guiot/shuttersense/pull/70
+[#77]: https://github.com/fabrice-guiot/shuttersense/pull/77
+[#79]: https://github.com/fabrice-guiot/shuttersense/pull/79
+[#80]: https://github.com/fabrice-guiot/shuttersense/pull/80
+[#81]: https://github.com/fabrice-guiot/shuttersense/pull/81
+[#82]: https://github.com/fabrice-guiot/shuttersense/pull/82
+[#84]: https://github.com/fabrice-guiot/shuttersense/pull/84
+[#86]: https://github.com/fabrice-guiot/shuttersense/pull/86
+[#88]: https://github.com/fabrice-guiot/shuttersense/pull/88
+[#96]: https://github.com/fabrice-guiot/shuttersense/pull/96
+[#104]: https://github.com/fabrice-guiot/shuttersense/pull/104
+[#108]: https://github.com/fabrice-guiot/shuttersense/pull/108
+[#112]: https://github.com/fabrice-guiot/shuttersense/pull/112
+[#116]: https://github.com/fabrice-guiot/shuttersense/pull/116
+[#117]: https://github.com/fabrice-guiot/shuttersense/pull/117
+[#121]: https://github.com/fabrice-guiot/shuttersense/pull/121
+[#125]: https://github.com/fabrice-guiot/shuttersense/pull/125
+[#127]: https://github.com/fabrice-guiot/shuttersense/pull/127
+[#129]: https://github.com/fabrice-guiot/shuttersense/pull/129
