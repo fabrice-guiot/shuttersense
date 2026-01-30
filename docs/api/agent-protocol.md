@@ -15,7 +15,7 @@ Agents are lightweight binaries that run on user machines and execute photo anal
 
 ### Registration Flow
 
-```
+```text
 Agent                              Server
   │                                  │
   │  POST /api/agent/v1/register     │
@@ -33,7 +33,7 @@ Agent                              Server
 
 ### Registration Endpoint
 
-```
+```text
 POST /api/agent/v1/register
 ```
 
@@ -67,7 +67,7 @@ The `api_key` is shown only once. The agent stores it in its local encrypted cre
 
 After registration, the agent enters a polling loop:
 
-```
+```text
 ┌──────────────────────────────────────────────┐
 │                 Polling Loop                  │
 │                                               │
@@ -87,7 +87,7 @@ After registration, the agent enters a polling loop:
 
 ## Job Lifecycle
 
-```
+```text
 SCHEDULED → PENDING → ASSIGNED → RUNNING → COMPLETED
                                          → FAILED
                                          → CANCELLED
@@ -220,7 +220,7 @@ Get the team's configuration (photo extensions, camera mappings, processing meth
 
 For large results (HTML reports can be several MB), the agent uses chunked upload:
 
-```
+```text
 1. POST /api/agent/v1/jobs/{guid}/uploads/initiate
    → { upload_id, chunk_size }
 

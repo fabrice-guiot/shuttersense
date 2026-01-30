@@ -15,9 +15,9 @@ The top section shows aggregated statistics across all collections and tools:
 | Total Collections | Number of registered collections | `/api/collections/stats` |
 | Total Files | Sum of files across all collections | `/api/collections/stats` |
 | Active Agents | Number of online agents | `/api/agent/v1/pool-status` |
-| Jobs (Last 7 Days) | Jobs completed in the past week | `/api/analytics/stats` |
+| Jobs (Last 7 Days) | Jobs completed in the past week | `/api/tools/queue-status` |
 | Storage Used | Total storage across collections | `/api/analytics/storage` |
-| Issues Found | Total issues from recent analysis | `/api/analytics/stats` |
+| Issues Found | Total issues from recent analysis | `/api/results/stats` |
 
 KPIs are also displayed in the TopHeader stats area (next to the bell icon) for visibility across all pages. This is managed by the `useHeaderStats` hook and `HeaderStatsContext`.
 
@@ -48,7 +48,7 @@ The activity feed shows recent events across the application:
 - **Agent status changes** - Agents coming online or going offline
 - **Collection updates** - New collections or configuration changes
 
-The feed is fetched from `/api/analytics/activity` and displays the most recent entries with timestamps rendered in the user's local timezone.
+The feed is assembled from existing endpoints (`/api/tools/jobs`, `/api/agent/v1/pool-status`, `/api/collections`) and displays the most recent entries with timestamps rendered in the user's local timezone.
 
 ## Queue Status
 
@@ -61,7 +61,7 @@ The queue status section shows the current state of the job processing pipeline:
 | Completed | Jobs finished in the current session |
 | Failed | Jobs that encountered errors |
 
-Data is fetched from `/api/tools/queue/status`. When no agents are available, a warning banner is displayed to inform users that jobs will remain queued.
+Data is fetched from `/api/tools/queue-status`. When no agents are available, a warning banner is displayed to inform users that jobs will remain queued.
 
 ## Trend Charts
 
@@ -92,10 +92,8 @@ Dashboard data is fetched using the following hooks and endpoints:
 | Hook | Endpoint | Purpose |
 |------|----------|---------|
 | `useHeaderStats` | Multiple | KPI aggregation for header display |
-| `useAnalytics` | `/api/analytics/stats` | Global analytics KPIs |
 | `useAnalyticsStorage` | `/api/analytics/storage` | Storage metrics |
-| `useAnalyticsActivity` | `/api/analytics/activity` | Recent activity feed |
-| `useQueueStatus` | `/api/tools/queue/status` | Job queue state |
+| `useQueueStatus` | `/api/tools/queue-status` | Job queue state |
 | `useTrends` | `/api/trends/*` | Trend chart data |
 | `useAgentPoolStatus` | `/api/agent/v1/pool-status` | Agent availability |
 

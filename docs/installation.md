@@ -120,21 +120,21 @@ See [Agent Installation Guide](agent-installation.md) for detailed agent setup i
 ### Required for Backend
 
 | Variable | Description | Example |
-|----------|-------------|---------|
+| ---------- | ------------- | --------- |
 | `SHUSAI_MASTER_KEY` | Fernet key for credential encryption | Generate with Python (see above) |
 | `SHUSAI_DB_URL` | PostgreSQL connection URL | `postgresql://user:pass@localhost:5432/shuttersense` |
 
 ### Optional
 
 | Variable | Description | Default |
-|----------|-------------|---------|
+| ---------- | ------------- | --------- |
 | `SHUSAI_ENV` | Environment name | `development` |
 | `SHUSAI_LOG_LEVEL` | Logging level | `INFO` |
 
 ### OAuth Provider Setup (Required for Authentication)
 
 | Variable | Description | Example |
-|----------|-------------|---------|
+| ---------- | ------------- | --------- |
 | `SESSION_SECRET_KEY` | Secret for signing session cookies (min 32 chars) | Generate with `python3 -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `SESSION_MAX_AGE` | Session duration in seconds | `86400` (24 hours, default) |
 | `SESSION_HTTPS_ONLY` | Require HTTPS for cookies | `true` (production), `false` (development) |
@@ -185,7 +185,7 @@ print('VAPID_PRIVATE_KEY=' + v.private_key)
 Set the environment variables:
 
 | Variable | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | `VAPID_PUBLIC_KEY` | Base64url-encoded public key |
 | `VAPID_PRIVATE_KEY` | Base64url-encoded private key |
 | `VAPID_SUBJECT` | Contact URI (e.g., `mailto:admin@example.com`) |
@@ -193,7 +193,7 @@ Set the environment variables:
 ### Complete Environment Variables Reference
 
 | Variable | Required | Description | Default |
-|----------|----------|-------------|---------|
+| ---------- | ---------- | ------------- | --------- |
 | `SHUSAI_MASTER_KEY` | Yes | Fernet encryption key | - |
 | `SHUSAI_DB_URL` | Yes | PostgreSQL connection URL | - |
 | `SESSION_SECRET_KEY` | Yes (for OAuth) | Session cookie signing key | - |

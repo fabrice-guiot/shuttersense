@@ -13,22 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Calendar & Events
 
-- **Calendar Events feature** - Full event management with locations, organizers, performers, and configurable statuses ([#70])
-- **Event deadline in Calendar view** - Deadlines now appear directly on the calendar ([#82])
-- **Instagram handle for Locations/Organizers** - Social media link support for event entities ([#81])
-- **Compact calendar view for mobile** - Responsive calendar layout optimized for small screens ([#80])
 - **Filter inactive categories from EventForm** - Inactive categories no longer appear in event creation dropdowns ([#77])
 
 ### Identity & Security
 
 - **Multi-tenant user authentication** - OAuth 2.0 login (Google, Microsoft), session-based auth, API tokens, and team-scoped data isolation ([#86])
-- **Global Unique Identifiers (GUIDs)** - All entities use prefixed GUIDs in APIs and URLs; numeric IDs are internal-only ([#64])
 
 ### UI/UX Polish
 
-- **Single Title Pattern for page layout** - Page titles rendered exclusively in TopHeader for consistency ([#79])
-- **Dark theme compliance** - Full dark mode support across all components and pages ([#65])
-- **User timezone display** - Dates and times rendered in the user's local timezone ([#66])
 - **ShutterSense.ai rebrand** - Project renamed from photo-admin to ShutterSense.ai across all components ([#88])
 - **Serve SPA and APIs from same server** - Frontend and backend served from a single FastAPI process ([#84])
 
@@ -121,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Python 3.10+ required** - For match/case syntax and modern type hints
 - **Centralized version management** - Git tag-based versioning across all components
 
-## [0.5] - 2026-01-14
+## [1.1.0] - 2026-01-14
 
 ### Added
 
@@ -178,9 +170,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/fabrice-guiot/shuttersense/compare/v0.5...HEAD
-[1.0.0]: https://github.com/fabrice-guiot/shuttersense/releases/tag/v0.4
-[0.5]: https://github.com/fabrice-guiot/shuttersense/compare/v0.4...v0.5
+[Unreleased]: https://github.com/fabrice-guiot/shuttersense/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/fabrice-guiot/shuttersense/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/fabrice-guiot/shuttersense/releases/tag/v1.0.0
 [0.4]: https://github.com/fabrice-guiot/shuttersense/compare/v0.3...v0.4
 [0.3]: https://github.com/fabrice-guiot/shuttersense/compare/v0.2...v0.3
 [0.2]: https://github.com/fabrice-guiot/shuttersense/compare/v0.1...v0.2

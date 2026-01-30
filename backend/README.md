@@ -846,8 +846,8 @@ All entity endpoints use GUIDs (e.g., `col_01hgw2bbg...`) as path parameters, ne
 - `POST /api/agent/v1/jobs/{guid}/fail` -- Report job failure
 - `GET /api/agent/v1/jobs/{guid}/config` -- Get job configuration
 - `GET /api/agent/v1/config` -- Get team configuration for agent
-- `POST /api/agent/v1/uploads/initiate` -- Initiate chunked upload
-- `PUT /api/agent/v1/uploads/{upload_id}/chunks/{chunk_number}` -- Upload chunk
+- `POST /api/agent/v1/jobs/{job_guid}/uploads/initiate` -- Initiate chunked upload
+- `PUT /api/agent/v1/uploads/{upload_id}/{chunk_index}` -- Upload chunk
 - `GET /api/agent/v1/uploads/{upload_id}/status` -- Get upload status
 - `POST /api/agent/v1/uploads/{upload_id}/finalize` -- Finalize upload
 - `DELETE /api/agent/v1/uploads/{upload_id}` -- Cancel upload

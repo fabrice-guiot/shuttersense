@@ -54,7 +54,7 @@ python -m cli.main --help
 
 Use the following format for branch names:
 
-```
+```text
 <issue-number>-<short-description>
 ```
 
@@ -134,7 +134,7 @@ Write clear, concise commit messages:
 ### Coverage Targets
 
 | Component | Target |
-|-----------|--------|
+| ----------- | -------- |
 | Backend core logic | >80% |
 | Agent core logic | >80% |
 | Utility functions | >85% |

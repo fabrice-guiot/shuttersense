@@ -127,7 +127,7 @@ shuttersense-agent register --server <URL> --token <TOKEN> [--name <NAME>] [--fo
 ```
 
 | Option | Short | Description |
-|--------|-------|-------------|
+| -------- | ------- | ------------- |
 | `--server` | `-s` | ShutterSense server URL (required) |
 | `--token` | `-t` | One-time registration token (required) |
 | `--name` | `-n` | Agent display name (defaults to hostname) |
@@ -196,7 +196,7 @@ shuttersense-agent connectors list [--pending] [--json]
 ```
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--pending` | Only show connectors pending credential configuration |
 | `--json` | Output as JSON |
 
@@ -209,7 +209,7 @@ shuttersense-agent connectors configure <GUID> [--test/--no-test] [--force]
 ```
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--test/--no-test` | Test credentials before storing (default: test) |
 | `--force` | Overwrite existing credentials without prompting |
 
@@ -262,7 +262,7 @@ shuttersense-agent test <PATH> [--tool <TOOL>] [--check-only] [--output <PATH>]
 ```
 
 | Option | Short | Description |
-|--------|-------|-------------|
+| -------- | ------- | ------------- |
 | `--tool` | | Run only this analysis tool (default: all) |
 | `--check-only` | | Only check accessibility, skip analysis |
 | `--output` | `-o` | Save HTML report (file path with `--tool`, directory path without) |
@@ -298,7 +298,7 @@ shuttersense-agent collection create <PATH> [--name <NAME>] [--skip-test] [--ana
 ```
 
 | Option | Short | Description |
-|--------|-------|-------------|
+| -------- | ------- | ------------- |
 | `--name` | `-n` | Collection display name (defaults to folder name) |
 | `--skip-test` | | Skip test validation (use with caution) |
 | `--analyze` | | Queue initial analysis after creation (not yet implemented) |
@@ -314,7 +314,7 @@ shuttersense-agent collection list [--type <TYPE>] [--status <STATUS>] [--offlin
 ```
 
 | Option | Short | Description |
-|--------|-------|-------------|
+| -------- | ------- | ------------- |
 | `--type` | `-t` | Filter by type: LOCAL, S3, GCS, SMB |
 | `--status` | `-s` | Filter by status: accessible, inaccessible, pending |
 | `--offline` | | Use locally cached data instead of fetching from server |
@@ -346,7 +346,7 @@ shuttersense-agent run <COLLECTION_GUID> --tool <TOOL> [--offline] [--output <PA
 ```
 
 | Option | Short | Description |
-|--------|-------|-------------|
+| -------- | ------- | ------------- |
 | `--tool` | `-t` | Analysis tool to run (required): photostats, photo_pairing, pipeline_validation |
 | `--offline` | | Store result locally for later sync (LOCAL collections only) |
 | `--output` | `-o` | Save HTML report to this path |
@@ -377,7 +377,7 @@ shuttersense-agent sync [--dry-run]
 ```
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--dry-run` | List pending results without uploading |
 
 Scans the local result store for pending results, uploads each one, and cleans up successfully uploaded result files from disk. Results that already exist on the server (HTTP 409) are automatically cleaned up.
@@ -496,7 +496,7 @@ agent/
 Agent configuration is stored as a YAML file named `agent-config.yaml` in a platform-specific directory:
 
 | Platform | Path |
-|----------|------|
+| ---------- | ------ |
 | **macOS** | `~/Library/Application Support/shuttersense/agent-config.yaml` |
 | **Linux** | `~/.config/shuttersense/agent-config.yaml` |
 | **Windows** | `%APPDATA%\shuttersense\agent-config.yaml` |
@@ -521,7 +521,7 @@ log_level: INFO
 Cached data (collections, test results, offline results) is stored in the platform data directory:
 
 | Platform | Path |
-|----------|------|
+| ---------- | ------ |
 | **macOS** | `~/Library/Application Support/shuttersense/` |
 | **Linux** | `~/.local/share/shuttersense/` |
 | **Windows** | `%APPDATA%\shuttersense\` |
@@ -543,7 +543,7 @@ Configuration values are resolved in this order (highest priority first):
 ## Environment Variables
 
 | Variable | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | `SHUTTERSENSE_SERVER_URL` | Override server URL from config file |
 | `SHUTTERSENSE_API_KEY` | Override API key from config file |
 | `SHUTTERSENSE_LOG_LEVEL` | Override log level (DEBUG, INFO, WARNING, ERROR) |
@@ -557,7 +557,7 @@ Configuration values are resolved in this order (highest priority first):
 The agent supports multiple storage backends through a unified adapter interface:
 
 | Adapter | Module | Description |
-|---------|--------|-------------|
+| --------- | -------- | ------------- |
 | **Local** | `src/remote/local_adapter.py` | Local filesystem access |
 | **S3** | `src/remote/s3_adapter.py` | AWS S3 buckets (via boto3) |
 | **GCS** | `src/remote/gcs_adapter.py` | Google Cloud Storage buckets |
@@ -590,7 +590,7 @@ All tools use the team configuration from the server (or local cache) for file e
 The agent maintains several local caches for offline operation and performance:
 
 | Cache | File | TTL | Purpose |
-|-------|------|-----|---------|
+| ------- | ------ | ----- | --------- |
 | **Collection cache** | `collection-cache.json` | Configurable | Collection metadata for offline listing and `run` |
 | **Team config cache** | `team-config-cache.json` | Configurable | Extensions, cameras, processing methods, pipeline |
 | **Test cache** | `test-cache/<hash>.json` | 24 hours | Test results to avoid redundant path checks |
@@ -675,7 +675,7 @@ python -m build
 ### Runtime
 
 | Package | Version | Purpose |
-|---------|---------|---------|
+| --------- | --------- | --------- |
 | httpx | >= 0.24.0 | HTTP client for REST API communication |
 | websockets | >= 11.0 | Real-time progress streaming |
 | pydantic | >= 2.0 | Data validation and serialization |
@@ -689,7 +689,7 @@ python -m build
 ### Development
 
 | Package | Version | Purpose |
-|---------|---------|---------|
+| --------- | --------- | --------- |
 | pytest | >= 7.0 | Test framework |
 | pytest-asyncio | >= 0.21 | Async test support |
 | pytest-cov | >= 4.0 | Coverage reporting |
@@ -701,7 +701,7 @@ python -m build
 ### Build
 
 | Package | Version | Purpose |
-|---------|---------|---------|
+| --------- | --------- | --------- |
 | pyinstaller | >= 5.0 | Standalone binary packaging |
 | hatchling | -- | Build backend |
 | hatch-vcs | -- | Git-based version detection |
