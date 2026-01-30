@@ -182,10 +182,10 @@ export function CollectionList({
                     className={cn(
                       'h-2 w-2 rounded-full',
                       collection.bound_agent.status === 'online'
-                        ? 'bg-green-500'
+                        ? 'bg-success'
                         : collection.bound_agent.status === 'offline'
-                          ? 'bg-gray-400'
-                          : 'bg-red-500'
+                          ? 'bg-muted-foreground'
+                          : 'bg-destructive'
                     )}
                   />
                   <span className="text-sm truncate max-w-[100px]">

@@ -112,11 +112,12 @@ describe('ResponsiveTable', () => {
       const table = desktopWrapper!.querySelector('table')
       expect(table).toBeInTheDocument()
 
-      // All column headers should be rendered
+      // All visible column headers should be rendered (hidden columns excluded)
       const headers = within(desktopWrapper as HTMLElement).getAllByRole(
         'columnheader'
       )
-      expect(headers).toHaveLength(allRolesColumns.length)
+      const visibleColumns = allRolesColumns.filter(c => c.cardRole !== 'hidden')
+      expect(headers).toHaveLength(visibleColumns.length)
     })
   })
 

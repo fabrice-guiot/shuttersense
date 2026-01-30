@@ -131,11 +131,11 @@ export function TeamsTab() {
     {
       header: 'Status',
       cell: (team) => team.is_active ? (
-        <Badge variant="default" className="bg-green-600">
+        <Badge variant="success">
           Active
         </Badge>
       ) : (
-        <Badge variant="secondary">Inactive</Badge>
+        <Badge variant="muted">Inactive</Badge>
       ),
       cardRole: 'badge',
     },

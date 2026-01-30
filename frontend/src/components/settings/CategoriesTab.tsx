@@ -132,7 +132,7 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
     {
       header: 'Status',
       cell: (category) => (
-        <Badge variant={category.is_active ? 'default' : 'secondary'}>
+        <Badge variant={category.is_active ? 'success' : 'muted'}>
           {category.is_active ? 'Active' : 'Inactive'}
         </Badge>
       ),
@@ -154,6 +154,7 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
             size="icon"
             onClick={() => onEdit(category)}
             title="Edit category"
+            aria-label={`Edit category ${category.name}`}
           >
             <Edit className="h-4 w-4" />
           </Button>
@@ -162,6 +163,7 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
             size="icon"
             onClick={() => handleDeleteClick(category)}
             title="Delete category"
+            aria-label={`Delete category ${category.name}`}
             className="text-destructive hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />

@@ -8,14 +8,14 @@
 **Decision**: Use CSS-toggled dual rendering (table + card list) with a `cardRole` column role system.
 
 **Rationale**:
-- All 11 tables use the same `Table/TableHeader/TableBody/TableRow/TableCell` component primitives from `frontend/src/components/ui/table.tsx`. A single `<ResponsiveTable>` wrapper can serve all cases.
+- All 13 tables use the same `Table/TableHeader/TableBody/TableRow/TableCell` component primitives from `frontend/src/components/ui/table.tsx`. A single `<ResponsiveTable>` wrapper can serve all cases.
 - CSS toggling via `hidden md:block` / `md:hidden` is the simplest approach — no JavaScript viewport detection, no `useMediaQuery` hook, no conditional rendering logic. Both views are in the DOM but only one is visible.
 - The card layout with structured zones (title, subtitle, badge, detail, action) handles all column counts from 4 (Release Manifests) to 10 (Results) without per-table layout code.
 - The `cardRole` system allows declarative column→card mapping without runtime logic. Default to `detail` means most columns just work.
 
 **Alternatives Considered**:
 1. **Column hiding (CSS visibility)**: Rejected — hides data from users; doesn't scale to 9-10 column tables.
-2. **TanStack Table**: Rejected — heavy dependency requiring full rewrite of 11 tables. The existing table primitives are adequate for desktop.
+2. **TanStack Table**: Rejected — heavy dependency requiring full rewrite of 13 tables. The existing table primitives are adequate for desktop.
 3. **JavaScript `useMediaQuery` hook with conditional rendering**: Rejected — adds complexity (resize listeners, hydration concerns) for no UX benefit. CSS toggling is sufficient for the `md` breakpoint.
 4. **Single responsive component with CSS Grid**: Rejected — card layout provides better mobile UX than a grid that still requires horizontal scanning.
 
@@ -69,7 +69,7 @@
 - The `cardRole: 'action'` system renders the same `cell()` output in both desktop and mobile views. No special mobile-only action rendering is needed.
 - The Agents table already uses a `DropdownMenu` pattern — this naturally works in the card action row.
 - Other tables use 2-5 icon buttons with tooltips. On mobile cards, these render in a flex row with `gap-2`. Touch targets are adequate when buttons use `size="sm"` (36px) or larger.
-- Standardizing all tables to dropdown menus would require changing 10 existing table implementations for minimal UX benefit.
+- Standardizing all tables to dropdown menus would require changing 12 existing table implementations for minimal UX benefit.
 
 **Alternatives Considered**:
 1. **Consolidate all actions into DropdownMenu on mobile**: Rejected — requires mobile-specific action rendering, increasing component complexity. Can be revisited in future iteration.

@@ -63,7 +63,7 @@ const columns: ColumnDef<CollectionRow>[] = [
 | `badge` | No | — | Right-aligned inline with title |
 | `detail` | No | Yes (default) | Key-value row: "Header: Value" |
 | `action` | No | — | Bottom row with border separator |
-| `hidden` | No | — | Not rendered on mobile |
+| `hidden` | No | — | Not rendered on mobile or desktop |
 
 ### Edge Case Contract
 

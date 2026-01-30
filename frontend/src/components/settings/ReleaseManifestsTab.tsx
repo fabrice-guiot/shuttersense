@@ -300,7 +300,7 @@ export function ReleaseManifestsTab() {
             title="Copy full checksum"
           >
             {copiedGuid === manifest.guid ? (
-              <Check className="h-3 w-3 text-green-600" />
+              <Check className="h-3 w-3 text-success" />
             ) : (
               <Copy className="h-3 w-3" />
             )}
@@ -312,11 +312,11 @@ export function ReleaseManifestsTab() {
     {
       header: 'Status',
       cell: (manifest) => manifest.is_active ? (
-        <Badge variant="default" className="bg-green-600">
+        <Badge variant="success">
           Active
         </Badge>
       ) : (
-        <Badge variant="secondary">Inactive</Badge>
+        <Badge variant="muted">Inactive</Badge>
       ),
       cardRole: 'badge',
     },

@@ -3,7 +3,7 @@
 **Feature Branch**: `123-mobile-responsive-tables-tabs`
 **Created**: 2026-01-29
 **Status**: Draft
-**Input**: User description: "Github issue #123 based on PRD: docs/prd/024-mobile-responsive-tables-tabs.md"
+**Input**: User description: "GitHub issue #123 based on PRD: docs/prd/024-mobile-responsive-tables-tabs.md"
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -11,7 +11,7 @@
 
 A user opens the application on a mobile phone (screen width ~375px). Currently, data tables require horizontal scrolling that hides most columns including action buttons. With this feature, tables automatically transform into a card layout on screens below 768px. Each row becomes a structured card showing the primary identifier at the top, status badges inline, detail rows as labeled key-value pairs, and action buttons at the bottom with adequate touch targets.
 
-**Why this priority**: Tables are the primary data presentation across the entire application (11 instances). Without readable tables, the mobile experience is fundamentally broken. This is the highest-value change.
+**Why this priority**: Tables are the primary data presentation across the entire application (13 instances). Without readable tables, the mobile experience is fundamentally broken. This is the highest-value change.
 
 **Independent Test**: Can be fully tested by opening any table page (e.g., Collections) on a mobile device or at a narrow browser width and verifying all data is visible without horizontal scrolling.
 
@@ -43,7 +43,7 @@ A user opens a tabbed page (e.g., Settings with 6 tabs) on a mobile phone. Curre
 
 ### User Story 3 - Migrate All Existing Tables to Responsive Component (Priority: P2)
 
-A developer migrates all 11 existing table instances across the application to use the new responsive table component. Each table gets a card role mapping that defines how columns appear in the mobile card layout: which column is the title, which are badges, which are detail rows, which are actions, and which are hidden on mobile.
+A developer migrates all 13 existing table instances across the application to use the new responsive table component. Each table gets a card role mapping that defines how columns appear in the mobile card layout: which column is the title, which are badges, which are detail rows, which are actions, and which are hidden on mobile.
 
 **Why this priority**: The core components (P1) only deliver value when applied across all pages. Migration is mechanical but necessary for complete coverage.
 
@@ -51,7 +51,7 @@ A developer migrates all 11 existing table instances across the application to u
 
 **Acceptance Scenarios**:
 
-1. **Given** all 11 tables are migrated, **When** each page is viewed at desktop width, **Then** the table rendering is visually identical to the pre-migration state.
+1. **Given** all 13 tables are migrated, **When** each page is viewed at desktop width, **Then** the table rendering is visually identical to the pre-migration state.
 2. **Given** the Results table (10 columns, most complex), **When** viewed on mobile, **Then** it renders as cards with Collection as title, Tool and Status as badges, and View/Download/Delete as action buttons.
 3. **Given** the Agents table uses a dropdown menu for actions, **When** viewed on mobile, **Then** the dropdown menu renders correctly in the card action row.
 
@@ -109,7 +109,7 @@ The design system documentation is updated with new sections covering responsive
 - **FR-004**: System MUST provide a reusable responsive tabs component that renders as a standard tab strip at 768px and above, and as a dropdown select picker below 768px.
 - **FR-005**: The responsive tabs component MUST support icons and badges in the dropdown select items to match the desktop tab trigger appearance.
 - **FR-006**: The responsive tabs component MUST be compatible with controlled tab state management so the select and tab strip drive the same state.
-- **FR-007**: All 11 existing table instances MUST be migrated to use the responsive table component with appropriate card role mappings.
+- **FR-007**: All 13 existing table instances MUST be migrated to use the responsive table component with appropriate card role mappings.
 - **FR-008**: All 5 existing tab instances plus 1 nested sub-tab MUST be migrated to use the responsive tabs component.
 - **FR-009**: The CollectionList tabs MUST be converted from uncontrolled to controlled mode to support the select picker.
 - **FR-010**: Desktop rendering of all migrated pages MUST be visually identical to the pre-migration state (zero regression).
@@ -130,7 +130,7 @@ The design system documentation is updated with new sections covering responsive
 
 - **SC-001**: All table data is visible without horizontal scrolling on screens 320px and wider.
 - **SC-002**: All tab options are reachable in a single interaction (one tap to open dropdown, one tap to select) on any viewport width.
-- **SC-003**: All 11 table instances and all 6 tab instances across the application use the responsive components.
+- **SC-003**: All 13 table instances and all 6 tab instances across the application use the responsive components.
 - **SC-004**: Desktop rendering of all pages is visually identical before and after migration — zero visual regressions at 768px and above.
 - **SC-005**: Mobile card action buttons have touch targets of at least 44px.
 - **SC-006**: Both responsive components are documented in the design system with clear usage guidelines and card role mapping conventions.

@@ -144,22 +144,31 @@ function PerformerList({ performers, loading, onEdit, onDelete }: PerformerListP
     },
     {
       header: 'Website',
-      cell: (performer) => performer.website ? (
-        <a
-          href={performer.website}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-primary hover:underline"
-          title={performer.website}
-        >
-          <Globe className="h-3 w-3" />
-          <span className="max-w-[120px] truncate">
-            {new URL(performer.website).hostname}
-          </span>
-        </a>
-      ) : (
-        <span className="text-muted-foreground">-</span>
-      ),
+      cell: (performer) => {
+        if (!performer.website) {
+          return <span className="text-muted-foreground">-</span>
+        }
+        let hostname: string | null = null
+        try {
+          hostname = new URL(performer.website).hostname
+        } catch {
+          // malformed URL — fall back to raw value
+        }
+        return (
+          <a
+            href={performer.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-primary hover:underline"
+            title={performer.website}
+          >
+            <Globe className="h-3 w-3" />
+            <span className="max-w-[120px] truncate">
+              {hostname ?? performer.website}
+            </span>
+          </a>
+        )
+      },
       cardRole: 'detail',
     },
     {

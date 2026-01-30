@@ -36,7 +36,7 @@ npm run dev
 ### Key Pages to Test
 
 | Page | URL | What to Verify |
-|------|-----|----------------|
+| ---- | --- | -------------- |
 | Collections | `/collections` | Table → cards, tab strip → select |
 | Settings | `/settings` | 6 tabs → select picker with admin badges |
 | Analytics | `/analytics` | Tabs with action buttons, nested sub-tabs |
@@ -94,7 +94,7 @@ const tabs: TabOption[] = [
 ## Card Role Quick Reference
 
 | Role | Use For | Example |
-|------|---------|---------|
+| ---- | ------- | ------- |
 | `title` | Primary identifier | Name, Version |
 | `subtitle` | Secondary context | Location, Hostname |
 | `badge` | Status/type indicators | Active/Inactive badges, Type badges |
@@ -106,7 +106,7 @@ const tabs: TabOption[] = [
 
 - [ ] New `ResponsiveTable` component renders table at >=768px and cards at <768px
 - [ ] New `ResponsiveTabsList` component renders tab strip at >=768px and select at <768px
-- [ ] All 11 tables migrated with correct card role mappings
+- [ ] All 13 tables migrated with correct card role mappings (AgentDetailPage, TeamPage, AgentsPage, CollectionList, ConnectorList, LocationsTab, OrganizersTab, PerformersTab, ReleaseManifestsTab, ResultsTable, CategoriesTab, TokensTab, TeamsTab)
 - [ ] All 6 tab instances migrated (including nested Analytics sub-tabs)
 - [ ] CollectionList tabs converted to controlled
 - [ ] Pagination bar stacks vertically on mobile

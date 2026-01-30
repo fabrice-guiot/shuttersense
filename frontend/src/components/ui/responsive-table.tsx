@@ -39,6 +39,7 @@ export function ResponsiveTable<T>({
     return emptyState ? <>{emptyState}</> : null
   }
 
+  const visibleCols = columns.filter((c) => c.cardRole !== 'hidden')
   const titleCols = columns.filter((c) => c.cardRole === 'title')
   const subtitleCols = columns.filter((c) => c.cardRole === 'subtitle')
   const badgeCols = columns.filter((c) => c.cardRole === 'badge')
@@ -55,7 +56,7 @@ export function ResponsiveTable<T>({
           <Table>
             <TableHeader>
               <TableRow>
-                {columns.map((col) => (
+                {visibleCols.map((col) => (
                   <TableHead key={col.header} className={col.headerClassName}>
                     {col.header}
                   </TableHead>
@@ -65,7 +66,7 @@ export function ResponsiveTable<T>({
             <TableBody>
               {data.map((item) => (
                 <TableRow key={String(item[keyField])}>
-                  {columns.map((col) => (
+                  {visibleCols.map((col) => (
                     <TableCell key={col.header} className={col.cellClassName}>
                       {col.cell(item)}
                     </TableCell>

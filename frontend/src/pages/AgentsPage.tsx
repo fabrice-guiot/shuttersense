@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye, ExternalLink } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -151,9 +152,9 @@ export default function AgentsPage() {
     {
       header: 'Load',
       cell: (agent) => agent.running_jobs_count > 0 ? (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+        <Badge variant="info">
           {agent.running_jobs_count} {agent.running_jobs_count === 1 ? 'job' : 'jobs'}
-        </span>
+        </Badge>
       ) : (
         <span className="text-muted-foreground text-sm">Idle</span>
       ),
@@ -230,7 +231,7 @@ export default function AgentsPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Action Row */}
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
         <Button variant="outline" onClick={handleRefresh} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh

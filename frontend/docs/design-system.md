@@ -736,7 +736,7 @@ Each domain object type should have a consistent icon:
 
 ## Table Responsiveness
 
-**Issue #123 - Mobile Responsive Tables and Tabs**
+### Issue `#123` - Mobile Responsive Tables and Tabs
 
 All data tables MUST use the `ResponsiveTable` component. It renders a standard `<Table>` on desktop (`md` and above) and a card list on mobile (below `md` / 768px). The switch uses pure CSS (`hidden md:block` / `md:hidden`) with no JavaScript viewport detection.
 
@@ -795,7 +795,7 @@ interface ColumnDef<T> {
 Each column is assigned a `cardRole` that controls where it renders in the mobile card layout:
 
 | Role | Zone | Behavior |
-|------|------|----------|
+| ---- | ---- | -------- |
 | `title` | Top-left | Bold primary content (name, title) |
 | `subtitle` | Below title | Muted secondary text (location, email) |
 | `badge` | Top-right | Flex-wrap badge area (status, type) |
@@ -805,7 +805,7 @@ Each column is assigned a `cardRole` that controls where it renders in the mobil
 
 ### Mobile Card Structure
 
-```
+```text
 ┌──────────────────────────────────────┐
 │ [title]                    [badges]  │
 │ [subtitle]                           │
@@ -824,7 +824,7 @@ Each column is assigned a `cardRole` that controls where it renders in the mobil
 ### Recommended Card Role Mappings
 
 | Domain | title | subtitle | badge | detail | action | hidden |
-|--------|-------|----------|-------|--------|--------|--------|
+| ------ | ----- | -------- | ----- | ------ | ------ | ------ |
 | Collections | Name | Location | Type, State | Agent, Pipeline, Inventory, Status | Edit, Delete | - |
 | Results | Collection | Connector | Tool, Status | Pipeline, Files, Issues, Duration | View, Download, Delete | - |
 | Agents | Name | Hostname | Status | Load, Version, Last Heartbeat | Menu | - |
@@ -852,7 +852,7 @@ Pass an `emptyState` prop for when the data array is empty. The component render
 
 ## Tab Responsiveness
 
-**Issue #123 - Mobile Responsive Tables and Tabs**
+### Issue `#123` - Mobile Responsive Tables and Tabs
 
 All tab strips MUST use the `ResponsiveTabsList` component. It renders a standard `TabsList` on desktop (`md` and above) and a `Select` dropdown on mobile (below `md` / 768px). The component integrates with the Radix UI `Tabs` controlled state.
 
@@ -908,7 +908,7 @@ interface TabOption {
 
 ### Controlled Tabs Requirement
 
-`ResponsiveTabsList` requires controlled `Tabs` (with `value` and `onValueChange`). The `Select` dropdown calls `onValueChange` directly to sync state with the parent `Tabs` component.
+ResponsiveTabsList requires Tabs to be controlled (with `value` and `onValueChange`). The `Select` dropdown calls `onValueChange` directly to sync state with the parent `Tabs` component.
 
 ```tsx
 // CORRECT - Controlled tabs

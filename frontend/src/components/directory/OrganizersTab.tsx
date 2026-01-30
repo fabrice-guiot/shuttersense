@@ -176,22 +176,31 @@ function OrganizerList({ organizers, loading, onEdit, onDelete }: OrganizerListP
     },
     {
       header: 'Website',
-      cell: (organizer) => organizer.website ? (
-        <a
-          href={organizer.website}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-primary hover:underline"
-          title={organizer.website}
-        >
-          <Globe className="h-3 w-3" />
-          <span className="max-w-[120px] truncate">
-            {new URL(organizer.website).hostname}
-          </span>
-        </a>
-      ) : (
-        <span className="text-muted-foreground">-</span>
-      ),
+      cell: (organizer) => {
+        if (!organizer.website) {
+          return <span className="text-muted-foreground">-</span>
+        }
+        let hostname: string | null = null
+        try {
+          hostname = new URL(organizer.website).hostname
+        } catch {
+          // malformed URL — fall back to raw value
+        }
+        return (
+          <a
+            href={organizer.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-primary hover:underline"
+            title={organizer.website}
+          >
+            <Globe className="h-3 w-3" />
+            <span className="max-w-[120px] truncate">
+              {hostname ?? organizer.website}
+            </span>
+          </a>
+        )
+      },
       cardRole: 'detail',
     },
     {
