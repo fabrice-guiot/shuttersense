@@ -126,5 +126,5 @@ frontend/
 > No Constitution Check violations. No complexity exceptions required.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| — | — | — |
+| --------- | ---------- | ----------------------------------- |
+| —         | —          | —                                   |

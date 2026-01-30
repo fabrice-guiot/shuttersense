@@ -74,17 +74,11 @@ npm run dev
 ### 6. Test Push Notifications
 
 1. Log in to ShutterSense
-2. Navigate to Settings → Notifications tab
-3. Click "Enable Notifications"
+2. Click the user avatar in the top bar → "View Profile"
+3. Scroll to the **Notification Preferences** section and click "Enable Notifications"
 4. Grant browser notification permission when prompted
-5. Use the test endpoint (dev only) to send a test push:
-
-```bash
-curl -X POST http://localhost:8000/api/notifications/test \
-  -H "Content-Type: application/json" \
-  -H "Cookie: session=<your-session-cookie>" \
-  -d '{"title": "Test", "body": "Hello from ShutterSense!"}'
-```
+5. Trigger a real notification event to confirm delivery — for example, start an analysis job and let it fail, or run an analysis that produces an inflection point result
+6. Verify the push notification appears on your device and the bell icon in the header shows an unread count
 
 ### 7. Test Notification Preferences
 

@@ -13,7 +13,7 @@ Represents a Web Push subscription for a specific user on a specific device/brow
 **GUID Prefix**: `sub_`
 
 | Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
+| ----- | ---- | ----------- | ----------- |
 | `id` | Integer | PK, auto-increment | Internal database ID |
 | `uuid` | UUID (UUIDv7) | unique, not null, indexed | GUID source (via GuidMixin) |
 | `user_id` | Integer | FK → users.id, not null, indexed | Owning user |
@@ -52,7 +52,7 @@ Represents a notification event sent to a user. Stores the notification content 
 **GUID Prefix**: `ntf_`
 
 | Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
+| ----- | ---- | ----------- | ----------- |
 | `id` | Integer | PK, auto-increment | Internal database ID |
 | `uuid` | UUID (UUIDv7) | unique, not null, indexed | GUID source (via GuidMixin) |
 | `user_id` | Integer | FK → users.id, not null, indexed | Recipient user |
@@ -120,7 +120,7 @@ The existing `preferences_json` column will be used to store notification prefer
     "job_failures": true,
     "inflection_points": true,
     "agent_status": true,
-    "deadlines": true,
+    "deadline": true,
     "retry_warning": false,
     "deadline_days_before": 3,
     "timezone": "America/New_York"
@@ -128,12 +128,12 @@ The existing `preferences_json` column will be used to store notification prefer
 }
 ```
 
-**Default Values** (when user first enables notifications):
-- `enabled`: `false` (user must explicitly opt in)
+**Initial Defaults** (pre-opt-in — values used when the `notifications` key is absent from `preferences_json`; `enabled` is `false` until the user explicitly opts in via the Profile page):
+- `enabled`: `false` (user must explicitly opt in; set to `true` when user clicks "Enable Notifications")
 - `job_failures`: `true`
 - `inflection_points`: `true`
 - `agent_status`: `true`
-- `deadlines`: `true`
+- `deadline`: `true`
 - `retry_warning`: `false`
 - `deadline_days_before`: `3`
 - `timezone`: auto-detected from browser via `Intl.DateTimeFormat().resolvedOptions().timeZone`, falling back to `"UTC"`. User can override via timezone selector (existing `timezone-combobox.tsx` component). IANA timezone identifier (e.g., `"America/New_York"`, `"Europe/London"`).

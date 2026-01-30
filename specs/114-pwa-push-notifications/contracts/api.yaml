@@ -341,7 +341,7 @@ components:
           type: boolean
         agent_status:
           type: boolean
-        deadlines:
+        deadline:
           type: boolean
         retry_warning:
           type: boolean
@@ -365,7 +365,7 @@ components:
           type: boolean
         agent_status:
           type: boolean
-        deadlines:
+        deadline:
           type: boolean
         retry_warning:
           type: boolean
