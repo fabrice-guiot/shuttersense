@@ -12,7 +12,9 @@ Issue #114 - PWA with Push Notifications
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
@@ -40,6 +42,9 @@ from backend.src.utils.logging_config import get_logger
 
 logger = get_logger("api")
 
+# Rate limiter for notification endpoints
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(
     prefix="/notifications",
     tags=["Notifications"],
@@ -60,14 +65,16 @@ def get_push_subscription_service(
 
 def get_notification_service(
     db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_auth),
 ) -> NotificationService:
-    """Create NotificationService instance with database session and VAPID config."""
+    """Create NotificationService instance with database session, VAPID config, and tenant context."""
     settings = get_settings()
     vapid_claims = {"sub": settings.vapid_subject} if settings.vapid_subject else {}
     return NotificationService(
         db=db,
         vapid_private_key=settings.vapid_private_key,
         vapid_claims=vapid_claims,
+        tenant_context=ctx,
     )
 
 
@@ -93,7 +100,9 @@ def _get_user(db: Session, user_id: int) -> User:
     status_code=status.HTTP_201_CREATED,
     summary="Register a push subscription",
 )
+@limiter.limit("10/minute")
 async def create_push_subscription(
+    request: Request,
     body: PushSubscriptionCreate,
     ctx: TenantContext = Depends(require_auth),
     service: PushSubscriptionService = Depends(get_push_subscription_service),
@@ -158,7 +167,9 @@ async def create_push_subscription(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove a push subscription",
 )
+@limiter.limit("10/minute")
 async def remove_push_subscription(
+    request: Request,
     body: PushSubscriptionRemove,
     ctx: TenantContext = Depends(require_auth),
     service: PushSubscriptionService = Depends(get_push_subscription_service),
@@ -184,7 +195,9 @@ async def remove_push_subscription(
     response_model=SubscriptionStatusResponse,
     summary="Check push subscription status",
 )
+@limiter.limit("10/minute")
 async def get_subscription_status(
+    request: Request,
     ctx: TenantContext = Depends(require_auth),
     db: Session = Depends(get_db),
     sub_service: PushSubscriptionService = Depends(get_push_subscription_service),
@@ -216,7 +229,9 @@ async def get_subscription_status(
     response_model=NotificationPreferencesResponse,
     summary="Get notification preferences",
 )
+@limiter.limit("10/minute")
 async def get_notification_preferences(
+    request: Request,
     ctx: TenantContext = Depends(require_auth),
     db: Session = Depends(get_db),
     service: NotificationService = Depends(get_notification_service),
@@ -234,7 +249,9 @@ async def get_notification_preferences(
     response_model=NotificationPreferencesResponse,
     summary="Update notification preferences",
 )
+@limiter.limit("10/minute")
 async def update_notification_preferences(
+    request: Request,
     body: NotificationPreferencesUpdate,
     ctx: TenantContext = Depends(require_auth),
     db: Session = Depends(get_db),
@@ -276,7 +293,9 @@ async def update_notification_preferences(
     response_model=NotificationListResponse,
     summary="List notification history",
 )
+@limiter.limit("10/minute")
 async def list_notifications(
+    request: Request,
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     category: Optional[str] = Query(
@@ -334,7 +353,9 @@ async def list_notifications(
     response_model=NotificationStatsResponse,
     summary="Get notification stats",
 )
+@limiter.limit("10/minute")
 async def get_notification_stats(
+    request: Request,
     ctx: TenantContext = Depends(require_auth),
     service: NotificationService = Depends(get_notification_service),
 ):
@@ -351,7 +372,9 @@ async def get_notification_stats(
     response_model=UnreadCountResponse,
     summary="Get unread notification count",
 )
+@limiter.limit("10/minute")
 async def get_unread_count(
+    request: Request,
     ctx: TenantContext = Depends(require_auth),
     service: NotificationService = Depends(get_notification_service),
 ):
@@ -369,7 +392,9 @@ async def get_unread_count(
     response_model=NotificationResponse,
     summary="Mark notification as read",
 )
+@limiter.limit("10/minute")
 async def mark_notification_read(
+    request: Request,
     guid: str,
     ctx: TenantContext = Depends(require_auth),
     service: NotificationService = Depends(get_notification_service),
@@ -399,7 +424,9 @@ async def mark_notification_read(
     description="Manually trigger deadline reminder check for the current team. "
                 "Sends notifications for approaching event deadlines. Idempotent.",
 )
+@limiter.limit("5/minute")
 async def run_deadline_check(
+    request: Request,
     ctx: TenantContext = Depends(require_auth),
     service: NotificationService = Depends(get_notification_service),
 ) -> dict:
@@ -423,7 +450,9 @@ async def run_deadline_check(
     response_model=VapidKeyResponse,
     summary="Get VAPID public key",
 )
+@limiter.limit("10/minute")
 async def get_vapid_key(
+    request: Request,
     ctx: TenantContext = Depends(require_auth),
 ):
     """

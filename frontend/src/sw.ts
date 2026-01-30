@@ -11,7 +11,7 @@
 
 /// <reference lib="webworker" />
 
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
@@ -33,21 +33,11 @@ cleanupOutdatedCaches()
 // ============================================================================
 
 // SPA navigation fallback — serve index.html for all navigation requests
-// except /api/ routes (which should go to the backend)
+// except /api/ routes (which should go to the backend).
+// Uses createHandlerBoundToURL so the precached index.html is resolved
+// regardless of cache versioning / revision hashes.
 const navigationRoute = new NavigationRoute(
-  // The precache handler will serve the cached index.html
-  // Using the strategy from precache for index.html
-  async ({ request }) => {
-    const cache = await caches.open('workbox-precache-v2')
-    const keys = await cache.keys()
-    // Find the precached index.html (may have a revision hash)
-    const indexKey = keys.find((k) => k.url.endsWith('/index.html') || k.url === new URL('/', self.location.origin).href)
-    if (indexKey) {
-      const response = await cache.match(indexKey)
-      if (response) return response
-    }
-    return fetch(request)
-  },
+  createHandlerBoundToURL('/index.html'),
   {
     denylist: [/^\/api\//],
   }

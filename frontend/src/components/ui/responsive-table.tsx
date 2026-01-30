@@ -71,7 +71,27 @@ export function ResponsiveTable<T>({
                 <TableRow
                   key={String(item[keyField])}
                   className={onRowClick ? 'cursor-pointer' : undefined}
-                  onClick={onRowClick ? () => onRowClick(item) : undefined}
+                  role={onRowClick ? 'button' : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={
+                    onRowClick
+                      ? (e: React.MouseEvent) => {
+                          const target = e.target as HTMLElement
+                          if (target.closest('button, a, input, select, textarea, [role="button"]')) return
+                          onRowClick(item)
+                        }
+                      : undefined
+                  }
+                  onKeyDown={
+                    onRowClick
+                      ? (e: React.KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onRowClick(item)
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   {visibleCols.map((col) => (
                     <TableCell key={col.header} className={col.cellClassName}>
@@ -94,7 +114,27 @@ export function ResponsiveTable<T>({
               'rounded-lg border border-border bg-card p-4',
               onRowClick && 'cursor-pointer'
             )}
-            onClick={onRowClick ? () => onRowClick(item) : undefined}
+            role={onRowClick ? 'button' : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
+            onClick={
+              onRowClick
+                ? (e: React.MouseEvent) => {
+                    const target = e.target as HTMLElement
+                    if (target.closest('button, a, input, select, textarea, [role="button"]')) return
+                    onRowClick(item)
+                  }
+                : undefined
+            }
+            onKeyDown={
+              onRowClick
+                ? (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onRowClick(item)
+                    }
+                  }
+                : undefined
+            }
           >
             {/* Title + Badge row */}
             {(titleCols.length > 0 || badgeCols.length > 0) && (

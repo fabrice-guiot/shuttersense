@@ -67,7 +67,13 @@ class NotificationService:
     3. Deliver push notification to all user subscriptions (async)
     """
 
-    def __init__(self, db: Session, vapid_private_key: str = "", vapid_claims: Optional[Dict[str, str]] = None):
+    def __init__(
+        self,
+        db: Session,
+        vapid_private_key: str = "",
+        vapid_claims: Optional[Dict[str, str]] = None,
+        tenant_context: Optional[Any] = None,
+    ):
         """
         Initialize notification service.
 
@@ -75,10 +81,12 @@ class NotificationService:
             db: SQLAlchemy database session
             vapid_private_key: VAPID private key for push authentication
             vapid_claims: VAPID claims dict (e.g., {"sub": "mailto:..."})
+            tenant_context: Optional TenantContext for tenant-scoped operations
         """
         self.db = db
         self.vapid_private_key = vapid_private_key
         self.vapid_claims = vapid_claims or {}
+        self.tenant_context = tenant_context
 
     # ========================================================================
     # Notification CRUD
@@ -1158,10 +1166,11 @@ class NotificationService:
                 if days_remaining < 0 or days_remaining > deadline_days_before:
                     continue
 
-                # 4. Deduplication check
+                # 4. Deduplication check (scoped per team to avoid cross-tenant suppression)
                 existing = (
                     self.db.query(Notification)
                     .filter(
+                        Notification.team_id == team_id,
                         Notification.user_id == user.id,
                         Notification.category == "deadline",
                         Notification.data["event_guid"].as_string() == event.guid,

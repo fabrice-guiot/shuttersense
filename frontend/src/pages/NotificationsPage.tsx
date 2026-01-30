@@ -57,13 +57,18 @@ const DATE_PRESETS = [
   { label: 'Custom', value: 'custom' },
 ] as const
 
-const CATEGORIES: { label: string; value: NotificationCategory }[] = [
-  { label: 'Job Failures', value: 'job_failure' },
-  { label: 'Inflection Points', value: 'inflection_point' },
-  { label: 'Agent Status', value: 'agent_status' },
-  { label: 'Deadlines', value: 'deadline' },
-  { label: 'Retry Warnings', value: 'retry_warning' },
+const NOTIFICATION_CATEGORY_VALUES: NotificationCategory[] = [
+  'job_failure',
+  'inflection_point',
+  'agent_status',
+  'deadline',
+  'retry_warning',
 ]
+
+const CATEGORIES = NOTIFICATION_CATEGORY_VALUES.map((value) => ({
+  label: NOTIFICATION_CATEGORY_LABELS[value],
+  value,
+}))
 
 const READ_STATUS_OPTIONS = [
   { label: 'All', value: 'all' },
