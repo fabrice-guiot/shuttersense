@@ -29,6 +29,11 @@ from backend.src.utils.logging_config import get_logger
 logger = get_logger("services")
 
 
+# Agent notification debounce cache: (agent_id, transition_type) -> last_sent datetime
+_agent_notification_debounce: Dict[tuple, datetime] = {}
+AGENT_NOTIFICATION_DEBOUNCE_SECONDS = 300  # 5 minutes
+
+
 # Default notification preferences (pre-opt-in)
 DEFAULT_PREFERENCES = {
     "enabled": False,
@@ -824,6 +829,133 @@ class NotificationService:
                 return f"{current_issues} issues found (unchanged) across {current_files} files"
 
         return f"{current_issues} issues found across {current_files} files"
+
+    def notify_agent_status(
+        self,
+        agent: Any,
+        team_id: int,
+        transition_type: str,
+        error_description: Optional[str] = None,
+    ) -> int:
+        """
+        Send agent status notifications to all active team members.
+
+        Builds notification content per push-payload.md agent status schemas
+        and delegates to send_notification() for per-user preference checks.
+
+        Debounces per (agent.id, transition_type) within 5-minute window.
+
+        Args:
+            agent: Agent instance (must have .id, .guid, .name, .team)
+            team_id: Team ID for tenant isolation
+            transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+            error_description: Error message (required for agent_error)
+
+        Returns:
+            Number of notifications actually sent (preference-filtered)
+        """
+        from backend.src.services.user_service import UserService
+
+        # Debounce check
+        debounce_key = (agent.id, transition_type)
+        now = datetime.utcnow()
+        last_sent = _agent_notification_debounce.get(debounce_key)
+        if last_sent and (now - last_sent).total_seconds() < AGENT_NOTIFICATION_DEBOUNCE_SECONDS:
+            logger.debug(
+                "Agent notification debounced",
+                extra={
+                    "agent_guid": agent.guid,
+                    "transition_type": transition_type,
+                },
+            )
+            return 0
+
+        # Build notification content per push-payload.md
+        team_guid = agent.team.guid if agent.team else ""
+
+        if transition_type == "pool_offline":
+            title = "Agent Pool Offline"
+            body = "All agents are offline. Jobs cannot be processed until an agent reconnects."
+            tag = f"agent_pool_offline_{team_guid}"
+            url = "/agents"
+            data = {
+                "url": url,
+                "category": "agent_status",
+            }
+        elif transition_type == "agent_error":
+            error_desc = (error_description or "Unknown error")[:200]
+            title = "Agent Error"
+            body = f'Agent "{agent.name}" reported an error: {error_desc}'
+            tag = f"agent_error_{agent.guid}"
+            url = f"/agents/{agent.guid}"
+            data = {
+                "url": url,
+                "category": "agent_status",
+                "agent_guid": agent.guid,
+            }
+        elif transition_type == "pool_recovery":
+            title = "Agents Available"
+            body = f'Agent "{agent.name}" is back online. Job processing has resumed.'
+            tag = f"agent_recovery_{team_guid}"
+            url = "/agents"
+            data = {
+                "url": url,
+                "category": "agent_status",
+            }
+        else:
+            logger.warning(
+                f"Unknown agent transition type: {transition_type}",
+                extra={"agent_guid": agent.guid},
+            )
+            return 0
+
+        push_payload = {
+            "title": title,
+            "body": body,
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+            "tag": tag,
+            "data": {
+                **data,
+                "category": "agent_status",
+            },
+        }
+
+        # Resolve all active team members
+        user_service = UserService(db=self.db)
+        team_members = user_service.list_by_team(
+            team_id=team_id, active_only=True
+        )
+
+        sent_count = 0
+        for user in team_members:
+            notification = self.send_notification(
+                user=user,
+                team_id=team_id,
+                category="agent_status",
+                title=title,
+                body=body,
+                data=data,
+                push_payload=push_payload,
+            )
+            if notification is not None:
+                sent_count += 1
+
+        # Update debounce timestamp only if at least one notification was sent
+        if sent_count > 0:
+            _agent_notification_debounce[debounce_key] = now
+
+        logger.info(
+            "Agent status notifications sent",
+            extra={
+                "agent_guid": agent.guid,
+                "transition_type": transition_type,
+                "sent_count": sent_count,
+                "team_members": len(team_members),
+            },
+        )
+
+        return sent_count
 
     # ========================================================================
     # Orchestration

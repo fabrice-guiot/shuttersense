@@ -21,6 +21,7 @@ Environment Variables:
     SHUSAI_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
 """
 
+import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -222,6 +223,84 @@ def validate_master_key() -> None:
         sys.exit(1)
 
 
+async def dead_agent_safety_net() -> None:
+    """
+    Background task that periodically checks for dead agents across all teams.
+
+    Runs every 120 seconds, marking agents with stale heartbeats as offline
+    and triggering pool_offline notifications if a team's pool becomes empty.
+
+    This is a safety net for cases where agents die without sending a disconnect
+    (e.g., crash, network partition, kill -9).
+
+    Issue #114 - Phase 8 (T035)
+    """
+    safety_logger = get_logger("agent")
+    safety_logger.info("Dead agent safety net background task started")
+
+    while True:
+        await asyncio.sleep(120)
+
+        db = None
+        try:
+            db = SessionLocal()
+
+            # Get all distinct team_ids from non-revoked agents
+            from backend.src.models import Agent, AgentStatus
+            team_ids = (
+                db.query(Agent.team_id)
+                .filter(Agent.status != AgentStatus.REVOKED)
+                .distinct()
+                .all()
+            )
+
+            for (team_id,) in team_ids:
+                try:
+                    from backend.src.services.agent_service import AgentService
+
+                    agent_service = AgentService(db)
+                    result = agent_service.check_offline_agents(team_id)
+
+                    if result.pool_now_empty and result.newly_offline_agents:
+                        # Use the first newly-offline agent as representative
+                        representative_agent = result.newly_offline_agents[0]
+                        try:
+                            from backend.src.services.notification_service import NotificationService
+                            from backend.src.config.settings import get_settings
+
+                            settings = get_settings()
+                            vapid_claims = (
+                                {"sub": settings.vapid_subject}
+                                if settings.vapid_subject
+                                else {}
+                            )
+                            notification_service = NotificationService(
+                                db=db,
+                                vapid_private_key=settings.vapid_private_key,
+                                vapid_claims=vapid_claims,
+                            )
+                            notification_service.notify_agent_status(
+                                agent=representative_agent,
+                                team_id=team_id,
+                                transition_type="pool_offline",
+                            )
+                        except Exception as e:
+                            safety_logger.error(
+                                f"Failed to send pool_offline notification: {e}",
+                                extra={"team_id": team_id},
+                            )
+                except Exception as e:
+                    safety_logger.error(
+                        f"Error checking offline agents for team: {e}",
+                        extra={"team_id": team_id},
+                    )
+        except Exception as e:
+            safety_logger.error(f"Dead agent safety net iteration error: {e}")
+        finally:
+            if db:
+                db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -292,10 +371,20 @@ async def lifespan(app: FastAPI):
 
     logger.info("ShutterSense backend started successfully")
 
+    # Start dead agent safety net background task (Phase 8, T035)
+    safety_net_task = asyncio.create_task(dead_agent_safety_net())
+
     yield
 
     # Shutdown
     logger.info("Shutting down ShutterSense backend application")
+
+    # Cancel dead agent safety net
+    safety_net_task.cancel()
+    try:
+        await safety_net_task
+    except asyncio.CancelledError:
+        logger.info("Dead agent safety net background task stopped")
 
 
 # Initialize logging before creating app
