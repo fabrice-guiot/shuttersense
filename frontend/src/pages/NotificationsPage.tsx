@@ -12,7 +12,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { BellOff, Search } from 'lucide-react'
+import { BellOff, RefreshCw, Search } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -131,6 +132,7 @@ export default function NotificationsPage() {
     notifications,
     total,
     loading,
+    error,
     fetchNotifications,
     markAsRead,
   } = useNotifications(false)
@@ -290,6 +292,24 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-4">
+      {/* Error banner */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>{error}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={doFetch}
+              className="shrink-0"
+            >
+              <RefreshCw className="mr-1 h-3 w-3" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Filters */}
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-3">
