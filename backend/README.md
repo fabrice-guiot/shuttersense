@@ -35,7 +35,7 @@ FastAPI backend for the ShutterSense.ai web application. Provides a comprehensiv
 - **google-cloud-storage** -- GCS and Storage Insights integration
 - **smbprotocol** -- SMB/CIFS network share access
 - **geopy / timezonefinder** -- Geocoding and timezone lookup for locations
-- **Pytest** -- Testing framework with 2,475 tests across 110 test files
+- **Pytest** -- Testing framework with 2,460 tests across 110 test files
 
 ## Project Structure
 
@@ -288,7 +288,7 @@ The application automatically starts two background tasks on startup:
 
 ## Testing
 
-The backend has comprehensive test coverage with **2,475 tests** across **110 test files** (1,882 unit + 578 integration).
+The backend has comprehensive test coverage with **2,460 tests** across **110 test files** (1,882 unit + 578 integration).
 
 ### Running Tests
 

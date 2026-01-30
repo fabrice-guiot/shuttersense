@@ -103,7 +103,7 @@ def _get_fallback_version() -> str:
     """
     # Try to get version from environment variable (useful for CI/CD)
     import os
-    env_version = os.environ.get('SHUSAI_VERSION')
+    env_version = os.environ.get('SHUTTERSENSE_VERSION')
     if env_version:
         return env_version
 

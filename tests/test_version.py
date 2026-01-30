@@ -137,10 +137,10 @@ class TestEnvironmentVariableFallback:
     """Tests for environment variable fallback"""
 
     def test_version_from_environment_variable(self, monkeypatch):
-        """Test using SHUSAI_VERSION environment variable as fallback"""
+        """Test using SHUTTERSENSE_VERSION environment variable as fallback"""
         # Reset cache
         monkeypatch.setattr(version, '_VERSION_CACHE', None)
-        monkeypatch.setenv('SHUSAI_VERSION', 'v2.0.0-ci')
+        monkeypatch.setenv('SHUTTERSENSE_VERSION', 'v2.0.0-ci')
 
         def mock_run(args, **kwargs):
             raise FileNotFoundError("git not found")
@@ -153,7 +153,7 @@ class TestEnvironmentVariableFallback:
         """Test fallback to default when no environment variable set"""
         # Reset cache
         monkeypatch.setattr(version, '_VERSION_CACHE', None)
-        monkeypatch.delenv('SHUSAI_VERSION', raising=False)
+        monkeypatch.delenv('SHUTTERSENSE_VERSION', raising=False)
 
         def mock_run(args, **kwargs):
             raise FileNotFoundError("git not found")
@@ -302,7 +302,7 @@ class TestRealWorldScenarios:
     def test_ci_environment_with_env_var(self, monkeypatch):
         """Test CI/CD environment using environment variable"""
         monkeypatch.setattr(version, '_VERSION_CACHE', None)
-        monkeypatch.setenv('SHUSAI_VERSION', 'v1.5.0-build.42')
+        monkeypatch.setenv('SHUTTERSENSE_VERSION', 'v1.5.0-build.42')
 
         def mock_run(args, **kwargs):
             raise FileNotFoundError("Git not available in CI")

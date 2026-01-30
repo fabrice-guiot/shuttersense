@@ -18,7 +18,7 @@ def _get_base_version() -> str:
 
     Version sources (in priority order):
     1. Git tag (e.g., "v1.2.3" from "v1.2.3-dev.5+abc123")
-    2. SHUSAI_VERSION environment variable
+    2. SHUTTERSENSE_VERSION environment variable
     3. Fallback to "v0.0.0"
 
     Returns:
@@ -40,7 +40,7 @@ def _get_base_version() -> str:
         pass
 
     # Try environment variable (strip any dev/commit suffix)
-    env_version = os.environ.get('SHUSAI_VERSION', '')
+    env_version = os.environ.get('SHUTTERSENSE_VERSION', '')
     if env_version:
         # Extract base version from formats like "v1.2.3-dev.5+abc123"
         match = re.match(r'^(v?\d+\.\d+\.\d+)', env_version)

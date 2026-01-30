@@ -37,7 +37,7 @@ This specification covers the complete rebranding of the "photo-admin" applicati
 |------------------------------------|-----------------|-----------------------------------------------|
 | UI display, documentation          | ShutterSense.ai | "Welcome to ShutterSense.ai"                  |
 | File names, package names          | shuttersense    | `shuttersense.py`, `@shuttersense/ui`         |
-| Environment variables              | SHUSAI_         | `SHUSAI_VERSION`, `SHUSAI_DEBUG`              |
+| Environment variables              | SHUSAI_         | `SHUTTERSENSE_VERSION`, `SHUSAI_DEBUG`        |
 | CSS classes, code identifiers      | shuttersense    | `.shuttersense-header`, `shuttersenseConfig`  |
 | CLI tool prefix (optional)         | shusai-         | `shusai-stats`, `shusai-pairing`              |
 
@@ -120,7 +120,7 @@ As a developer configuring the application, I want environment variables to use 
 
 **Acceptance Scenarios**:
 
-1. **Given** I set `SHUSAI_VERSION` environment variable, **When** the application starts, **Then** it uses this value
+1. **Given** I set `SHUTTERSENSE_VERSION` environment variable, **When** the application starts, **Then** it uses this value
 2. **Given** I view documentation for environment variables, **When** I read the configuration guide, **Then** variables are documented with `SHUSAI_` prefix
 
 ---

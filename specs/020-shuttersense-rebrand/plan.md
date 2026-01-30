@@ -103,7 +103,7 @@ frontend/
 ├── photo_stats.py           # Help text, version output updates
 ├── photo_pairing.py         # Help text, version output updates
 ├── pipeline_validation.py   # Help text, version output updates
-├── version.py               # PHOTO_ADMIN_VERSION → SHUSAI_VERSION
+├── version.py               # PHOTO_ADMIN_VERSION → SHUTTERSENSE_VERSION
 └── templates/
     ├── base.html.j2         # Footer branding update
     └── [tool templates]     # Inherit from base
@@ -144,7 +144,7 @@ frontend/
 
 ### Phase 3: CLI Tools & Templates (P2)
 
-1. Update `version.py` (PHOTO_ADMIN_VERSION → SHUSAI_VERSION)
+1. Update `version.py` (PHOTO_ADMIN_VERSION → SHUTTERSENSE_VERSION)
 2. Update CLI tool help text and version output
 3. Update `templates/base.html.j2` footer
 4. Test HTML report generation
