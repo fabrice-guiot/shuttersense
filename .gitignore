@@ -231,6 +231,7 @@ debug-dump_*.md
 # Frontend-specific
 frontend/node_modules/
 frontend/dist/
+frontend/dev-dist/
 frontend/build/
 frontend/.vite/
 frontend/.env
