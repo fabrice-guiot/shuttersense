@@ -590,14 +590,14 @@ alembic history
 ### Required
 
 | Variable | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | `SHUSAI_MASTER_KEY` | Fernet encryption key for credential storage (44 chars, base64-encoded) |
 | `SHUSAI_DB_URL` | PostgreSQL connection URL (e.g., `postgresql://user:pass@localhost:5432/shuttersense`) |
 
 ### Application Settings
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `SHUSAI_ENV` | `development` | Environment name (`development` or `production`) |
 | `SHUSAI_LOG_LEVEL` | `INFO` | Logging level (`DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL`) |
 | `SHUSAI_LOG_DIR` | (platform default) | Directory for log file output |
@@ -608,7 +608,7 @@ alembic history
 ### Authentication (OAuth 2.0)
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `SESSION_SECRET_KEY` | (empty) | Secret key for signing session cookies (min 32 chars; required for OAuth) |
 | `SESSION_MAX_AGE` | `86400` (24h) | Session duration in seconds (min 60, max 30 days) |
 | `SESSION_COOKIE_NAME` | `shusai_session` | Name of the session cookie |
@@ -619,14 +619,14 @@ alembic history
 ### API Tokens (JWT)
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `JWT_SECRET_KEY` | (empty) | Secret key for signing JWT API tokens (min 32 chars) |
 | `JWT_TOKEN_EXPIRY_DAYS` | `90` | Default token expiry in days (1-365) |
 
 ### Web Push Notifications (VAPID)
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `VAPID_PUBLIC_KEY` | (empty) | Base64url-encoded VAPID public key |
 | `VAPID_PRIVATE_KEY` | (empty) | Base64url-encoded VAPID private key |
 | `VAPID_SUBJECT` | (empty) | VAPID subject identifier (`mailto:` or `https:` URL) |
@@ -634,7 +634,7 @@ alembic history
 ### Job Execution
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `INMEMORY_JOB_TYPES` | (empty) | Comma-separated tool types to run in-memory on the server (e.g., `photostats,photo_pairing`). By default all jobs are dispatched to agents. |
 
 ### Example `.env` file
