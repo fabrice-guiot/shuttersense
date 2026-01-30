@@ -95,7 +95,7 @@ Each method already has the data needed (job details, agent status, team_id) to 
 **Codebase Context**:
 - `frontend/src/components/layout/TopHeader.tsx` (line 164-175): Existing bell button with hardcoded badge.
 - `frontend/src/hooks/`: 29 existing hooks follow consistent useState/useCallback/useEffect pattern.
-- Settings page: Tab-based architecture in `SettingsPage.tsx` — add a "Notifications" tab for preferences.
+- Notification preferences placed on the Profile page (`/profile`), not SettingsPage — see RQ-10 for rationale.
 
 ### RQ-8: Asynchronous Notification Delivery
 
