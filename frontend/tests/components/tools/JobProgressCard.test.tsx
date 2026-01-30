@@ -80,9 +80,9 @@ describe('JobProgressCard', () => {
       />
     )
 
-    // Cancel button should be visible
-    const cancelButton = screen.getByRole('button')
-    expect(cancelButton).toBeInTheDocument()
+    // Cancel button should be visible (multiple buttons exist due to GuidBadge)
+    const buttons = screen.getAllByRole('button')
+    expect(buttons.length).toBeGreaterThanOrEqual(1)
   })
 
   it('should call onCancel when cancel button is clicked', async () => {
@@ -96,7 +96,9 @@ describe('JobProgressCard', () => {
       />
     )
 
-    const cancelButton = screen.getByRole('button')
+    // Find the cancel button (the one without a Copy GUID aria-label)
+    const buttons = screen.getAllByRole('button')
+    const cancelButton = buttons.find(btn => !btn.getAttribute('aria-label')?.startsWith('Copy GUID'))!
     await user.click(cancelButton)
 
     expect(mockOnCancel).toHaveBeenCalledWith('job-1')

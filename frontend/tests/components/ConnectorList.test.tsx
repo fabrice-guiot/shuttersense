@@ -75,9 +75,10 @@ describe('ConnectorList', () => {
       />
     )
 
-    expect(screen.getByText('S3 Connector')).toBeInTheDocument()
-    expect(screen.getByText('GCS Connector')).toBeInTheDocument()
-    expect(screen.getByText('SMB Connector')).toBeInTheDocument()
+    const table = within(screen.getByTestId('desktop-view'))
+    expect(table.getByText('S3 Connector')).toBeInTheDocument()
+    expect(table.getByText('GCS Connector')).toBeInTheDocument()
+    expect(table.getByText('SMB Connector')).toBeInTheDocument()
   })
 
   it('should display connector types as badges', () => {
@@ -91,9 +92,10 @@ describe('ConnectorList', () => {
       />
     )
 
-    expect(screen.getByText('Amazon S3')).toBeInTheDocument()
-    expect(screen.getByText('Google Cloud Storage')).toBeInTheDocument()
-    expect(screen.getByText('SMB/CIFS')).toBeInTheDocument()
+    const table = within(screen.getByTestId('desktop-view'))
+    expect(table.getByText('Amazon S3')).toBeInTheDocument()
+    expect(table.getByText('Google Cloud Storage')).toBeInTheDocument()
+    expect(table.getByText('SMB/CIFS')).toBeInTheDocument()
   })
 
   it('should display active/inactive status', () => {
@@ -107,8 +109,9 @@ describe('ConnectorList', () => {
       />
     )
 
-    const activeChips = screen.getAllByText('Active')
-    const inactiveChips = screen.getAllByText('Inactive')
+    const table = within(screen.getByTestId('desktop-view'))
+    const activeChips = table.getAllByText('Active')
+    const inactiveChips = table.getAllByText('Inactive')
 
     expect(activeChips).toHaveLength(2)
     expect(inactiveChips).toHaveLength(1)
@@ -344,7 +347,7 @@ describe('ConnectorList', () => {
         />
       )
 
-      expect(screen.getByText('Agent')).toBeInTheDocument()
+      expect(screen.getAllByText('Agent')[0]).toBeInTheDocument()
     })
 
     it('should display Pending Config badge for pending credential location', () => {
@@ -358,7 +361,7 @@ describe('ConnectorList', () => {
         />
       )
 
-      expect(screen.getByText('Pending Config')).toBeInTheDocument()
+      expect(screen.getAllByText('Pending Config')[0]).toBeInTheDocument()
     })
 
     it('should display Needs config hint for pending connectors', () => {
@@ -372,7 +375,7 @@ describe('ConnectorList', () => {
         />
       )
 
-      expect(screen.getByText('Needs config')).toBeInTheDocument()
+      expect(screen.getAllByText('Needs config')[0]).toBeInTheDocument()
     })
 
     it('should display agent count for agent-based connectors with credentials', () => {
@@ -388,7 +391,7 @@ describe('ConnectorList', () => {
       )
 
       // Should show count "2" for the 2 agents with credentials
-      expect(screen.getByText('2')).toBeInTheDocument()
+      expect(screen.getAllByText('2')[0]).toBeInTheDocument()
     })
   })
 })

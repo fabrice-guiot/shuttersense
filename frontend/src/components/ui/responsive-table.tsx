@@ -50,7 +50,7 @@ export function ResponsiveTable<T>({
   return (
     <div className={className}>
       {/* Desktop table view */}
-      <div className="hidden md:block">
+      <div className="hidden md:block" data-testid="desktop-view">
         <div className="rounded-md border border-border overflow-x-auto">
           <Table>
             <TableHeader>
@@ -78,7 +78,7 @@ export function ResponsiveTable<T>({
       </div>
 
       {/* Mobile card view */}
-      <div className="md:hidden space-y-3">
+      <div className="md:hidden space-y-3" data-testid="mobile-view">
         {data.map((item) => (
           <div
             key={String(item[keyField])}

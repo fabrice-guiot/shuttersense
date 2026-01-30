@@ -219,8 +219,8 @@ describe('AgentDetailPage', () => {
       expect(screen.getByText('Recent Jobs')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('photostats')).toBeInTheDocument()
-    expect(screen.getByText('Holiday Photos')).toBeInTheDocument()
+    expect(screen.getAllByText('photostats')[0]).toBeInTheDocument()
+    expect(screen.getAllByText('Holiday Photos')[0]).toBeInTheDocument()
   })
 
   it('displays job history with pagination info', async () => {
