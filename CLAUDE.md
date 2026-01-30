@@ -111,7 +111,7 @@ The `version.py` module provides a single source of truth for version informatio
 - **Tagged releases**: Returns clean tag (e.g., `v1.2.3`)
 - **Development builds**: Returns tag with suffix (e.g., `v1.2.3-dev.5+a1b2c3d`)
 - **No tags**: Returns development version (e.g., `v0.0.0-dev+a1b2c3d`)
-- **No Git**: Falls back to `SHUTTERSENSE_VERSION` environment variable or `v0.0.0-dev+unknown`
+- **No Git**: Falls back to `SHUSAI_VERSION` environment variable or `v0.0.0-dev+unknown`
 
 ### Version Display Locations
 
@@ -163,8 +163,8 @@ Example: `v1.2.3-dev.5+a1b2c3d` means:
 ### CI/CD Integration
 
 For CI/CD environments without Git:
-- Set `SHUTTERSENSE_VERSION` environment variable
-- Example: `export SHUTTERSENSE_VERSION=v1.5.0-build.42`
+- Set `SHUSAI_VERSION` environment variable
+- Example: `export SHUSAI_VERSION=v1.5.0-build.42`
 
 ### Creating Releases
 

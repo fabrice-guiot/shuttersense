@@ -71,7 +71,7 @@ mkdir -p frontend/public
 ### Step 4: Update CLI Tools
 
 1. **version.py**:
-   - Update `PHOTO_ADMIN_VERSION` → `SHUTTERSENSE_VERSION`
+   - Update `PHOTO_ADMIN_VERSION` → `SHUSAI_VERSION`
 
 2. **CLI tools** (photo_stats.py, photo_pairing.py, pipeline_validation.py):
    - Update help text and descriptions
@@ -137,7 +137,7 @@ After all changes are merged to main:
 | PHOTO_ADMIN_ENV | SHUSAI_ENV |
 | PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS | SHUSAI_AUTHORIZED_LOCAL_ROOTS |
 | PHOTO_ADMIN_SPA_DIST_PATH | SHUSAI_SPA_DIST_PATH |
-| PHOTO_ADMIN_VERSION | SHUTTERSENSE_VERSION |
+| PHOTO_ADMIN_VERSION | SHUSAI_VERSION |
 
 ## Troubleshooting
 

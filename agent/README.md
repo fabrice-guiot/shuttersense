@@ -550,7 +550,7 @@ Configuration values are resolved in this order (highest priority first):
 | `SHUTTERSENSE_CONFIG_PATH` | Override config file path |
 | `SHUTTERSENSE_DEBUG_COMMANDS` | Set to `1` to enable debug CLI commands |
 | `SHUTTERSENSE_AGENT_DEV_MODE` | Set to `1` to enable development mode |
-| `SHUTTERSENSE_VERSION` | Override version string (for CI/CD without Git) |
+| `SHUSAI_VERSION` | Override version string (for CI/CD without Git) |
 
 ## Storage Adapters
 

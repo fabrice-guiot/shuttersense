@@ -75,7 +75,7 @@ This document captures the research findings for the ShutterSense.ai rebrand. Si
 | `PHOTO_ADMIN_ENV` | `SHUSAI_ENV` | logging_config.py |
 | `PHOTO_ADMIN_AUTHORIZED_LOCAL_ROOTS` | `SHUSAI_AUTHORIZED_LOCAL_ROOTS` | security_settings.py |
 | `PHOTO_ADMIN_SPA_DIST_PATH` | `SHUSAI_SPA_DIST_PATH` | security_settings.py |
-| `PHOTO_ADMIN_VERSION` | `SHUTTERSENSE_VERSION` | version.py |
+| `PHOTO_ADMIN_VERSION` | `SHUSAI_VERSION` | version.py |
 
 **Rationale**: Photo Admin was never officially released (pre-release only), so no backward compatibility is needed. Clean break simplifies codebase.
 

@@ -86,7 +86,7 @@ def _get_version() -> str:
         return git_version
 
     # Fallback: environment variable or default
-    return os.environ.get('SHUTTERSENSE_VERSION', 'v0.0.0-dev+unknown')
+    return os.environ.get('SHUSAI_VERSION', 'v0.0.0-dev+unknown')
 
 
 __version__ = _get_version()
