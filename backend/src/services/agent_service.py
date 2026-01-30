@@ -47,6 +47,36 @@ API_KEY_LENGTH = 48  # Total length including prefix
 
 
 @dataclass
+class HeartbeatResult:
+    """
+    Result of heartbeat processing with transition metadata.
+
+    Attributes:
+        agent: The updated agent
+        previous_status: Agent status before heartbeat processing
+        transitioned_to_error: True if agent transitioned to ERROR state
+        pool_was_all_offline: True if the entire pool was offline before this heartbeat
+    """
+    agent: Agent
+    previous_status: AgentStatus
+    transitioned_to_error: bool = False
+    pool_was_all_offline: bool = False
+
+
+@dataclass
+class OfflineCheckResult:
+    """
+    Result of offline agent check with pool status metadata.
+
+    Attributes:
+        newly_offline_agents: Agents that were marked offline in this check
+        pool_now_empty: True if no online agents remain after marking agents offline
+    """
+    newly_offline_agents: List[Agent]
+    pool_now_empty: bool = False
+
+
+@dataclass
 class RegistrationResult:
     """
     Result of agent registration.
@@ -489,12 +519,14 @@ class AgentService:
         authorized_roots: Optional[List[str]] = None,
         version: Optional[str] = None,
         metrics: Optional[dict] = None
-    ) -> Agent:
+    ) -> HeartbeatResult:
         """
         Process an agent heartbeat.
 
         Updates last_heartbeat timestamp and optionally updates
         status, capabilities, authorized_roots, version, and metrics.
+
+        Returns HeartbeatResult with transition metadata for notification triggers.
 
         Args:
             agent: The agent sending the heartbeat
@@ -506,13 +538,31 @@ class AgentService:
             metrics: System resource metrics (cpu_percent, memory_percent, disk_free_gb)
 
         Returns:
-            The updated agent
+            HeartbeatResult with agent and transition metadata
 
         Raises:
             ValidationError: If agent is revoked
         """
+        from sqlalchemy import func
+
         if agent.is_revoked:
             raise ValidationError("Agent has been revoked")
+
+        # Capture previous status before any mutation
+        previous_status = agent.status
+
+        # Determine effective status
+        effective_status = status if status else AgentStatus.ONLINE
+
+        # Check pool state before updating (for pool_recovery detection)
+        pool_was_all_offline = False
+        if effective_status == AgentStatus.ONLINE and previous_status != AgentStatus.ONLINE:
+            # Count currently ONLINE agents before we update this one
+            online_count = self.db.query(func.count(Agent.id)).filter(
+                Agent.team_id == agent.team_id,
+                Agent.status == AgentStatus.ONLINE,
+            ).scalar() or 0
+            pool_was_all_offline = (online_count == 0)
 
         # Update heartbeat timestamp
         agent.last_heartbeat = datetime.utcnow()
@@ -528,6 +578,12 @@ class AgentService:
             # No status provided, set to ONLINE
             agent.status = AgentStatus.ONLINE
             agent.error_message = None
+
+        # Determine if agent transitioned to ERROR
+        transitioned_to_error = (
+            effective_status == AgentStatus.ERROR
+            and previous_status != AgentStatus.ERROR
+        )
 
         # Update optional fields if provided
         if capabilities is not None:
@@ -561,7 +617,12 @@ class AgentService:
             }
         )
 
-        return agent
+        return HeartbeatResult(
+            agent=agent,
+            previous_status=previous_status,
+            transitioned_to_error=transitioned_to_error,
+            pool_was_all_offline=pool_was_all_offline,
+        )
 
     def disconnect_agent(self, agent: Agent) -> Agent:
         """
@@ -591,19 +652,23 @@ class AgentService:
 
         return agent
 
-    def check_offline_agents(self, team_id: int) -> List[Agent]:
+    def check_offline_agents(self, team_id: int) -> OfflineCheckResult:
         """
         Check for agents that have gone offline and release their jobs.
 
         Agents are considered offline after HEARTBEAT_TIMEOUT_SECONDS
         without a heartbeat.
 
+        Returns OfflineCheckResult with transition metadata for notification triggers.
+
         Args:
             team_id: Team to check agents for
 
         Returns:
-            List of agents that were marked offline
+            OfflineCheckResult with newly offline agents and pool status
         """
+        from sqlalchemy import func
+
         cutoff = datetime.utcnow() - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)
 
         # Find agents that should be offline
@@ -626,7 +691,20 @@ class AgentService:
             )
 
         self.db.commit()
-        return offline_agents
+
+        # Check if the pool is now empty after marking agents offline
+        pool_now_empty = False
+        if offline_agents:
+            remaining_online = self.db.query(func.count(Agent.id)).filter(
+                Agent.team_id == team_id,
+                Agent.status == AgentStatus.ONLINE,
+            ).scalar() or 0
+            pool_now_empty = (remaining_online == 0)
+
+        return OfflineCheckResult(
+            newly_offline_agents=offline_agents,
+            pool_now_empty=pool_now_empty,
+        )
 
     def _release_agent_jobs(self, agent: Agent) -> int:
         """
@@ -659,6 +737,31 @@ class AgentService:
                         "retry_count": job.retry_count
                     }
                 )
+
+                # Send retry warning on final attempt (Issue #114, Phase 10 T040)
+                if job.retry_count == job.max_retries - 1:
+                    try:
+                        from backend.src.services.notification_service import NotificationService
+                        from backend.src.config.settings import get_settings
+
+                        settings = get_settings()
+                        vapid_claims = (
+                            {"sub": settings.vapid_subject}
+                            if settings.vapid_subject
+                            else {}
+                        )
+                        notification_service = NotificationService(
+                            db=self.db,
+                            vapid_private_key=settings.vapid_private_key,
+                            vapid_claims=vapid_claims,
+                        )
+                        notification_service.notify_retry_warning(job)
+                    except Exception as e:
+                        # Non-blocking: notification failure must not affect job processing
+                        logger.error(
+                            f"Failed to send retry warning notifications: {e}",
+                            extra={"job_guid": job.guid},
+                        )
             else:
                 job.fail(f"Agent went offline after {job.max_retries} retries")
                 logger.warning(

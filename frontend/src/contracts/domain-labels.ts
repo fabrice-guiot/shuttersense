@@ -23,6 +23,12 @@ import {
   Building2,
   User,
   Tag,
+  Bell,
+  XCircle,
+  TrendingUp,
+  ServerCrash,
+  Clock,
+  RefreshCw,
   type LucideIcon
 } from 'lucide-react'
 
@@ -52,6 +58,8 @@ export const DOMAIN_ICONS = {
   location: MapPin,
   organizer: Building2,
   performer: User,
+  // Notifications domain (Issue #114)
+  notification: Bell,
 } as const satisfies Record<string, LucideIcon>
 
 export type DomainType = keyof typeof DOMAIN_ICONS
@@ -394,4 +402,76 @@ export const PERFORMER_STATUS_BADGE_VARIANT: Record<
   announced: 'secondary',
   confirmed: 'success',
   cancelled: 'destructive'
+}
+
+// ============================================================================
+// Notification Categories (Push Notifications - Issue #114)
+// ============================================================================
+
+export type NotificationCategory =
+  | 'job_failure'
+  | 'inflection_point'
+  | 'agent_status'
+  | 'deadline'
+  | 'retry_warning'
+
+/**
+ * Human-readable labels for notification categories
+ */
+export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> = {
+  job_failure: 'Job Failures',
+  inflection_point: 'Inflection Points',
+  agent_status: 'Agent Status',
+  deadline: 'Deadlines',
+  retry_warning: 'Retry Warnings'
+}
+
+/**
+ * Icons for notification categories
+ */
+export const NOTIFICATION_CATEGORY_ICONS: Record<NotificationCategory, LucideIcon> = {
+  job_failure: XCircle,
+  inflection_point: TrendingUp,
+  agent_status: ServerCrash,
+  deadline: Clock,
+  retry_warning: RefreshCw
+}
+
+/**
+ * Short descriptions for notification category preference toggles
+ */
+export const NOTIFICATION_CATEGORY_DESCRIPTIONS: Record<NotificationCategory, string> = {
+  job_failure: 'When an analysis job fails after all retries',
+  inflection_point: 'When analysis detects changes in a collection',
+  agent_status: 'When agent pool goes offline, errors, or recovers',
+  deadline: 'Reminders before event deadlines approach',
+  retry_warning: 'When a job reaches its final retry attempt'
+}
+
+/**
+ * Badge variants for notification categories
+ */
+export const NOTIFICATION_CATEGORY_BADGE_VARIANT: Record<
+  NotificationCategory,
+  'destructive' | 'secondary' | 'warning' | 'muted'
+> = {
+  job_failure: 'destructive',
+  inflection_point: 'secondary',
+  agent_status: 'warning',
+  deadline: 'secondary',
+  retry_warning: 'muted'
+}
+
+/**
+ * Get the label for a notification category
+ */
+export function getNotificationCategoryLabel(category: NotificationCategory): string {
+  return NOTIFICATION_CATEGORY_LABELS[category] || category
+}
+
+/**
+ * Get the icon for a notification category
+ */
+export function getNotificationCategoryIcon(category: NotificationCategory): LucideIcon {
+  return NOTIFICATION_CATEGORY_ICONS[category]
 }

@@ -1,0 +1,442 @@
+openapi: 3.1.0
+info:
+  title: ShutterSense Notification API
+  description: Push notification subscription, preferences, and history endpoints for the PWA push notifications feature.
+  version: 1.0.0
+
+servers:
+  - url: https://{host}
+    description: Production server (HTTPS required for session cookies and service workers)
+    variables:
+      host:
+        default: api.shuttersense.ai
+        description: API host
+
+paths:
+  /api/notifications/subscribe:
+    post:
+      operationId: createPushSubscription
+      summary: Register a push subscription
+      description: |
+        Creates a new Web Push subscription for the authenticated user's current device.
+        If a subscription with the same endpoint already exists, it is replaced.
+        Requires the user to have granted browser notification permission.
+      tags: [Push Subscriptions]
+      security:
+        - session: []
+        - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionCreate'
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushSubscriptionResponse'
+        '400':
+          description: Invalid subscription data
+        '401':
+          description: Not authenticated
+
+    delete:
+      operationId: removePushSubscription
+      summary: Remove a push subscription
+      description: |
+        Removes the push subscription matching the given endpoint for the authenticated user.
+        Called when the user disables notifications on a device.
+      tags: [Push Subscriptions]
+      security:
+        - session: []
+        - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint:
+                  type: string
+                  description: The push service endpoint URL to unsubscribe
+      responses:
+        '204':
+          description: Subscription removed
+        '401':
+          description: Not authenticated
+        '404':
+          description: Subscription not found
+
+  /api/notifications/status:
+    get:
+      operationId: getSubscriptionStatus
+      summary: Check push subscription status
+      description: |
+        Returns the notification enablement status and active push subscriptions for the authenticated user.
+        Used by the frontend to determine the current notification state (enabled, permission status, active devices).
+      tags: [Push Subscriptions]
+      security:
+        - session: []
+        - bearer: []
+      responses:
+        '200':
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionStatusResponse'
+        '401':
+          description: Not authenticated
+
+  /api/notifications/preferences:
+    get:
+      operationId: getNotificationPreferences
+      summary: Get notification preferences
+      description: |
+        Returns the authenticated user's notification preference settings, including
+        the master toggle and per-category toggles.
+      tags: [Notification Preferences]
+      security:
+        - session: []
+        - bearer: []
+      responses:
+        '200':
+          description: Current preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferencesResponse'
+        '401':
+          description: Not authenticated
+
+    put:
+      operationId: updateNotificationPreferences
+      summary: Update notification preferences
+      description: |
+        Updates the authenticated user's notification preferences. All fields are optional;
+        only provided fields are updated. Changes take effect immediately for future notifications.
+      tags: [Notification Preferences]
+      security:
+        - session: []
+        - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreferencesUpdate'
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferencesResponse'
+        '400':
+          description: Invalid preference values
+        '401':
+          description: Not authenticated
+
+  /api/notifications:
+    get:
+      operationId: listNotifications
+      summary: List notification history
+      description: |
+        Returns the authenticated user's recent notifications, ordered by creation time
+        (most recent first). Supports pagination via offset/limit.
+      tags: [Notification History]
+      security:
+        - session: []
+        - bearer: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+          description: Maximum number of notifications to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Number of notifications to skip
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [job_failure, inflection_point, agent_status, deadline, retry_warning]
+          description: Filter by notification category
+        - name: unread_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Return only unread notifications
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/notifications/unread-count:
+    get:
+      operationId: getUnreadCount
+      summary: Get unread notification count
+      description: |
+        Returns the count of unread notifications for the authenticated user.
+        Used by the notification bell badge in the UI header.
+      tags: [Notification History]
+      security:
+        - session: []
+        - bearer: []
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unread_count:
+                    type: integer
+                    description: Number of unread notifications
+                    example: 5
+        '401':
+          description: Not authenticated
+
+  /api/notifications/{guid}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Mark notification as read
+      description: |
+        Marks a single notification as read by setting its read_at timestamp.
+        Idempotent - marking an already-read notification is a no-op.
+      tags: [Notification History]
+      security:
+        - session: []
+        - bearer: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Notification GUID (ntf_xxx)
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Notification not found
+
+  /api/notifications/vapid-key:
+    get:
+      operationId: getVapidPublicKey
+      summary: Get VAPID public key
+      description: |
+        Returns the server's VAPID public key, needed by the frontend to create
+        push subscriptions via PushManager.subscribe().
+      tags: [Push Subscriptions]
+      security:
+        - session: []
+        - bearer: []
+      responses:
+        '200':
+          description: VAPID public key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vapid_public_key:
+                    type: string
+                    description: Base64url-encoded VAPID public key
+        '401':
+          description: Not authenticated
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: session
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    PushSubscriptionCreate:
+      type: object
+      required: [endpoint, p256dh_key, auth_key]
+      properties:
+        endpoint:
+          type: string
+          format: uri
+          description: Push service endpoint URL (must be HTTPS)
+          example: "https://fcm.googleapis.com/fcm/send/abc123..."
+        p256dh_key:
+          type: string
+          description: Base64url-encoded ECDH public key
+        auth_key:
+          type: string
+          description: Base64url-encoded auth secret
+        device_name:
+          type: string
+          maxLength: 100
+          description: Optional user-friendly device name
+          example: "MacBook Pro"
+
+    PushSubscriptionResponse:
+      type: object
+      properties:
+        guid:
+          type: string
+          description: Subscription GUID
+          example: "sub_01hgw2bbg0000000000000001"
+        endpoint:
+          type: string
+        device_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    SubscriptionStatusResponse:
+      type: object
+      properties:
+        notifications_enabled:
+          type: boolean
+          description: Whether the user has the master notification toggle enabled
+        subscriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PushSubscriptionResponse'
+          description: Active push subscriptions for this user
+
+    NotificationPreferencesResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Master notification toggle
+        job_failures:
+          type: boolean
+        inflection_points:
+          type: boolean
+        agent_status:
+          type: boolean
+        deadline:
+          type: boolean
+        retry_warning:
+          type: boolean
+        deadline_days_before:
+          type: integer
+          minimum: 1
+          maximum: 30
+        timezone:
+          type: string
+          description: IANA timezone identifier for deadline proximity calculations (e.g., "America/New_York"). Auto-detected from browser on first enable, user-overridable.
+          example: "America/New_York"
+
+    NotificationPreferencesUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        job_failures:
+          type: boolean
+        inflection_points:
+          type: boolean
+        agent_status:
+          type: boolean
+        deadline:
+          type: boolean
+        retry_warning:
+          type: boolean
+        deadline_days_before:
+          type: integer
+          minimum: 1
+          maximum: 30
+        timezone:
+          type: string
+          description: IANA timezone identifier (e.g., "America/New_York", "Europe/London", "UTC")
+          example: "America/New_York"
+
+    NotificationResponse:
+      type: object
+      properties:
+        guid:
+          type: string
+          example: "ntf_01hgw2bbg0000000000000001"
+        category:
+          type: string
+          enum: [job_failure, inflection_point, agent_status, deadline, retry_warning]
+        title:
+          type: string
+          example: "Analysis Failed"
+        body:
+          type: string
+          example: "PhotoStats analysis of \"Wedding Photos\" failed: Connection timeout"
+        data:
+          type: object
+          nullable: true
+          properties:
+            url:
+              type: string
+              description: In-app navigation URL
+            job_guid:
+              type: string
+            collection_guid:
+              type: string
+            result_guid:
+              type: string
+            event_guid:
+              type: string
+            agent_guid:
+              type: string
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationResponse'
+        total:
+          type: integer
+          description: Total number of notifications matching the filter
+        limit:
+          type: integer
+        offset:
+          type: integer

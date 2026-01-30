@@ -21,6 +21,7 @@ Environment Variables:
     SHUSAI_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
 """
 
+import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -222,6 +223,156 @@ def validate_master_key() -> None:
         sys.exit(1)
 
 
+async def dead_agent_safety_net() -> None:
+    """
+    Background task that periodically checks for dead agents across all teams.
+
+    Runs every 120 seconds, marking agents with stale heartbeats as offline
+    and triggering pool_offline notifications if a team's pool becomes empty.
+
+    This is a safety net for cases where agents die without sending a disconnect
+    (e.g., crash, network partition, kill -9).
+
+    Issue #114 - Phase 8 (T035)
+    """
+    safety_logger = get_logger("agent")
+    safety_logger.info("Dead agent safety net background task started")
+
+    while True:
+        await asyncio.sleep(120)
+
+        db = None
+        try:
+            db = SessionLocal()
+
+            # Get all distinct team_ids from non-revoked agents
+            from backend.src.models import Agent, AgentStatus
+            team_ids = (
+                db.query(Agent.team_id)
+                .filter(Agent.status != AgentStatus.REVOKED)
+                .distinct()
+                .all()
+            )
+
+            for (team_id,) in team_ids:
+                try:
+                    from backend.src.services.agent_service import AgentService
+
+                    agent_service = AgentService(db)
+                    result = agent_service.check_offline_agents(team_id)
+
+                    if result.pool_now_empty and result.newly_offline_agents:
+                        # Use the first newly-offline agent as representative
+                        representative_agent = result.newly_offline_agents[0]
+                        try:
+                            from backend.src.services.notification_service import NotificationService
+                            from backend.src.config.settings import get_settings
+
+                            settings = get_settings()
+                            vapid_claims = (
+                                {"sub": settings.vapid_subject}
+                                if settings.vapid_subject
+                                else {}
+                            )
+                            notification_service = NotificationService(
+                                db=db,
+                                vapid_private_key=settings.vapid_private_key,
+                                vapid_claims=vapid_claims,
+                            )
+                            notification_service.notify_agent_status(
+                                agent=representative_agent,
+                                team_id=team_id,
+                                transition_type="pool_offline",
+                            )
+                        except Exception as e:
+                            safety_logger.error(
+                                f"Failed to send pool_offline notification: {e}",
+                                extra={"team_id": team_id},
+                            )
+                except Exception as e:
+                    safety_logger.error(
+                        f"Error checking offline agents for team: {e}",
+                        extra={"team_id": team_id},
+                    )
+        except Exception as e:
+            safety_logger.error(f"Dead agent safety net iteration error: {e}")
+        finally:
+            if db:
+                db.close()
+
+
+async def deadline_check_scheduler() -> None:
+    """
+    Background task that periodically checks for approaching event deadlines.
+
+    Runs every hour, querying all teams with deadline events and sending
+    reminder push notifications to users based on their deadline_days_before
+    and timezone preferences.
+
+    Deduplication is handled in check_deadlines() — hourly runs are safe
+    and handle server restarts and timezone edge cases without complex
+    "last run" tracking.
+
+    Issue #114 - Phase 9 (T036)
+    """
+    deadline_logger = get_logger("notifications")
+    deadline_logger.info("Deadline check scheduler background task started")
+
+    while True:
+        await asyncio.sleep(3600)  # Hourly
+
+        db = None
+        try:
+            db = SessionLocal()
+
+            # Find distinct team_ids that have events with deadlines
+            from backend.src.models import Event
+            team_ids = (
+                db.query(Event.team_id)
+                .filter(
+                    Event.deadline_date.isnot(None),
+                    Event.deleted_at.is_(None),
+                )
+                .distinct()
+                .all()
+            )
+
+            total_sent = 0
+            team_count = len(team_ids)
+
+            for (team_id,) in team_ids:
+                try:
+                    from backend.src.services.notification_service import NotificationService
+                    from backend.src.config.settings import get_settings
+
+                    settings = get_settings()
+                    vapid_claims = (
+                        {"sub": settings.vapid_subject}
+                        if settings.vapid_subject
+                        else {}
+                    )
+                    notification_service = NotificationService(
+                        db=db,
+                        vapid_private_key=settings.vapid_private_key,
+                        vapid_claims=vapid_claims,
+                    )
+                    sent = notification_service.check_deadlines(team_id=team_id)
+                    total_sent += sent
+                except Exception as e:
+                    deadline_logger.error(
+                        f"Error checking deadlines for team: {e}",
+                        extra={"team_id": team_id},
+                    )
+            deadline_logger.info(
+                f"Deadline check completed: {total_sent} reminders across {team_count} teams"
+            )
+        except Exception as e:
+            deadline_logger.error(f"Deadline check scheduler iteration error: {e}")
+        finally:
+            if db:
+                db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -257,6 +408,33 @@ async def lifespan(app: FastAPI):
     # Log CORS configuration
     logger.info(f"CORS allowed origins: {cors_origins}")
 
+    # Validate Web Push (VAPID) configuration
+    from backend.src.config.settings import get_settings
+    _settings = get_settings()
+    if _settings.vapid_configured:
+        try:
+            from pywebpush import webpush  # noqa: F401
+            logger.info(
+                "Web Push (VAPID) configured — push notifications enabled"
+            )
+        except ImportError:
+            logger.warning(
+                "VAPID keys configured but pywebpush is not installed. "
+                "Push notifications will fail. Install with: pip install pywebpush>=2.0.0"
+            )
+    else:
+        missing = []
+        if not _settings.vapid_public_key:
+            missing.append("VAPID_PUBLIC_KEY")
+        if not _settings.vapid_private_key:
+            missing.append("VAPID_PRIVATE_KEY")
+        if not _settings.vapid_subject:
+            missing.append("VAPID_SUBJECT")
+        logger.warning(
+            f"Web Push (VAPID) not configured — push notifications disabled. "
+            f"Missing: {', '.join(missing)}"
+        )
+
     # NOTE: Default configuration seeding (extensions) is now team-specific
     # and should be done when a team is created, not on application startup.
     # The seed_default_extensions(team_id) method requires a team_id parameter
@@ -265,10 +443,34 @@ async def lifespan(app: FastAPI):
 
     logger.info("ShutterSense backend started successfully")
 
+    # Start dead agent safety net background task (Phase 8, T035)
+    safety_net_task = asyncio.create_task(dead_agent_safety_net())
+
+    # Start deadline check scheduler background task (Phase 9, T036)
+    deadline_task = asyncio.create_task(deadline_check_scheduler())
+
     yield
 
     # Shutdown
     logger.info("Shutting down ShutterSense backend application")
+
+    # Cancel dead agent safety net
+    safety_net_task.cancel()
+    try:
+        await safety_net_task
+    except asyncio.CancelledError:
+        logger.info("Dead agent safety net background task stopped")
+    except Exception as e:
+        logger.error(f"Dead agent safety net failed: {e}")
+
+    # Cancel deadline check scheduler
+    deadline_task.cancel()
+    try:
+        await deadline_task
+    except asyncio.CancelledError:
+        logger.info("Deadline check scheduler background task stopped")
+    except Exception as e:
+        logger.error(f"Deadline check scheduler failed: {e}")
 
 
 # Initialize logging before creating app
@@ -717,7 +919,8 @@ async def get_version() -> Dict[str, str]:
 
 from backend.src.api import (
     collections, connectors, tools, results, pipelines, trends,
-    config, categories, events, locations, organizers, performers, analytics
+    config, categories, events, locations, organizers, performers, analytics,
+    notifications
 )
 from backend.src.api import auth as auth_router
 from backend.src.api import users as users_router
@@ -747,6 +950,9 @@ app.include_router(config.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(connectors.router, prefix="/api")
 app.include_router(users_router.router, prefix="/api")
+
+# === Notifications (Issue #114) ===
+app.include_router(notifications.router, prefix="/api")
 
 # === Infrastructure (internal APIs - not accessible via API tokens) ===
 app.include_router(agent_router)

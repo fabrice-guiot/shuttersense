@@ -378,11 +378,11 @@ class TestAgentServiceOfflineDetection:
         test_db_session.commit()
 
         # Check for offline agents
-        offline_agents = service.check_offline_agents(test_team.id)
+        result = service.check_offline_agents(test_team.id)
 
-        assert len(offline_agents) == 1
-        assert offline_agents[0].id == reg_result.agent.id
-        assert offline_agents[0].status == AgentStatus.OFFLINE
+        assert len(result.newly_offline_agents) == 1
+        assert result.newly_offline_agents[0].id == reg_result.agent.id
+        assert result.newly_offline_agents[0].status == AgentStatus.OFFLINE
 
     def test_check_offline_agents_ignores_recent_heartbeats(
         self, test_db_session, test_team, test_user
@@ -404,9 +404,9 @@ class TestAgentServiceOfflineDetection:
         reg_result.agent.last_heartbeat = datetime.utcnow()
         test_db_session.commit()
 
-        offline_agents = service.check_offline_agents(test_team.id)
+        result = service.check_offline_agents(test_team.id)
 
-        assert len(offline_agents) == 0
+        assert len(result.newly_offline_agents) == 0
         assert reg_result.agent.status == AgentStatus.ONLINE
 
 

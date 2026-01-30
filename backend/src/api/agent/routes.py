@@ -26,6 +26,7 @@ from backend.src.services.tool_service import _db_job_to_response
 
 from backend.src.db.database import get_db
 from backend.src.middleware.tenant import TenantContext, get_tenant_context
+from backend.src.models import AgentStatus
 from backend.src.services.agent_service import AgentService
 from backend.src.services.connector_service import ConnectorService
 from backend.src.api.connectors import get_connector_service
@@ -116,6 +117,103 @@ from backend.src.api.agent.dependencies import AgentContext, get_agent_context, 
 
 # Create router with prefix and tags
 router = APIRouter(prefix="/api/agent/v1", tags=["Agents"])
+
+
+async def _trigger_agent_notification_async(
+    agent_guid: str,
+    agent_name: str,
+    agent_id: int,
+    team_id: int,
+    transition_type: str,
+    error_description: Optional[str] = None,
+) -> None:
+    """
+    Trigger an agent status notification in a background task.
+
+    Uses a fresh DB session so it does not depend on the request-scoped
+    session (which may be closed by the time push delivery completes).
+    Failures are logged but never propagated.
+
+    Args:
+        agent_guid: Agent GUID (for re-fetching)
+        agent_name: Agent display name (for logging)
+        agent_id: Agent internal ID (for re-fetching)
+        team_id: Team ID for tenant isolation
+        transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+        error_description: Error message (for agent_error)
+    """
+    from backend.src.db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        from backend.src.services.notification_service import NotificationService
+        from backend.src.config.settings import get_settings
+
+        settings = get_settings()
+        vapid_claims = {"sub": settings.vapid_subject} if settings.vapid_subject else {}
+        notification_service = NotificationService(
+            db=db,
+            vapid_private_key=settings.vapid_private_key,
+            vapid_claims=vapid_claims,
+        )
+
+        # Re-fetch agent in this session to avoid detached instance errors
+        agent_service = AgentService(db)
+        agent = agent_service.get_agent_by_guid(agent_guid, team_id)
+        if not agent:
+            logger.warning(
+                "Agent not found for notification",
+                extra={"agent_guid": agent_guid, "transition_type": transition_type},
+            )
+            return
+
+        notification_service.notify_agent_status(
+            agent=agent,
+            team_id=team_id,
+            transition_type=transition_type,
+            error_description=error_description,
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to send agent status notification: {e}",
+            extra={
+                "agent_guid": agent_guid,
+                "transition_type": transition_type,
+            },
+        )
+    finally:
+        db.close()
+
+
+def _trigger_agent_notification(
+    agent,
+    team_id: int,
+    transition_type: str,
+    error_description: Optional[str] = None,
+) -> None:
+    """
+    Schedule an agent status notification as a background task.
+
+    Wraps _trigger_agent_notification_async in asyncio.create_task so
+    notification delivery (DB work + pywebpush HTTP calls) does not block
+    heartbeat/disconnect handling.
+
+    Args:
+        agent: Agent instance (values are captured before scheduling)
+        team_id: Team ID for tenant isolation
+        transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+        error_description: Error message (for agent_error)
+    """
+    asyncio.create_task(
+        _trigger_agent_notification_async(
+            agent_guid=agent.guid,
+            agent_name=getattr(agent, "name", ""),
+            agent_id=agent.id,
+            team_id=team_id,
+            transition_type=transition_type,
+            error_description=error_description,
+        )
+    )
 
 
 # ============================================================================
@@ -273,7 +371,7 @@ async def send_heartbeat(
     if data.metrics:
         metrics_dict = data.metrics.model_dump(exclude_none=True)
 
-    service.process_heartbeat(
+    result = service.process_heartbeat(
         agent=agent,
         status=data.status,
         capabilities=data.capabilities,
@@ -282,6 +380,22 @@ async def send_heartbeat(
         error_message=data.error_message,
         metrics=metrics_dict,
     )
+
+    # Trigger agent status notifications based on transitions (Phase 8, T034)
+    # Notifications run as background tasks with fresh DB sessions
+    if result.transitioned_to_error:
+        _trigger_agent_notification(
+            agent=result.agent,
+            team_id=ctx.team_id,
+            transition_type="agent_error",
+            error_description=data.error_message,
+        )
+    if result.pool_was_all_offline and result.agent.status == AgentStatus.ONLINE:
+        _trigger_agent_notification(
+            agent=result.agent,
+            team_id=ctx.team_id,
+            transition_type="pool_recovery",
+        )
 
     # Get pending commands for this agent
     pending_commands = service.get_and_clear_commands(ctx.agent_id)
@@ -354,6 +468,14 @@ async def disconnect_agent(
     asyncio.create_task(
         manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
     )
+
+    # Trigger pool_offline notification if no agents remain online (Phase 8, T034)
+    if pool_status["online_count"] == 0:
+        _trigger_agent_notification(
+            agent=agent,
+            team_id=ctx.team_id,
+            transition_type="pool_offline",
+        )
 
     return None
 

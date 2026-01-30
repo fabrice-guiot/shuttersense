@@ -6,10 +6,11 @@
  */
 
 import { useNavigate } from 'react-router-dom'
-import { Bell, Menu, HelpCircle, LogOut, User, Users, type LucideIcon } from 'lucide-react'
+import { Menu, HelpCircle, LogOut, User, Users, type LucideIcon } from 'lucide-react'
 import { AgentPoolStatus } from '@/components/layout/AgentPoolStatus'
+import { NotificationPanel } from '@/components/notifications/NotificationPanel'
+import { useNotifications } from '@/hooks/useNotifications'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import {
   Tooltip,
   TooltipContent,
@@ -87,6 +88,7 @@ export function TopHeader({
 }: TopHeaderProps) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const { unreadCount } = useNotifications()
 
   // Compute user display info
   const displayName = user?.display_name || user?.email?.split('@')[0] || 'User'
@@ -160,19 +162,8 @@ export function TopHeader({
           </div>
         )}
 
-        {/* Notifications */}
-        <button
-          className="relative rounded-md p-2 hover:bg-accent transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5 text-foreground" />
-          <Badge
-            className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
-            variant="destructive"
-          >
-            3
-          </Badge>
-        </button>
+        {/* Notifications (Issue #114) */}
+        <NotificationPanel unreadCount={unreadCount} />
 
         {/* Agent Pool Status (Issue #90) */}
         <AgentPoolStatus />

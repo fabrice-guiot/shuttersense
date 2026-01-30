@@ -26,6 +26,8 @@ export interface ResponsiveTableProps<T> {
   keyField: keyof T
   emptyState?: React.ReactNode
   className?: string
+  /** Optional row click handler — makes entire rows clickable */
+  onRowClick?: (item: T) => void
 }
 
 export function ResponsiveTable<T>({
@@ -34,6 +36,7 @@ export function ResponsiveTable<T>({
   keyField,
   emptyState,
   className,
+  onRowClick,
 }: ResponsiveTableProps<T>) {
   if (data.length === 0) {
     return emptyState ? <>{emptyState}</> : null
@@ -65,7 +68,31 @@ export function ResponsiveTable<T>({
             </TableHeader>
             <TableBody>
               {data.map((item) => (
-                <TableRow key={String(item[keyField])}>
+                <TableRow
+                  key={String(item[keyField])}
+                  className={onRowClick ? 'cursor-pointer' : undefined}
+                  role={onRowClick ? 'button' : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={
+                    onRowClick
+                      ? (e: React.MouseEvent) => {
+                          const target = e.target as HTMLElement
+                          if (target.closest('button, a, input, select, textarea, [role="button"]')) return
+                          onRowClick(item)
+                        }
+                      : undefined
+                  }
+                  onKeyDown={
+                    onRowClick
+                      ? (e: React.KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onRowClick(item)
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   {visibleCols.map((col) => (
                     <TableCell key={col.header} className={col.cellClassName}>
                       {col.cell(item)}
@@ -83,7 +110,31 @@ export function ResponsiveTable<T>({
         {data.map((item) => (
           <div
             key={String(item[keyField])}
-            className="rounded-lg border border-border bg-card p-4"
+            className={cn(
+              'rounded-lg border border-border bg-card p-4',
+              onRowClick && 'cursor-pointer'
+            )}
+            role={onRowClick ? 'button' : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
+            onClick={
+              onRowClick
+                ? (e: React.MouseEvent) => {
+                    const target = e.target as HTMLElement
+                    if (target.closest('button, a, input, select, textarea, [role="button"]')) return
+                    onRowClick(item)
+                  }
+                : undefined
+            }
+            onKeyDown={
+              onRowClick
+                ? (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onRowClick(item)
+                    }
+                  }
+                : undefined
+            }
           >
             {/* Title + Badge row */}
             {(titleCols.length > 0 || badgeCols.length > 0) && (

@@ -19,6 +19,9 @@ class AppSettings(BaseSettings):
         JWT_SECRET_KEY: Secret key for signing JWT API tokens (required for API tokens)
         JWT_TOKEN_EXPIRY_DAYS: Default token expiry in days (default: 90)
         INMEMORY_JOB_TYPES: Comma-separated list of tool types to run in-memory (default: empty)
+        VAPID_PUBLIC_KEY: Web Push VAPID public key (Base64url-encoded)
+        VAPID_PRIVATE_KEY: Web Push VAPID private key (Base64url-encoded)
+        VAPID_SUBJECT: VAPID subject identifier (mailto: or https: URL)
     """
 
     # JWT settings for API tokens
@@ -33,6 +36,25 @@ class AppSettings(BaseSettings):
         validation_alias="JWT_TOKEN_EXPIRY_DAYS",
         ge=1,
         le=365,
+    )
+
+    # VAPID settings for Web Push notifications
+    vapid_public_key: str = Field(
+        default="",
+        validation_alias="VAPID_PUBLIC_KEY",
+        description="Base64url-encoded VAPID public key for Web Push subscriptions"
+    )
+
+    vapid_private_key: str = Field(
+        default="",
+        validation_alias="VAPID_PRIVATE_KEY",
+        description="Base64url-encoded VAPID private key for signing push messages"
+    )
+
+    vapid_subject: str = Field(
+        default="",
+        validation_alias="VAPID_SUBJECT",
+        description="VAPID subject (mailto: or https: URL identifying the push sender)"
     )
 
     # Job execution settings
@@ -61,6 +83,11 @@ class AppSettings(BaseSettings):
     def jwt_configured(self) -> bool:
         """Check if JWT is properly configured."""
         return bool(self.jwt_secret_key)
+
+    @property
+    def vapid_configured(self) -> bool:
+        """Check if VAPID keys are properly configured for Web Push."""
+        return bool(self.vapid_public_key and self.vapid_private_key and self.vapid_subject)
 
     @property
     def inmemory_job_types_set(self) -> Set[str]:

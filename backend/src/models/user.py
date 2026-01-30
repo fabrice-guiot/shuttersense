@@ -182,6 +182,18 @@ class User(Base, GuidMixin):
         back_populates="created_by",
         lazy="dynamic"
     )
+    # Push notification subscriptions (one-to-many, Issue #114)
+    push_subscriptions = relationship(
+        "PushSubscription",
+        back_populates="user",
+        lazy="dynamic"
+    )
+    # Notification history (one-to-many, Issue #114)
+    notifications = relationship(
+        "Notification",
+        back_populates="user",
+        lazy="dynamic"
+    )
 
     @property
     def full_name(self) -> Optional[str]:
