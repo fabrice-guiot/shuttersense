@@ -54,7 +54,7 @@ cli.add_command(self_test)
 
 # Debug commands - only available in development mode
 import os as _os  # noqa: E402
-if _os.environ.get("SHUTTERSENSE_DEBUG_COMMANDS", "").lower() in ("1", "true", "yes"):
+if _os.environ.get("SHUSAI_DEBUG_COMMANDS", "").lower() in ("1", "true", "yes"):
     try:
         from cli.debug import debug  # noqa: E402
         cli.add_command(debug)

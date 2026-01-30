@@ -212,7 +212,7 @@ class TestDevelopmentMode:
             # Note: This test may not work perfectly due to module caching
             # In practice, the env var is read at import time
 
-    @patch.dict(os.environ, {'SHUTTERSENSE_AGENT_DEV_MODE': 'true'})
+    @patch.dict(os.environ, {'SHUSAI_AGENT_DEV_MODE': 'true'})
     def test_dev_mode_from_env(self):
         """Development mode can be enabled via environment."""
         import importlib
@@ -221,7 +221,7 @@ class TestDevelopmentMode:
 
         assert attestation_module.is_development_mode() is True
 
-    @patch.dict(os.environ, {'SHUTTERSENSE_AGENT_DEV_MODE': 'false'})
+    @patch.dict(os.environ, {'SHUSAI_AGENT_DEV_MODE': 'false'})
     def test_dev_mode_false_string(self):
         """'false' string disables dev mode."""
         import importlib

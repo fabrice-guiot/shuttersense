@@ -306,7 +306,7 @@ pytest tests/e2e/test_job_execution.py -v
 
 ```bash
 # Enable verbose logging
-export SHUTTERSENSE_LOG_LEVEL=DEBUG
+export SHUSAI_LOG_LEVEL=DEBUG
 shuttersense-agent start
 ```
 

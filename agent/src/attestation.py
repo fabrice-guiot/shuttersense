@@ -178,7 +178,7 @@ def verify_checksum(expected: str, actual: Optional[str] = None) -> bool:
 
 # Development mode flag - can be set to bypass attestation
 # This should NEVER be True in production builds
-_DEVELOPMENT_MODE = os.environ.get('SHUTTERSENSE_AGENT_DEV_MODE', '').lower() == 'true'
+_DEVELOPMENT_MODE = os.environ.get('SHUSAI_AGENT_DEV_MODE', '').lower() == 'true'
 
 
 def is_development_mode() -> bool:

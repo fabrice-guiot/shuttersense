@@ -70,9 +70,9 @@ class TestAgentConfig:
         """Test that environment variables override file configuration."""
         from src.config import AgentConfig
 
-        monkeypatch.setenv("SHUTTERSENSE_SERVER_URL", "http://env-server:8000")
-        monkeypatch.setenv("SHUTTERSENSE_API_KEY", "agt_key_from_env")
-        monkeypatch.setenv("SHUTTERSENSE_LOG_LEVEL", "DEBUG")
+        monkeypatch.setenv("SHUSAI_SERVER_URL", "http://env-server:8000")
+        monkeypatch.setenv("SHUSAI_API_KEY", "agt_key_from_env")
+        monkeypatch.setenv("SHUSAI_LOG_LEVEL", "DEBUG")
 
         config = AgentConfig(config_dir=temp_config_dir)
 

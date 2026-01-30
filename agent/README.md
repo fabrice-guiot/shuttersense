@@ -402,14 +402,14 @@ Exit codes: `0` = all pass, `1` = warnings only, `2` = failures. Provides action
 
 Development-only diagnostic commands. Not included in production builds.
 
-**Requires**: `SHUTTERSENSE_DEBUG_COMMANDS=1` environment variable.
+**Requires**: `SHUSAI_DEBUG_COMMANDS=1` environment variable.
 
 #### debug compare-inventory
 
 Compare FileInfo from the two most recent inventory manifests for a connector:
 
 ```bash
-SHUTTERSENSE_DEBUG_COMMANDS=1 shuttersense-agent debug compare-inventory <CONNECTOR_GUID> \
+SHUSAI_DEBUG_COMMANDS=1 shuttersense-agent debug compare-inventory <CONNECTOR_GUID> \
   [--collection <COL_GUID>] [--tool <TOOL>] [--list-folders] [--dump] \
   [--limit N] [--show-all] [--verbose]
 ```
@@ -536,7 +536,7 @@ Contents:
 
 Configuration values are resolved in this order (highest priority first):
 
-1. **Environment variables** (`SHUTTERSENSE_SERVER_URL`, `SHUTTERSENSE_API_KEY`, `SHUTTERSENSE_LOG_LEVEL`)
+1. **Environment variables** (`SHUSAI_SERVER_URL`, `SHUSAI_API_KEY`, `SHUSAI_LOG_LEVEL`)
 2. **Configuration file** (`agent-config.yaml`)
 3. **Default values**
 
@@ -544,12 +544,12 @@ Configuration values are resolved in this order (highest priority first):
 
 | Variable | Description |
 | ---------- | ------------- |
-| `SHUTTERSENSE_SERVER_URL` | Override server URL from config file |
-| `SHUTTERSENSE_API_KEY` | Override API key from config file |
-| `SHUTTERSENSE_LOG_LEVEL` | Override log level (DEBUG, INFO, WARNING, ERROR) |
-| `SHUTTERSENSE_CONFIG_PATH` | Override config file path |
-| `SHUTTERSENSE_DEBUG_COMMANDS` | Set to `1` to enable debug CLI commands |
-| `SHUTTERSENSE_AGENT_DEV_MODE` | Set to `1` to enable development mode |
+| `SHUSAI_SERVER_URL` | Override server URL from config file |
+| `SHUSAI_API_KEY` | Override API key from config file |
+| `SHUSAI_LOG_LEVEL` | Override log level (DEBUG, INFO, WARNING, ERROR) |
+| `SHUSAI_CONFIG_PATH` | Override config file path |
+| `SHUSAI_DEBUG_COMMANDS` | Set to `1` to enable debug CLI commands |
+| `SHUSAI_AGENT_DEV_MODE` | Set to `1` to enable development mode |
 | `SHUSAI_VERSION` | Override version string (for CI/CD without Git) |
 
 ## Storage Adapters
