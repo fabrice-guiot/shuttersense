@@ -135,16 +135,25 @@ export const useNotifications = (
       try {
         const updated = await notificationService.markAsRead(guid)
         if (mountedRef.current) {
-          // Update the notification in the list
+          // Check if the notification was previously unread before updating
+          let wasUnread = false
           setNotifications((prev) =>
-            prev.map((n) => (n.guid === guid ? updated : n))
+            prev.map((n) => {
+              if (n.guid === guid) {
+                wasUnread = n.read_at === null
+                return updated
+              }
+              return n
+            })
           )
-          // Decrement unread count if it was previously unread
-          setUnreadCount((prev) => {
-            const next = Math.max(0, prev - 1)
-            syncAppBadge(next)
-            return next
-          })
+          // Only decrement unread count if the notification was previously unread
+          if (wasUnread) {
+            setUnreadCount((prev) => {
+              const next = Math.max(0, prev - 1)
+              syncAppBadge(next)
+              return next
+            })
+          }
         }
       } catch (err: unknown) {
         if (mountedRef.current) {
