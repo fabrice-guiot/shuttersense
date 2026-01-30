@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye, ExternalLink } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -37,14 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -132,10 +126,112 @@ export default function AgentsPage() {
     refetchStats()
   }
 
+  const agentColumns: ColumnDef<Agent>[] = [
+    {
+      header: 'Name',
+      cell: (agent) => (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{agent.name}</span>
+          <GuidBadge guid={agent.guid} />
+        </div>
+      ),
+      cardRole: 'title',
+    },
+    {
+      header: 'Status',
+      cell: (agent) => (
+        <>
+          <AgentStatusBadge status={agent.status} />
+          {agent.error_message && (
+            <p className="text-xs text-destructive mt-1">{agent.error_message}</p>
+          )}
+        </>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Load',
+      cell: (agent) => agent.running_jobs_count > 0 ? (
+        <Badge variant="info">
+          {agent.running_jobs_count} {agent.running_jobs_count === 1 ? 'job' : 'jobs'}
+        </Badge>
+      ) : (
+        <span className="text-muted-foreground text-sm">Idle</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Hostname',
+      cell: (agent) => (
+        <div className="flex flex-col min-w-0">
+          <span className="truncate" title={agent.hostname}>{agent.hostname}</span>
+          <span className="text-xs text-muted-foreground truncate" title={agent.os_info}>{agent.os_info}</span>
+        </div>
+      ),
+      cardRole: 'subtitle',
+    },
+    {
+      header: 'Version',
+      cell: (agent) => (
+        <span className="text-sm font-mono block truncate max-w-[200px]" title={agent.version}>
+          {agent.version}
+        </span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Last Heartbeat',
+      cell: (agent) => agent.last_heartbeat ? (
+        <span className="text-sm">{formatDateTime(agent.last_heartbeat)}</span>
+      ) : (
+        <span className="text-muted-foreground">Never</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: '',
+      headerClassName: 'w-[50px]',
+      cell: (agent) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">Actions</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link to={`/agents/${agent.guid}`}>
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open Detail Page
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleViewDetails(agent)}>
+              <Eye className="h-4 w-4 mr-2" />
+              Quick View
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleRename(agent)}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleRevoke(agent)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Revoke
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <div className="flex flex-col gap-6">
       {/* Action Row */}
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
         <Button variant="outline" onClick={handleRefresh} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -154,7 +250,7 @@ export default function AgentsPage() {
       )}
 
       {/* Agents Table */}
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>Registered Agents</CardTitle>
           <CardDescription>
@@ -166,103 +262,20 @@ export default function AgentsPage() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : agents.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No agents registered yet.</p>
-              <p className="text-sm mt-2">
-                Create a registration token and use it to register an agent.
-              </p>
-            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Load</TableHead>
-                  <TableHead>Hostname</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Last Heartbeat</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {agents.map(agent => (
-                  <TableRow key={agent.guid}>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium">{agent.name}</span>
-                        <GuidBadge guid={agent.guid} />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <AgentStatusBadge status={agent.status} />
-                      {agent.error_message && (
-                        <p className="text-xs text-destructive mt-1">{agent.error_message}</p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {agent.running_jobs_count > 0 ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-                          {agent.running_jobs_count} {agent.running_jobs_count === 1 ? 'job' : 'jobs'}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">Idle</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span>{agent.hostname}</span>
-                        <span className="text-xs text-muted-foreground">{agent.os_info}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm font-mono">{agent.version}</span>
-                    </TableCell>
-                    <TableCell>
-                      {agent.last_heartbeat ? (
-                        <span className="text-sm">{formatDateTime(agent.last_heartbeat)}</span>
-                      ) : (
-                        <span className="text-muted-foreground">Never</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Actions</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link to={`/agents/${agent.guid}`}>
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              Open Detail Page
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleViewDetails(agent)}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Quick View
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleRename(agent)}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleRevoke(agent)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Revoke
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ResponsiveTable
+              data={agents}
+              columns={agentColumns}
+              keyField="guid"
+              emptyState={
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No agents registered yet.</p>
+                  <p className="text-sm mt-2">
+                    Create a registration token and use it to register an agent.
+                  </p>
+                </div>
+              }
+            />
           )}
         </CardContent>
       </Card>

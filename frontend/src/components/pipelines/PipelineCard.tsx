@@ -66,7 +66,7 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
     <Card
       className={cn(
         'hover:shadow-md transition-shadow',
-        pipeline.is_default && 'ring-2 ring-amber-500 border-amber-500/50',
+        pipeline.is_default && 'ring-2 ring-warning border-warning/50',
         pipeline.is_active && !pipeline.is_default && 'ring-2 ring-primary border-primary/50',
         isLoading && 'opacity-50 pointer-events-none'
       )}
@@ -78,13 +78,13 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
             <div
               className={cn(
                 'p-2 rounded-lg',
-                pipeline.is_default ? 'bg-amber-500/10' : pipeline.is_active ? 'bg-primary/10' : 'bg-muted'
+                pipeline.is_default ? 'bg-warning/10' : pipeline.is_active ? 'bg-primary/10' : 'bg-muted'
               )}
             >
               <GitBranch
                 className={cn(
                   'h-5 w-5',
-                  pipeline.is_default ? 'text-amber-600' : pipeline.is_active ? 'text-primary' : 'text-muted-foreground'
+                  pipeline.is_default ? 'text-warning' : pipeline.is_active ? 'text-primary' : 'text-muted-foreground'
                 )}
               />
             </div>
@@ -141,7 +141,7 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
               {pipeline.is_default ? (
                 <DropdownMenuItem
                   onClick={() => onUnsetDefault(pipeline)}
-                  className="text-amber-600 focus:text-amber-600"
+                  className="text-warning focus:text-warning"
                 >
                   <Star className="h-4 w-4 mr-2" />
                   Remove Default
@@ -150,7 +150,7 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
                 <DropdownMenuItem
                   onClick={() => onSetDefault(pipeline)}
                   disabled={!pipeline.is_active}
-                  className={pipeline.is_active ? 'text-amber-600 focus:text-amber-600' : ''}
+                  className={pipeline.is_active ? 'text-warning focus:text-warning' : ''}
                 >
                   <Star className="h-4 w-4 mr-2" />
                   Set as Default
@@ -183,7 +183,7 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
         {/* Status Badges */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           {pipeline.is_default && (
-            <Badge variant="secondary" className="gap-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+            <Badge variant="warning" className="gap-1">
               <Star className="h-3 w-3" />
               Default
             </Badge>

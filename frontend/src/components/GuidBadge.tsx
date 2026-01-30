@@ -70,25 +70,26 @@ export function GuidBadge({
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       className={cn(
-        'inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md',
+        'inline-flex items-center gap-1.5 max-w-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md',
         className
       )}
       aria-label={`Copy GUID: ${guid}`}
     >
       {showLabel && (
-        <span className="text-xs text-muted-foreground">{label}:</span>
+        <span className="text-xs text-muted-foreground shrink-0">{label}:</span>
       )}
       <Badge
         variant="outline"
-        className="font-mono text-xs cursor-pointer hover:bg-muted transition-colors"
+        className="font-mono text-xs cursor-pointer hover:bg-muted transition-colors overflow-hidden"
       >
-        {guid}
+        <span className="truncate">{guid}</span>
         {copied ? (
-          <Check className="ml-1.5 h-3 w-3 text-green-500" />
+          <Check className="ml-1.5 h-3 w-3 text-success shrink-0" />
         ) : (
-          <Copy className="ml-1.5 h-3 w-3 text-muted-foreground" />
+          <Copy className="ml-1.5 h-3 w-3 text-muted-foreground shrink-0" />
         )}
       </Badge>
     </button>

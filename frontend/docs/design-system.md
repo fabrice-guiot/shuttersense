@@ -13,6 +13,8 @@ This document establishes UI/UX guidelines to ensure consistency across all scre
 - [Domain Model Display](#domain-model-display)
 - [Notification System](#notification-system)
 - [Icons](#icons)
+- [Table Responsiveness](#table-responsiveness)
+- [Tab Responsiveness](#tab-responsiveness)
 - [Dark Theme Compliance](#dark-theme-compliance)
 - [Calendar & Events Patterns](#calendar--events-patterns)
 
@@ -732,6 +734,241 @@ Each domain object type should have a consistent icon:
 
 ---
 
+## Table Responsiveness
+
+### Issue `#123` - Mobile Responsive Tables and Tabs
+
+All data tables MUST use the `ResponsiveTable` component. It renders a standard `<Table>` on desktop (`md` and above) and a card list on mobile (below `md` / 768px). The switch uses pure CSS (`hidden md:block` / `md:hidden`) with no JavaScript viewport detection.
+
+### Usage
+
+```tsx
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
+
+const columns: ColumnDef<MyItem>[] = [
+  {
+    header: 'Name',
+    cell: (item) => item.name,
+    cellClassName: 'font-medium',
+    cardRole: 'title',
+  },
+  {
+    header: 'Status',
+    cell: (item) => <Badge>{item.status}</Badge>,
+    cardRole: 'badge',
+  },
+  {
+    header: 'Created',
+    cell: (item) => formatDate(item.created_at),
+    cardRole: 'detail',
+  },
+  {
+    header: 'Actions',
+    headerClassName: 'text-right',
+    cell: (item) => <Button size="sm">Edit</Button>,
+    cardRole: 'action',
+  },
+]
+
+<ResponsiveTable
+  data={items}
+  columns={columns}
+  keyField="guid"
+  emptyState={<p className="text-muted-foreground">No items found</p>}
+/>
+```
+
+### ColumnDef Interface
+
+```typescript
+interface ColumnDef<T> {
+  header: string            // Column header text (also used as label in mobile detail rows)
+  headerClassName?: string  // Optional CSS classes for <th>
+  cell: (item: T) => ReactNode  // Cell renderer
+  cellClassName?: string    // Optional CSS classes for <td>
+  cardRole?: CardRole       // Mobile card layout zone (default: 'detail')
+}
+```
+
+### Card Roles
+
+Each column is assigned a `cardRole` that controls where it renders in the mobile card layout:
+
+| Role | Zone | Behavior |
+| ---- | ---- | -------- |
+| `title` | Top-left | Bold primary content (name, title) |
+| `subtitle` | Below title | Muted secondary text (location, email) |
+| `badge` | Top-right | Flex-wrap badge area (status, type) |
+| `detail` | Key-value rows | Label-value pairs with border separator (default) |
+| `action` | Bottom row | Action buttons with border separator, min-h 44px touch targets |
+| `hidden` | Not rendered | Desktop-only columns (e.g., internal IDs, timestamps) |
+
+### Mobile Card Structure
+
+```text
+┌──────────────────────────────────────┐
+│ [title]                    [badges]  │
+│ [subtitle]                           │
+├──────────────────────────────────────┤
+│ Detail Label        Detail Value     │
+│ Detail Label        Detail Value     │
+├──────────────────────────────────────┤
+│ [action buttons]                     │
+└──────────────────────────────────────┘
+```
+
+- Badge area is omitted when no columns have `cardRole: 'badge'`
+- Action row and its separator are omitted when no columns have `cardRole: 'action'`
+- Detail separator is omitted when no title/subtitle/badge columns exist
+
+### Recommended Card Role Mappings
+
+| Domain | title | subtitle | badge | detail | action | hidden |
+| ------ | ----- | -------- | ----- | ------ | ------ | ------ |
+| Collections | Name | Location | Type, State | Agent, Pipeline, Inventory, Status | Edit, Delete | - |
+| Results | Collection | Connector | Tool, Status | Pipeline, Files, Issues, Duration | View, Download, Delete | - |
+| Agents | Name | Hostname | Status | Load, Version, Last Heartbeat | Menu | - |
+| Directory | Name | Location | Status, Category | Rating, Instagram, Website | Edit, Delete | Created |
+
+### Empty State
+
+Pass an `emptyState` prop for when the data array is empty. The component renders it directly — no table or card wrapper is shown.
+
+```tsx
+<ResponsiveTable
+  data={items}
+  columns={columns}
+  keyField="guid"
+  emptyState={
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <Search className="h-10 w-10 text-muted-foreground mb-3" />
+      <p className="text-muted-foreground">No items found</p>
+    </div>
+  }
+/>
+```
+
+---
+
+## Tab Responsiveness
+
+### Issue `#123` - Mobile Responsive Tables and Tabs
+
+All tab strips MUST use the `ResponsiveTabsList` component. It renders a standard `TabsList` on desktop (`md` and above) and a `Select` dropdown on mobile (below `md` / 768px). The component integrates with the Radix UI `Tabs` controlled state.
+
+### Usage
+
+```tsx
+import { Tabs, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ResponsiveTabsList, type TabOption } from '@/components/ui/responsive-tabs-list'
+
+const tabOptions: TabOption[] = [
+  { value: 'overview', label: 'Overview', icon: BarChart3 },
+  { value: 'details', label: 'Details', icon: FileText },
+  { value: 'settings', label: 'Settings', icon: Settings },
+]
+
+<Tabs value={activeTab} onValueChange={setActiveTab}>
+  <ResponsiveTabsList
+    tabs={tabOptions}
+    value={activeTab}
+    onValueChange={setActiveTab}
+  >
+    {/* Desktop TabsTrigger children */}
+    <TabsTrigger value="overview" className="gap-2">
+      <BarChart3 className="h-4 w-4" />
+      Overview
+    </TabsTrigger>
+    <TabsTrigger value="details" className="gap-2">
+      <FileText className="h-4 w-4" />
+      Details
+    </TabsTrigger>
+    <TabsTrigger value="settings" className="gap-2">
+      <Settings className="h-4 w-4" />
+      Settings
+    </TabsTrigger>
+  </ResponsiveTabsList>
+
+  <TabsContent value="overview">...</TabsContent>
+  <TabsContent value="details">...</TabsContent>
+  <TabsContent value="settings">...</TabsContent>
+</Tabs>
+```
+
+### TabOption Interface
+
+```typescript
+interface TabOption {
+  value: string             // Tab identifier (matches TabsTrigger value)
+  label: string             // Display text in Select dropdown
+  icon?: LucideIcon         // Optional icon rendered before label in Select
+  badge?: ReactNode         // Optional badge rendered after label in Select (e.g., count)
+}
+```
+
+### Controlled Tabs Requirement
+
+ResponsiveTabsList requires Tabs to be controlled (with `value` and `onValueChange`). The `Select` dropdown calls `onValueChange` directly to sync state with the parent `Tabs` component.
+
+```tsx
+// CORRECT - Controlled tabs
+const [activeTab, setActiveTab] = useState('overview')
+
+<Tabs value={activeTab} onValueChange={setActiveTab}>
+  <ResponsiveTabsList tabs={options} value={activeTab} onValueChange={setActiveTab}>
+    ...
+  </ResponsiveTabsList>
+</Tabs>
+
+// INCORRECT - Uncontrolled tabs (Select cannot sync)
+<Tabs defaultValue="overview">
+  <ResponsiveTabsList tabs={options} value={???} onValueChange={???}>
+    ...
+  </ResponsiveTabsList>
+</Tabs>
+```
+
+### Flex Container Compatibility
+
+When tabs share a row with action buttons (Pattern B), the `ResponsiveTabsList` works inside the existing flex container:
+
+```tsx
+<Tabs value={activeTab} onValueChange={handleTabChange}>
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <ResponsiveTabsList tabs={tabOptions} value={activeTab} onValueChange={handleTabChange}>
+      <TabsTrigger value="trends">Trends</TabsTrigger>
+      <TabsTrigger value="reports">Reports</TabsTrigger>
+    </ResponsiveTabsList>
+    <div className="flex gap-2">
+      <Button variant="outline" size="icon" onClick={handleRefresh}>
+        <RefreshCw className="h-4 w-4" />
+      </Button>
+      <Button>Run Tool</Button>
+    </div>
+  </div>
+</Tabs>
+```
+
+### Filter Tabs (No TabsContent)
+
+`ResponsiveTabsList` can also be used for filter controls that don't have associated `TabsContent` panels. Wrap in a `Tabs` component for the Radix context:
+
+```tsx
+<Tabs value={filterStatus} onValueChange={setFilterStatus}>
+  <ResponsiveTabsList
+    tabs={filterOptions}
+    value={filterStatus}
+    onValueChange={setFilterStatus}
+  >
+    <TabsTrigger value="all">All</TabsTrigger>
+    <TabsTrigger value="active">Active</TabsTrigger>
+    <TabsTrigger value="archived">Archived</TabsTrigger>
+  </ResponsiveTabsList>
+</Tabs>
+```
+
+---
+
 ## Dark Theme Compliance
 
 ### Required Practices
@@ -991,6 +1228,12 @@ Before submitting a PR for a new UI feature, verify:
 - [ ] Icons match domain definitions
 - [ ] FK references show icon + name + type badge
 
+### Responsive
+- [ ] Tables use `ResponsiveTable` with appropriate card roles
+- [ ] Tab strips use `ResponsiveTabsList` with controlled state
+- [ ] Action rows wrap on mobile (`flex-wrap` or `flex-col sm:flex-row`)
+- [ ] Long text fields (GUIDs, versions, paths) truncate with `title` tooltip
+
 ### Accessibility
 - [ ] All icon buttons have aria-label
 - [ ] Loading states have role="status"
@@ -1031,6 +1274,7 @@ Before submitting a PR for a new UI feature, verify:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4 | 2026-01-29 | Added Table Responsiveness and Tab Responsiveness patterns, responsive checklist items (Issue #123) |
 | 1.3 | 2026-01-13 | Added Single Title Pattern, pageHelp tooltip, action button positioning (Issue #67) |
 | 1.2 | 2026-01-12 | Added Calendar & Events patterns, event domain icons (Issue #39) |
 | 1.1 | 2026-01-10 | Added scrollbar styling guidelines, known exceptions, error handling patterns (Issue #55) |

@@ -250,7 +250,7 @@ export const PipelinesPage: React.FC = () => {
       />
 
       {/* Beta indicator */}
-      <div className="mb-4 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+      <div className="mb-4 flex items-center gap-2 text-sm text-warning-foreground bg-warning/10 border border-warning/30 rounded-lg px-4 py-2">
         <Beaker className="h-4 w-4 flex-shrink-0" />
         <span>
           <strong>Beta Feature:</strong> Pipeline management is currently in beta.
@@ -364,7 +364,7 @@ export const PipelinesPage: React.FC = () => {
               Deactivating <strong>{confirmDeactivate.name}</strong> will mark it as
               not ready for use.
               {confirmDeactivate.is_default && (
-                <span className="block mt-2 text-amber-600">
+                <span className="block mt-2 text-warning">
                   <strong>Note:</strong> This pipeline is currently the default.
                   Deactivating it will also remove the default status.
                 </span>
@@ -401,7 +401,7 @@ export const PipelinesPage: React.FC = () => {
               Setting <strong>{confirmSetDefault.name}</strong> as default will
               use it for all pipeline validation tool runs.
               {stats?.default_pipeline_name && stats.default_pipeline_guid !== confirmSetDefault.guid && (
-                <span className="block mt-2 text-amber-600">
+                <span className="block mt-2 text-warning">
                   <strong>Note:</strong> The current default pipeline "{stats.default_pipeline_name}"
                   will lose its default status.
                 </span>
@@ -417,7 +417,7 @@ export const PipelinesPage: React.FC = () => {
               </button>
               <button
                 onClick={handleSetDefaultConfirm}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                className="px-4 py-2 bg-warning text-warning-foreground rounded-lg hover:bg-warning/90"
                 disabled={actionLoading}
               >
                 {actionLoading ? 'Setting...' : 'Set as Default'}
@@ -449,7 +449,7 @@ export const PipelinesPage: React.FC = () => {
               </button>
               <button
                 onClick={handleUnsetDefaultConfirm}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                className="px-4 py-2 bg-warning text-warning-foreground rounded-lg hover:bg-warning/90"
                 disabled={actionLoading}
               >
                 {actionLoading ? 'Removing...' : 'Remove Default'}

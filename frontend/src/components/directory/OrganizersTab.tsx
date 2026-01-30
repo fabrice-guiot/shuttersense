@@ -17,14 +17,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { useOrganizers, useOrganizerStats } from '@/hooks/useOrganizers'
@@ -143,111 +136,131 @@ function OrganizerList({ organizers, loading, onEdit, onDelete }: OrganizerListP
     )
   }
 
+  const organizerColumns: ColumnDef<Organizer>[] = [
+    {
+      header: 'Name',
+      cell: (organizer) => (
+        <div className="flex flex-col">
+          <span>{organizer.name}</span>
+          {organizer.notes && (
+            <span className="text-xs text-muted-foreground line-clamp-1">
+              {organizer.notes}
+            </span>
+          )}
+        </div>
+      ),
+      cellClassName: 'font-medium',
+      cardRole: 'title',
+    },
+    {
+      header: 'Category',
+      cell: (organizer) => <CategoryBadge category={organizer.category} />,
+      cardRole: 'badge',
+    },
+    {
+      header: 'Rating',
+      cell: (organizer) => <RatingDisplay rating={organizer.rating} size="sm" />,
+      cardRole: 'detail',
+    },
+    {
+      header: 'Ticket Default',
+      cell: (organizer) => organizer.ticket_required_default ? (
+        <Badge variant="default" className="gap-1">
+          <Ticket className="h-3 w-3" />
+          Required
+        </Badge>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Website',
+      cell: (organizer) => {
+        if (!organizer.website) {
+          return <span className="text-muted-foreground">-</span>
+        }
+        let hostname: string | null = null
+        try {
+          hostname = new URL(organizer.website).hostname
+        } catch {
+          // malformed URL — fall back to raw value
+        }
+        return (
+          <a
+            href={organizer.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-primary hover:underline"
+            title={organizer.website}
+          >
+            <Globe className="h-3 w-3" />
+            <span className="max-w-[120px] truncate">
+              {hostname ?? organizer.website}
+            </span>
+          </a>
+        )
+      },
+      cardRole: 'detail',
+    },
+    {
+      header: 'Instagram',
+      cell: (organizer) => organizer.instagram_handle ? (
+        <a
+          href={organizer.instagram_url || '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-primary hover:underline"
+        >
+          <Instagram className="h-3 w-3" />
+          <span>@{organizer.instagram_handle}</span>
+        </a>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Created',
+      cell: (organizer) => formatRelativeTime(organizer.created_at),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (organizer) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(organizer)}
+            title="Edit organizer"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleDeleteClick(organizer)}
+            title="Delete organizer"
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Rating</TableHead>
-            <TableHead>Ticket Default</TableHead>
-            <TableHead>Website</TableHead>
-            <TableHead>Instagram</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {organizers.map((organizer) => (
-            <TableRow key={organizer.guid}>
-              <TableCell className="font-medium">
-                <div className="flex flex-col">
-                  <span>{organizer.name}</span>
-                  {organizer.notes && (
-                    <span className="text-xs text-muted-foreground line-clamp-1">
-                      {organizer.notes}
-                    </span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                <CategoryBadge category={organizer.category} />
-              </TableCell>
-              <TableCell>
-                <RatingDisplay rating={organizer.rating} size="sm" />
-              </TableCell>
-              <TableCell>
-                {organizer.ticket_required_default ? (
-                  <Badge variant="default" className="gap-1">
-                    <Ticket className="h-3 w-3" />
-                    Required
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-              <TableCell>
-                {organizer.website ? (
-                  <a
-                    href={organizer.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-primary hover:underline"
-                    title={organizer.website}
-                  >
-                    <Globe className="h-3 w-3" />
-                    <span className="max-w-[120px] truncate">
-                      {new URL(organizer.website).hostname}
-                    </span>
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-              <TableCell>
-                {organizer.instagram_handle ? (
-                  <a
-                    href={organizer.instagram_url || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-primary hover:underline"
-                  >
-                    <Instagram className="h-3 w-3" />
-                    <span>@{organizer.instagram_handle}</span>
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatRelativeTime(organizer.created_at)}
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(organizer)}
-                    title="Edit organizer"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteClick(organizer)}
-                    title="Delete organizer"
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <ResponsiveTable
+        data={organizers}
+        columns={organizerColumns}
+        keyField="guid"
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog

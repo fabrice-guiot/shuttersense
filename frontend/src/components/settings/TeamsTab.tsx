@@ -21,14 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { useTeams, useTeamStats, Team } from '@/hooks/useTeams'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
@@ -110,6 +103,70 @@ export function TeamsTab() {
     }
   }
 
+  const teamColumns: ColumnDef<Team>[] = [
+    {
+      header: 'Team',
+      cell: (team) => (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{team.name}</span>
+          <GuidBadge guid={team.guid} />
+        </div>
+      ),
+      cardRole: 'title',
+    },
+    {
+      header: 'Slug',
+      cell: (team) => (
+        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+          {team.slug}
+        </code>
+      ),
+      cardRole: 'subtitle',
+    },
+    {
+      header: 'Users',
+      cell: (team) => team.user_count,
+      cardRole: 'detail',
+    },
+    {
+      header: 'Status',
+      cell: (team) => team.is_active ? (
+        <Badge variant="success">
+          Active
+        </Badge>
+      ) : (
+        <Badge variant="muted">Inactive</Badge>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (team) => team.is_active ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleDeactivate(team)}
+          className="gap-1.5 text-destructive hover:text-destructive"
+        >
+          <PowerOff className="h-4 w-4" />
+          Deactivate
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleReactivate(team)}
+          className="gap-1.5"
+        >
+          <Power className="h-4 w-4" />
+          Reactivate
+        </Button>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <div className="flex flex-col gap-6">
       {/* Action Row */}
@@ -128,90 +185,23 @@ export function TeamsTab() {
       )}
 
       {/* Teams Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Team</TableHead>
-              <TableHead>Slug</TableHead>
-              <TableHead>Users</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="text-center text-muted-foreground py-8"
-                >
-                  Loading teams...
-                </TableCell>
-              </TableRow>
-            ) : teams.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="text-center text-muted-foreground py-8"
-                >
-                  <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  No teams found
-                </TableCell>
-              </TableRow>
-            ) : (
-              teams.map(team => (
-                <TableRow key={team.guid}>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span className="font-medium">{team.name}</span>
-                      <GuidBadge guid={team.guid} />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                      {team.slug}
-                    </code>
-                  </TableCell>
-                  <TableCell>{team.user_count}</TableCell>
-                  <TableCell>
-                    {team.is_active ? (
-                      <Badge variant="default" className="bg-green-600">
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {team.is_active ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeactivate(team)}
-                        className="gap-1.5 text-destructive hover:text-destructive"
-                      >
-                        <PowerOff className="h-4 w-4" />
-                        Deactivate
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleReactivate(team)}
-                        className="gap-1.5"
-                      >
-                        <Power className="h-4 w-4" />
-                        Reactivate
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-muted-foreground">Loading teams...</div>
+        </div>
+      ) : (
+        <ResponsiveTable
+          data={teams}
+          columns={teamColumns}
+          keyField="guid"
+          emptyState={
+            <div className="text-center py-8 text-muted-foreground">
+              <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              No teams found
+            </div>
+          }
+        />
+      )}
 
       {/* Create Team Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

@@ -99,31 +99,31 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
-      expect(screen.getByText('1.1.0')).toBeInTheDocument()
+      expect(screen.getAllByText('1.1.0')[0]).toBeInTheDocument()
     })
 
     it('displays platform badges', async () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('darwin-arm64')).toBeInTheDocument()
+        expect(screen.getAllByText('darwin-arm64')[0]).toBeInTheDocument()
       })
 
-      expect(screen.getByText('darwin-amd64')).toBeInTheDocument()
-      expect(screen.getByText('linux-amd64')).toBeInTheDocument()
+      expect(screen.getAllByText('darwin-amd64')[0]).toBeInTheDocument()
+      expect(screen.getAllByText('linux-amd64')[0]).toBeInTheDocument()
     })
 
     it('displays status badges', async () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('Active')).toBeInTheDocument()
+        expect(screen.getAllByText('Active')[0]).toBeInTheDocument()
       })
 
-      expect(screen.getByText('Inactive')).toBeInTheDocument()
+      expect(screen.getAllByText('Inactive')[0]).toBeInTheDocument()
     })
 
     it('displays truncated checksums', async () => {
@@ -131,17 +131,17 @@ describe('ReleaseManifestsTab', () => {
 
       await waitFor(() => {
         // Checksum is truncated: first 8 + ... + last 4
-        expect(screen.getByText('aaaaaaaa...aaaa')).toBeInTheDocument()
+        expect(screen.getAllByText('aaaaaaaa...aaaa')[0]).toBeInTheDocument()
       })
 
-      expect(screen.getByText('bbbbbbbb...bbbb')).toBeInTheDocument()
+      expect(screen.getAllByText('bbbbbbbb...bbbb')[0]).toBeInTheDocument()
     })
 
     it('displays notes for manifests', async () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('Initial macOS universal binary')).toBeInTheDocument()
+        expect(screen.getAllByText('Initial macOS universal binary')[0]).toBeInTheDocument()
       })
     })
 
@@ -179,7 +179,7 @@ describe('ReleaseManifestsTab', () => {
 
       // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       await user.click(screen.getByRole('button', { name: /New Manifest/i }))
@@ -194,7 +194,7 @@ describe('ReleaseManifestsTab', () => {
 
       // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       await user.click(screen.getByRole('button', { name: /New Manifest/i }))
@@ -215,7 +215,7 @@ describe('ReleaseManifestsTab', () => {
 
       // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       await user.click(screen.getByRole('button', { name: /New Manifest/i }))
@@ -239,7 +239,7 @@ describe('ReleaseManifestsTab', () => {
 
       // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       await user.click(screen.getByRole('button', { name: /New Manifest/i }))
@@ -264,7 +264,7 @@ describe('ReleaseManifestsTab', () => {
 
       // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       await user.click(screen.getByRole('button', { name: /New Manifest/i }))
@@ -298,7 +298,7 @@ describe('ReleaseManifestsTab', () => {
 
       // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       await user.click(screen.getByRole('button', { name: /New Manifest/i }))
@@ -318,11 +318,11 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       // Find the row for active manifest and click deactivate button
-      const row = screen.getByText('1.0.0').closest('tr')!
+      const row = screen.getAllByText('1.0.0')[0].closest('tr')!
       const deactivateButton = within(row).getByTitle('Deactivate')
 
       await user.click(deactivateButton)
@@ -342,11 +342,11 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       // Find the row and click edit button
-      const row = screen.getByText('1.0.0').closest('tr')!
+      const row = screen.getAllByText('1.0.0')[0].closest('tr')!
       const editButton = within(row).getByTitle('Edit notes')
 
       await user.click(editButton)
@@ -365,11 +365,11 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       // Find the row and click edit button
-      const row = screen.getByText('1.0.0').closest('tr')!
+      const row = screen.getAllByText('1.0.0')[0].closest('tr')!
       const editButton = within(row).getByTitle('Edit notes')
 
       await user.click(editButton)
@@ -400,11 +400,11 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       // Find the row and click delete button
-      const row = screen.getByText('1.0.0').closest('tr')!
+      const row = screen.getAllByText('1.0.0')[0].closest('tr')!
       const deleteButton = within(row).getByTitle('Delete')
 
       await user.click(deleteButton)
@@ -419,11 +419,11 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       // Find the row and click delete button
-      const row = screen.getByText('1.0.0').closest('tr')!
+      const row = screen.getAllByText('1.0.0')[0].closest('tr')!
       const deleteButton = within(row).getByTitle('Delete')
 
       await user.click(deleteButton)
@@ -444,11 +444,11 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       // Find the row and click delete button
-      const row = screen.getByText('1.0.0').closest('tr')!
+      const row = screen.getAllByText('1.0.0')[0].closest('tr')!
       const deleteButton = within(row).getByTitle('Delete')
 
       await user.click(deleteButton)
@@ -469,11 +469,11 @@ describe('ReleaseManifestsTab', () => {
       render(<ReleaseManifestsTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('1.0.0')).toBeInTheDocument()
+        expect(screen.getAllByText('1.0.0')[0]).toBeInTheDocument()
       })
 
       // Find the row and verify copy button exists
-      const row = screen.getByText('1.0.0').closest('tr')!
+      const row = screen.getAllByText('1.0.0')[0].closest('tr')!
       const copyButton = within(row).getByTitle('Copy full checksum')
 
       expect(copyButton).toBeInTheDocument()

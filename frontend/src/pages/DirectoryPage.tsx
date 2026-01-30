@@ -10,7 +10,8 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MapPin, Building2, Users } from 'lucide-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs'
+import { ResponsiveTabsList, type TabOption } from '@/components/ui/responsive-tabs-list'
 import { LocationsTab } from '@/components/directory/LocationsTab'
 import { OrganizersTab } from '@/components/directory/OrganizersTab'
 import { PerformersTab } from '@/components/directory/PerformersTab'
@@ -67,7 +68,11 @@ export default function DirectoryPage() {
     <div className="flex flex-col gap-6">
       {/* Tabs (Issue #67 - Single Title Pattern: title moved to TopHeader, description to pageHelp) */}
       <Tabs value={validTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList>
+        <ResponsiveTabsList
+          tabs={TABS.map((tab): TabOption => ({ value: tab.id, label: tab.label, icon: tab.icon }))}
+          value={validTab}
+          onValueChange={handleTabChange}
+        >
           {TABS.map(tab => {
             const Icon = tab.icon
             return (
@@ -77,7 +82,7 @@ export default function DirectoryPage() {
               </TabsTrigger>
             )
           })}
-        </TabsList>
+        </ResponsiveTabsList>
 
         <TabsContent value="locations" className="mt-6">
           <LocationsTab categories={categories} />

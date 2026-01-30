@@ -24,7 +24,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Tabs, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ResponsiveTabsList, type TabOption } from '@/components/ui/responsive-tabs-list'
 import { useTools, useQueueStatus } from '@/hooks/useTools'
 import { useAgentPoolStatus } from '@/hooks/useAgentPoolStatus'
 import { useResults, useResult, useResultStats, useReportDownload } from '@/hooks/useResults'
@@ -409,6 +410,49 @@ export default function AnalyticsPage() {
   // Derived State
   // ============================================================================
 
+  // Tab options for ResponsiveTabsList
+  const mainTabOptions: TabOption[] = [
+    { value: 'trends', label: 'Trends', icon: TrendingUp },
+    { value: 'reports', label: 'Reports', icon: FileText },
+    { value: 'runs', label: 'Runs', icon: Clock },
+    { value: 'storage', label: 'Storage', icon: HardDrive },
+  ]
+
+  const runsSubTabOptions: TabOption[] = [
+    {
+      value: 'upcoming',
+      label: 'Upcoming',
+      icon: CalendarClock,
+      badge: queueStatus && queueStatus.scheduled_count > 0 ? (
+        <span className="text-xs">({queueStatus.scheduled_count})</span>
+      ) : undefined,
+    },
+    {
+      value: 'active',
+      label: 'Active',
+      icon: Clock,
+      badge: queueStatus && (queueStatus.queued_count + queueStatus.running_count) > 0 ? (
+        <span className="text-xs">({queueStatus.queued_count + queueStatus.running_count})</span>
+      ) : undefined,
+    },
+    {
+      value: 'completed',
+      label: 'Completed',
+      icon: CheckCircle,
+      badge: queueStatus && queueStatus.completed_count > 0 ? (
+        <span className="text-xs">({queueStatus.completed_count})</span>
+      ) : undefined,
+    },
+    {
+      value: 'failed',
+      label: 'Failed',
+      icon: XCircle,
+      badge: queueStatus && (queueStatus.failed_count + queueStatus.cancelled_count) > 0 ? (
+        <span className="text-xs">({queueStatus.failed_count + queueStatus.cancelled_count})</span>
+      ) : undefined,
+    },
+  ]
+
   // Loading state based on active tab
   const isLoading =
     activeTab === 'trends'
@@ -513,24 +557,28 @@ export default function AnalyticsPage() {
       {/* Main Tabs with Action Buttons (Issue #67 - Single Title Pattern) */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <TabsList>
-          <TabsTrigger value="trends" className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Trends
-          </TabsTrigger>
-          <TabsTrigger value="reports" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Reports
-          </TabsTrigger>
-          <TabsTrigger value="runs" className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Runs
-          </TabsTrigger>
-          <TabsTrigger value="storage" className="flex items-center gap-2">
-            <HardDrive className="h-4 w-4" />
-            Storage
-          </TabsTrigger>
-          </TabsList>
+          <ResponsiveTabsList
+            tabs={mainTabOptions}
+            value={activeTab}
+            onValueChange={handleTabChange}
+          >
+            <TabsTrigger value="trends" className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Trends
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Reports
+            </TabsTrigger>
+            <TabsTrigger value="runs" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Runs
+            </TabsTrigger>
+            <TabsTrigger value="storage" className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4" />
+              Storage
+            </TabsTrigger>
+          </ResponsiveTabsList>
           <div className="flex gap-2">
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -624,7 +672,11 @@ export default function AnalyticsPage() {
         {/* Runs Tab */}
         <TabsContent value="runs">
           <Tabs value={runsSubTab} onValueChange={handleRunsSubTabChange} className="w-full">
-            <TabsList>
+            <ResponsiveTabsList
+              tabs={runsSubTabOptions}
+              value={runsSubTab}
+              onValueChange={handleRunsSubTabChange}
+            >
               <TabsTrigger value="upcoming" className="gap-2">
                 <CalendarClock className="h-4 w-4" />
                 Upcoming
@@ -653,7 +705,7 @@ export default function AnalyticsPage() {
                   <span className="ml-1 text-xs">({queueStatus.failed_count + queueStatus.cancelled_count})</span>
                 )}
               </TabsTrigger>
-            </TabsList>
+            </ResponsiveTabsList>
 
             <TabsContent value="upcoming" className="mt-6">
               {jobsLoading && jobs.length === 0 ? (

@@ -10,8 +10,9 @@
 import { useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plug, Cog, Tag, Key, Building2, Package } from 'lucide-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { ResponsiveTabsList, type TabOption } from '@/components/ui/responsive-tabs-list'
 import { ConnectorsTab } from '@/components/settings/ConnectorsTab'
 import { ConfigTab } from '@/components/settings/ConfigTab'
 import { CategoriesTab } from '@/components/settings/CategoriesTab'
@@ -101,11 +102,23 @@ export default function SettingsPage() {
     }
   }, [searchParams, setSearchParams])
 
+  // Build TabOption array for ResponsiveTabsList
+  const tabOptions: TabOption[] = tabs.map(tab => ({
+    value: tab.id,
+    label: tab.label,
+    icon: tab.icon,
+    badge: tab.superAdminOnly ? (
+      <Badge variant="secondary" className="ml-1 text-xs py-0 px-1.5">
+        Admin
+      </Badge>
+    ) : undefined,
+  }))
+
   return (
     <div className="flex flex-col gap-6">
       {/* Tabs (Issue #67 - Single Title Pattern: title moved to TopHeader, description to pageHelp) */}
       <Tabs value={validTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList>
+        <ResponsiveTabsList tabs={tabOptions} value={validTab} onValueChange={handleTabChange}>
           {tabs.map(tab => {
             const Icon = tab.icon
             return (
@@ -120,7 +133,7 @@ export default function SettingsPage() {
               </TabsTrigger>
             )
           })}
-        </TabsList>
+        </ResponsiveTabsList>
 
         <TabsContent value="config" className="mt-6">
           <ConfigTab />

@@ -24,6 +24,8 @@ Analysis tools are executed through the ShutterSense agent binary (`shuttersense
 ## Active Technologies
 - Python 3.10+ (agent and backend), TypeScript 5.9.3 (frontend - minimal changes) + Click 8.1+ (agent CLI), FastAPI (backend API), httpx (agent HTTP client), Pydantic v2 (data validation), platformdirs (config paths) (108-remove-cli-direct-usage)
 - PostgreSQL 12+ (server), JSON files (agent local cache), SQLAlchemy 2.0+ (ORM) (108-remove-cli-direct-usage)
+- TypeScript 5.9.3, React 18.3.1 + shadcn/ui (Table, Tabs, Select, Badge), Tailwind CSS 4.x, Radix UI primitives, class-variance-authority, Lucide React icons (123-mobile-responsive-tables-tabs)
+- N/A (frontend-only, no backend changes) (123-mobile-responsive-tables-tabs)
 
 ### Backend
 - **Python 3.10+** - Required for match/case syntax
@@ -552,11 +554,11 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 123-mobile-responsive-tables-tabs: Added TypeScript 5.9.3, React 18.3.1 + shadcn/ui (Table, Tabs, Select, Badge), Tailwind CSS 4.x, Radix UI primitives, class-variance-authority, Lucide React icons
 - 108-remove-cli-direct-usage: Remove standalone CLI tools (photo_stats.py, photo_pairing.py, pipeline_validation.py) and consolidate all tool execution through agent commands (test, collection, run, sync, self-test). Added local caching, offline execution, and new agent API endpoints for collection management and result upload
 
 ### Issue #107: Cloud Storage Bucket Inventory Import (2026-01)
 - S3 Inventory and GCS Storage Insights integration
-- Connector-based AnalysisResult tracking
 
 ### Issue #106: Fix Trend Aggregation (2026-01)
 

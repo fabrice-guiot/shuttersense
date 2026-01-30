@@ -103,7 +103,7 @@ describe('AgentsPage', () => {
 
     // Wait for loading to complete
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
   })
 
@@ -111,40 +111,41 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Home Server')).toBeInTheDocument()
+    expect(screen.getAllByText('Home Server')[0]).toBeInTheDocument()
   })
 
   it('displays agent status badges', async () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Online')).toBeInTheDocument()
-    expect(screen.getByText('Offline')).toBeInTheDocument()
+    expect(screen.getAllByText('Online')[0]).toBeInTheDocument()
+    expect(screen.getAllByText('Offline')[0]).toBeInTheDocument()
   })
 
   it('displays agent hostname and OS info', async () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('studio-mac.local')).toBeInTheDocument()
+      expect(screen.getAllByText('studio-mac.local')[0]).toBeInTheDocument()
     })
 
-    expect(screen.getByText('macOS 14.0')).toBeInTheDocument()
-    expect(screen.getByText('home-server.local')).toBeInTheDocument()
-    expect(screen.getByText('Ubuntu 22.04')).toBeInTheDocument()
+    expect(screen.getAllByText('macOS 14.0')[0]).toBeInTheDocument()
+    expect(screen.getAllByText('home-server.local')[0]).toBeInTheDocument()
+    expect(screen.getAllByText('Ubuntu 22.04')[0]).toBeInTheDocument()
   })
 
   it('displays agent version', async () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getAllByText('1.0.0')).toHaveLength(2)
+      // 2 agents × 2 views (desktop table + mobile cards) = 4
+      expect(screen.getAllByText('1.0.0')).toHaveLength(4)
     })
   })
 
@@ -164,7 +165,7 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
     const newTokenButton = screen.getByRole('button', { name: /New Registration Token/i })
@@ -179,7 +180,7 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
     // Find the first action menu
@@ -199,7 +200,7 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
     // Open action menu and click rename
@@ -231,7 +232,7 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
     // Open action menu and click revoke
@@ -250,7 +251,7 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
     // Open action menu and click revoke
@@ -275,7 +276,7 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
     // Open action menu and click revoke
@@ -302,7 +303,7 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Studio Mac')).toBeInTheDocument()
+      expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
     // Clear mock calls from initial load
@@ -328,9 +329,9 @@ describe('AgentsPage', () => {
     render(<AgentsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Error')).toBeInTheDocument()
+      expect(screen.getAllByText('Error')[0]).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Connection timeout')).toBeInTheDocument()
+    expect(screen.getAllByText('Connection timeout')[0]).toBeInTheDocument()
   })
 })

@@ -17,14 +17,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { useLocations, useLocationStats } from '@/hooks/useLocations'
@@ -160,89 +153,102 @@ function LocationList({ locations, loading, onEdit, onDelete }: LocationListProp
     )
   }
 
+  const locationColumns: ColumnDef<Location>[] = [
+    {
+      header: 'Name',
+      cell: (location) => (
+        <div className="flex flex-col">
+          <span>{location.name}</span>
+          {location.timezone && (
+            <span className="text-xs text-muted-foreground">{location.timezone}</span>
+          )}
+        </div>
+      ),
+      cellClassName: 'font-medium',
+      cardRole: 'title',
+    },
+    {
+      header: 'Location',
+      cell: (location) => <AddressDisplay location={location} />,
+      cardRole: 'subtitle',
+    },
+    {
+      header: 'Category',
+      cell: (location) => <CategoryBadge category={location.category} />,
+      cardRole: 'detail',
+    },
+    {
+      header: 'Rating',
+      cell: (location) => <RatingDisplay rating={location.rating} size="sm" />,
+      cardRole: 'detail',
+    },
+    {
+      header: 'Instagram',
+      cell: (location) => location.instagram_handle ? (
+        <a
+          href={location.instagram_url || '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-primary hover:underline"
+        >
+          <Instagram className="h-3 w-3" />
+          <span>@{location.instagram_handle}</span>
+        </a>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Status',
+      cell: (location) => (
+        <Badge variant={location.is_known ? 'default' : 'secondary'}>
+          {location.is_known ? 'Known' : 'One-time'}
+        </Badge>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Created',
+      cell: (location) => formatRelativeTime(location.created_at),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (location) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(location)}
+            title="Edit location"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleDeleteClick(location)}
+            title="Delete location"
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Location</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Rating</TableHead>
-            <TableHead>Instagram</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {locations.map((location) => (
-            <TableRow key={location.guid}>
-              <TableCell className="font-medium">
-                <div className="flex flex-col">
-                  <span>{location.name}</span>
-                  {location.timezone && (
-                    <span className="text-xs text-muted-foreground">{location.timezone}</span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                <AddressDisplay location={location} />
-              </TableCell>
-              <TableCell>
-                <CategoryBadge category={location.category} />
-              </TableCell>
-              <TableCell>
-                <RatingDisplay rating={location.rating} size="sm" />
-              </TableCell>
-              <TableCell>
-                {location.instagram_handle ? (
-                  <a
-                    href={location.instagram_url || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-primary hover:underline"
-                  >
-                    <Instagram className="h-3 w-3" />
-                    <span>@{location.instagram_handle}</span>
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <Badge variant={location.is_known ? 'default' : 'secondary'}>
-                  {location.is_known ? 'Known' : 'One-time'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatRelativeTime(location.created_at)}
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(location)}
-                    title="Edit location"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteClick(location)}
-                    title="Delete location"
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <ResponsiveTable
+        data={locations}
+        columns={locationColumns}
+        keyField="guid"
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog

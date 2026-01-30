@@ -140,8 +140,8 @@ describe('ResultsTable', () => {
     test('NO_CHANGE status badge is rendered correctly', () => {
       render(<ResultsTable {...defaultProps} />)
 
-      // Verify NO_CHANGE badge appears
-      expect(screen.getByText('No Change')).toBeInTheDocument()
+      // Verify NO_CHANGE badge appears (desktop + mobile views both render)
+      expect(screen.getAllByText('No Change')[0]).toBeInTheDocument()
     })
 
     test('copy indicator appears next to status badge for deduplicated results', () => {
@@ -154,8 +154,8 @@ describe('ResultsTable', () => {
 
       render(<ResultsTable {...defaultProps} results={resultsWithCopy} total={1} />)
 
-      // The NO_CHANGE badge should be visible
-      expect(screen.getByText('No Change')).toBeInTheDocument()
+      // The NO_CHANGE badge should be visible (desktop + mobile views both render)
+      expect(screen.getAllByText('No Change')[0]).toBeInTheDocument()
 
       // The row should contain the Copy icon
       // Since we can't easily check for the SVG, we verify the structure exists
@@ -179,14 +179,14 @@ describe('ResultsTable', () => {
     test('renders FAILED status with destructive variant', () => {
       render(<ResultsTable {...defaultProps} />)
 
-      const badge = screen.getByText('Failed')
+      const badge = screen.getAllByText('Failed')[0]
       expect(badge).toBeInTheDocument()
     })
 
     test('renders NO_CHANGE status with default variant', () => {
       render(<ResultsTable {...defaultProps} />)
 
-      const badge = screen.getByText('No Change')
+      const badge = screen.getAllByText('No Change')[0]
       expect(badge).toBeInTheDocument()
     })
   })

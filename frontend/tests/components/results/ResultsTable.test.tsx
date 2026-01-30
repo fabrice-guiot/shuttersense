@@ -97,27 +97,30 @@ describe('ResultsTable', () => {
   it('should render table with results', () => {
     render(<ResultsTable {...defaultProps} />)
 
+    // Scope to desktop table view (ResponsiveTable renders both desktop + mobile)
+    const table = within(screen.getByTestId('desktop-view'))
+
     // Check table headers
-    expect(screen.getByText('Collection')).toBeInTheDocument()
-    expect(screen.getByText('Tool')).toBeInTheDocument()
-    expect(screen.getByText('Status')).toBeInTheDocument()
-    expect(screen.getByText('Files')).toBeInTheDocument()
-    expect(screen.getByText('Issues')).toBeInTheDocument()
-    expect(screen.getByText('Duration')).toBeInTheDocument()
+    expect(table.getByText('Collection')).toBeInTheDocument()
+    expect(table.getByText('Tool')).toBeInTheDocument()
+    expect(table.getByText('Status')).toBeInTheDocument()
+    expect(table.getByText('Files')).toBeInTheDocument()
+    expect(table.getByText('Issues')).toBeInTheDocument()
+    expect(table.getByText('Duration')).toBeInTheDocument()
 
     // Check that "Completed" header exists
-    const completedHeaders = screen.getAllByText('Completed')
+    const completedHeaders = table.getAllByText('Completed')
     expect(completedHeaders.length).toBeGreaterThanOrEqual(1)
 
     // Check data rows - use getAllByText for repeated collection names
-    const testCollectionCells = screen.getAllByText('Test Collection')
+    const testCollectionCells = table.getAllByText('Test Collection')
     expect(testCollectionCells.length).toBeGreaterThanOrEqual(1)
 
-    expect(screen.getByText('Remote Collection')).toBeInTheDocument()
+    expect(table.getByText('Remote Collection')).toBeInTheDocument()
     // PhotoStats appears in multiple rows
-    const photoStatsBadges = screen.getAllByText('PhotoStats')
+    const photoStatsBadges = table.getAllByText('PhotoStats')
     expect(photoStatsBadges.length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Photo Pairing')).toBeInTheDocument()
+    expect(table.getByText('Photo Pairing')).toBeInTheDocument()
   })
 
   it('should show loading spinner when loading', () => {
@@ -137,12 +140,15 @@ describe('ResultsTable', () => {
   it('should format duration correctly', () => {
     render(<ResultsTable {...defaultProps} />)
 
+    // Scope to desktop view (ResponsiveTable renders both desktop + mobile)
+    const table = within(screen.getByTestId('desktop-view'))
+
     // 300 seconds = 5m 0s
-    expect(screen.getByText('5m 0s')).toBeInTheDocument()
+    expect(table.getByText('5m 0s')).toBeInTheDocument()
     // 180 seconds = 3m 0s
-    expect(screen.getByText('3m 0s')).toBeInTheDocument()
+    expect(table.getByText('3m 0s')).toBeInTheDocument()
     // 30 seconds = 30.0s
-    expect(screen.getByText('30.0s')).toBeInTheDocument()
+    expect(table.getByText('30.0s')).toBeInTheDocument()
   })
 
   it('should show correct status badges', () => {
@@ -152,8 +158,8 @@ describe('ResultsTable', () => {
     const completedBadges = screen.getAllByText('Completed')
     expect(completedBadges.length).toBeGreaterThanOrEqual(2)
 
-    // Should have failed badge
-    expect(screen.getByText('Failed')).toBeInTheDocument()
+    // Should have failed badge (desktop + mobile views both render)
+    expect(screen.getAllByText('Failed')[0]).toBeInTheDocument()
   })
 
   it('should call onView when view button is clicked', async () => {
@@ -180,8 +186,8 @@ describe('ResultsTable', () => {
       btn.querySelector('svg.lucide-download')
     )
 
-    // Should have 2 download buttons (for results 1 and 2)
-    expect(downloadButtons).toHaveLength(2)
+    // Should have 4 download buttons (2 results × 2 views: desktop table + mobile cards)
+    expect(downloadButtons).toHaveLength(4)
   })
 
   it('should call onDownloadReport when download button is clicked', async () => {

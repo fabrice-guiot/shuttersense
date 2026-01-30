@@ -17,14 +17,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -245,65 +238,83 @@ function TokenList({ tokens, loading, onRevoke }: TokenListProps) {
     )
   }
 
+  const tokenColumns: ColumnDef<ApiToken>[] = [
+    {
+      header: 'Name',
+      cell: (token) => token.name,
+      cellClassName: 'font-medium',
+      cardRole: 'title',
+    },
+    {
+      header: 'Token',
+      cell: (token) => (
+        <code className="bg-muted px-2 py-1 rounded text-sm">
+          {token.token_prefix}...
+        </code>
+      ),
+      cardRole: 'subtitle',
+    },
+    {
+      header: 'Status',
+      cell: (token) => (
+        <Badge variant={token.is_active ? 'default' : 'secondary'}>
+          {token.is_active ? 'Active' : 'Revoked'}
+        </Badge>
+      ),
+      cardRole: 'badge',
+    },
+    {
+      header: 'Created',
+      cell: (token) => (
+        <div>
+          <div>{formatRelativeTime(token.created_at)}</div>
+          {token.created_by_email && (
+            <div className="text-xs">by {token.created_by_email}</div>
+          )}
+        </div>
+      ),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'detail',
+    },
+    {
+      header: 'Expires',
+      cell: (token) => formatRelativeTime(token.expires_at),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'detail',
+    },
+    {
+      header: 'Last Used',
+      cell: (token) => token.last_used_at
+        ? formatRelativeTime(token.last_used_at)
+        : 'Never',
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (token) => token.is_active ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => handleRevokeClick(token)}
+          title="Revoke token"
+          className="text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      ) : null,
+      cardRole: 'action',
+    },
+  ]
+
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Token</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead>Expires</TableHead>
-            <TableHead>Last Used</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tokens.map((token) => (
-            <TableRow key={token.guid}>
-              <TableCell className="font-medium">{token.name}</TableCell>
-              <TableCell>
-                <code className="bg-muted px-2 py-1 rounded text-sm">
-                  {token.token_prefix}...
-                </code>
-              </TableCell>
-              <TableCell>
-                <Badge variant={token.is_active ? 'default' : 'secondary'}>
-                  {token.is_active ? 'Active' : 'Revoked'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                <div>{formatRelativeTime(token.created_at)}</div>
-                {token.created_by_email && (
-                  <div className="text-xs">by {token.created_by_email}</div>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatRelativeTime(token.expires_at)}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {token.last_used_at
-                  ? formatRelativeTime(token.last_used_at)
-                  : 'Never'}
-              </TableCell>
-              <TableCell className="text-right">
-                {token.is_active && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleRevokeClick(token)}
-                    title="Revoke token"
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <ResponsiveTable
+        data={tokens}
+        columns={tokenColumns}
+        keyField="guid"
+      />
 
       {/* Revoke Confirmation Dialog */}
       <Dialog

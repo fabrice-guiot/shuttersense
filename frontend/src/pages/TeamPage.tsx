@@ -28,14 +28,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -193,107 +186,113 @@ function UserList({
     )
   }
 
-  if (users.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Mail className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium text-foreground mb-2">No team members yet</h3>
-        <p className="text-muted-foreground max-w-md">
-          Invite team members by clicking the "Invite User" button above.
-        </p>
-      </div>
-    )
-  }
+  const emptyState = (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <Mail className="h-12 w-12 text-muted-foreground mb-4" />
+      <h3 className="text-lg font-medium text-foreground mb-2">No team members yet</h3>
+      <p className="text-muted-foreground max-w-md">
+        Invite team members by clicking the "Invite User" button above.
+      </p>
+    </div>
+  )
+
+  const userColumns: ColumnDef<User>[] = [
+    {
+      header: 'User',
+      cell: (user) => (
+        <div className="flex items-center gap-3">
+          <UserAvatar user={user} size="sm" />
+          <div className="flex flex-col">
+            <span className="font-medium">
+              {user.display_name || user.email.split('@')[0]}
+              {user.guid === currentUserGuid && (
+                <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+              )}
+            </span>
+            <span className="text-sm text-muted-foreground">{user.email}</span>
+          </div>
+        </div>
+      ),
+      cardRole: 'title',
+    },
+    {
+      header: 'Status',
+      cell: (user) => <StatusBadge status={user.status} />,
+      cardRole: 'badge',
+    },
+    {
+      header: 'Last Login',
+      cell: (user) =>
+        user.last_login_at ? (
+          <span className="text-muted-foreground">
+            {formatRelativeTime(user.last_login_at)}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Never</span>
+        ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'ID',
+      cell: (user) => <GuidBadge guid={user.guid} />,
+      cardRole: 'hidden',
+    },
+    {
+      header: 'Actions',
+      headerClassName: 'text-right',
+      cell: (user) => {
+        const isCurrentUser = user.guid === currentUserGuid
+        const canDelete = user.status === 'pending'
+        const canDeactivate = user.status !== 'deactivated' && !isCurrentUser
+        const canReactivate = user.status === 'deactivated'
+
+        return (
+          <div className="flex justify-end gap-2">
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDeleteClick(user)}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+            {canDeactivate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDeactivateClick(user)}
+                className="text-orange-600 hover:text-orange-700"
+              >
+                <UserMinus className="h-4 w-4" />
+              </Button>
+            )}
+            {canReactivate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onReactivate(user)}
+                className="text-green-600 hover:text-green-700"
+              >
+                <UserCheck className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )
+      },
+      cardRole: 'action',
+    },
+  ]
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[300px]">User</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Last Login</TableHead>
-            <TableHead className="w-[100px]">ID</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map(user => {
-            const isCurrentUser = user.guid === currentUserGuid
-            const canDelete = user.status === 'pending'
-            const canDeactivate = user.status !== 'deactivated' && !isCurrentUser
-            const canReactivate = user.status === 'deactivated'
-
-            return (
-              <TableRow key={user.guid}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <UserAvatar user={user} size="sm" />
-                    <div className="flex flex-col">
-                      <span className="font-medium">
-                        {user.display_name || user.email.split('@')[0]}
-                        {isCurrentUser && (
-                          <span className="ml-2 text-xs text-muted-foreground">(you)</span>
-                        )}
-                      </span>
-                      <span className="text-sm text-muted-foreground">{user.email}</span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge status={user.status} />
-                </TableCell>
-                <TableCell>
-                  {user.last_login_at ? (
-                    <span className="text-muted-foreground">
-                      {formatRelativeTime(user.last_login_at)}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">Never</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <GuidBadge guid={user.guid} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    {canDelete && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteClick(user)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {canDeactivate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeactivateClick(user)}
-                        className="text-orange-600 hover:text-orange-700"
-                      >
-                        <UserMinus className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {canReactivate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onReactivate(user)}
-                        className="text-green-600 hover:text-green-700"
-                      >
-                        <UserCheck className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+      <ResponsiveTable
+        data={users}
+        columns={userColumns}
+        keyField="guid"
+        emptyState={emptyState}
+      />
 
       {/* Delete Pending User Confirmation Dialog */}
       <Dialog
