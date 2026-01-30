@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Building2, Mail, Shield, User } from 'lucide-react'
+import { NotificationPreferences } from '@/components/profile/NotificationPreferences'
 
 // ============================================================================
 // Helpers
@@ -118,6 +119,9 @@ export default function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Notification Preferences (Issue #114) */}
+      <NotificationPreferences />
     </div>
   )
 }
