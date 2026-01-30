@@ -86,6 +86,10 @@ from backend.src.models.storage_metrics import StorageMetrics
 # Inventory Import (Issue #107)
 from backend.src.models.inventory_folder import InventoryFolder
 
+# Push Notifications (Issue #114)
+from backend.src.models.push_subscription import PushSubscription
+from backend.src.models.notification import Notification
+
 # Export Base and all models
 __all__ = [
     "Base",
@@ -140,4 +144,7 @@ __all__ = [
     "StorageMetrics",
     # Inventory Import (Issue #107)
     "InventoryFolder",
+    # Push Notifications (Issue #114)
+    "PushSubscription",
+    "Notification",
 ]

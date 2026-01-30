@@ -10,6 +10,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { Sidebar } from './Sidebar'
 import { TopHeader } from './TopHeader'
+import { IosPwaGuidance } from '@/components/pwa/IosPwaGuidance'
 import { cn } from '@/lib/utils'
 import { HeaderStatsProvider, useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { useSidebarCollapse } from '@/hooks/useSidebarCollapse'
@@ -99,6 +100,9 @@ function MainLayoutInner({
           onOpenMobileMenu={onOpenMobileMenu}
           isSidebarCollapsed={isCollapsed}
         />
+
+        {/* iOS PWA installation guidance (Issue #114) */}
+        <IosPwaGuidance />
 
         {/* Scrollable Content Area */}
         <main className={cn('flex-1 overflow-auto p-4 md:p-6', className)}>

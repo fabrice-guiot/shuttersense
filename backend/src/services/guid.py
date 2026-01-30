@@ -32,6 +32,8 @@ from uuid_extensions import uuid7
 #   tok - ApiToken (API access token)
 #   agt - Agent (remote processing agent)
 #   art - AgentRegistrationToken (one-time agent registration token)
+#   sub - PushSubscription (Web Push subscription)
+#   ntf - Notification (notification history entry)
 # In-memory entities (transient):
 #   job - Tool execution job
 #   imp - Config import session
@@ -55,6 +57,8 @@ ENTITY_PREFIXES = {
     "imp": "ImportSession",
     "fld": "InventoryFolder",
     "rel": "ReleaseManifest",
+    "sub": "PushSubscription",
+    "ntf": "Notification",
 }
 
 # Crockford Base32 alphabet (excludes I, L, O, U to avoid confusion)
@@ -63,7 +67,7 @@ CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # Pattern for validating GUIDs
 # Format: {3-char prefix}_{26-char Crockford Base32}
 GUID_PATTERN = re.compile(
-    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|ten|usr|tok|agt|art|job|imp|fld|rel)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+    r"^(col|con|pip|res|evt|ser|loc|org|prf|cat|ten|usr|tok|agt|art|job|imp|fld|rel|sub|ntf)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
     re.IGNORECASE
 )
 

@@ -23,11 +23,11 @@
 
 **Purpose**: Install dependencies, configure VAPID keys, and register GUID prefixes
 
-- [ ] T001 Add `pywebpush>=2.0.0` to `backend/requirements.txt`
-- [ ] T002 Install `vite-plugin-pwa` as dev dependency in `frontend/package.json`
-- [ ] T003 Add VAPID environment variables (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) to `backend/src/config/settings.py` AppSettings class
-- [ ] T004 [P] Register `sub` and `ntf` GUID prefixes in `backend/src/services/guid.py` ENTITY_PREFIXES dict
-- [ ] T005 [P] Add notification category labels and icons to `frontend/src/contracts/domain-labels.ts`
+- [x] T001 Add `pywebpush>=2.0.0` to `backend/requirements.txt`
+- [x] T002 Install `vite-plugin-pwa` as dev dependency in `frontend/package.json`
+- [x] T003 Add VAPID environment variables (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) to `backend/src/config/settings.py` AppSettings class
+- [x] T004 [P] Register `sub` and `ntf` GUID prefixes in `backend/src/services/guid.py` ENTITY_PREFIXES dict
+- [x] T005 [P] Add notification category labels and icons to `frontend/src/contracts/domain-labels.ts`
 
 ---
 
@@ -39,29 +39,29 @@
 
 ### Database Models & Migration
 
-- [ ] T006 [P] Create PushSubscription model with GuidMixin, team_id FK, user_id FK, endpoint, p256dh_key, auth_key, device_name, last_used_at, expires_at, timestamps in `backend/src/models/push_subscription.py`
-- [ ] T007 [P] Create Notification model with GuidMixin, team_id FK, user_id FK, category, title, body, data (JSONB), read_at, created_at in `backend/src/models/notification.py`
-- [ ] T008 Register PushSubscription and Notification models in `backend/src/models/__init__.py`
-- [ ] T009 Create Alembic migration for `push_subscriptions` and `notifications` tables with all indexes (uuid unique, user_id, team_id, endpoint unique, user unread partial index, created_at) in `backend/src/db/migrations/versions/`
+- [x] T006 [P] Create PushSubscription model with GuidMixin, team_id FK, user_id FK, endpoint, p256dh_key, auth_key, device_name, last_used_at, expires_at, timestamps in `backend/src/models/push_subscription.py`
+- [x] T007 [P] Create Notification model with GuidMixin, team_id FK, user_id FK, category, title, body, data (JSONB), read_at, created_at in `backend/src/models/notification.py`
+- [x] T008 Register PushSubscription and Notification models in `backend/src/models/__init__.py`
+- [x] T009 Create Alembic migration for `push_subscriptions` and `notifications` tables with all indexes (uuid unique, user_id, team_id, endpoint unique, user unread partial index, created_at) in `backend/src/db/migrations/versions/`
 
 ### Pydantic Schemas
 
-- [ ] T010 Create Pydantic request/response schemas in `backend/src/schemas/notifications.py`: PushSubscriptionCreate, PushSubscriptionResponse, SubscriptionStatusResponse, NotificationPreferencesResponse, NotificationPreferencesUpdate, NotificationResponse, NotificationListResponse — per contracts/api.yaml
+- [x] T010 Create Pydantic request/response schemas in `backend/src/schemas/notifications.py`: PushSubscriptionCreate, PushSubscriptionResponse, SubscriptionStatusResponse, NotificationPreferencesResponse, NotificationPreferencesUpdate, NotificationResponse, NotificationListResponse — per contracts/api.yaml
 
 ### Core Services
 
-- [ ] T011 Create PushSubscriptionService in `backend/src/services/push_subscription_service.py` with: create_subscription (upsert by endpoint), remove_subscription (by endpoint + user), list_subscriptions (by user), cleanup_expired, remove_invalid (410 Gone handling)
-- [ ] T012 Create NotificationService in `backend/src/services/notification_service.py` with: create_notification (stores in DB), deliver_push (sends to all user subscriptions via pywebpush), get_user_preferences (reads from User.preferences_json), check_preference (verifies category enabled for user), send_notification (orchestrates: check prefs → create record → async push delivery)
-- [ ] T013 Create notification preferences helper in `backend/src/services/notification_service.py`: get_default_preferences(), update_preferences() — reads/writes User.preferences_json with Pydantic validation per data-model.md schema
+- [x] T011 Create PushSubscriptionService in `backend/src/services/push_subscription_service.py` with: create_subscription (upsert by endpoint), remove_subscription (by endpoint + user), list_subscriptions (by user), cleanup_expired, remove_invalid (410 Gone handling)
+- [x] T012 Create NotificationService in `backend/src/services/notification_service.py` with: create_notification (stores in DB), deliver_push (sends to all user subscriptions via pywebpush), get_user_preferences (reads from User.preferences_json), check_preference (verifies category enabled for user), send_notification (orchestrates: check prefs → create record → async push delivery)
+- [x] T013 Create notification preferences helper in `backend/src/services/notification_service.py`: get_default_preferences(), update_preferences() — reads/writes User.preferences_json with Pydantic validation per data-model.md schema
 
 ### API Router
 
-- [ ] T014 Create notification API router in `backend/src/api/notifications.py` with all endpoints per contracts/api.yaml: POST/DELETE /subscribe, GET /status, GET/PUT /preferences, GET /notifications, GET /unread-count, POST /{guid}/read, GET /vapid-key
-- [ ] T015 Register notification router and add VAPID key dependency injection in `backend/src/main.py`
+- [x] T014 Create notification API router in `backend/src/api/notifications.py` with all endpoints per contracts/api.yaml: POST/DELETE /subscribe, GET /status, GET/PUT /preferences, GET /notifications, GET /unread-count, POST /{guid}/read, GET /vapid-key
+- [x] T015 Register notification router and add VAPID key dependency injection in `backend/src/main.py`
 
 ### Frontend API Client
 
-- [ ] T016 Create notifications API service in `frontend/src/services/notifications.ts` with functions for all endpoints: subscribe, unsubscribe, getStatus, getPreferences, updatePreferences, listNotifications, getUnreadCount, markAsRead, getVapidKey
+- [x] T016 Create notifications API service in `frontend/src/services/notifications.ts` with functions for all endpoints: subscribe, unsubscribe, getStatus, getPreferences, updatePreferences, listNotifications, getUnreadCount, markAsRead, getVapidKey
 
 **Checkpoint**: Foundation ready — database, services, API, and frontend client all in place. User story implementation can now begin.
 
@@ -75,11 +75,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T017 [P] [US1] Create PWA icon set in `frontend/public/icons/`: icon-192x192.png, icon-512x512.png, maskable-icon-192x192.png, maskable-icon-512x512.png, badge-72x72.png (generate from existing favicon-192.png or SVG source)
-- [ ] T018 [P] [US1] Add PWA meta tags to `frontend/index.html`: theme-color, apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style, manifest link
-- [ ] T019 [US1] Configure `vite-plugin-pwa` in `frontend/vite.config.ts`: registerType 'autoUpdate', manifest config (name, short_name, icons, theme_color, background_color, display: standalone, start_url), workbox precaching for build assets
-- [ ] T020 [US1] Create custom service worker additions in `frontend/src/custom-sw.ts`: push event listener (showNotification from payload), notificationclick handler (focus existing window or open new one with data.url) — integrated via vite-plugin-pwa injectManifest or custom SW entry
-- [ ] T021 [US1] Add iOS PWA detection and "Add to Home Screen" guidance component: detect `navigator.userAgent` iOS + `display-mode: standalone` not matched, show installation instructions banner. Place in MainLayout or TopHeader area
+- [x] T017 [P] [US1] Create PWA icon set in `frontend/public/icons/`: icon-192x192.png, icon-512x512.png, maskable-icon-192x192.png, maskable-icon-512x512.png, badge-72x72.png (generate from existing favicon-192.png or SVG source)
+- [x] T018 [P] [US1] Add PWA meta tags to `frontend/index.html`: theme-color, apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style, manifest link
+- [x] T019 [US1] Configure `vite-plugin-pwa` in `frontend/vite.config.ts`: registerType 'autoUpdate', manifest config (name, short_name, icons, theme_color, background_color, display: standalone, start_url), workbox precaching for build assets
+- [x] T020 [US1] Create custom service worker additions in `frontend/src/sw.ts`: push event listener (showNotification from payload), notificationclick handler (focus existing window or open new one with data.url) — integrated via vite-plugin-pwa injectManifest
+- [x] T021 [US1] Add iOS PWA detection and "Add to Home Screen" guidance component: detect `navigator.userAgent` iOS + `display-mode: standalone` not matched, show installation instructions banner. Place in MainLayout or TopHeader area
 
 **Checkpoint**: App is installable as PWA. Service worker caches assets. Update prompts work. iOS users see guidance.
 

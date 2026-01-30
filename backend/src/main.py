@@ -717,7 +717,8 @@ async def get_version() -> Dict[str, str]:
 
 from backend.src.api import (
     collections, connectors, tools, results, pipelines, trends,
-    config, categories, events, locations, organizers, performers, analytics
+    config, categories, events, locations, organizers, performers, analytics,
+    notifications
 )
 from backend.src.api import auth as auth_router
 from backend.src.api import users as users_router
@@ -747,6 +748,9 @@ app.include_router(config.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(connectors.router, prefix="/api")
 app.include_router(users_router.router, prefix="/api")
+
+# === Notifications (Issue #114) ===
+app.include_router(notifications.router, prefix="/api")
 
 # === Infrastructure (internal APIs - not accessible via API tokens) ===
 app.include_router(agent_router)
