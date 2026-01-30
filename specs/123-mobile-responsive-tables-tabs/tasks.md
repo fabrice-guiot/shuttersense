@@ -117,8 +117,8 @@
 
 ### Implementation for User Story 5
 
-- [ ] T021 [US5] Add "Table Responsiveness" section to `frontend/docs/design-system.md`. Document: `ResponsiveTable` component import and usage, `ColumnDef<T>` interface with all `cardRole` values, card layout structure (title/subtitle/badge/detail/action/hidden zones), recommended card role mappings per domain, empty state handling, and the requirement that all new tables MUST use `<ResponsiveTable>`.
-- [ ] T022 [US5] Add "Tab Responsiveness" section to `frontend/docs/design-system.md`. Document: `ResponsiveTabsList` component import and usage, `TabOption` interface, controlled tabs requirement, integration with Radix UI `Tabs`, `Select` dropdown behavior on mobile, flex container compatibility for tabs with action buttons, and the requirement that all new tab sets MUST use `<ResponsiveTabsList>`.
+- [x] T021 [US5] Add "Table Responsiveness" section to `frontend/docs/design-system.md`. Document: `ResponsiveTable` component import and usage, `ColumnDef<T>` interface with all `cardRole` values, card layout structure (title/subtitle/badge/detail/action/hidden zones), recommended card role mappings per domain, empty state handling, and the requirement that all new tables MUST use `<ResponsiveTable>`.
+- [x] T022 [US5] Add "Tab Responsiveness" section to `frontend/docs/design-system.md`. Document: `ResponsiveTabsList` component import and usage, `TabOption` interface, controlled tabs requirement, integration with Radix UI `Tabs`, `Select` dropdown behavior on mobile, flex container compatibility for tabs with action buttons, and the requirement that all new tab sets MUST use `<ResponsiveTabsList>`.
 
 **Checkpoint**: Design system documentation complete. Future developers have clear guidance on responsive table and tab patterns.
 
@@ -128,9 +128,9 @@
 
 **Purpose**: Final verification across all migrated pages
 
-- [ ] T023 Verify TypeScript compilation succeeds with no errors across all modified files by running `npm run build` in `frontend/`
-- [ ] T024 Visual QA pass at 375px (iPhone SE), 390px (iPhone 14), and 412px (Pixel) viewports across all 11 table pages and 5 tabbed pages. Verify: cards render without horizontal scroll, select pickers show all tabs, action buttons have touch targets >= 44px (FR-012), pagination stacks vertically, no layout breakage. Also verify edge cases: cards with no action columns omit action separator, cards with no badge columns collapse badge area, long tab labels display without truncation in select dropdown.
-- [ ] T025 Desktop regression check at 1024px and 1440px viewports across all modified pages. Verify: table rendering identical to pre-migration, tab strips identical to pre-migration, no visual changes at md breakpoint and above
+- [x] T023 Verify TypeScript compilation succeeds with no errors across all modified files by running `npm run build` in `frontend/`
+- [x] T024 Visual QA pass at 375px (iPhone SE), 390px (iPhone 14), and 412px (Pixel) viewports across all 11 table pages and 5 tabbed pages. Verify: cards render without horizontal scroll, select pickers show all tabs, action buttons have touch targets >= 44px (FR-012), pagination stacks vertically, no layout breakage. Also verify edge cases: cards with no action columns omit action separator, cards with no badge columns collapse badge area, long tab labels display without truncation in select dropdown.
+- [x] T025 Desktop regression check at 1024px and 1440px viewports across all modified pages. Verify: table rendering identical to pre-migration, tab strips identical to pre-migration, no visual changes at md breakpoint and above
 
 ---
 
