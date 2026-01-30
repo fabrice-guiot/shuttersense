@@ -45,6 +45,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mobile responsive tables and tabs** - Adaptive table layouts and tab navigation for small screens ([#125])
 - **PWA with push notifications** - Installable Progressive Web App with push notification support for job completion alerts ([#129])
 
+## [1.1.0] - 2026-01-14
+
+### Added
+
+- **Calendar Events feature** - Full event lifecycle with CRUD, multi-day events, locations, organizers, performers, and configurable statuses ([#70])
+- **Event deadline in Calendar view** - Workflow deadlines displayed on the calendar ([#82])
+- **Instagram handle for Locations/Organizers** - Social media integration for event entities ([#81])
+- **Compact calendar view for mobile** - Responsive calendar layout for small screens ([#80])
+- **Single Title Pattern** - Consistent page layout with titles only in TopHeader ([#79])
+- **Global Unique Identifiers (GUIDs)** - Prefixed GUID system for all entities ([#64])
+- **Dark theme compliance** - Complete dark mode support across the application ([#65])
+- **User timezone display** - Localized date and time rendering ([#66])
+
+### Fixed
+
+- **Filter inactive categories from EventForm** - Inactive categories excluded from dropdowns ([#77])
+
 ## [1.0.0] - 2026-01-09
 
 ### Added
@@ -112,23 +129,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Python 3.10+ required** - For match/case syntax and modern type hints
 - **Centralized version management** - Git tag-based versioning across all components
-
-## [1.1.0] - 2026-01-14
-
-### Added
-
-- **Calendar Events feature** - Full event lifecycle with CRUD, multi-day events, locations, organizers, performers, and configurable statuses ([#70])
-- **Event deadline in Calendar view** - Workflow deadlines displayed on the calendar ([#82])
-- **Instagram handle for Locations/Organizers** - Social media integration for event entities ([#81])
-- **Compact calendar view for mobile** - Responsive calendar layout for small screens ([#80])
-- **Single Title Pattern** - Consistent page layout with titles only in TopHeader ([#79])
-- **Global Unique Identifiers (GUIDs)** - Prefixed GUID system for all entities ([#64])
-- **Dark theme compliance** - Complete dark mode support across the application ([#65])
-- **User timezone display** - Localized date and time rendering ([#66])
-
-### Fixed
-
-- **Filter inactive categories from EventForm** - Inactive categories excluded from dropdowns ([#77])
 
 ## [0.4] - 2026-01-09
 
