@@ -439,31 +439,65 @@ class NotificationService:
             return 0
 
         success_count = 0
+        failed_count = 0
+        removed_count = 0
         payload_json = json.dumps(payload)
+        category = payload.get("data", {}).get("category", "unknown")
 
         for sub in subscriptions:
+            endpoint_short = sub.endpoint[:60] if sub.endpoint else "?"
             try:
                 self._send_push(sub, payload_json)
                 sub.last_used_at = datetime.utcnow()
                 success_count += 1
                 logger.debug(
                     "Push delivered",
-                    extra={"subscription_guid": sub.guid, "user_id": user_id},
+                    extra={
+                        "subscription_guid": sub.guid,
+                        "user_id": user_id,
+                        "category": category,
+                        "endpoint": endpoint_short,
+                    },
                 )
             except PushGoneError:
-                # 410 Gone — subscription is invalid, remove it
+                # 410 Gone or 404 Not Found — subscription expired/invalid
                 logger.info(
-                    "Removing invalid subscription (410 Gone)",
-                    extra={"subscription_guid": sub.guid},
+                    "Removing expired push subscription",
+                    extra={
+                        "subscription_guid": sub.guid,
+                        "user_id": user_id,
+                        "endpoint": endpoint_short,
+                    },
                 )
                 self.db.delete(sub)
+                removed_count += 1
             except PushDeliveryError as e:
+                failed_count += 1
                 logger.warning(
                     f"Push delivery failed: {e}",
-                    extra={"subscription_guid": sub.guid, "user_id": user_id},
+                    extra={
+                        "subscription_guid": sub.guid,
+                        "user_id": user_id,
+                        "category": category,
+                        "endpoint": endpoint_short,
+                    },
                 )
 
         self.db.commit()
+
+        if removed_count > 0 or failed_count > 0:
+            logger.info(
+                "Push delivery summary",
+                extra={
+                    "user_id": user_id,
+                    "category": category,
+                    "total": len(subscriptions),
+                    "success": success_count,
+                    "failed": failed_count,
+                    "removed": removed_count,
+                },
+            )
+
         return success_count
 
     def _send_push(self, subscription: PushSubscription, payload_json: str) -> None:
@@ -496,8 +530,11 @@ class NotificationService:
                 vapid_claims=self.vapid_claims,
             )
         except WebPushException as e:
-            if hasattr(e, "response") and e.response is not None and e.response.status_code == 410:
-                raise PushGoneError(subscription.endpoint) from e
+            if hasattr(e, "response") and e.response is not None:
+                status_code = e.response.status_code
+                # 410 Gone or 404 Not Found — subscription is expired/invalid
+                if status_code in (410, 404):
+                    raise PushGoneError(subscription.endpoint) from e
             raise PushDeliveryError(str(e)) from e
         except Exception as e:
             raise PushDeliveryError(str(e)) from e
@@ -607,14 +644,28 @@ class NotificationService:
 
         # Master toggle must be on
         if not prefs.get("enabled", False):
+            logger.debug(
+                "Preference check: master toggle off",
+                extra={"user_id": user.id, "category": category},
+            )
             return False
 
         # Check category-specific preference
         pref_key = CATEGORY_PREFERENCE_KEYS.get(category)
         if not pref_key:
+            logger.debug(
+                "Preference check: unknown category",
+                extra={"user_id": user.id, "category": category},
+            )
             return False
 
-        return prefs.get(pref_key, False)
+        enabled = prefs.get(pref_key, False)
+        if not enabled:
+            logger.debug(
+                "Preference check: category disabled",
+                extra={"user_id": user.id, "category": category, "pref_key": pref_key},
+            )
+        return enabled
 
     # ========================================================================
     # Domain Event Notifications
@@ -1212,10 +1263,6 @@ class NotificationService:
         """
         # Check preferences
         if not self.check_preference(user, category):
-            logger.debug(
-                f"Notification suppressed by preference",
-                extra={"user_id": user.id, "category": category},
-            )
             return None
 
         # Create notification record

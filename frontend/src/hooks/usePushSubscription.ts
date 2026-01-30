@@ -306,6 +306,41 @@ export const usePushSubscription = (
     return () => window.removeEventListener('focus', handleFocus)
   }, [])
 
+  // Real-time permission revocation detection via Permissions API (T046)
+  useEffect(() => {
+    if (!isSupported) return
+    if (!navigator.permissions?.query) return
+
+    let permissionStatus: PermissionStatus | null = null
+
+    navigator.permissions
+      .query({ name: 'notifications' as PermissionName })
+      .then((status) => {
+        permissionStatus = status
+        // Sync initial state from Permissions API
+        setPermissionState(status.state === 'prompt' ? 'default' : (status.state as PermissionState))
+
+        status.onchange = () => {
+          const newState = status.state === 'prompt' ? 'default' : (status.state as PermissionState)
+          setPermissionState(newState)
+
+          // If permission was revoked while notifications are active, refresh server status
+          if (newState === 'denied') {
+            refreshStatus()
+          }
+        }
+      })
+      .catch(() => {
+        // Permissions API not available for notifications in this browser — fall back to focus listener
+      })
+
+    return () => {
+      if (permissionStatus) {
+        permissionStatus.onchange = null
+      }
+    }
+  }, [isSupported, refreshStatus])
+
   return {
     subscriptions,
     notificationsEnabled,

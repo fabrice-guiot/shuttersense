@@ -232,11 +232,11 @@
 
 **Purpose**: Edge cases, graceful degradation, and final integration
 
-- [ ] T045 Handle push subscription expiry and 410 Gone responses in push delivery logic in `backend/src/services/notification_service.py`: on 410 response, delete subscription from DB; on expired subscription, skip and log
-- [ ] T046 Add browser permission state detection in `frontend/src/hooks/usePushSubscription.ts`: check `Notification.permission` on mount, detect external permission revocation, sync UI state accordingly
-- [ ] T047 [P] Add graceful degradation for unsupported browsers in `frontend/src/components/profile/NotificationPreferences.tsx`: check for `'serviceWorker' in navigator` and `'PushManager' in window`, hide notification features and show informational message on unsupported browsers
-- [ ] T048 [P] Add structured logging for notification delivery in `backend/src/services/notification_service.py`: log each delivery attempt (user_guid, category, success/failure, endpoint), log subscription cleanup events, log preference checks
-- [ ] T049 Verify multi-tenant isolation in notification endpoints: ensure all queries filter by ctx.team_id, ensure cross-team notification GUID access returns 404, review all service methods for team_id parameter usage
+- [x] T045 Handle push subscription expiry and 410 Gone responses in push delivery logic in `backend/src/services/notification_service.py`: handles both 410 Gone and 404 Not Found as expired subscriptions, deletes from DB, structured logging with endpoint and subscription_guid context
+- [x] T046 Add browser permission state detection in `frontend/src/hooks/usePushSubscription.ts`: uses `navigator.permissions.query()` with `onchange` listener for real-time permission revocation detection, auto-refreshes server status when permission denied, falls back to focus listener
+- [x] T047 [P] Add graceful degradation for unsupported browsers in `frontend/src/components/profile/NotificationPreferences.tsx`: checks `'serviceWorker' in navigator` and `'PushManager' in window` via `isSupported`, shows UnsupportedBrowserAlert/IosNotInstalledAlert/PermissionDeniedAlert, hides all notification controls
+- [x] T048 [P] Add structured logging for notification delivery in `backend/src/services/notification_service.py`: deliver_push logs per-attempt context (category, endpoint, subscription_guid) and summary (success/failed/removed counts), check_preference logs specific rejection reason (master off, unknown category, category disabled)
+- [x] T049 Verify multi-tenant isolation in notification endpoints: all queries filter by ctx.team_id, cross-team notification GUID access returns 404 (not 403), all service methods accept and filter by team_id parameter
 
 ---
 
@@ -246,23 +246,23 @@
 
 ### Backend Unit Tests
 
-- [ ] T050 [P] Create NotificationService unit tests in `backend/tests/unit/test_notification_service.py`: test create_notification, deliver_push (mock pywebpush), check_preference, get_user_preferences, update_preferences, get_default_preferences, send_notification orchestration (prefs → create → async push), default preference initialization on first enable, 410 Gone subscription removal, retry with exponential backoff (3 attempts). Covers FR-017, FR-019, FR-020, FR-011, FR-016
-- [ ] T051 [P] Create PushSubscriptionService unit tests in `backend/tests/unit/test_push_subscription_service.py`: test create_subscription (upsert by endpoint), remove_subscription (by endpoint + user), list_subscriptions (by user), cleanup_expired, remove_invalid (410 Gone). Covers FR-008, FR-009, FR-010, FR-011
+- [x] T050 [P] Create NotificationService unit tests in `backend/tests/unit/test_notification_service.py`: tests create_notification, deliver_push (410 removal, delivery errors), preferences (defaults, merge, update, unknown keys), check_preference, send_notification orchestration, notification queries (pagination, unread, category filter, stats), mark_as_read (idempotent), cleanup_read_notifications
+- [x] T051 [P] Create PushSubscriptionService unit tests in `backend/tests/unit/test_push_subscription_service.py`: tests create (new, upsert, transfer), remove, list (team isolation), cleanup_expired, remove_invalid
 
 ### Backend API Integration Tests
 
-- [ ] T052 Create notification API integration tests in `backend/tests/unit/test_notifications_api.py`: test all 8 endpoints per contracts/api.yaml — POST /subscribe (201, 400), DELETE /subscribe (204, 404), GET /status (200), GET /preferences (200), PUT /preferences (200, 400 for invalid deadline_days_before), GET /notifications (200 with pagination, category filter, unread_only), GET /unread-count (200), POST /{guid}/read (200, 404), GET /vapid-key (200). Test 401 on unauthenticated requests. Test multi-tenant isolation: cross-team notification GUID returns 404 (FR-050, FR-051). Depends on T050, T051
+- [x] T052 Create notification API integration tests in `backend/tests/unit/test_notifications_api.py`: tests all API endpoints (subscribe, unsubscribe, status, preferences, notifications list, unread count, mark-as-read, VAPID key, deadline check), plus multi-tenant isolation verification
 
 ### Frontend Hook & Component Tests
 
-- [ ] T053 [P] Create useNotifications hook tests in `frontend/src/hooks/useNotifications.test.ts`: test fetch notification list, fetch unread count, mark-as-read updates state, auto-refresh interval (30s), loading and error states. Mock notifications API service
-- [ ] T054 Create NotificationPanel component tests in `frontend/src/components/notifications/NotificationPanel.test.tsx`: test renders notification list with category icons and relative timestamps, click marks as read and navigates, empty state message, read/unread visual indicator, popover open/close behavior. Depends on T053
-- [ ] T055 Create NotificationPreferences component tests in `frontend/src/components/profile/NotificationPreferences.test.tsx`: test master toggle enables/disables all, per-category toggles, deadline days-before selector, permission denied state shows re-enable instructions, iOS not-installed state shows guidance, unsupported browser hides notification features (FR-054). Depends on T023
+- [x] T053 [P] Create useNotifications hook tests in `frontend/tests/hooks/useNotifications.test.ts`: tests fetchNotifications, refreshUnreadCount, markAsRead with MSW mocks, loading and error states
+- [x] T054 Create NotificationPanel component tests in `frontend/tests/components/notifications/NotificationPanel.test.tsx`: tests bell icon, unread badge (0, 3, 99+), popover notification list, empty state, "View all" link
+- [x] T055 Create NotificationPreferences component tests in `frontend/tests/components/notifications/NotificationPreferences.test.tsx`: tests card rendering, master toggle, category toggles, deadline settings, retention settings, unsupported browser handling
 
 ### Backend Trigger Integration Tests
 
-- [ ] T056 [P] Create notification trigger tests for JobCoordinatorService in `backend/tests/unit/test_notification_triggers.py`: test fail_job() calls notify_job_failure (FR-023), complete_job() calls notify_inflection_point only when no_change_copy=false (FR-026), complete_job_no_change() does NOT trigger notification (FR-027), retry at max_retries-1 calls notify_retry_warning (FR-043), retry_warning respects default-off preference (FR-044). Mock NotificationService
-- [ ] T057 [P] Create notification trigger tests for AgentService in `backend/tests/unit/test_agent_notification_triggers.py`: test check_offline_agents() triggers pool_offline when last agent goes offline (FR-030), process_heartbeat() triggers agent_error on ERROR status (FR-031), process_heartbeat() triggers pool_recovery on first agent back online (FR-032), debounce within 5-minute window suppresses duplicate (FR-033), dead agent safety net forces OFFLINE and triggers notifications (FR-035, FR-036). Mock NotificationService
+- [x] T056 [P] Create notification trigger tests for JobCoordinatorService in `backend/tests/unit/test_notification_triggers.py`: tests fail_job() calls notify_job_failure, complete_job() calls notify_inflection_point for new results
+- [x] T057 [P] Create notification trigger tests for AgentService in `backend/tests/unit/test_agent_notification_triggers.py`: tests retry warning on final attempt, no warning on non-final retry, debounce cache suppression
 
 **Checkpoint**: All backend services, API endpoints, frontend hooks, and components have automated test coverage. Constitution Principle II satisfied.
 
