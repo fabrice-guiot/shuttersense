@@ -25,7 +25,7 @@
 ### Tests — Verify AuditMixin and audit schemas (NFR-400.1, NFR-400.3)
 
 - [ ] T004a Create backend/tests/unit/test_audit_mixin.py with tests for: AuditMixin columns exist on a model (created_by_user_id, updated_by_user_id); FK constraint targets users table; SET NULL behavior when referenced user is deleted; columns are nullable (historical data compatibility); lazy="joined" relationships resolve to User instances
-- [ ] T004b [P] Create backend/tests/unit/test_audit_schemas.py with tests for: AuditUserSummary serialization from User model (guid, display_name, email); AuditInfo serialization with full data (both users present); AuditInfo serialization with null users (historical records); AuditInfo with mixed null (created_by present, updated_by null); the build_audit_info helper function from T049 returns correct AuditInfo from a model instance
+- [ ] T004b [P] Create backend/tests/unit/test_audit_schemas.py with tests for: AuditUserSummary serialization from User model (guid, display_name, email); AuditInfo serialization with full data (both users present); AuditInfo serialization with null users (historical records); AuditInfo with mixed null (created_by present, updated_by null) — NOTE: do NOT test build_audit_info here (it is created in Phase 3 T049); build_audit_info tests belong in T064a or a dedicated Phase-3 test file
 
 **Checkpoint**: AuditMixin, schemas, migration, frontend types, and foundational tests are ready. No models or services modified yet.
 
@@ -128,7 +128,7 @@
 
 ### Tests — Verify audit field in API responses (NFR-400.3)
 
-- [ ] T064a [US4] Create backend/tests/unit/test_audit_responses.py (or add to existing integration tests) with tests covering: entity API response includes audit field with created_by/updated_by user summaries (test at least CollectionResponse and one other); historical entity response has audit.created_by = null and audit.updated_by = null without error; audit field coexists with existing top-level created_at/updated_at fields (backward compatibility); AuditUserSummary contains guid (not internal id), display_name, and email
+- [ ] T064a [US4] Create backend/tests/unit/test_audit_responses.py (or add to existing integration tests) with tests covering: build_audit_info helper (from T049) returns correct AuditInfo from a model instance with full user data, null users, and mixed null; entity API response includes audit field with created_by/updated_by user summaries (test at least CollectionResponse and one other); historical entity response has audit.created_by = null and audit.updated_by = null without error; audit field coexists with existing top-level created_at/updated_at fields (backward compatibility); AuditUserSummary contains guid (not internal id), display_name, and email
 
 **Checkpoint**: All API responses now include the `audit` field with test coverage. Verify with curl/httpie requests to list and detail endpoints.
 

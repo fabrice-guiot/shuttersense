@@ -18,7 +18,7 @@ Minimal user representation for audit attribution display.
 |-------|------|----------|-------|
 | guid | string | Yes | User GUID (usr_xxx format) |
 | display_name | string \| null | No | May be null for system users without a display name |
-| email | string | Yes | Always present |
+| email | string \| null | No | Optional — populated only when the requester is authorized to view PII; null or omitted otherwise |
 
 ### AuditInfo
 

@@ -9,25 +9,25 @@
 
 ## Executive Summary
 
-The specification and plan are well-structured with thorough coverage of the feature scope. However, the user's concern is confirmed: **tasks.md has a critical gap in test coverage**. The PRD explicitly requires unit tests (NFR-400.1–400.4), the constitution mandates test coverage (Principle II), the plan references tests in its Constitution Check, and the contracts define test requirements — yet tasks.md contains **zero dedicated test-writing tasks**. Task T090 only runs existing tests and fixes regressions; it does not create any new tests.
+The specification and plan are well-structured with thorough coverage of the feature scope. The user's original concern about missing test coverage has been **resolved**: tasks.md now includes **6 dedicated test-writing tasks** (T004a, T004b, T048a, T064a, T066a, T066b) spanning all four NFR-400 requirements and covering both backend and frontend contract test items. These tasks are placed within the appropriate phases alongside the implementation tasks they verify, following the constitution's "tests written alongside implementation" principle.
 
-**Verdict**: Tasks must be amended before implementation.
+**Verdict**: Tasks are ready for implementation. All critical test gaps have been addressed.
 
 ---
 
 ## Findings
 
-### CRITICAL: Missing Test Tasks
+### RESOLVED: Test Tasks Now Present
 
-| ID | Severity | Source | Finding |
-|----|----------|--------|---------|
-| F-001 | **CRITICAL** | Constitution II vs tasks.md | Constitution states: "All features MUST have test coverage. Tests SHOULD be written before or alongside implementation." Tasks.md contains 0 test-writing tasks out of 92. |
-| F-002 | **CRITICAL** | PRD NFR-400.1 vs tasks.md | PRD requires: "Unit tests verify `created_by_user_id` is set on creation for each service." No task creates these tests. |
-| F-003 | **CRITICAL** | PRD NFR-400.2 vs tasks.md | PRD requires: "Unit tests verify `updated_by_user_id` is updated on modification for each service." No task creates these tests. |
-| F-004 | **CRITICAL** | PRD NFR-400.3 vs tasks.md | PRD requires: "Unit tests verify `AuditInfo` serialization in response schemas, including null user handling." No task creates these tests. |
-| F-005 | **CRITICAL** | PRD NFR-400.4 vs tasks.md | PRD requires: "Frontend tests verify `<AuditTrailPopover>` renders correctly with full, partial, and null audit data." No task creates these tests. |
-| F-006 | **CRITICAL** | contracts/audit-schema.md vs tasks.md | Contract specifies 5 backend test requirements (schema serialization, service create, service update, user deletion SET NULL, response integration). None appear in tasks. |
-| F-007 | **CRITICAL** | contracts/frontend-components.md vs tasks.md | Contract specifies 3 frontend test requirements (AuditTrailPopover, AuditTrailSection, fallback rendering). None appear in tasks. |
+| ID | Severity | Source | Finding | Resolution |
+|----|----------|--------|---------|------------|
+| F-001 | ~~CRITICAL~~ **RESOLVED** | Constitution II vs tasks.md | Constitution states: "All features MUST have test coverage. Tests SHOULD be written before or alongside implementation." | Tasks.md now contains 6 test-writing tasks (T004a, T004b, T048a, T064a, T066a, T066b) placed within their respective phases alongside implementation tasks. |
+| F-002 | ~~CRITICAL~~ **RESOLVED** | PRD NFR-400.1 vs tasks.md | PRD requires: "Unit tests verify `created_by_user_id` is set on creation for each service." | Covered by **T004a** (AuditMixin column/FK tests) and **T048a** (service attribution tests verifying created_by_user_id set on create). |
+| F-003 | ~~CRITICAL~~ **RESOLVED** | PRD NFR-400.2 vs tasks.md | PRD requires: "Unit tests verify `updated_by_user_id` is updated on modification for each service." | Covered by **T048a** (service attribution tests verifying updated_by_user_id updated on update while preserving created_by_user_id). |
+| F-004 | ~~CRITICAL~~ **RESOLVED** | PRD NFR-400.3 vs tasks.md | PRD requires: "Unit tests verify `AuditInfo` serialization in response schemas, including null user handling." | Covered by **T004b** (AuditUserSummary/AuditInfo serialization tests) and **T064a** (API response integration tests with null user handling). |
+| F-005 | ~~CRITICAL~~ **RESOLVED** | PRD NFR-400.4 vs tasks.md | PRD requires: "Frontend tests verify `<AuditTrailPopover>` renders correctly with full, partial, and null audit data." | Covered by **T066a** (AuditTrailPopover tests: full data, null users, unmodified records, email fallback) and **T066b** (AuditTrailSection tests). |
+| F-006 | ~~CRITICAL~~ **RESOLVED** | contracts/audit-schema.md vs tasks.md | Contract specifies 5 backend test requirements (schema serialization, service create, service update, user deletion SET NULL, response integration). | Mapped: schema serialization → **T004b**; service create → **T048a**; service update → **T048a**; user deletion SET NULL → **T004a**; response integration → **T064a**. |
+| F-007 | ~~CRITICAL~~ **RESOLVED** | contracts/frontend-components.md vs tasks.md | Contract specifies 3 frontend test requirements (AuditTrailPopover, AuditTrailSection, fallback rendering). | Mapped: AuditTrailPopover → **T066a**; AuditTrailSection → **T066b**; fallback rendering → covered in both T066a (null user handling) and T066b (null user handling). |
 
 ### MINOR: Other Observations
 
@@ -72,17 +72,17 @@ The specification and plan are well-structured with thorough coverage of the fea
 | NFR-300.1 (Backward compat) | T050–T063 (Optional audit field) | ✅ Covered |
 | NFR-300.2 (Frontend fallback) | T077 (fallback pattern) | ✅ Covered |
 | NFR-300.3 (Agent API unaffected) | T047 (agent routes) | ✅ Covered |
-| **NFR-400.1** (Service create tests) | **None** | ❌ **MISSING** |
-| **NFR-400.2** (Service update tests) | **None** | ❌ **MISSING** |
-| **NFR-400.3** (Schema serialization tests) | **None** | ❌ **MISSING** |
-| **NFR-400.4** (Frontend component tests) | **None** | ❌ **MISSING** |
+| NFR-400.1 (Service create tests) | T004a, T048a | ✅ Covered |
+| NFR-400.2 (Service update tests) | T048a | ✅ Covered |
+| NFR-400.3 (Schema serialization tests) | T004b, T064a | ✅ Covered |
+| NFR-400.4 (Frontend component tests) | T066a, T066b | ✅ Covered |
 
 ### Constitution Principle Alignment
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
 | I. Agent-Only Tool Execution | ✅ Pass | N/A for this feature |
-| **II. Testing & Quality** | ❌ **FAIL** | Zero test-writing tasks. Constitution: "All features MUST have test coverage." |
+| II. Testing & Quality | ✅ Pass | 6 test-writing tasks: T004a (mixin), T004b (schemas), T048a (attribution), T064a (responses), T066a (popover), T066b (section). |
 | III. User-Centric Design | ✅ Pass | Graceful null handling, popover UX |
 | IV. GUIDs | ✅ Pass | AuditUserSummary uses guid field |
 | V. Multi-Tenancy | ✅ Pass | Audit columns on tenant-scoped entities, ctx.user_id from TenantContext |
@@ -90,53 +90,35 @@ The specification and plan are well-structured with thorough coverage of the fea
 
 ---
 
-## Recommended Test Tasks (to add to tasks.md)
+## Test Task Mapping (tasks.md ↔ requirements)
 
-Based on the PRD (NFR-400), contracts (audit-schema.md, frontend-components.md), and constitution (Principle II), the following test tasks should be added:
+The following test tasks in tasks.md satisfy all PRD, contract, and constitution test requirements:
 
-### Backend Tests (insert after T003, before T004)
+### Phase 1 — Setup Tests
 
-**T003a** — Create backend/tests/unit/test_audit_mixin.py with tests for:
-- AuditMixin columns exist on a model (created_by_user_id, updated_by_user_id)
-- FK constraint to users table
-- SET NULL behavior when referenced user is deleted
-- Nullable columns (historical data compatibility)
+| Task | File | Covers | Requirements |
+|------|------|--------|-------------|
+| **T004a** | backend/tests/unit/test_audit_mixin.py | AuditMixin columns, FK constraints, SET NULL on user delete, nullable columns, lazy="joined" relationships | NFR-400.1, audit-schema.md #4 (user deletion SET NULL) |
+| **T004b** | backend/tests/unit/test_audit_schemas.py | AuditUserSummary serialization (guid, display_name, email), AuditInfo full/null/mixed | NFR-400.3, audit-schema.md #1 (schema serialization) |
 
-**T003b** — Create backend/tests/unit/test_audit_schemas.py with tests for:
-- AuditUserSummary serialization from User model (guid, display_name, email)
-- AuditInfo serialization with full data (both users present)
-- AuditInfo serialization with null users (historical records)
-- AuditInfo helper function from model instance
-- AuditInfo with mixed null (created_by present, updated_by null)
+### Phase 2 — Service Attribution Tests
 
-### Service Attribution Tests (insert in Phase 2, after service tasks)
+| Task | File | Covers | Requirements |
+|------|------|--------|-------------|
+| **T048a** | backend/tests/unit/test_audit_attribution.py | CollectionService create/update attribution, 2+ additional services, user_id=None backward compat, agent system_user_id | NFR-400.1, NFR-400.2, audit-schema.md #2 (service create), #3 (service update) |
 
-**T033a** — Add user attribution tests to existing service test files (or create backend/tests/unit/test_audit_attribution.py) covering at minimum:
-- CollectionService: created_by_user_id set on create, updated_by_user_id updated on update, created_by_user_id preserved on update
-- At least 2 other representative services (e.g., EventService, PipelineService) with same create/update/preserve pattern
-- Service methods work with user_id=None (backward compat, no crash)
+### Phase 3 — API Response Tests
 
-### API Response Tests (insert in Phase 3, after schema tasks)
+| Task | File | Covers | Requirements |
+|------|------|--------|-------------|
+| **T064a** | backend/tests/unit/test_audit_responses.py | Entity response includes audit field, null user handling, backward compat with top-level created_at/updated_at, AuditUserSummary uses guid | NFR-400.3, audit-schema.md #5 (response integration) |
 
-**T064a** — Create backend/tests/unit/test_audit_responses.py (or add to existing integration tests) covering:
-- Entity API response includes audit field with created_by/updated_by user summaries
-- Historical entity response has audit.created_by = null (no error)
-- Audit field coexists with existing created_at/updated_at top-level fields
+### Phase 4 — Frontend Component Tests
 
-### Frontend Component Tests (insert in Phase 4, after T066)
-
-**T066a** — Create frontend tests for AuditTrailPopover:
-- Renders relative time trigger with correct text
-- Popover displays created date/time and user name
-- Popover displays modified date/time and user name
-- Handles null created_by/updated_by (displays "—")
-- Hides modified section when created_at === updated_at
-
-**T066b** — Create frontend tests for AuditTrailSection:
-- Renders created and modified rows with full timestamps
-- Shows user display_name, falls back to email
-- Handles null users with "—"
-- Same-timestamp handling
+| Task | File | Covers | Requirements |
+|------|------|--------|-------------|
+| **T066a** | frontend tests for AuditTrailPopover | Relative time trigger, created/modified date+user, null user "—", unmodified record, email fallback | NFR-400.4, frontend-components.md #1 (AuditTrailPopover) |
+| **T066b** | frontend tests for AuditTrailSection | Full timestamps, display_name→email fallback, null users "—", same-timestamp handling | NFR-400.4, frontend-components.md #2 (AuditTrailSection), #3 (fallback) |
 
 ---
 
@@ -144,19 +126,20 @@ Based on the PRD (NFR-400), contracts (audit-schema.md, frontend-components.md),
 
 | Metric | Value |
 |--------|-------|
-| Total tasks in tasks.md | 92 |
+| Total tasks in tasks.md | 98 (92 original + 6 test tasks) |
+| Test-writing tasks | 6 (T004a, T004b, T048a, T064a, T066a, T066b) |
 | Functional requirements covered | 16/16 (100%) |
-| NFR requirements covered | 7/11 (64%) — 4 test NFRs missing |
-| Constitution principles aligned | 5/6 (83%) — Principle II fails |
-| Critical findings | 7 |
+| NFR requirements covered | 11/11 (100%) |
+| Constitution principles aligned | 6/6 (100%) |
+| Critical findings resolved | 7/7 |
 | Minor findings | 1 |
 | Info findings | 2 |
-| Recommended new tasks | 5-6 |
+| Recommended new tasks | 0 (all added) |
 
 ---
 
 ## Conclusion
 
-The feature design is solid — the AuditMixin approach, schema contracts, component specs, and integration scenarios are thorough and consistent. The single gap is test coverage: **zero of the 92 tasks create new tests**, despite the PRD, contracts, and constitution all explicitly requiring them. Adding the recommended 5-6 test tasks (approximately 5 new tasks spanning backend unit, service attribution, API response, and frontend component tests) will resolve all critical findings and bring the plan into full constitution compliance.
+The feature design is solid — the AuditMixin approach, schema contracts, component specs, and integration scenarios are thorough and consistent. The original test coverage gap has been fully addressed: **6 dedicated test-writing tasks** (T004a, T004b, T048a, T064a, T066a, T066b) now cover all 4 NFR-400 requirements and all 8 contract test items (5 backend from audit-schema.md, 3 frontend from frontend-components.md). Each test task is placed within the appropriate phase alongside related implementation tasks, satisfying Constitution Principle II ("tests written before or alongside implementation").
 
-**Recommendation**: Update tasks.md with the test tasks listed above before proceeding to `/speckit.implement`.
+**Recommendation**: Tasks are ready for implementation via `/speckit.implement`.
