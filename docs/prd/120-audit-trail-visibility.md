@@ -20,7 +20,7 @@ ShutterSense currently stores `created_at` and `updated_at` timestamps on all en
 ### Key Design Decisions
 
 1. **Column-level tracking, not a separate audit log**: `created_by_user_id` and `updated_by_user_id` foreign keys are added directly to each entity table rather than maintaining a separate audit log table. This is simpler, avoids joins on every list query, and satisfies the stated requirements without over-engineering.
-2. **System user attribution**: Actions performed by agents and API tokens are attributed to the system user associated with that agent or token (already exists in `Agent.system_user_id` and `ApiToken.system_user_id`).
+2. **System user attribution**: Actions performed by agents and API tokens are attributed to the dedicated system user associated with that agent or token. Both `Agent.system_user_id` and `ApiToken.system_user_id` already exist in the data model. For API tokens, `TokenService.validate_token` sets `TenantContext.user_id = system_user.id`, so route handlers use the same `ctx.user_id` pattern regardless of whether the caller is a browser session or an API token — no special-casing required.
 3. **Hover popover in list views**: A single "Modified" column shows relative time (e.g., "5 min ago") with a hover popover revealing the full audit card (created by, created at, modified by, modified at). This keeps tables compact while making full details accessible.
 4. **Reusable `<AuditTrailPopover>` component**: One shared component used in both table rows and detail dialogs, ensuring consistent presentation.
 5. **Graceful handling of historical data**: Existing records without `created_by`/`updated_by` display "System" or "—" rather than failing.
@@ -37,6 +37,16 @@ ShutterSense currently stores `created_at` and `updated_at` timestamps on all en
 - No entity tracks `updated_by_user_id`.
 - `PipelineHistory` has a `changed_by` string field (not a foreign key).
 - `TenantContext` carries `user_id` in every authenticated request but services do not capture it during create/update operations.
+
+**Authentication paths and `TenantContext.user_id` resolution** (see `backend/src/middleware/tenant.py`):
+
+| Auth Method | `ctx.user_id` resolves to | `ctx.is_api_token` | Source |
+|---|---|---|---|
+| Session (browser) | Human user's `User.id` | `False` | `_authenticate_session` → `user.id` |
+| API Token (Bearer) | Token's `system_user.id` | `True` | `TokenService.validate_token` → `api_token.system_user.id` |
+| Agent (agent auth) | N/A — uses separate auth | N/A | `get_authenticated_agent` dependency |
+
+This means `ctx.user_id` already points to the correct attribution user for both session and API token auth. For API tokens, the `system_user` is a dedicated `User` row representing that token (created during token provisioning), so audit records attributed to it are clearly distinguishable from human user actions.
 
 **Frontend**:
 - `formatDateTime()` and `formatRelativeTime()` utilities exist in `frontend/src/utils/dateFormat.ts`.
@@ -123,9 +133,11 @@ Audit trail visibility is foundational for:
 
 - **FR-200.1**: All service `create_*` methods accept `user_id: Optional[int]` and set `created_by_user_id` and `updated_by_user_id` on the new entity.
 - **FR-200.2**: All service `update_*` methods accept `user_id: Optional[int]` and set `updated_by_user_id` on the modified entity.
-- **FR-200.3**: All API route handlers pass `ctx.user_id` from `TenantContext` to service methods.
-- **FR-200.4**: Agent-facing API endpoints (`/api/agent/*`) pass the agent's `system_user_id` as the acting user.
-- **FR-200.5**: When `TenantContext.is_api_token` is true, the token's `system_user_id` is used for attribution.
+- **FR-200.3**: All API route handlers pass `ctx.user_id` from `TenantContext` to service methods. This single pattern covers **both** session and API token authentication because `TenantContext.user_id` already resolves to the correct user in each case:
+  - **Session auth** (browser): `ctx.user_id` = the human user's `User.id`
+  - **API token auth** (Bearer): `ctx.user_id` = the token's `system_user.id` (set by `TokenService.validate_token` at `token_service.py:247`). This system user is a dedicated `User` row representing the API token, so mutations performed via API tokens are attributed to that token's system user — clearly distinguishable from human-initiated actions.
+- **FR-200.4**: Agent-facing API endpoints (`/api/agent/*`) use a separate authentication path (`get_authenticated_agent` dependency) that returns the `Agent` object directly. These handlers pass `agent.system_user_id` to service methods for attribution.
+- **FR-200.5**: No special-casing is needed for API token auth in route handlers. The standard `ctx.user_id` pattern (FR-200.3) already handles it correctly. Implementors MUST NOT add conditional logic like `if ctx.is_api_token: ...` — the middleware abstraction handles this transparently.
 
 #### FR-300: Backend — API Response Schemas
 
@@ -361,7 +373,13 @@ def update_collection(
     return collection
 ```
 
-### 4. Route Handler Pattern
+### 4. Route Handler Pattern — Three Authentication Paths
+
+All three authentication paths converge to a single `user_id: int` parameter passed to service methods. No conditional logic is needed in route handlers.
+
+#### 4a. Session Auth (Browser — Human Users)
+
+`TenantContext.user_id` = the logged-in human user's `User.id`.
 
 ```python
 # Example: backend/src/api/collection_router.py
@@ -376,12 +394,45 @@ async def create_collection(
     collection = service.create_collection(
         data=data,
         team_id=ctx.team_id,
-        user_id=ctx.user_id,  # Attribution from TenantContext
+        user_id=ctx.user_id,  # Human user's User.id
     )
     ...
 ```
 
-For agent-facing endpoints, the agent's system user is used:
+#### 4b. API Token Auth (Bearer — Programmatic Access)
+
+`TenantContext.user_id` = the API token's `system_user.id`. This is set automatically by `TokenService.validate_token` (`token_service.py:244-252`), which resolves `api_token.system_user` and sets `user_id=system_user.id` on the `TenantContext`.
+
+The **same route handler code** works for both session and API token auth — no branching needed:
+
+```python
+# The SAME handler above also handles API token requests.
+# When a Bearer token authenticates:
+#   ctx.user_id = api_token.system_user.id  (token's dedicated system user)
+#   ctx.is_api_token = True
+#
+# The service receives the token's system user ID, so the audit trail
+# shows: "Modified by API Token: My CI Token (tok_01hgw...)"
+
+@router.put("/{guid}", response_model=CollectionResponse)
+async def update_collection(
+    guid: str,
+    data: CollectionUpdate,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    service = CollectionService(db)
+    collection = service.update_collection(
+        collection=existing,
+        data=data,
+        user_id=ctx.user_id,  # Token's system_user.id when is_api_token=True
+    )
+    ...
+```
+
+#### 4c. Agent Auth (Agent-Facing Endpoints)
+
+Agent endpoints use a separate `get_authenticated_agent` dependency that returns the `Agent` model directly. The agent's `system_user_id` is passed explicitly:
 
 ```python
 # backend/src/api/agent/job_router.py
@@ -397,9 +448,17 @@ async def complete_job(
     service.complete_job(
         job=job,
         result=result,
-        user_id=agent.system_user_id,  # Agent's system user
+        user_id=agent.system_user_id,  # Agent's dedicated system user
     )
 ```
+
+#### Summary: User ID Resolution by Auth Method
+
+| Auth Method | Route Dependency | `user_id` Passed to Service | Display Name in Audit Trail |
+|---|---|---|---|
+| Session (browser) | `get_tenant_context` | `ctx.user_id` (human `User.id`) | "John Doe (john@example.com)" |
+| API Token (Bearer) | `get_tenant_context` | `ctx.user_id` (token's `system_user.id`) | "API Token: My CI Token (tok_xxx@system)" |
+| Agent | `get_authenticated_agent` | `agent.system_user_id` | "Agent: Home Mac (agt_xxx@system)" |
 
 ### 5. Response Schema — AuditInfo
 
@@ -770,6 +829,11 @@ function AuditTrailSection({ audit }: { audit: AuditInfo }) {
 
 ## Revision History
 
+- **2026-01-31 (v1.1)**: Clarified API token audit attribution
+  - Expanded Background section with auth method resolution table showing how `ctx.user_id` maps to the correct user for session, API token, and agent auth
+  - Rewrote FR-200.3 through FR-200.5 to explicitly document that API token auth resolves `ctx.user_id` to `api_token.system_user.id` (via `TokenService.validate_token`)
+  - Added FR-200.5 clarification that no special-casing is needed in route handlers
+  - Expanded Technical Approach §4 into three subsections (4a/4b/4c) with per-auth-path code examples and a summary resolution table
 - **2026-01-31 (v1.0)**: Initial draft
   - Defined column-level audit tracking approach with AuditMixin
   - Specified service layer and route handler attribution patterns
