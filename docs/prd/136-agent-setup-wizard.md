@@ -125,7 +125,7 @@ May need to set up an agent on their personal machine to process local photo col
 
 **FR-200.6**: The wizard MUST fetch the active release manifest from a **new** user-accessible endpoint `GET /api/agent/v1/releases/active` (see [Release Manifest API](#release-manifest-api)). The existing admin endpoints at `/api/admin/release-manifests` require super-admin privileges and are not suitable for regular wizard users. The response contains an `artifacts` array with per-platform entries, each specifying `platform`, `filename`, and `checksum`.
 
-**FR-200.7**: If a matching artifact exists for the selected platform in the manifest's `artifacts` array, the wizard MUST display a **"Download Agent"** button that initiates a download of the binary using `{download_base_url}/{artifact.filename}`.
+**FR-200.7**: If a matching artifact exists for the selected platform in the manifest's `artifacts` array **and** `download_base_url` is non-null, the wizard MUST display a **"Download Agent"** button that initiates a download of the binary using `{download_base_url}/{artifact.filename}`. If `download_base_url` is `null` (server's `AGENT_DIST_BASE_URL` env var is not configured), the wizard MUST hide the download button and show the same warning banner as FR-200.9.
 
 **FR-200.8**: If no matching artifact exists for the selected platform, the wizard MUST display an informational message: *"No agent build is available for {platform}. Please contact your administrator."* The "Next" button MUST be disabled.
 
@@ -589,7 +589,7 @@ const WIZARD_STEPS = [
 
 The wizard requires agent binaries to be downloadable. This PRD assumes one of the following distribution mechanisms exists (or will be set up independently):
 
-**Option A — Static file serving**: Agent binaries are placed in a static directory served by the web server (e.g., `/agent-dist/{version}/shuttersense-agent-{platform}`). The release manifest stores the version and an `artifacts` array with per-platform filenames and checksums; the frontend constructs the download URL from `download_base_url` + `artifact.filename`.
+**Option A — Static file serving**: Agent binaries are placed in a static directory served by the web server (e.g., `/agent-dist/{version}/shuttersense-agent-{platform}`). The backend reads the `AGENT_DIST_BASE_URL` environment variable, appends the manifest's `version` to form `download_base_url`, and returns it alongside the per-platform `artifacts` array. The frontend constructs the final download URL as `download_base_url` + `artifact.filename`.
 
 **Option B — Backend download endpoint**: A new endpoint `GET /api/agent/v1/releases/{version}/download?platform={platform}` streams the binary. This is more controlled but requires backend changes.
 
@@ -603,12 +603,14 @@ The existing release manifest endpoints live under `/api/admin/release-manifests
 GET /api/agent/v1/releases/active
 ```
 
+The `download_base_url` field in the response is **not** stored in the `ReleaseManifest` model. The backend MUST construct it at response time by combining the `AGENT_DIST_BASE_URL` environment variable with the manifest's `version` field (e.g., `{AGENT_DIST_BASE_URL}/{version}/`). If `AGENT_DIST_BASE_URL` is not set, the field MUST be `null` and the frontend MUST hide the download button (same UX as FR-200.9).
+
 Response:
 ```json
 {
   "guid": "rel_01hgw2bbg...",
   "version": "1.0.0",
-  "download_base_url": "https://example.com/agent-dist/1.0.0/",
+  "download_base_url": "https://cdn.example.com/agent-dist/1.0.0/",
   "artifacts": [
     {
       "platform": "darwin-arm64",
@@ -757,6 +759,7 @@ The frontend constructs the download URL as:
 
 ## Revision History
 
+- **2026-01-31 (v1.3)**: Clarify `download_base_url` is derived at runtime from `AGENT_DIST_BASE_URL` env var + version, not a DB field; handle `null` case in FR-200.7 — AI Assistant
 - **2026-01-31 (v1.2)**: Clarify release manifest endpoint: new user-accessible `GET /api/agent/v1/releases/active` required (existing admin endpoints need super-admin auth) — AI Assistant
 - **2026-01-31 (v1.1)**: Config-based server URL, allow wizard progression without manifests, per-platform artifacts schema, MD040/MD060 fixes — AI Assistant
 - **2026-01-31 (v1.0)**: Initial draft — AI Assistant
