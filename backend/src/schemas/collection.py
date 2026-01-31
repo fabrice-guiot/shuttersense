@@ -379,6 +379,9 @@ class ConnectorResponse(BaseModel):
                     data.metadata = None
             else:
                 data.metadata = None
+        # Audit trail (Issue #120)
+        if hasattr(data, 'audit'):
+            data.__dict__['audit'] = data.audit
         return data
 
     model_config = {

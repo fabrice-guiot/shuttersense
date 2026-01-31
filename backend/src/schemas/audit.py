@@ -23,14 +23,15 @@ class AuditUserSummary(BaseModel):
     Attributes:
         guid: User GUID (usr_xxx format) — never the internal numeric ID.
         display_name: Human-readable name (may be null for system users).
-        email: User email address.
+        email: User email address (optional — populated only when the
+            requester is authorized to view PII; null otherwise).
     """
 
     guid: str = Field(..., description="User GUID (usr_xxx)")
     display_name: Optional[str] = Field(
         default=None, description="User display name"
     )
-    email: str = Field(..., description="User email")
+    email: Optional[str] = Field(default=None, description="User email")
 
     model_config = {
         "from_attributes": True,

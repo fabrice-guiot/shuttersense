@@ -2241,14 +2241,17 @@ class JobCoordinatorService:
             agent_id: Agent ID (must match job's assigned agent)
             team_id: Team ID
             error_message: Error description
-            signature: Optional signature for verification
+            signature: HMAC-SHA256 signature over the error payload, verified
+                using the same mechanism as complete_job to prevent spoofed
+                failure reports.
+            user_id: Optional user ID for audit attribution
 
         Returns:
             Failed job
 
         Raises:
             NotFoundError: If job not found
-            ValidationError: If agent doesn't own the job
+            ValidationError: If agent doesn't own the job or signature is invalid
         """
         job = self._get_job_for_agent(job_guid, agent_id, team_id)
 
@@ -2256,6 +2259,12 @@ class JobCoordinatorService:
             raise ValidationError(
                 f"Job must be in ASSIGNED or RUNNING state to fail, got {job.status.value}"
             )
+
+        # Verify signature (same pattern as complete_job)
+        if signature and not self.verify_signature(
+            job, {"error": error_message}, signature
+        ):
+            raise ValidationError("Invalid result signature")
 
         # Create failed analysis result (so failure appears in results history)
         result = self._create_failed_result(job, error_message, user_id=user_id)

@@ -11,6 +11,7 @@ NOTE: build_audit_info helper tests belong in test_audit_responses.py (Phase 3 T
 from datetime import datetime
 
 import pytest
+from pydantic import ValidationError
 
 from backend.src.schemas.audit import AuditUserSummary, AuditInfo
 
@@ -65,16 +66,16 @@ class TestAuditUserSummary:
 
     def test_guid_required(self):
         """AuditUserSummary should require guid."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             AuditUserSummary(display_name="Test", email="test@example.com")
 
-    def test_email_required(self):
-        """AuditUserSummary should require email."""
-        with pytest.raises(Exception):
-            AuditUserSummary(
-                guid="usr_01hgw2bbg0000000000000001",
-                display_name="Test",
-            )
+    def test_email_optional(self):
+        """AuditUserSummary should default email to None when omitted."""
+        summary = AuditUserSummary(
+            guid="usr_01hgw2bbg0000000000000001",
+            display_name="Test",
+        )
+        assert summary.email is None
 
     def test_from_orm_user(self, test_user):
         """AuditUserSummary should be constructable from User model attributes."""

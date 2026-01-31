@@ -51,7 +51,24 @@ LARGE_TABLES = {"collections", "jobs", "analysis_results", "events", "notificati
 
 
 def upgrade() -> None:
-    """Add audit user attribution columns and indexes to all entity tables."""
+    """Add audit user attribution columns and indexes to all entity tables.
+
+    Adds created_by_user_id and updated_by_user_id foreign key columns to
+    14 Group A tables and updated_by_user_id to 3 Group B tables (which
+    already have created_by_user_id). Creates indexes on all new columns
+    and an immutability trigger for created_by_user_id on PostgreSQL.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+
+    Side Effects:
+        Modifies DB schema via Alembic op: adds columns, creates indexes
+        (CONCURRENTLY on large PostgreSQL tables), and installs an immutability
+        trigger function on PostgreSQL.
+    """
     bind = op.get_bind()
     is_pg = bind.dialect.name == "postgresql"
 
@@ -148,7 +165,22 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove audit user attribution columns, indexes, and triggers."""
+    """Remove audit user attribution columns, indexes, and triggers.
+
+    Reverses upgrade() by dropping the immutability trigger and function
+    (PostgreSQL only), dropping all indexes on audit columns, and removing
+    the created_by_user_id and updated_by_user_id columns from all tables.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+
+    Side Effects:
+        Modifies DB schema via Alembic op: drops triggers, indexes
+        (CONCURRENTLY on large PostgreSQL tables), and columns.
+    """
     bind = op.get_bind()
     is_pg = bind.dialect.name == "postgresql"
 
