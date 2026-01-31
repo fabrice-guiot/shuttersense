@@ -190,6 +190,59 @@ Set the environment variables:
 | `VAPID_PRIVATE_KEY` | Base64url-encoded private key |
 | `VAPID_SUBJECT` | Contact URI (e.g., `mailto:admin@example.com`) |
 
+### Rate Limiting Storage (Optional)
+
+By default, rate limiting uses in-memory storage, which works for single-worker deployments. For multi-worker or multi-instance deployments, use a shared backend so rate limits are enforced globally:
+
+```bash
+# Install Redis client library
+pip install redis
+
+# Set the storage backend
+export RATE_LIMIT_STORAGE_URI="redis://localhost:6379"
+```
+
+Supported backends:
+
+| URI | Backend | Notes |
+| --- | ------- | ----- |
+| `memory://` | In-process | Default. Single-worker only. |
+| `redis://host:6379` | Redis | Recommended for multi-worker. Requires `pip install redis`. |
+| `memcached://host:11211` | Memcached | Alternative to Redis. Requires `pip install pymemcache`. |
+| `redis+sentinel://host:26379` | Redis Sentinel | High-availability Redis. |
+
+### GeoIP Geofencing (Optional)
+
+GeoIP geofencing restricts API access to requests originating from a configurable list of countries, using a local MaxMind GeoLite2-Country database.
+
+#### 1. Obtain the GeoLite2 Database
+
+1. Create a free account at [MaxMind GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data)
+2. Download the **GeoLite2-Country** database in `.mmdb` format
+3. Place the file on the server (e.g., `/opt/geoip/GeoLite2-Country.mmdb`)
+
+#### 2. Configure Environment Variables
+
+```bash
+# Path to the .mmdb database file
+export SHUSAI_GEOIP_DB_PATH="/opt/geoip/GeoLite2-Country.mmdb"
+
+# Comma-separated ISO 3166-1 alpha-2 country codes to allow
+export SHUSAI_GEOIP_ALLOWED_COUNTRIES="US,CA"
+
+# Block requests from unknown IPs (default: false)
+# Set to true to allow requests when GeoIP lookup returns no country
+export SHUSAI_GEOIP_FAIL_OPEN="false"
+```
+
+**Important notes:**
+
+- Private/loopback IPs (127.x, 10.x, 192.168.x, ::1) always bypass geofencing
+- The `/health` endpoint is always exempt
+- An empty `SHUSAI_GEOIP_ALLOWED_COUNTRIES` with a configured database path will **block all non-private requests**
+- The server must be restarted to pick up database file updates
+- Use [geoipupdate](https://github.com/maxmind/geoipupdate) for automated weekly database refreshes
+
 ### Complete Environment Variables Reference
 
 | Variable | Required | Description | Default |
@@ -206,6 +259,10 @@ Set the environment variables:
 | `VAPID_PUBLIC_KEY` | No | Web Push public key | - |
 | `VAPID_PRIVATE_KEY` | No | Web Push private key | - |
 | `VAPID_SUBJECT` | No | Web Push contact URI | - |
+| `RATE_LIMIT_STORAGE_URI` | No | Rate limiting storage backend URI | `memory://` |
+| `SHUSAI_GEOIP_DB_PATH` | No | Path to GeoLite2-Country .mmdb file | - (disabled) |
+| `SHUSAI_GEOIP_ALLOWED_COUNTRIES` | No | Comma-separated allowed country codes | - |
+| `SHUSAI_GEOIP_FAIL_OPEN` | No | Allow unknown IPs when `true` | `false` |
 
 > **Note:** In production, the FastAPI server serves both the API and the React SPA frontend from the same origin. Set `SHUSAI_SPA_DIST_PATH` to point to the built frontend `dist/` directory.
 

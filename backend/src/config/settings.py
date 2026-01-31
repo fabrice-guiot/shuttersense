@@ -22,6 +22,13 @@ class AppSettings(BaseSettings):
         VAPID_PUBLIC_KEY: Web Push VAPID public key (Base64url-encoded)
         VAPID_PRIVATE_KEY: Web Push VAPID private key (Base64url-encoded)
         VAPID_SUBJECT: VAPID subject identifier (mailto: or https: URL)
+        RATE_LIMIT_STORAGE_URI: Storage backend URI for rate limiting (default: "memory://")
+            Use "memory://" for single-process deployments.
+            Use "redis://host:6379" for multi-worker or multi-instance deployments.
+            Use "memcached://host:11211" as an alternative to Redis.
+        SHUSAI_GEOIP_DB_PATH: Path to MaxMind GeoLite2-Country .mmdb file (default: "" = disabled)
+        SHUSAI_GEOIP_ALLOWED_COUNTRIES: Comma-separated allowed country codes (default: "" = none)
+        SHUSAI_GEOIP_FAIL_OPEN: Allow unknown IPs through when True (default: False)
     """
 
     # JWT settings for API tokens
@@ -55,6 +62,39 @@ class AppSettings(BaseSettings):
         default="",
         validation_alias="VAPID_SUBJECT",
         description="VAPID subject (mailto: or https: URL identifying the push sender)"
+    )
+
+    # Rate limiting storage backend
+    # Default: "memory://" (in-process, single-worker only)
+    # For multi-worker or multi-instance deployments, use a shared backend:
+    #   "redis://localhost:6379"       - Redis (recommended)
+    #   "memcached://localhost:11211"  - Memcached
+    #   "redis+sentinel://host:26379"  - Redis Sentinel (HA)
+    rate_limit_storage_uri: str = Field(
+        default="memory://",
+        validation_alias="RATE_LIMIT_STORAGE_URI",
+        description="Storage backend URI for rate limiting counters"
+    )
+
+    # GeoIP geofencing (optional)
+    # When SHUSAI_GEOIP_DB_PATH is set, requests are filtered by country.
+    # Only countries listed in SHUSAI_GEOIP_ALLOWED_COUNTRIES are allowed.
+    geoip_db_path: str = Field(
+        default="",
+        validation_alias="SHUSAI_GEOIP_DB_PATH",
+        description="Path to MaxMind GeoLite2-Country .mmdb database file. Empty = geofencing disabled."
+    )
+
+    geoip_allowed_countries: str = Field(
+        default="",
+        validation_alias="SHUSAI_GEOIP_ALLOWED_COUNTRIES",
+        description="Comma-separated ISO 3166-1 alpha-2 country codes (e.g., US,CA,GB)"
+    )
+
+    geoip_fail_open: bool = Field(
+        default=False,
+        validation_alias="SHUSAI_GEOIP_FAIL_OPEN",
+        description="If True, allow requests when GeoIP lookup returns no country. Default: False (block unknown)."
     )
 
     # Job execution settings
@@ -100,6 +140,18 @@ class AppSettings(BaseSettings):
         if not self.inmemory_job_types:
             return set()
         return {t.strip().lower() for t in self.inmemory_job_types.split(",") if t.strip()}
+
+    @property
+    def geoip_configured(self) -> bool:
+        """Check if GeoIP geofencing is configured."""
+        return bool(self.geoip_db_path)
+
+    @property
+    def geoip_allowed_countries_set(self) -> Set[str]:
+        """Get the set of allowed country codes (uppercase)."""
+        if not self.geoip_allowed_countries:
+            return set()
+        return {c.strip().upper() for c in self.geoip_allowed_countries.split(",") if c.strip()}
 
     def is_inmemory_job_type(self, tool_type: str) -> bool:
         """

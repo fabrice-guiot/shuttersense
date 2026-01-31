@@ -19,6 +19,8 @@ Environment Variables:
     SHUSAI_AUTHORIZED_LOCAL_ROOTS: Comma-separated list of authorized root
         paths for local collections (security - required for local collections)
     SHUSAI_SPA_DIST_PATH: Path to SPA dist directory (default: frontend/dist)
+    RATE_LIMIT_STORAGE_URI: Rate limit storage backend (default: memory://)
+        Use "redis://host:6379" for multi-worker deployments.
 """
 
 import asyncio
@@ -56,9 +58,16 @@ from version import __version__
 # ============================================================================
 # Rate Limiting Configuration (T168)
 # ============================================================================
-# Configure rate limiter with sensible defaults for single-user deployment
-# These protect against runaway scripts and misconfigured clients
-limiter = Limiter(key_func=get_remote_address)
+# Configure rate limiter with configurable storage backend.
+# Default: in-memory (single-process). Set RATE_LIMIT_STORAGE_URI for
+# multi-worker deployments (e.g., "redis://localhost:6379").
+from backend.src.config.settings import get_settings as _get_rate_limit_settings
+
+_rate_limit_storage = _get_rate_limit_settings().rate_limit_storage_uri
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=_rate_limit_storage,
+)
 
 
 # ============================================================================
@@ -479,6 +488,36 @@ async def lifespan(app: FastAPI):
                 "Sessions will not work. Set a strong secret key (min 32 characters)."
             )
 
+    # Log GeoIP geofencing configuration status
+    if _settings.geoip_configured:
+        if _geofence_reader is not None:
+            allowed = _settings.geoip_allowed_countries_set
+            fail_mode = "fail-open" if _settings.geoip_fail_open else "fail-closed"
+            if allowed:
+                logger.info(
+                    "GeoIP geofencing enabled — allowed countries: %s (%s, db: %s)",
+                    ", ".join(sorted(allowed)),
+                    fail_mode,
+                    _settings.geoip_db_path,
+                )
+            else:
+                logger.warning(
+                    "GeoIP database configured but SHUSAI_GEOIP_ALLOWED_COUNTRIES is empty — "
+                    "ALL requests from non-private IPs will be BLOCKED (%s)",
+                    fail_mode,
+                )
+        else:
+            logger.error(
+                "GeoIP database not found at %s — geofencing DISABLED. "
+                "Download GeoLite2-Country.mmdb from MaxMind.",
+                _settings.geoip_db_path,
+            )
+    else:
+        logger.info("GeoIP geofencing disabled (SHUSAI_GEOIP_DB_PATH not set)")
+
+    # Store GeoIP reader reference for shutdown cleanup
+    app.state.geoip_reader = _geofence_reader
+
     logger.info("ShutterSense backend started successfully")
 
     # Start dead agent safety net background task (Phase 8, T035)
@@ -509,6 +548,11 @@ async def lifespan(app: FastAPI):
         logger.info("Deadline check scheduler background task stopped")
     except Exception as e:
         logger.error(f"Deadline check scheduler failed: {e}")
+
+    # Close GeoIP reader if it was opened
+    if hasattr(app.state, 'geoip_reader') and app.state.geoip_reader:
+        app.state.geoip_reader.close()
+        logger.info("GeoIP database reader closed")
 
 
 # Initialize logging before creating app
@@ -654,11 +698,20 @@ app.state.limiter = limiter
 # Add rate limit exceeded handler
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Module-level reference for GeoIP reader (opened conditionally below, closed in lifespan)
+_geofence_reader = None
+_geofence_settings = _get_rate_limit_settings()  # Reuse cached AppSettings
+
 # ============================================================================
 # Security Middlewares (T169, T170)
 # ============================================================================
-# Note: Middleware order matters - first added is outermost
-# Add request size limit middleware
+# Note: Starlette middleware order is LIFO — last added runs first (outermost).
+# Registration order below (innermost → outermost):
+#   1. RequestSizeLimitMiddleware (innermost)
+#   2. SecurityHeadersMiddleware
+#   3. CORS
+#   4. SessionMiddleware
+#   5. GeoFenceMiddleware (outermost, if enabled) — added after Session below
 app.add_middleware(RequestSizeLimitMiddleware)
 
 # Add security headers middleware
@@ -715,6 +768,26 @@ else:
         "Set SESSION_SECRET_KEY in .env to enable OAuth login.",
         UserWarning
     )
+
+# ============================================================================
+# GeoIP Geofencing Middleware (optional, outermost)
+# ============================================================================
+# Added last so it runs first (outermost in Starlette's LIFO middleware stack).
+# When configured via SHUSAI_GEOIP_DB_PATH and SHUSAI_GEOIP_ALLOWED_COUNTRIES,
+# blocks requests from countries not in the allowlist before any other processing.
+if _geofence_settings.geoip_configured:
+    import os as _geofence_os
+    if _geofence_os.path.isfile(_geofence_settings.geoip_db_path):
+        import geoip2.database as _geoip2_db
+        from backend.src.middleware.geofence import GeoFenceMiddleware
+
+        _geofence_reader = _geoip2_db.Reader(_geofence_settings.geoip_db_path)
+        app.add_middleware(
+            GeoFenceMiddleware,
+            reader=_geofence_reader,
+            allowed_countries=_geofence_settings.geoip_allowed_countries_set,
+            fail_open=_geofence_settings.geoip_fail_open,
+        )
 
 
 # ============================================================================

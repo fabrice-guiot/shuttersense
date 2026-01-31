@@ -22,10 +22,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from backend.src.db.database import get_db
+from backend.src.main import limiter
 from backend.src.middleware.auth import require_super_admin, TenantContext
 from backend.src.services.auth_service import AuthService
 from backend.src.services.exceptions import ValidationError
@@ -33,9 +32,6 @@ from backend.src.utils.logging_config import get_logger
 
 
 logger = get_logger("api")
-
-# Rate limiter for auth endpoints
-limiter = Limiter(key_func=get_remote_address)
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])

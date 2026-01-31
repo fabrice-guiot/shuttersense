@@ -21,11 +21,10 @@ from fastapi import (
     APIRouter, Depends, HTTPException, Query, Request, WebSocket,
     WebSocketDisconnect, status
 )
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.main import limiter
 from backend.src.middleware.tenant import TenantContext, get_tenant_context
 from backend.src.schemas.tools import (
     ToolType, ToolMode, JobStatus, ToolRunRequest, JobResponse,
@@ -47,9 +46,6 @@ router = APIRouter(
     prefix="/tools",
     tags=["Tools"],
 )
-
-# Rate limiter instance - shared from main app
-limiter = Limiter(key_func=get_remote_address)
 
 
 # ============================================================================
