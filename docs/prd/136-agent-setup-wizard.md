@@ -123,17 +123,17 @@ May need to set up an agent on their personal machine to process local photo col
 
 **FR-200.5**: When the user overrides the OS, the wizard MUST display a warning: *"You selected a different platform than detected. Make sure this matches the machine where you will install the agent."*
 
-**FR-200.6**: The wizard MUST fetch the active release manifest from the backend (`GET /api/agent/v1/releases/active` or equivalent) to determine available platforms and the download URL/checksum.
+**FR-200.6**: The wizard MUST fetch the active release manifest from the backend (`GET /api/agent/v1/releases/active` or equivalent) to determine available platforms. The manifest contains an `artifacts` array with per-platform entries, each specifying `platform`, `filename`, and `checksum`.
 
-**FR-200.7**: If a build exists for the selected platform, the wizard MUST display a **"Download Agent"** button that initiates a download of the binary.
+**FR-200.7**: If a matching artifact exists for the selected platform in the manifest's `artifacts` array, the wizard MUST display a **"Download Agent"** button that initiates a download of the binary using `{download_base_url}/{artifact.filename}`.
 
-**FR-200.8**: If no build exists for the selected platform, the wizard MUST display an informational message: *"No agent build is available for {platform}. Please contact your administrator."* The "Next" button MUST be disabled.
+**FR-200.8**: If no matching artifact exists for the selected platform, the wizard MUST display an informational message: *"No agent build is available for {platform}. Please contact your administrator."* The "Next" button MUST be disabled.
 
-**FR-200.9**: If no release manifests exist at all (no builds uploaded yet), the wizard MUST display: *"No agent builds have been published yet. Please contact your administrator to upload agent binaries."* The "Next" button MUST be disabled.
+**FR-200.9**: If no release manifests exist at all (no builds uploaded yet), the wizard MUST display a warning banner: *"No agent builds have been published yet. You can continue to create a registration token and view CLI commands, but you will need to obtain the agent binary separately. Contact your administrator to upload agent binaries."* The "Next" button MUST remain enabled so the user can proceed with the token-creation and CLI-reference steps of the wizard.
 
-**FR-200.10**: The download button SHOULD display the binary filename and file size when available.
+**FR-200.10**: The download button SHOULD display the artifact's `filename` and file size when available.
 
-**FR-200.11**: The wizard MUST display the SHA-256 checksum of the binary so the user can verify the download integrity.
+**FR-200.11**: The wizard MUST display the per-platform `checksum` from the matching artifact so the user can verify download integrity.
 
 #### FR-300: Step 2 — Registration Token
 
@@ -156,16 +156,16 @@ May need to set up an agent on their personal machine to process local photo col
 **FR-400.1**: Step 3 MUST display OS-specific instructions for registering the agent.
 
 **FR-400.2**: The wizard MUST display a pre-populated, copy-ready `register` command:
-```
+```bash
 shuttersense-agent register --server {server_url} --token {token}
 ```
 
-**FR-400.3**: The `{server_url}` MUST be automatically set to the current application URL (the URL the user is accessing the web app from).
+**FR-400.3**: The `{server_url}` MUST be resolved from the application's API base URL configuration (e.g., the `apiBaseUrl` value already used by the frontend HTTP client in `frontend/src/services/`). If the config value is not set, `window.location.origin` MUST be used as a fallback. Before substitution, the resolved URL MUST be validated (well-formed URL with scheme) and normalized (trailing slashes stripped).
 
 **FR-400.4**: The `{token}` MUST be the token generated in Step 2.
 
 **FR-400.5**: For macOS and Linux, the wizard MUST include a preliminary step to make the binary executable:
-```
+```bash
 chmod +x ./shuttersense-agent
 ```
 
@@ -176,7 +176,7 @@ chmod +x ./shuttersense-agent
 #### FR-500: Step 4 — Agent Launch
 
 **FR-500.1**: Step 4 MUST display the command to start the agent:
-```
+```bash
 shuttersense-agent start
 ```
 
@@ -185,7 +185,7 @@ shuttersense-agent start
 **FR-500.3**: The wizard MUST display a note: *"Keep this terminal window open while the agent is running. For automatic startup, proceed to the next step to configure a background service."*
 
 **FR-500.4**: The wizard MUST also show the `self-test` command for verifying the agent is correctly configured:
-```
+```bash
 shuttersense-agent self-test
 ```
 
@@ -378,7 +378,7 @@ sudo systemctl status shuttersense-agent
 
 The wizard is implemented entirely as a frontend component. It composes existing API calls (token creation, release manifest retrieval) into a guided multi-step flow. No new backend endpoints are needed.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │  AgentsPage                                             │
 │  ┌───────────────────┐  ┌────────────────────────────┐  │
@@ -410,7 +410,7 @@ The wizard is implemented entirely as a frontend component. It composes existing
 ### New Files
 
 | File | Purpose |
-|------|---------|
+| ------ | ------- |
 | `frontend/src/components/agents/AgentSetupWizardDialog.tsx` | Root wizard dialog component with step state management |
 | `frontend/src/components/agents/wizard/DownloadStep.tsx` | Step 1: OS detection + binary download |
 | `frontend/src/components/agents/wizard/TokenStep.tsx` | Step 2: Registration token creation |
@@ -426,10 +426,10 @@ The wizard is implemented entirely as a frontend component. It composes existing
 ### Modified Files
 
 | File | Change |
-|------|--------|
+| ------ | ------ |
 | `frontend/src/pages/AgentsPage.tsx` | Add "Agent Setup" button next to existing token button |
 | `frontend/src/services/agents.ts` | Add `getActiveRelease()` function (if release manifest endpoint exists) |
-| `frontend/src/contracts/api/agent-api.ts` | Add release manifest types (if not already present) |
+| `frontend/src/contracts/api/agent-api.ts` | Add `ReleaseManifest` and `ReleaseArtifact` types (if not already present) |
 
 ### OS Detection Logic
 
@@ -553,9 +553,24 @@ interface WizardState {
   releaseManifest: ReleaseManifest | null
   createdToken: string | null      // plaintext token (in-memory only)
   tokenName: string | null
+  serverUrl: string                // resolved once on wizard init (see getServerUrl)
   binaryPath: string               // user-provided for service setup
   serviceUser: string              // user-provided for systemd
   skippedService: boolean
+}
+
+/**
+ * Resolve the server URL for the register command.
+ * Reads the app-level API base URL config (apiBaseUrl) used by the
+ * frontend HTTP client. Falls back to window.location.origin when
+ * the config value is not set. The returned URL is validated
+ * (must have a scheme) and normalized (trailing slashes stripped).
+ */
+function getServerUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL  // or appConfig.apiBaseUrl
+    || window.location.origin
+  const url = new URL(configured) // throws on invalid URL
+  return url.origin               // scheme + host, no trailing slash
 }
 
 const WIZARD_STEPS = [
@@ -572,17 +587,17 @@ const WIZARD_STEPS = [
 
 The wizard requires agent binaries to be downloadable. This PRD assumes one of the following distribution mechanisms exists (or will be set up independently):
 
-**Option A — Static file serving**: Agent binaries are placed in a static directory served by the web server (e.g., `/agent-dist/{version}/shuttersense-agent-{platform}`). The release manifest stores the version and platform list; the frontend constructs the download URL.
+**Option A — Static file serving**: Agent binaries are placed in a static directory served by the web server (e.g., `/agent-dist/{version}/shuttersense-agent-{platform}`). The release manifest stores the version and an `artifacts` array with per-platform filenames and checksums; the frontend constructs the download URL from `download_base_url` + `artifact.filename`.
 
 **Option B — Backend download endpoint**: A new endpoint `GET /api/agent/v1/releases/{version}/download?platform={platform}` streams the binary. This is more controlled but requires backend changes.
 
-This PRD recommends **Option A** for simplicity, with the download URL pattern configurable via an environment variable (`AGENT_DIST_BASE_URL`). If the distribution mechanism is not yet in place, the wizard gracefully degrades (FR-200.9).
+This PRD recommends **Option A** for simplicity, with the download URL pattern configurable via an environment variable (`AGENT_DIST_BASE_URL`). If no release manifests have been published, the wizard gracefully degrades per FR-200.9: it warns the user that no binary is available for download but allows them to continue through the remaining wizard steps (token creation, CLI commands, service setup).
 
 ### Release Manifest API
 
 If a release manifest list endpoint does not yet exist, a minimal one is needed:
 
-```
+```text
 GET /api/agent/v1/releases/active
 ```
 
@@ -591,16 +606,31 @@ Response:
 {
   "guid": "rel_01hgw2bbg...",
   "version": "1.0.0",
-  "platforms": ["darwin-arm64", "darwin-amd64", "linux-amd64"],
-  "checksum": "sha256:abc123...",
   "download_base_url": "https://example.com/agent-dist/1.0.0/",
+  "artifacts": [
+    {
+      "platform": "darwin-arm64",
+      "filename": "shuttersense-agent-darwin-arm64",
+      "checksum": "sha256:a1b2c3d4..."
+    },
+    {
+      "platform": "darwin-amd64",
+      "filename": "shuttersense-agent-darwin-amd64",
+      "checksum": "sha256:e5f6a7b8..."
+    },
+    {
+      "platform": "linux-amd64",
+      "filename": "shuttersense-agent-linux-amd64",
+      "checksum": "sha256:c9d0e1f2..."
+    }
+  ],
   "notes": "Initial release"
 }
 ```
 
 The frontend constructs the download URL as:
-```
-{download_base_url}/shuttersense-agent-{platform}
+```text
+{download_base_url}/{artifact.filename}
 ```
 
 ---
@@ -632,7 +662,7 @@ The frontend constructs the download URL as:
 ### Phase 3: Registration & Launch Steps
 
 **Tasks:**
-1. Implement `RegisterStep.tsx` — display `chmod` + `register` commands with auto-populated server URL and token.
+1. Implement `RegisterStep.tsx` — display `chmod` + `register` commands with server URL read from app config (`apiBaseUrl`, falling back to `window.location.origin`) and token from wizard state.
 2. Implement `LaunchStep.tsx` — display `start` and `self-test` commands, collapsible "Previous Commands" section.
 3. Write unit tests for command generation with various server URLs and token values.
 
@@ -665,7 +695,7 @@ The frontend constructs the download URL as:
 ## Alternatives Considered
 
 | Approach | Pros | Cons | Decision |
-|----------|------|------|----------|
+| -------- | ---- | ---- | -------- |
 | **Multi-step wizard dialog (chosen)** | Guided flow, no page navigation, reuses existing APIs | Larger dialog component, more frontend code | **Selected** — best balance of UX and implementation cost |
 | **Dedicated setup page (`/agents/setup`)** | More screen real estate, URL-shareable | Breaks modal pattern used elsewhere, requires routing changes | Rejected — unnecessary for a one-time flow |
 | **Expandable inline guide on Agents page** | No dialog, always visible | Clutters the page, poor mobile experience | Rejected — too intrusive for a one-time action |
@@ -683,9 +713,9 @@ The frontend constructs the download URL as:
 
 ### R-2: No release manifests available
 
-- **Impact**: High — wizard cannot provide a download link
+- **Impact**: Medium — wizard cannot provide a download link, but remains functional for token creation and CLI command reference
 - **Probability**: Medium — depends on admin having uploaded binaries
-- **Mitigation**: Graceful degradation (FR-200.9) with clear messaging; wizard can still be used for token creation and CLI command reference even without a download link
+- **Mitigation**: Graceful degradation (FR-200.9): the wizard displays a warning banner on Step 1 but does **not** block progression. Users can still complete Steps 2–6 (token creation, registration commands, launch instructions, service setup, and summary). The warning directs users to contact their administrator for the binary. Step 1's "Download Agent" button is hidden when no manifest is available, but "Next" remains enabled.
 
 ### R-3: Token expires before user completes setup
 
@@ -704,7 +734,7 @@ The frontend constructs the download URL as:
 ## Success Metrics
 
 | Metric | Target | Measurement |
-|--------|--------|-------------|
+| ------ | ------ | ----------- |
 | Agent setup completion rate | > 80% of wizard starts result in a successfully registered agent within 1 hour | Backend: track registration events correlated with wizard-created tokens |
 | Time from wizard open to agent online | < 5 minutes for experienced users | Timestamp delta: token created_at → agent first heartbeat |
 | Support requests for agent setup | 50% reduction vs. pre-wizard baseline | Support ticket categorization |
