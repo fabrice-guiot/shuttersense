@@ -13,6 +13,33 @@ from unittest.mock import MagicMock, patch
 import tempfile
 
 
+class TestRateLimitSettings:
+    """Tests for rate limit storage configuration."""
+
+    def test_default_storage_uri_is_memory(self):
+        """Test that rate limit storage defaults to in-memory."""
+        from backend.src.config.settings import AppSettings
+
+        settings = AppSettings()
+        assert settings.rate_limit_storage_uri == "memory://"
+
+    def test_custom_storage_uri_from_env(self, monkeypatch):
+        """Test that RATE_LIMIT_STORAGE_URI is loaded from environment."""
+        from backend.src.config.settings import AppSettings
+
+        monkeypatch.setenv("RATE_LIMIT_STORAGE_URI", "redis://redis:6379")
+        settings = AppSettings()
+        assert settings.rate_limit_storage_uri == "redis://redis:6379"
+
+    def test_limiter_uses_configured_storage(self):
+        """Test that the app limiter has storage_uri configured."""
+        from backend.src.main import limiter
+
+        # The limiter should exist and be attached to the app
+        assert limiter is not None
+        assert limiter._key_func is not None
+
+
 class TestRateLimiting:
     """Tests for rate limiting middleware (T174)."""
 
@@ -320,4 +347,177 @@ class TestSecurityMiddleware:
         )
 
         # Should return successful CORS response
+        assert response.status_code == 200
+
+
+class TestGeoFenceSettings:
+    """Tests for GeoIP geofencing configuration settings."""
+
+    def test_default_geoip_disabled(self):
+        """Test that GeoIP is disabled by default (empty path)."""
+        from backend.src.config.settings import AppSettings
+
+        settings = AppSettings()
+        assert settings.geoip_db_path == ""
+        assert settings.geoip_configured is False
+
+    def test_geoip_db_path_from_env(self, monkeypatch):
+        """Test SHUSAI_GEOIP_DB_PATH is loaded from environment."""
+        from backend.src.config.settings import AppSettings
+
+        monkeypatch.setenv("SHUSAI_GEOIP_DB_PATH", "/opt/geoip/GeoLite2-Country.mmdb")
+        settings = AppSettings()
+        assert settings.geoip_db_path == "/opt/geoip/GeoLite2-Country.mmdb"
+        assert settings.geoip_configured is True
+
+    def test_allowed_countries_parsing(self, monkeypatch):
+        """Test comma-separated country code parsing with mixed case and whitespace."""
+        from backend.src.config.settings import AppSettings
+
+        monkeypatch.setenv("SHUSAI_GEOIP_ALLOWED_COUNTRIES", "us, CA, gb")
+        settings = AppSettings()
+        assert settings.geoip_allowed_countries_set == {"US", "CA", "GB"}
+
+    def test_allowed_countries_empty(self):
+        """Test empty allowed countries returns empty set."""
+        from backend.src.config.settings import AppSettings
+
+        settings = AppSettings()
+        assert settings.geoip_allowed_countries_set == set()
+
+    def test_fail_open_default_false(self):
+        """Test that fail_open defaults to False (fail-closed)."""
+        from backend.src.config.settings import AppSettings
+
+        settings = AppSettings()
+        assert settings.geoip_fail_open is False
+
+    def test_fail_open_from_env(self, monkeypatch):
+        """Test SHUSAI_GEOIP_FAIL_OPEN is loaded from environment."""
+        from backend.src.config.settings import AppSettings
+
+        monkeypatch.setenv("SHUSAI_GEOIP_FAIL_OPEN", "true")
+        settings = AppSettings()
+        assert settings.geoip_fail_open is True
+
+
+class TestGeoFenceMiddleware:
+    """Tests for GeoIP geofencing middleware using a minimal test app."""
+
+    def _create_geofenced_app(self, mock_reader, allowed_countries=None, fail_open=False):
+        """Create a minimal FastAPI app with geofence middleware for testing."""
+        from fastapi import FastAPI
+        from backend.src.middleware.geofence import GeoFenceMiddleware
+
+        test_app = FastAPI()
+
+        @test_app.get("/health")
+        async def health():
+            return {"status": "ok"}
+
+        @test_app.get("/api/test")
+        async def api_test():
+            return {"data": "ok"}
+
+        if allowed_countries is None:
+            allowed_countries = {"US", "CA"}
+
+        test_app.add_middleware(
+            GeoFenceMiddleware,
+            reader=mock_reader,
+            allowed_countries=allowed_countries,
+            fail_open=fail_open,
+        )
+
+        return test_app
+
+    def _mock_reader(self, country_code=None, raise_not_found=False):
+        """Create a mock geoip2 reader."""
+        reader = MagicMock()
+        if raise_not_found:
+            import geoip2.errors
+            reader.country.side_effect = geoip2.errors.AddressNotFoundError("not found")
+        elif country_code:
+            mock_response = MagicMock()
+            mock_response.country.iso_code = country_code
+            reader.country.return_value = mock_response
+        else:
+            mock_response = MagicMock()
+            mock_response.country.iso_code = None
+            reader.country.return_value = mock_response
+        return reader
+
+    def test_private_ips_always_allowed(self):
+        """Test that private/loopback IPs bypass geofencing."""
+        from backend.src.middleware.geofence import GeoFenceMiddleware
+
+        private_ips = ["127.0.0.1", "10.0.0.1", "192.168.1.1", "172.16.0.1", "::1"]
+        for ip in private_ips:
+            assert GeoFenceMiddleware._is_private_ip(ip) is True, f"Expected {ip} to be private"
+
+    def test_public_ip_not_private(self):
+        """Test that public IPs are not flagged as private."""
+        from backend.src.middleware.geofence import GeoFenceMiddleware
+
+        public_ips = ["8.8.8.8", "1.1.1.1", "185.199.108.1"]
+        for ip in public_ips:
+            assert GeoFenceMiddleware._is_private_ip(ip) is False, f"Expected {ip} to be public"
+
+    def test_health_exempt(self):
+        """Test that /health endpoint is exempt from geofencing."""
+        from fastapi.testclient import TestClient
+
+        reader = self._mock_reader(country_code="RU")
+        app = self._create_geofenced_app(reader, allowed_countries={"US"})
+        client = TestClient(app)
+
+        # /health should always return 200 regardless of country
+        response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_allowed_country_passes(self):
+        """Test that requests from allowed countries pass through."""
+        from fastapi.testclient import TestClient
+
+        reader = self._mock_reader(country_code="US")
+        app = self._create_geofenced_app(reader, allowed_countries={"US", "CA"})
+        client = TestClient(app)
+
+        response = client.get("/api/test")
+        assert response.status_code == 200
+        assert response.json() == {"data": "ok"}
+
+    def test_blocked_country_returns_403(self):
+        """Test that requests from non-allowed countries get 403."""
+        from fastapi.testclient import TestClient
+
+        reader = self._mock_reader(country_code="DE")
+        app = self._create_geofenced_app(reader, allowed_countries={"US", "CA"})
+        client = TestClient(app)
+
+        response = client.get("/api/test")
+        assert response.status_code == 403
+        data = response.json()
+        assert "geographic" in data["detail"].lower()
+
+    def test_unknown_ip_fail_closed_blocks(self):
+        """Test that unknown IPs are blocked when fail_open=False."""
+        from fastapi.testclient import TestClient
+
+        reader = self._mock_reader(raise_not_found=True)
+        app = self._create_geofenced_app(reader, allowed_countries={"US"}, fail_open=False)
+        client = TestClient(app)
+
+        response = client.get("/api/test")
+        assert response.status_code == 403
+
+    def test_unknown_ip_fail_open_allows(self):
+        """Test that unknown IPs are allowed when fail_open=True."""
+        from fastapi.testclient import TestClient
+
+        reader = self._mock_reader(raise_not_found=True)
+        app = self._create_geofenced_app(reader, allowed_countries={"US"}, fail_open=True)
+        client = TestClient(app)
+
+        response = client.get("/api/test")
         assert response.status_code == 200

@@ -536,7 +536,12 @@ class NotificationService:
         """
         try:
             from pywebpush import webpush, WebPushException
+        except ImportError as e:
+            raise PushDeliveryError(
+                "pywebpush is not installed. Install with: pip install pywebpush"
+            ) from e
 
+        try:
             subscription_info = {
                 "endpoint": subscription.endpoint,
                 "keys": {

@@ -46,7 +46,7 @@ Internet ──▶ [Reverse Proxy (TLS)] ──▶ [FastAPI Backend] ──▶ [
 
 The application implements layered security:
 
-1. **Network**: TLS termination at reverse proxy, CORS, rate limiting
+1. **Network**: TLS termination at reverse proxy, CORS, rate limiting, GeoIP geofencing (optional)
 2. **Transport**: Session cookies with SameSite, HTTPS-only enforcement
 3. **Application**: Input validation (Pydantic), SQL injection prevention (SQLAlchemy ORM), security headers (CSP, X-Frame-Options)
 4. **Data**: Fernet encryption for stored credentials, SHA-256 hashed API tokens
@@ -322,6 +322,45 @@ All other endpoints require authentication.
 - Tool execution: 10 requests/minute per IP
 - Global default via slowapi middleware
 
+### Rate Limiting Storage
+
+By default, rate limiting counters are stored in-process (`memory://`). This works for single-worker deployments but does **not** share counters across workers or instances.
+
+For multi-worker (`uvicorn --workers N`) or multi-instance deployments, configure a shared storage backend:
+
+| `RATE_LIMIT_STORAGE_URI` | Backend | Notes |
+|---------------------------|---------|-------|
+| `memory://` (default) | In-process | Single-worker only |
+| `redis://host:6379` | Redis | Recommended. Requires `pip install redis`. |
+| `memcached://host:11211` | Memcached | Requires `pip install pymemcache`. |
+| `redis+sentinel://host:26379` | Redis Sentinel | High-availability Redis. |
+
+Without a shared backend, each worker maintains independent counters, effectively multiplying the rate limit by the number of workers.
+
+### GeoIP Geofencing (Optional)
+
+GeoIP geofencing restricts API access based on the geographic origin of the request, using a local MaxMind GeoLite2-Country database.
+
+**Configuration:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SHUSAI_GEOIP_DB_PATH` | Path to GeoLite2-Country `.mmdb` file | `""` (disabled) |
+| `SHUSAI_GEOIP_ALLOWED_COUNTRIES` | Comma-separated ISO 3166-1 alpha-2 codes | `""` |
+| `SHUSAI_GEOIP_FAIL_OPEN` | Allow unknown IPs when `true` | `false` (block) |
+
+**Behavior:**
+
+- When `SHUSAI_GEOIP_DB_PATH` is empty or not set, geofencing is completely disabled (zero overhead)
+- Private/loopback IPs (127.x, 10.x, 172.16-31.x, 192.168.x, ::1) always bypass geofencing
+- The `/health` endpoint is always exempt
+- Blocked requests receive `403 Forbidden` with `{"detail": "Access denied based on geographic restrictions"}`
+- An empty `SHUSAI_GEOIP_ALLOWED_COUNTRIES` with a configured database path blocks **all** non-private requests
+
+**IP address resolution:** The middleware uses `request.client.host`, which is set by Uvicorn's built-in `ProxyHeadersMiddleware` when `--proxy-headers` and `--forwarded-allow-ips` are configured. This is the same mechanism SlowAPI uses for rate limiting. See the [Reverse Proxy](#reverse-proxy) section for configuration details.
+
+**Database freshness:** The GeoLite2 database is loaded once at application startup. To pick up updates, restart the application. Use [geoipupdate](https://github.com/maxmind/geoipupdate) with a weekly cron job to keep the database current.
+
 ### Security Headers
 
 Applied to all responses via `SecurityHeadersMiddleware`:
@@ -424,6 +463,14 @@ Place nginx (or equivalent) in front of the application:
 - Configure WebSocket proxying for `/api/tools/ws/` paths
 - Set `client_max_body_size` to match the application's 10MB limit
 
+**Important for IP-based security features** (rate limiting, GeoIP geofencing): Uvicorn must be started with `--proxy-headers` and `--forwarded-allow-ips` set to the reverse proxy's IP addresses. This ensures `X-Forwarded-For` is trusted only from legitimate proxies and prevents IP spoofing:
+
+```bash
+uvicorn src.main:app --proxy-headers --forwarded-allow-ips="10.0.0.1,10.0.0.2"
+```
+
+Without `--forwarded-allow-ips`, clients can spoof their IP address via the `X-Forwarded-For` header, bypassing both rate limits and geofencing.
+
 ### Database
 
 - Use a dedicated database user with minimal required privileges
@@ -468,6 +515,7 @@ Place nginx (or equivalent) in front of the application:
 - [ ] `REQUIRE_AGENT_ATTESTATION=true` (if using distributed agents)
 - [ ] `SHUSAI_AUTHORIZED_LOCAL_ROOTS` set to specific paths (or unset to disable local collections)
 - [ ] `INMEMORY_JOB_TYPES` left empty (all jobs processed by agents)
+- [ ] `RATE_LIMIT_STORAGE_URI` set to Redis for multi-worker deployments
 
 ### Database Security
 
@@ -476,6 +524,14 @@ Place nginx (or equivalent) in front of the application:
 - [ ] Database password is unique and strong
 - [ ] Alembic migrations run successfully (`alembic upgrade head`)
 - [ ] Database backups configured and tested
+
+### Geographic Access Control (Optional)
+
+- [ ] GeoLite2-Country database downloaded and path configured (`SHUSAI_GEOIP_DB_PATH`)
+- [ ] Allowed countries list matches operational requirements (`SHUSAI_GEOIP_ALLOWED_COUNTRIES`)
+- [ ] `SHUSAI_GEOIP_FAIL_OPEN=false` (fail-closed for unknown IPs)
+- [ ] Uvicorn `--forwarded-allow-ips` set to reverse proxy IPs only
+- [ ] Database update automation configured (`geoipupdate` cron, weekly)
 
 ### Monitoring
 

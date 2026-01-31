@@ -46,6 +46,10 @@ pywebpush>=2.0.0  # Web Push protocol with VAPID authentication
 
 # Security
 slowapi>=0.1.9  # Rate limiting middleware
+# For Redis-backed rate limiting (multi-worker deployments), install:
+#   pip install redis
+# Then set RATE_LIMIT_STORAGE_URI=redis://localhost:6379
+geoip2>=4.8.0  # GeoIP geofencing (requires MaxMind GeoLite2-Country database)
 
 # Authentication (OAuth 2.0 + PKCE)
 authlib>=1.6.0  # OAuth 2.0/OpenID Connect client
