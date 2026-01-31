@@ -624,8 +624,9 @@ function userName(user: AuditUserSummary | null): string {
 
 export function AuditTrailPopover({ audit }: AuditTrailPopoverProps) {
   const isUnmodified = audit.created_at === audit.updated_at
-  const summaryTime = formatRelativeTime(audit.updated_at)
-
+  const summaryTime = formatRelativeTime(
+    isUnmodified ? audit.created_at : audit.updated_at
+  )
   return (
     <Popover>
       <PopoverTrigger asChild>
