@@ -129,7 +129,9 @@ May need to set up an agent on their personal machine to process local photo col
 
 **FR-200.7a**: Before enabling the download button, the wizard MUST validate that `download_base_url` starts with `https://` and parses as a well-formed URL. If the check fails (e.g., `http://` or malformed), the wizard MUST NOT show the download button and MUST display a warning: *"The agent download URL is not served over HTTPS. Downloads are disabled for security. Contact your administrator to configure a secure distribution URL."* The "Next" button MUST remain enabled (same degradation as FR-200.9). **Exception**: `http://localhost` and `http://127.0.0.1` are permitted for local development environments.
 
-**FR-200.8**: If no matching artifact exists for the selected platform, the wizard MUST display an informational message: *"No agent build is available for {platform}. Please contact your administrator."* The "Next" button MUST be disabled.
+**FR-200.7b**: If the download initiated by the "Download Agent" button (FR-200.7) fails due to a network error, HTTP error (e.g., 404 Not Found, 500 Server Error), or CORS restriction, the wizard MUST display an inline error message: *"Download failed: {error_details}. Verify the distribution URL is correct and accessible."* The wizard MUST replace the "Download Agent" button with a **"Retry Download"** button that re-attempts the same request. A secondary note MUST read: *"If the problem persists, contact your administrator."* The "Next" button MUST remain enabled so the user can continue the wizard even if the download must be obtained through other means.
+
+**FR-200.8**: If no matching artifact exists for the selected platform, the wizard MUST display an informational message: *"No agent build is available for {platform}. You can continue to create a registration token and view CLI commands, but you will need to obtain the agent binary separately. Contact your administrator."* The "Next" button MUST remain enabled so the user can proceed with the remaining wizard steps (consistent with the graceful-degradation behavior of FR-200.9).
 
 **FR-200.9**: If no release manifests exist at all (no builds uploaded yet), the wizard MUST display a warning banner: *"No agent builds have been published yet. You can continue to create a registration token and view CLI commands, but you will need to obtain the agent binary separately. Contact your administrator to upload agent binaries."* The "Next" button MUST remain enabled so the user can proceed with the token-creation and CLI-reference steps of the wizard.
 
@@ -149,7 +151,7 @@ May need to set up an agent on their personal machine to process local photo col
 
 **FR-300.5**: The wizard MUST display a warning: *"This token will only be shown once. Copy it now."*
 
-**FR-300.6**: If a token has already been created in this wizard session, navigating back to Step 2 and forward again MUST NOT create a duplicate token. The previously created token MUST be displayed (or a message indicating a token was already created).
+**FR-300.6**: If a token has already been created in this wizard session, navigating back to Step 2 and forward again MUST NOT create a duplicate token. The wizard MUST redisplay the previously created plaintext token value with a **"Copy"** button and a notice: *"This token was previously created in this session — store it securely now."* The token creation form MUST be hidden and replaced with this read-only display. The token value MUST remain accessible (not masked behind a "Show" toggle) because the user may need to copy it again for the registration step.
 
 **FR-300.7**: The wizard MUST NOT allow proceeding to Step 3 until a token has been created and is visible.
 
@@ -204,7 +206,13 @@ shuttersense-agent self-test
 - Linux: `/usr/local/bin/shuttersense-agent`
 - Windows: `C:\Program Files\ShutterSense\shuttersense-agent.exe`
 
-**FR-600.4**: For **macOS**, the wizard MUST generate a `launchd` property list (`.plist`) file content:
+**FR-600.3a**: The wizard MUST validate the binary path entered in FR-600.2 / FR-600.3 with real-time feedback as the user types:
+- **Absoluteness**: The path MUST be absolute — starting with `/` on macOS/Linux or a drive letter (e.g., `C:\`) on Windows. Relative paths MUST be rejected with: *"Path must be absolute (e.g., /usr/local/bin/shuttersense-agent)."*
+- **OS format**: The path MUST match the OS-specific format for the selected platform. Forward slashes for macOS/Linux; backslashes (or forward slashes) for Windows.
+- **Spaces warning**: If the path contains spaces, the wizard MUST display a non-blocking warning: *"Path contains spaces. It will be properly quoted/escaped in the generated service file."* The wizard MUST ensure the generated plist and systemd files handle the path correctly (no additional escaping needed for plist XML; systemd `ExecStart` does not require quoting for paths with spaces).
+- **Empty path**: If the field is empty, the "Generate" / service file display MUST be disabled with a prompt to enter the path.
+
+**FR-600.4**: For **macOS**, the wizard MUST generate a `launchd` property list (`.plist`) file content. Log paths MUST use persistent locations that survive reboots (not `/tmp`):
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -223,15 +231,20 @@ shuttersense-agent self-test
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/shuttersense-agent.stdout.log</string>
+    <string>/var/log/shuttersense/shuttersense-agent.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/shuttersense-agent.stderr.log</string>
+    <string>/var/log/shuttersense/shuttersense-agent.stderr.log</string>
 </dict>
 </plist>
 ```
 
-**FR-600.5**: For macOS, the wizard MUST display installation commands:
+**FR-600.5**: For macOS, the wizard MUST display installation commands. The commands MUST create the log directory with appropriate ownership before loading the plist:
 ```bash
+# Create the log directory
+sudo mkdir -p /var/log/shuttersense
+sudo chown root:wheel /var/log/shuttersense
+sudo chmod 755 /var/log/shuttersense
+
 # Save the plist file
 sudo cp ai.shuttersense.agent.plist /Library/LaunchDaemons/
 
@@ -280,7 +293,7 @@ sudo systemctl status shuttersense-agent
 
 **FR-600.10**: The `{binary_path}` placeholder in all generated files MUST be replaced with the path the user provided in FR-600.2.
 
-**FR-600.11**: The Linux service file MUST include a `{current_user}` placeholder with a default suggestion based on common conventions (e.g., the user's login name), editable by the user.
+**FR-600.11**: The Linux systemd service file requires a `User=` value (the `{current_user}` placeholder in FR-600.6). The wizard MUST NOT attempt to auto-detect the browser user's OS login name. Instead, the wizard MUST present a **"Service User"** text input pre-filled with the suggested default `shuttersense`, clearly labeled: *"Enter the Linux username the agent will run as (default: shuttersense)."* The field MUST be editable so the user can replace it with their actual username. The input MUST be non-empty before the service file is generated.
 
 #### FR-700: Step 6 — Summary & Completion
 
@@ -453,13 +466,33 @@ export interface DetectedOS {
   confidence: 'high' | 'low'
 }
 
+/**
+ * Attempt Apple Silicon detection via WebGL renderer string.
+ * Returns true if the GPU is a known Apple Silicon GPU, false otherwise.
+ * This is a best-effort heuristic — the user can always override manually.
+ */
+function checkAppleSilicon(): boolean {
+  try {
+    const canvas = document.createElement('canvas')
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+    if (!gl) return false
+    const debugExt = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info')
+    if (!debugExt) return false
+    const renderer = (gl as WebGLRenderingContext).getParameter(debugExt.UNMASKED_RENDERER_WEBGL)
+    // Apple Silicon GPUs report "Apple M1", "Apple M2", "Apple GPU", etc.
+    return /Apple (M\d|GPU)/i.test(renderer)
+  } catch {
+    return false
+  }
+}
+
 export function detectPlatform(): DetectedOS {
   const ua = navigator.userAgent
   const platform = navigator.platform
 
   if (/Mac/.test(platform)) {
-    // Check for Apple Silicon via WebGL renderer or platform hints
-    const isArm = /ARM/.test(ua) || checkAppleSilicon()
+    // Heuristic: check userAgent for ARM hints, then probe WebGL renderer
+    const isArm = /ARM|aarch64|arm64/i.test(ua) || checkAppleSilicon()
     return {
       platform: isArm ? 'darwin-arm64' : 'darwin-amd64',
       label: isArm ? 'macOS (Apple Silicon)' : 'macOS (Intel)',
@@ -516,9 +549,9 @@ export function generateLaunchdPlist(binaryPath: string): string {
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/shuttersense-agent.stdout.log</string>
+    <string>/var/log/shuttersense/shuttersense-agent.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/shuttersense-agent.stderr.log</string>
+    <string>/var/log/shuttersense/shuttersense-agent.stderr.log</string>
 </dict>
 </plist>`
 }
@@ -766,6 +799,7 @@ The frontend constructs the download URL as:
 
 ## Revision History
 
+- **2026-01-31 (v1.5)**: Add FR-200.7b (download error handling with retry); FR-200.8 keeps Next enabled (consistent degradation); FR-300.6 always redisplays token; FR-600.3a (binary path validation); persistent plist log paths; FR-600.11 clarifies Linux User default; implement `checkAppleSilicon()` — AI Assistant
 - **2026-01-31 (v1.4)**: Remove backend ambiguity (endpoint is new, not pre-existing); add HTTPS validation for download URLs (FR-200.7a); make `getServerUrl` return `null` on invalid URL instead of throwing, with caller error handling in FR-400.3 — AI Assistant
 - **2026-01-31 (v1.3)**: Clarify `download_base_url` is derived at runtime from `AGENT_DIST_BASE_URL` env var + version, not a DB field; handle `null` case in FR-200.7 — AI Assistant
 - **2026-01-31 (v1.2)**: Clarify release manifest endpoint: new user-accessible `GET /api/agent/v1/releases/active` required (existing admin endpoints need super-admin auth) — AI Assistant
