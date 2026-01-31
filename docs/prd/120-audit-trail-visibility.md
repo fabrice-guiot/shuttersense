@@ -137,6 +137,7 @@ Audit trail visibility is foundational for:
   - **Session auth** (browser): `ctx.user_id` = the human user's `User.id`
   - **API token auth** (Bearer): `ctx.user_id` = the token's `system_user.id` (set by `TokenService.validate_token` at `token_service.py:247`). This system user is a dedicated `User` row representing the API token, so mutations performed via API tokens are attributed to that token's system user — clearly distinguishable from human-initiated actions.
 - **FR-200.4**: Agent-facing API endpoints (`/api/agent/*`) use a separate authentication path (`get_authenticated_agent` dependency) that returns the `Agent` object directly. These handlers pass `agent.system_user_id` to service methods for attribution.
+- **FR-200.4a**: `Agent.system_user_id` MUST be non-NULL for every registered agent. The agent registration/creation flow (invoked by the `get_authenticated_agent` dependency and the agent registration endpoint) MUST create and assign a dedicated system `User` row for each `Agent` at registration time, ensuring `agent.system_user_id` is always populated before the agent can authenticate and perform actions. Service method signatures may still accept `user_id: Optional[int]` to match the shared signature used by session/token callers, but agent-facing route handlers can assume the value is present and SHOULD assert `agent.system_user_id is not None` before passing it to the service layer.
 - **FR-200.5**: No special-casing is needed for API token auth in route handlers. The standard `ctx.user_id` pattern (FR-200.3) already handles it correctly. Implementors MUST NOT add conditional logic like `if ctx.is_api_token: ...` — the middleware abstraction handles this transparently.
 
 #### FR-300: Backend — API Response Schemas
@@ -897,6 +898,9 @@ function AuditTrailSection({ audit }: { audit: AuditInfo }) {
 
 ## Revision History
 
+- **2026-01-31 (v1.3)**: Added FR-200.4a — agent system_user_id non-NULL invariant
+  - New requirement that agent registration MUST create and assign a dedicated system user, ensuring `agent.system_user_id` is always non-NULL before the agent can authenticate
+  - Agent-facing route handlers SHOULD assert non-NULL before passing to service layer
 - **2026-01-31 (v1.2)**: Added explicit index creation to migration
   - Rewrote §2 (Database Migration) to include `op.create_index` calls with `ix_<table>_<column>` naming
   - Added `postgresql_concurrently=True` for large tables (`collections`, `jobs`, `analysis_results`, `events`, `notifications`)
