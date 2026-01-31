@@ -14,8 +14,8 @@ export interface AuditUserSummary {
   guid: string
   /** Human-readable name. May be null for system users. */
   display_name: string | null
-  /** User email address. */
-  email: string
+  /** User email address. Optional — populated only when authorized to view PII. */
+  email: string | null
 }
 
 /** Structured audit trail included in entity API responses. */
