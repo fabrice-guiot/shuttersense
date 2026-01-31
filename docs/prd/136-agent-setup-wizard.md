@@ -19,7 +19,7 @@ Today, setting up an agent requires switching between the web UI (to create a re
 
 Key design decisions:
 - **OS auto-detection with manual override** — `navigator.userAgent` / `navigator.platform` is used for initial detection; the user can override if they are setting up a remote machine.
-- **Frontend-only wizard UI** — No new backend endpoints are required beyond the existing registration token and release manifest APIs; all wizard logic lives in the frontend.
+- **Primarily frontend wizard UI** — All wizard logic lives in the frontend. One new read-only backend endpoint (`GET /api/agent/v1/releases/active`) is needed to expose the active release manifest to regular users, since the existing admin endpoints require super-admin privileges.
 - **Agent binaries served from a static distribution folder** — The server hosts pre-built agent binaries at a well-known path; the wizard constructs download links from the release manifest metadata.
 
 ---
@@ -123,7 +123,7 @@ May need to set up an agent on their personal machine to process local photo col
 
 **FR-200.5**: When the user overrides the OS, the wizard MUST display a warning: *"You selected a different platform than detected. Make sure this matches the machine where you will install the agent."*
 
-**FR-200.6**: The wizard MUST fetch the active release manifest from the backend (`GET /api/agent/v1/releases/active` or equivalent) to determine available platforms. The manifest contains an `artifacts` array with per-platform entries, each specifying `platform`, `filename`, and `checksum`.
+**FR-200.6**: The wizard MUST fetch the active release manifest from a **new** user-accessible endpoint `GET /api/agent/v1/releases/active` (see [Release Manifest API](#release-manifest-api)). The existing admin endpoints at `/api/admin/release-manifests` require super-admin privileges and are not suitable for regular wizard users. The response contains an `artifacts` array with per-platform entries, each specifying `platform`, `filename`, and `checksum`.
 
 **FR-200.7**: If a matching artifact exists for the selected platform in the manifest's `artifacts` array, the wizard MUST display a **"Download Agent"** button that initiates a download of the binary using `{download_base_url}/{artifact.filename}`.
 
@@ -368,7 +368,7 @@ sudo systemctl status shuttersense-agent
 
 **NFR-500.1**: The existing "New Registration Token" button and `RegistrationTokenDialog` MUST remain functional and unchanged. The wizard is an additional entry point, not a replacement.
 
-**NFR-500.2**: No backend API changes are required. The wizard MUST work with the existing `/api/agent/v1/tokens` and release manifest endpoints.
+**NFR-500.2**: The wizard MUST work with the existing `/api/agent/v1/tokens` endpoint for token creation. One new backend endpoint is required: `GET /api/agent/v1/releases/active` (read-only, standard user auth) to expose the active release manifest without requiring super-admin privileges. See [Release Manifest API](#release-manifest-api) for details.
 
 ---
 
@@ -376,7 +376,7 @@ sudo systemctl status shuttersense-agent
 
 ### Architecture Overview
 
-The wizard is implemented entirely as a frontend component. It composes existing API calls (token creation, release manifest retrieval) into a guided multi-step flow. No new backend endpoints are needed.
+The wizard is implemented primarily as a frontend component. It composes API calls (token creation, release manifest retrieval) into a guided multi-step flow. One new backend endpoint is required: a read-only, user-accessible `GET /api/agent/v1/releases/active` to expose the active release manifest without requiring super-admin privileges (see [Release Manifest API](#release-manifest-api)).
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -428,8 +428,10 @@ The wizard is implemented entirely as a frontend component. It composes existing
 | File | Change |
 | ------ | ------ |
 | `frontend/src/pages/AgentsPage.tsx` | Add "Agent Setup" button next to existing token button |
-| `frontend/src/services/agents.ts` | Add `getActiveRelease()` function (if release manifest endpoint exists) |
+| `frontend/src/services/agents.ts` | Add `getActiveRelease()` function calling the new user-accessible endpoint |
 | `frontend/src/contracts/api/agent-api.ts` | Add `ReleaseManifest` and `ReleaseArtifact` types (if not already present) |
+| `backend/src/api/agent/routes.py` | Add `GET /api/agent/v1/releases/active` (read-only, standard user auth) |
+| `backend/src/api/agent/schemas.py` | Add `ActiveReleaseResponse` and `ReleaseArtifactResponse` schemas |
 
 ### OS Detection Logic
 
@@ -595,7 +597,7 @@ This PRD recommends **Option A** for simplicity, with the download URL pattern c
 
 ### Release Manifest API
 
-If a release manifest list endpoint does not yet exist, a minimal one is needed:
+The existing release manifest endpoints live under `/api/admin/release-manifests` and require super-admin authentication. Regular users accessing the wizard cannot call those endpoints. A new **read-only, user-accessible** endpoint is required in the agent API namespace:
 
 ```text
 GET /api/agent/v1/releases/active
@@ -755,4 +757,6 @@ The frontend constructs the download URL as:
 
 ## Revision History
 
+- **2026-01-31 (v1.2)**: Clarify release manifest endpoint: new user-accessible `GET /api/agent/v1/releases/active` required (existing admin endpoints need super-admin auth) — AI Assistant
+- **2026-01-31 (v1.1)**: Config-based server URL, allow wizard progression without manifests, per-platform artifacts schema, MD040/MD060 fixes — AI Assistant
 - **2026-01-31 (v1.0)**: Initial draft — AI Assistant
