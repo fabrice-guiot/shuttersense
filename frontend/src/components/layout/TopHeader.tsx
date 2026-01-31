@@ -88,7 +88,7 @@ export function TopHeader({
 }: TopHeaderProps) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const { unreadCount } = useNotifications()
+  const { unreadCount, refreshUnreadCount } = useNotifications()
 
   // Compute user display info
   const displayName = user?.display_name || user?.email?.split('@')[0] || 'User'
@@ -163,7 +163,7 @@ export function TopHeader({
         )}
 
         {/* Notifications (Issue #114) */}
-        <NotificationPanel unreadCount={unreadCount} />
+        <NotificationPanel unreadCount={unreadCount} onUnreadCountChanged={refreshUnreadCount} />
 
         {/* Agent Pool Status (Issue #90) */}
         <AgentPoolStatus />

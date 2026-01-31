@@ -100,9 +100,11 @@ function EmptyState() {
 interface NotificationPanelProps {
   /** Unread count for the badge */
   unreadCount: number
+  /** Callback to refresh the unread count in the parent (TopHeader) after marking as read */
+  onUnreadCountChanged?: () => void
 }
 
-export function NotificationPanel({ unreadCount }: NotificationPanelProps) {
+export function NotificationPanel({ unreadCount, onUnreadCountChanged }: NotificationPanelProps) {
   const navigate = useNavigate()
   const {
     notifications,
@@ -121,6 +123,7 @@ export function NotificationPanel({ unreadCount }: NotificationPanelProps) {
     setPopoverOpen(open)
     if (open) {
       fetchNotifications({ limit: 10 })
+      onUnreadCountChanged?.()
     }
   }
 
@@ -130,6 +133,7 @@ export function NotificationPanel({ unreadCount }: NotificationPanelProps) {
   const handleItemClick = async (notification: NotificationResponse) => {
     if (notification.read_at === null) {
       await markAsRead(notification.guid)
+      onUnreadCountChanged?.()
     }
     setSelected(notification)
     setPopoverOpen(false)

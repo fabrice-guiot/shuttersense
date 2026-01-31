@@ -118,6 +118,8 @@ export const useAgentPoolStatus = (
             if (data.type === 'agent_pool_status' && data.pool_status) {
               setPoolStatus(data.pool_status)
               setLoading(false)
+            } else if (data.type === 'notification_created') {
+              window.dispatchEvent(new Event('notification-created'))
             }
             // Ignore heartbeat messages
           } catch {

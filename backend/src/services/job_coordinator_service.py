@@ -1246,7 +1246,17 @@ class JobCoordinatorService:
                 vapid_private_key=settings.vapid_private_key,
                 vapid_claims=vapid_claims,
             )
-            notification_service.notify_inflection_point(job, result)
+            sent_count = notification_service.notify_inflection_point(job, result)
+
+            # Broadcast hint so frontend refreshes unread badge immediately
+            if sent_count > 0:
+                import asyncio
+                from backend.src.utils.websocket import get_connection_manager
+
+                manager = get_connection_manager()
+                asyncio.get_event_loop().create_task(
+                    manager.broadcast_notification_hint(job.team_id)
+                )
         except Exception as e:
             # Non-blocking: notification failure must not affect job processing
             logger.error(
@@ -2250,7 +2260,17 @@ class JobCoordinatorService:
                 vapid_private_key=settings.vapid_private_key,
                 vapid_claims=vapid_claims,
             )
-            notification_service.notify_job_failure(job)
+            sent_count = notification_service.notify_job_failure(job)
+
+            # Broadcast hint so frontend refreshes unread badge immediately
+            if sent_count > 0:
+                import asyncio
+                from backend.src.utils.websocket import get_connection_manager
+
+                manager = get_connection_manager()
+                asyncio.get_event_loop().create_task(
+                    manager.broadcast_notification_hint(job.team_id)
+                )
         except Exception as e:
             # Non-blocking: notification failure must not affect job processing
             logger.error(

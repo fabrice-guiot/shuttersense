@@ -185,6 +185,20 @@ class ConnectionManager:
             "pool_status": pool_status
         })
 
+    async def broadcast_notification_hint(self, team_id: int) -> None:
+        """
+        Broadcast a notification-created hint to all clients for a team.
+
+        Clients receiving this hint should refresh their unread notification
+        count from the REST API. The hint carries no per-user data, avoiding
+        leaking counts on a team-scoped channel.
+
+        Args:
+            team_id: Team ID to broadcast to
+        """
+        channel = self.get_agent_pool_channel(team_id)
+        await self.broadcast(channel, {"type": "notification_created"})
+
     async def broadcast_job_progress(
         self, team_id: int, job_guid: str, progress: Dict[str, Any]
     ) -> None:
