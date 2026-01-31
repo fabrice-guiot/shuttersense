@@ -303,34 +303,101 @@ class Collection(Base, GuidMixin, AuditMixin):
 
 ### 2. Database Migration
 
-A single Alembic migration adds both columns to all affected tables:
+A single Alembic migration adds both columns **and** their indexes to all affected tables. The migration is split into two phases: (1) add columns, (2) create indexes. Indexes use `postgresql_concurrently=True` for large tables to avoid holding `ACCESS EXCLUSIVE` locks during creation.
+
+**Important**: PostgreSQL `CREATE INDEX CONCURRENTLY` cannot run inside a transaction. Alembic migrations run inside a transaction by default, so the index-creation phase must use `op.execute("COMMIT")` to end the implicit transaction before concurrent index creation, or the migration can be split into two files (one transactional for columns, one non-transactional for indexes). The example below uses the single-file approach with explicit transaction management.
 
 ```python
 # backend/src/db/migrations/versions/0XX_add_audit_user_columns.py
 
-def upgrade():
-    tables = [
-        "collections", "connectors", "pipelines", "jobs",
-        "analysis_results", "events", "event_series", "categories",
-        "locations", "organizers", "performers", "configurations",
-        "push_subscriptions", "notifications",
-        # Already have created_by, add updated_by only:
-        "agents", "api_tokens", "agent_registration_tokens",
-    ]
+"""Add audit user attribution columns and indexes to all tenant-scoped tables."""
 
-    for table in tables:
-        if table not in ("agents", "api_tokens", "agent_registration_tokens"):
-            op.add_column(table, sa.Column(
-                "created_by_user_id", sa.Integer(),
-                sa.ForeignKey("users.id", ondelete="SET NULL"),
-                nullable=True
-            ))
+# Tables that need BOTH created_by_user_id and updated_by_user_id
+NEW_AUDIT_TABLES = [
+    "collections", "connectors", "pipelines", "jobs",
+    "analysis_results", "events", "event_series", "categories",
+    "locations", "organizers", "performers", "configurations",
+    "push_subscriptions", "notifications",
+]
+
+# Tables that already have created_by_user_id — only need updated_by_user_id
+EXISTING_CREATED_BY_TABLES = [
+    "agents", "api_tokens", "agent_registration_tokens",
+]
+
+# Tables likely to be large in production — use CONCURRENTLY for indexes
+LARGE_TABLES = {"collections", "jobs", "analysis_results", "events", "notifications"}
+
+
+def upgrade():
+    # ── Phase 1: Add columns (transactional, safe) ──────────────────────
+
+    for table in NEW_AUDIT_TABLES:
+        op.add_column(table, sa.Column(
+            "created_by_user_id", sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True
+        ))
         op.add_column(table, sa.Column(
             "updated_by_user_id", sa.Integer(),
             sa.ForeignKey("users.id", ondelete="SET NULL"),
             nullable=True
         ))
+
+    for table in EXISTING_CREATED_BY_TABLES:
+        op.add_column(table, sa.Column(
+            "updated_by_user_id", sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True
+        ))
+
+    # ── Phase 2: Create indexes ─────────────────────────────────────────
+    # End the implicit transaction so we can use CREATE INDEX CONCURRENTLY
+    # for large tables. Small tables use regular (transactional) indexes.
+    op.execute("COMMIT")
+
+    all_tables = NEW_AUDIT_TABLES + EXISTING_CREATED_BY_TABLES
+
+    for table in all_tables:
+        concurrent = table in LARGE_TABLES
+
+        # created_by_user_id index — skip for tables that already had it
+        if table not in EXISTING_CREATED_BY_TABLES:
+            op.create_index(
+                f"ix_{table}_created_by_user_id",
+                table,
+                ["created_by_user_id"],
+                postgresql_concurrently=concurrent,
+            )
+
+        # updated_by_user_id index — all tables need this
+        op.create_index(
+            f"ix_{table}_updated_by_user_id",
+            table,
+            ["updated_by_user_id"],
+            postgresql_concurrently=concurrent,
+        )
+
+
+def downgrade():
+    all_tables = NEW_AUDIT_TABLES + EXISTING_CREATED_BY_TABLES
+
+    for table in reversed(all_tables):
+        op.drop_index(f"ix_{table}_updated_by_user_id", table_name=table)
+        if table not in EXISTING_CREATED_BY_TABLES:
+            op.drop_index(f"ix_{table}_created_by_user_id", table_name=table)
+
+    for table in reversed(EXISTING_CREATED_BY_TABLES):
+        op.drop_column(table, "updated_by_user_id")
+
+    for table in reversed(NEW_AUDIT_TABLES):
+        op.drop_column(table, "updated_by_user_id")
+        op.drop_column(table, "created_by_user_id")
 ```
+
+**Index naming convention**: `ix_<table>_<column>` (e.g., `ix_collections_created_by_user_id`, `ix_jobs_updated_by_user_id`). This matches Alembic's default naming and is consistent with existing indexes in the schema.
+
+**Concurrency considerations**: Tables in `LARGE_TABLES` use `postgresql_concurrently=True` to avoid blocking reads/writes during index creation. The set should be adjusted based on actual production data volumes. Smaller tables use standard index creation which is faster and simpler.
 
 ### 3. Service Layer Pattern
 
@@ -829,6 +896,12 @@ function AuditTrailSection({ audit }: { audit: AuditInfo }) {
 
 ## Revision History
 
+- **2026-01-31 (v1.2)**: Added explicit index creation to migration
+  - Rewrote §2 (Database Migration) to include `op.create_index` calls with `ix_<table>_<column>` naming
+  - Added `postgresql_concurrently=True` for large tables (`collections`, `jobs`, `analysis_results`, `events`, `notifications`)
+  - Split migration into Phase 1 (add columns, transactional) and Phase 2 (create indexes, non-transactional via explicit `COMMIT`)
+  - Skip `created_by_user_id` index for tables that already had the column (`agents`, `api_tokens`, `agent_registration_tokens`)
+  - Added `downgrade()` function that drops indexes before columns
 - **2026-01-31 (v1.1)**: Clarified API token audit attribution
   - Expanded Background section with auth method resolution table showing how `ctx.user_id` maps to the correct user for session, API token, and agent auth
   - Rewrote FR-200.3 through FR-200.5 to explicitly document that API token auth resolves `ctx.user_id` to `api_token.system_user.id` (via `TokenService.validate_token`)
