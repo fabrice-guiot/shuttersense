@@ -582,7 +582,8 @@ def create_config_value(
             key=key,
             value=request.value,
             team_id=ctx.team_id,
-            description=request.description
+            description=request.description,
+            user_id=ctx.user_id
         )
     except ValidationError as e:
         raise HTTPException(
@@ -632,7 +633,8 @@ def update_config_value(
             key=key,
             team_id=ctx.team_id,
             value=request.value,
-            description=request.description
+            description=request.description,
+            user_id=ctx.user_id
         )
     except NotFoundError as e:
         raise HTTPException(

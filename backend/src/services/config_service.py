@@ -79,7 +79,8 @@ class ConfigService:
         value: Any,
         team_id: int,
         description: Optional[str] = None,
-        source: ConfigSource = ConfigSource.DATABASE
+        source: ConfigSource = ConfigSource.DATABASE,
+        user_id: Optional[int] = None
     ) -> ConfigItemResponse:
         """
         Create a new configuration item.
@@ -125,7 +126,10 @@ class ConfigService:
             value_json=value,
             description=description,
             source=source,
-            team_id=team_id
+            team_id=team_id,
+            # Audit tracking
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(config)
@@ -236,7 +240,8 @@ class ConfigService:
         key: str,
         team_id: int,
         value: Optional[Any] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        user_id: Optional[int] = None
     ) -> ConfigItemResponse:
         """
         Update a configuration item.
@@ -269,6 +274,9 @@ class ConfigService:
 
         if description is not None:
             config.description = description
+
+        if user_id is not None:
+            config.updated_by_user_id = user_id
 
         self.db.commit()
         self.db.refresh(config)

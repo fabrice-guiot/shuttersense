@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.src.models import CollectionType, CollectionState, ConnectorType
 from backend.src.models.connector import CredentialLocation
+from backend.src.schemas.audit import AuditInfo
 
 
 # ============================================================================
@@ -358,6 +359,7 @@ class ConnectorResponse(BaseModel):
     )
     created_at: datetime
     updated_at: datetime
+    audit: Optional[AuditInfo] = None
 
     @model_validator(mode='before')
     @classmethod
@@ -377,6 +379,9 @@ class ConnectorResponse(BaseModel):
                     data.metadata = None
             else:
                 data.metadata = None
+        # Audit trail (Issue #120)
+        if hasattr(data, 'audit'):
+            data.__dict__['audit'] = data.audit
         return data
 
     model_config = {
@@ -656,6 +661,7 @@ class CollectionResponse(BaseModel):
     file_info: Optional[FileInfoSummary] = Field(default=None, description="FileInfo cache summary")
     created_at: datetime
     updated_at: datetime
+    audit: Optional[AuditInfo] = None
     connector: Optional[ConnectorResponse] = None
 
     @model_validator(mode='before')
@@ -736,6 +742,10 @@ class CollectionResponse(BaseModel):
             )
         else:
             result['file_info'] = None
+
+        # Audit trail (Issue #120)
+        if hasattr(data, 'audit'):
+            result['audit'] = data.audit
 
         return result
 

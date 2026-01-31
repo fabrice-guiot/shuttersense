@@ -21,7 +21,7 @@ from sqlalchemy.orm import relationship
 from backend.src.models.types import JSONBType
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
 class ConnectorType(enum.Enum):
@@ -52,7 +52,7 @@ class CredentialLocation(str, enum.Enum):
     PENDING = "pending"
 
 
-class Connector(Base, GuidMixin):
+class Connector(Base, GuidMixin, AuditMixin):
     """
     Remote storage connector model.
 

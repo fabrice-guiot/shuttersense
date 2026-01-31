@@ -87,6 +87,7 @@ class LocationService:
         travel_required_default: bool = False,
         notes: Optional[str] = None,
         is_known: bool = True,
+        user_id: Optional[int] = None,
     ) -> Location:
         """
         Create a new location.
@@ -160,6 +161,8 @@ class LocationService:
                 travel_required_default=travel_required_default,
                 notes=notes,
                 is_known=is_known,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(location)
             self.db.commit()
@@ -304,6 +307,7 @@ class LocationService:
         travel_required_default: Optional[bool] = None,
         notes: Optional[str] = None,
         is_known: Optional[bool] = None,
+        user_id: Optional[int] = None,
     ) -> Location:
         """
         Update an existing location.
@@ -392,6 +396,9 @@ class LocationService:
                 "Both latitude and longitude must be provided together",
                 field="latitude" if location.latitude is None else "longitude",
             )
+
+        if user_id is not None:
+            location.updated_by_user_id = user_id
 
         try:
             self.db.commit()

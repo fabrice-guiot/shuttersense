@@ -20,6 +20,8 @@ from datetime import datetime
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field, field_validator, field_serializer
 
+from backend.src.schemas.audit import AuditInfo
+
 
 # ============================================================================
 # Embedded Schemas
@@ -275,6 +277,7 @@ class PerformerResponse(BaseModel):
     additional_info: Optional[str]
     created_at: datetime
     updated_at: datetime
+    audit: Optional[AuditInfo] = None
 
     @field_serializer("created_at", "updated_at")
     @classmethod

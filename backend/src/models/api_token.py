@@ -129,6 +129,14 @@ class ApiToken(Base, GuidMixin):
     last_used_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
 
+    # Audit: who last updated this token
+    updated_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", name="fk_api_tokens_updated_by_user_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -145,11 +153,22 @@ class ApiToken(Base, GuidMixin):
         back_populates="created_api_tokens",
         lazy="joined"
     )
+    updated_by_user = relationship(
+        "User",
+        foreign_keys=[updated_by_user_id],
+        lazy="select"
+    )
     team = relationship(
         "Team",
         back_populates="api_tokens",
         lazy="joined"
     )
+
+    @property
+    def audit(self):
+        """Computed audit info dict for API serialization."""
+        from backend.src.schemas.audit import build_audit_info
+        return build_audit_info(self, created_by_attr="created_by")
 
     @property
     def scopes(self) -> List[str]:

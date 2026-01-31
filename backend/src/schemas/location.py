@@ -19,6 +19,8 @@ from decimal import Decimal
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator, field_serializer
 
+from backend.src.schemas.audit import AuditInfo
+
 
 # ============================================================================
 # Embedded Schemas
@@ -507,6 +509,7 @@ class LocationResponse(BaseModel):
     is_known: bool
     created_at: datetime
     updated_at: datetime
+    audit: Optional[AuditInfo] = None
 
     @field_serializer("created_at", "updated_at")
     @classmethod

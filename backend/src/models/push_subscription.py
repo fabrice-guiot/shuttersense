@@ -16,10 +16,10 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class PushSubscription(Base, GuidMixin):
+class PushSubscription(Base, GuidMixin, AuditMixin):
     """
     Web Push subscription for a specific user on a specific device/browser.
 
@@ -75,5 +75,5 @@ class PushSubscription(Base, GuidMixin):
     )
 
     # Relationships
-    user = relationship("User", back_populates="push_subscriptions")
+    user = relationship("User", foreign_keys=[user_id], back_populates="push_subscriptions")
     team = relationship("Team")

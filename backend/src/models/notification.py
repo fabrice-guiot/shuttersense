@@ -16,10 +16,10 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class Notification(Base, GuidMixin):
+class Notification(Base, GuidMixin, AuditMixin):
     """
     Notification event sent to a user.
 
@@ -66,7 +66,7 @@ class Notification(Base, GuidMixin):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     # Relationships
-    user = relationship("User", back_populates="notifications")
+    user = relationship("User", foreign_keys=[user_id], back_populates="notifications")
     team = relationship("Team")
 
     # Partial index for efficient unread count queries

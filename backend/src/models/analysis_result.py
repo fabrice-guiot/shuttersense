@@ -24,10 +24,10 @@ from sqlalchemy.sql import expression
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base, ResultStatus
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class AnalysisResult(Base, GuidMixin):
+class AnalysisResult(Base, GuidMixin, AuditMixin):
     """
     Analysis result model.
 

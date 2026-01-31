@@ -19,6 +19,8 @@ from enum import Enum
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
+from backend.src.schemas.audit import AuditInfo
+
 
 class NodeType(str, Enum):
     """Pipeline node types."""
@@ -197,6 +199,7 @@ class PipelineSummary(BaseModel):
     node_count: int = Field(..., description="Number of nodes")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True,
@@ -235,6 +238,7 @@ class PipelineResponse(BaseModel):
     validation_errors: Optional[List[str]] = Field(None, description="Validation errors if invalid")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True,

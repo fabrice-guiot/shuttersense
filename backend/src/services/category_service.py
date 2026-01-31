@@ -59,6 +59,7 @@ class CategoryService:
         color: Optional[str] = None,
         is_active: bool = True,
         display_order: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> Category:
         """
         Create a new category.
@@ -112,6 +113,8 @@ class CategoryService:
                 is_active=is_active,
                 display_order=display_order,
                 team_id=team_id,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(category)
             self.db.commit()
@@ -214,6 +217,7 @@ class CategoryService:
         icon: Optional[str] = None,
         color: Optional[str] = None,
         is_active: Optional[bool] = None,
+        user_id: Optional[int] = None,
     ) -> Category:
         """
         Update an existing category.
@@ -264,6 +268,9 @@ class CategoryService:
             category.color = color
         if is_active is not None:
             category.is_active = is_active
+
+        if user_id is not None:
+            category.updated_by_user_id = user_id
 
         try:
             self.db.commit()

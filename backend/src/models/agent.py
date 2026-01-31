@@ -190,6 +190,14 @@ class Agent(Base, GuidMixin):
     revocation_reason = Column(Text, nullable=True)
     revoked_at = Column(DateTime, nullable=True)
 
+    # Audit: who last updated this agent
+    updated_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", name="fk_agents_updated_by_user_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -215,11 +223,22 @@ class Agent(Base, GuidMixin):
         foreign_keys=[created_by_user_id],
         lazy="joined"
     )
+    updated_by_user = relationship(
+        "User",
+        foreign_keys=[updated_by_user_id],
+        lazy="select"
+    )
     bound_collections = relationship(
         "Collection",
         back_populates="bound_agent",
         lazy="dynamic"
     )
+
+    @property
+    def audit(self):
+        """Computed audit info dict for API serialization."""
+        from backend.src.schemas.audit import build_audit_info
+        return build_audit_info(self, created_by_attr="created_by")
 
     # Table-level indexes
     __table_args__ = (

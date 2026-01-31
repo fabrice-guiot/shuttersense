@@ -1138,7 +1138,8 @@ class JobCoordinatorService:
         job_guid: str,
         agent_id: int,
         team_id: int,
-        completion_data: JobCompletionData
+        completion_data: JobCompletionData,
+        user_id: Optional[int] = None
     ) -> Job:
         """
         Complete a job with results.
@@ -1180,10 +1181,12 @@ class JobCoordinatorService:
         # Handle collection_test jobs specially - update collection accessibility
         # and create AnalysisResult following tool-implementation-pattern.md
         if job.tool == "collection_test":
-            result = self._handle_collection_test_completion(job, completion_data)
+            result = self._handle_collection_test_completion(job, completion_data, user_id=user_id)
             # Complete the job with the created result
             job.complete(result_id=result.id)
             job.progress = None
+            if user_id is not None:
+                job.updated_by_user_id = user_id
 
             self.db.commit()
 
@@ -1200,13 +1203,15 @@ class JobCoordinatorService:
             return job
 
         # Standard job completion - create analysis result
-        result = self._create_analysis_result(job, completion_data)
+        result = self._create_analysis_result(job, completion_data, user_id=user_id)
 
         # Update collection statistics from tool results
         self._update_collection_stats_from_results(job, completion_data)
 
         # Complete the job
         job.complete(result_id=result.id)
+        if user_id is not None:
+            job.updated_by_user_id = user_id
 
         # Create scheduled follow-up job if TTL is configured
         scheduled_job = self._maybe_create_scheduled_job(job)
@@ -1284,7 +1289,8 @@ class JobCoordinatorService:
         input_state_hash: str,
         source_result_guid: str,
         signature: str,
-        input_state_json: Optional[str] = None
+        input_state_json: Optional[str] = None,
+        user_id: Optional[int] = None
     ) -> Job:
         """
         Complete a job with NO_CHANGE status (Issue #92: Storage Optimization).
@@ -1407,6 +1413,9 @@ class JobCoordinatorService:
             input_state_json=input_state_json,  # Only stored in DEBUG mode
             no_change_copy=True,
             download_report_from=download_from_guid,
+            # Audit tracking
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(result)
@@ -1415,6 +1424,8 @@ class JobCoordinatorService:
         # Complete the job
         job.complete(result_id=result.id)
         job.progress = None
+        if user_id is not None:
+            job.updated_by_user_id = user_id
 
         # Cleanup intermediate copies (Issue #92)
         cleanup_count = self._cleanup_intermediate_copies(
@@ -1664,7 +1675,8 @@ class JobCoordinatorService:
     def _handle_collection_test_completion(
         self,
         job: Job,
-        completion_data: JobCompletionData
+        completion_data: JobCompletionData,
+        user_id: Optional[int] = None
     ) -> AnalysisResult:
         """
         Handle completion of a collection_test job.
@@ -1690,7 +1702,7 @@ class JobCoordinatorService:
                 "Collection test job has no collection_id",
                 extra={"job_guid": job.guid}
             )
-            return self._create_collection_test_result(job, completion_data)
+            return self._create_collection_test_result(job, completion_data, user_id=user_id)
 
         collection = self.db.query(Collection).filter(
             Collection.id == job.collection_id
@@ -1701,7 +1713,7 @@ class JobCoordinatorService:
                 "Collection not found for collection_test job",
                 extra={"job_guid": job.guid, "collection_id": job.collection_id}
             )
-            return self._create_collection_test_result(job, completion_data)
+            return self._create_collection_test_result(job, completion_data, user_id=user_id)
 
         # Extract results
         results = completion_data.results
@@ -1724,7 +1736,7 @@ class JobCoordinatorService:
         )
 
         # Create AnalysisResult following standard tool pattern
-        result = self._create_collection_test_result(job, completion_data)
+        result = self._create_collection_test_result(job, completion_data, user_id=user_id)
 
         # After successful accessibility check, trigger refresh jobs
         if success:
@@ -1735,7 +1747,8 @@ class JobCoordinatorService:
     def _create_collection_test_result(
         self,
         job: Job,
-        completion_data: JobCompletionData
+        completion_data: JobCompletionData,
+        user_id: Optional[int] = None
     ) -> AnalysisResult:
         """
         Create an AnalysisResult for a collection_test job.
@@ -1771,6 +1784,9 @@ class JobCoordinatorService:
             files_scanned=completion_data.files_scanned or 0,
             issues_found=completion_data.issues_found or (0 if success else 1),
             error_message=results.get("error") if not success else None,
+            # Audit tracking
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(result)
@@ -1865,7 +1881,8 @@ class JobCoordinatorService:
     def _create_analysis_result(
         self,
         job: Job,
-        completion_data: JobCompletionData
+        completion_data: JobCompletionData,
+        user_id: Optional[int] = None
     ) -> AnalysisResult:
         """
         Create an AnalysisResult from job completion data.
@@ -1912,6 +1929,9 @@ class JobCoordinatorService:
             # Storage optimization fields (Issue #92)
             input_state_hash=completion_data.input_state_hash,
             input_state_json=completion_data.input_state_json,
+            # Audit tracking
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(result)
@@ -2210,7 +2230,8 @@ class JobCoordinatorService:
         agent_id: int,
         team_id: int,
         error_message: str,
-        signature: Optional[str] = None
+        signature: Optional[str] = None,
+        user_id: Optional[int] = None
     ) -> Job:
         """
         Mark a job as failed and create an AnalysisResult with failure status.
@@ -2220,14 +2241,17 @@ class JobCoordinatorService:
             agent_id: Agent ID (must match job's assigned agent)
             team_id: Team ID
             error_message: Error description
-            signature: Optional signature for verification
+            signature: HMAC-SHA256 signature over the error payload, verified
+                using the same mechanism as complete_job to prevent spoofed
+                failure reports.
+            user_id: Optional user ID for audit attribution
 
         Returns:
             Failed job
 
         Raises:
             NotFoundError: If job not found
-            ValidationError: If agent doesn't own the job
+            ValidationError: If agent doesn't own the job or signature is invalid
         """
         job = self._get_job_for_agent(job_guid, agent_id, team_id)
 
@@ -2236,13 +2260,21 @@ class JobCoordinatorService:
                 f"Job must be in ASSIGNED or RUNNING state to fail, got {job.status.value}"
             )
 
+        # Verify signature (same pattern as complete_job)
+        if signature and not self.verify_signature(
+            job, {"error": error_message}, signature
+        ):
+            raise ValidationError("Invalid result signature")
+
         # Create failed analysis result (so failure appears in results history)
-        result = self._create_failed_result(job, error_message)
+        result = self._create_failed_result(job, error_message, user_id=user_id)
 
         # Fail the job and link to result
         job.fail(error_message)
         job.result_id = result.id
         job.progress = None  # Clear progress
+        if user_id is not None:
+            job.updated_by_user_id = user_id
 
         # Increment storage metrics counter (Issue #92: T057)
         self._increment_storage_metrics_on_completion(team_id)
@@ -2297,7 +2329,8 @@ class JobCoordinatorService:
     def _create_failed_result(
         self,
         job: Job,
-        error_message: str
+        error_message: str,
+        user_id: Optional[int] = None
     ) -> AnalysisResult:
         """
         Create an AnalysisResult for a failed job.
@@ -2328,6 +2361,9 @@ class JobCoordinatorService:
             files_scanned=0,
             issues_found=0,
             error_message=error_message,
+            # Audit tracking
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(result)

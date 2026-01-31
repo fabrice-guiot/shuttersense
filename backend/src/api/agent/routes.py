@@ -112,6 +112,7 @@ from backend.src.api.agent.schemas import (
     # Team config (Issue #108 - config caching)
     TeamConfigResponse,
 )
+from backend.src.schemas.audit import build_audit_info
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
 
@@ -263,6 +264,7 @@ def agent_to_response(
         current_job_guid=current_job_guid,
         metrics=metrics,
         running_jobs_count=running_jobs_count,
+        audit=agent.audit,
     )
 
 
@@ -751,6 +753,7 @@ async def complete_job_no_change(
             source_result_guid=data.source_result_guid,
             signature=data.signature,
             input_state_json=data.input_state_json,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
 
         # Refresh job to get result relationship
@@ -848,6 +851,7 @@ async def complete_job(
             agent_id=ctx.agent_id,
             team_id=ctx.team_id,
             completion_data=completion_data,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
 
         # Refresh job to get result relationship
@@ -918,6 +922,7 @@ async def fail_job(
             team_id=ctx.team_id,
             error_message=data.error_message,
             signature=data.signature,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
 
         # Refresh job to get result relationship
@@ -1531,6 +1536,7 @@ async def list_registration_tokens(
             used_by_agent_guid=agent_guid,
             created_at=token.created_at,
             created_by_email=creator.email if creator else None,
+            audit=token.audit,
         ))
 
     return RegistrationTokenListResponse(
@@ -3635,6 +3641,7 @@ async def get_agent_detail(
         total_jobs_completed=total_jobs_completed,
         total_jobs_failed=total_jobs_failed,
         recent_jobs=recent_jobs,
+        audit=agent.audit,
     )
 
 

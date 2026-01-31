@@ -146,7 +146,8 @@ def create_pipeline(
             description=request.description,
             nodes=nodes,
             edges=edges,
-            team_id=ctx.team_id
+            team_id=ctx.team_id,
+            user_id=ctx.user_id
         )
     except ConflictError as e:
         raise HTTPException(
@@ -238,7 +239,8 @@ def update_pipeline(
             description=request.description,
             nodes=nodes,
             edges=edges,
-            change_summary=request.change_summary
+            change_summary=request.change_summary,
+            user_id=ctx.user_id
         )
     except ValueError as e:
         raise HTTPException(
@@ -345,7 +347,7 @@ def activate_pipeline(
     """
     try:
         pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
-        return service.activate(pipeline.id)
+        return service.activate(pipeline.id, user_id=ctx.user_id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -391,7 +393,7 @@ def deactivate_pipeline(
     """
     try:
         pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
-        return service.deactivate(pipeline.id)
+        return service.deactivate(pipeline.id, user_id=ctx.user_id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -434,7 +436,7 @@ def set_default_pipeline(
     """
     try:
         pipeline = service._get_pipeline_by_guid(guid, team_id=ctx.team_id)
-        return service.set_default(pipeline.id)
+        return service.set_default(pipeline.id, user_id=ctx.user_id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -712,7 +714,7 @@ async def import_pipeline(
     try:
         content = await file.read()
         yaml_content = content.decode("utf-8")
-        return service.import_from_yaml(yaml_content, team_id=ctx.team_id)
+        return service.import_from_yaml(yaml_content, team_id=ctx.team_id, user_id=ctx.user_id)
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

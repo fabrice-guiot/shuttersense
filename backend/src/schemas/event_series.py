@@ -15,6 +15,8 @@ from datetime import datetime, date, time
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_serializer
 
+from backend.src.schemas.audit import AuditInfo
+
 
 # ============================================================================
 # Response Schemas
@@ -80,6 +82,9 @@ class EventSeriesResponse(BaseModel):
     # Timestamps
     created_at: datetime
     updated_at: datetime
+
+    # Audit trail
+    audit: Optional[AuditInfo] = None
 
     @field_serializer("created_at", "updated_at")
     @classmethod

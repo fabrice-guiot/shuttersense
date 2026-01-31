@@ -18,6 +18,7 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 from backend.src.models import ResultStatus
+from backend.src.schemas.audit import AuditInfo
 
 
 class SortField(str, Enum):
@@ -86,6 +87,7 @@ class AnalysisResultSummary(BaseModel):
     # Storage Optimization Fields (Issue #92)
     input_state_hash: Optional[str] = Field(None, description="SHA-256 hash of Input State (null for legacy results)")
     no_change_copy: bool = Field(False, description="True if this result references a previous result")
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True,
@@ -210,6 +212,7 @@ class AnalysisResultResponse(BaseModel):
     no_change_copy: bool = Field(False, description="True if this result references a previous result")
     download_report_from: Optional[str] = Field(None, description="GUID of source result for report download (res_xxx)")
     source_result_exists: Optional[bool] = Field(None, description="Whether source result still exists (for NO_CHANGE results)")
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True,

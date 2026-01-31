@@ -376,6 +376,7 @@ async def create_location(
             name=location.name,
             category_guid=location.category_guid,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             address=location.address,
             city=location.city,
             state=location.state,
@@ -512,6 +513,7 @@ async def update_location(
         updated_location = location_service.update(
             guid=guid,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             name=location_update.name,
             category_guid=location_update.category_guid,
             address=location_update.address,

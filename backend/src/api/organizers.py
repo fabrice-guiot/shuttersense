@@ -279,6 +279,7 @@ async def create_organizer(
             name=organizer.name,
             category_guid=organizer.category_guid,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             website=organizer.website,
             instagram_handle=organizer.instagram_handle,
             rating=organizer.rating,
@@ -400,6 +401,7 @@ async def update_organizer(
         updated_organizer = organizer_service.update(
             guid=guid,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             name=organizer_update.name,
             category_guid=organizer_update.category_guid,
             website=organizer_update.website,

@@ -106,6 +106,14 @@ class AgentRegistrationToken(Base, GuidMixin):
     # Expiration
     expires_at = Column(DateTime, nullable=False)
 
+    # Audit: who last updated this token
+    updated_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", name="fk_art_updated_by_user_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -119,11 +127,22 @@ class AgentRegistrationToken(Base, GuidMixin):
         foreign_keys=[created_by_user_id],
         lazy="joined"
     )
+    updated_by_user = relationship(
+        "User",
+        foreign_keys=[updated_by_user_id],
+        lazy="select"
+    )
     used_by_agent = relationship(
         "Agent",
         foreign_keys=[used_by_agent_id],
         lazy="joined"
     )
+
+    @property
+    def audit(self):
+        """Computed audit info dict for API serialization."""
+        from backend.src.schemas.audit import build_audit_info
+        return build_audit_info(self, created_by_attr="created_by")
 
     # Table-level indexes
     __table_args__ = (

@@ -64,6 +64,7 @@ class OrganizerService:
         rating: Optional[int] = None,
         ticket_required_default: bool = False,
         notes: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> Organizer:
         """
         Create a new organizer.
@@ -112,6 +113,8 @@ class OrganizerService:
                 rating=rating,
                 ticket_required_default=ticket_required_default,
                 notes=notes,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(organizer)
             self.db.commit()
@@ -240,6 +243,7 @@ class OrganizerService:
         rating: Optional[int] = None,
         ticket_required_default: Optional[bool] = None,
         notes: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> Organizer:
         """
         Update an existing organizer.
@@ -294,6 +298,9 @@ class OrganizerService:
             organizer.ticket_required_default = ticket_required_default
         if notes is not None:
             organizer.notes = notes if notes else None
+
+        if user_id is not None:
+            organizer.updated_by_user_id = user_id
 
         try:
             self.db.commit()

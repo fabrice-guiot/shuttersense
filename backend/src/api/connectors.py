@@ -231,7 +231,8 @@ async def create_connector(
             credential_location=connector.credential_location,
             credentials=connector.credentials,
             metadata=connector.metadata,
-            is_active=connector.is_active
+            is_active=connector.is_active,
+            user_id=ctx.user_id
         )
 
         logger.info(
@@ -379,7 +380,8 @@ async def update_connector(
             credentials=connector_update.credentials,
             update_credentials=connector_update.update_credentials,
             metadata=connector_update.metadata,
-            is_active=connector_update.is_active
+            is_active=connector_update.is_active,
+            user_id=ctx.user_id
         )
 
         logger.info(

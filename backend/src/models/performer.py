@@ -21,10 +21,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class Performer(Base, GuidMixin):
+class Performer(Base, GuidMixin, AuditMixin):
     """
     Event performer model.
 
