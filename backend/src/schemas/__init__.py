@@ -68,6 +68,10 @@ from backend.src.schemas.user import (
     UserStatsResponse,
     user_to_response,
 )
+from backend.src.schemas.audit import (
+    AuditUserSummary,
+    AuditInfo,
+)
 from backend.src.schemas.team import (
     CreateTeamRequest,
     TeamResponse,
@@ -136,6 +140,9 @@ __all__ = [
     "UserListResponse",
     "UserStatsResponse",
     "user_to_response",
+    # Audit schemas (Issue #120)
+    "AuditUserSummary",
+    "AuditInfo",
     # Team schemas (Issue #73)
     "CreateTeamRequest",
     "TeamResponse",

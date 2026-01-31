@@ -17,15 +17,15 @@
 
 **Purpose**: Create the AuditMixin, audit schemas, and database migration that all user stories depend on.
 
-- [ ] T001 Create AuditMixin class in backend/src/models/mixins/audit.py with created_by_user_id and updated_by_user_id columns (Integer FK to users.id, nullable, SET NULL on delete, indexed) and created_by_user/updated_by_user relationships (lazy="joined" to User, foreign_keys specified)
-- [ ] T002 Create AuditInfo and AuditUserSummary Pydantic schemas in backend/src/schemas/audit.py with from_attributes=True config; AuditUserSummary has guid/display_name/email fields; AuditInfo has created_at/created_by/updated_at/updated_by fields
-- [ ] T003 Create Alembic migration backend/src/db/migrations/versions/058_add_audit_user_columns.py — add created_by_user_id + updated_by_user_id to 14 Group A tables (collections, connectors, pipelines, jobs, analysis_results, events, event_series, categories, locations, organizers, performers, configurations, push_subscriptions, notifications) and updated_by_user_id only to 3 Group B tables (agents, api_tokens, agent_registration_tokens); add indexes for all columns; use dialect-aware code for PostgreSQL CONCURRENTLY on large tables vs SQLite standard indexes
-- [ ] T004 [P] Create AuditInfo and AuditUserSummary TypeScript types in frontend/src/contracts/api/audit-api.ts matching the backend schema (guid, display_name, email for user summary; created_at, created_by, updated_at, updated_by for audit info)
+- [X] T001 Create AuditMixin class in backend/src/models/mixins/audit.py with created_by_user_id and updated_by_user_id columns (Integer FK to users.id, nullable, SET NULL on delete, indexed) and created_by_user/updated_by_user relationships (lazy="joined" to User, foreign_keys specified)
+- [X] T002 Create AuditInfo and AuditUserSummary Pydantic schemas in backend/src/schemas/audit.py with from_attributes=True config; AuditUserSummary has guid/display_name/email fields; AuditInfo has created_at/created_by/updated_at/updated_by fields
+- [X] T003 Create Alembic migration backend/src/db/migrations/versions/058_add_audit_user_columns.py — add created_by_user_id + updated_by_user_id to 14 Group A tables (collections, connectors, pipelines, jobs, analysis_results, events, event_series, categories, locations, organizers, performers, configurations, push_subscriptions, notifications) and updated_by_user_id only to 3 Group B tables (agents, api_tokens, agent_registration_tokens); add indexes for all columns; use dialect-aware code for PostgreSQL CONCURRENTLY on large tables vs SQLite standard indexes
+- [X] T004 [P] Create AuditInfo and AuditUserSummary TypeScript types in frontend/src/contracts/api/audit-api.ts matching the backend schema (guid, display_name, email for user summary; created_at, created_by, updated_at, updated_by for audit info)
 
 ### Tests — Verify AuditMixin and audit schemas (NFR-400.1, NFR-400.3)
 
-- [ ] T004a Create backend/tests/unit/test_audit_mixin.py with tests for: AuditMixin columns exist on a model (created_by_user_id, updated_by_user_id); FK constraint targets users table; SET NULL behavior when referenced user is deleted; columns are nullable (historical data compatibility); lazy="joined" relationships resolve to User instances
-- [ ] T004b [P] Create backend/tests/unit/test_audit_schemas.py with tests for: AuditUserSummary serialization from User model (guid, display_name, email); AuditInfo serialization with full data (both users present); AuditInfo serialization with null users (historical records); AuditInfo with mixed null (created_by present, updated_by null) — NOTE: do NOT test build_audit_info here (it is created in Phase 3 T049); build_audit_info tests belong in T064a or a dedicated Phase-3 test file
+- [X] T004a Create backend/tests/unit/test_audit_mixin.py with tests for: AuditMixin columns exist on a model (created_by_user_id, updated_by_user_id); FK constraint targets users table; SET NULL behavior when referenced user is deleted; columns are nullable (historical data compatibility); lazy="joined" relationships resolve to User instances
+- [X] T004b [P] Create backend/tests/unit/test_audit_schemas.py with tests for: AuditUserSummary serialization from User model (guid, display_name, email); AuditInfo serialization with full data (both users present); AuditInfo serialization with null users (historical records); AuditInfo with mixed null (created_by present, updated_by null) — NOTE: do NOT test build_audit_info here (it is created in Phase 3 T049); build_audit_info tests belong in T064a or a dedicated Phase-3 test file
 
 **Checkpoint**: AuditMixin, schemas, migration, frontend types, and foundational tests are ready. No models or services modified yet.
 
@@ -39,7 +39,7 @@
 
 ### Models — Apply AuditMixin to Group A entities (14 models)
 
-- [ ] T005 [P] [US2] Add AuditMixin to Collection model class in backend/src/models/collection.py (add to class inheritance, import AuditMixin from mixins)
+- [X] T005 [P] [US2] Add AuditMixin to Collection model class in backend/src/models/collection.py (add to class inheritance, import AuditMixin from mixins)
 - [ ] T006 [P] [US2] Add AuditMixin to Connector model class in backend/src/models/connector.py
 - [ ] T007 [P] [US2] Add AuditMixin to Pipeline model class in backend/src/models/pipeline.py
 - [ ] T008 [P] [US2] Add AuditMixin to Job model class in backend/src/models/job.py

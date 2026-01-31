@@ -22,7 +22,7 @@ from sqlalchemy.orm import relationship
 from backend.src.models.types import JSONBType
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 from backend.src.utils.cache import COLLECTION_STATE_TTL
 
 
@@ -56,7 +56,7 @@ class CollectionState(enum.Enum):
     ARCHIVED = "archived"
 
 
-class Collection(Base, GuidMixin):
+class Collection(Base, GuidMixin, AuditMixin):
     """
     Photo collection model.
 
