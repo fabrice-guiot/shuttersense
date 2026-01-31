@@ -176,22 +176,20 @@ def verify_checksum(expected: str, actual: Optional[str] = None) -> bool:
     return expected.lower() == actual.lower()
 
 
-# Development mode flag - can be set to bypass attestation
-# This should NEVER be True in production builds
-_DEVELOPMENT_MODE = os.environ.get('SHUSAI_AGENT_DEV_MODE', '').lower() == 'true'
-
-
 def is_development_mode() -> bool:
     """
     Check if agent is running in development mode.
 
-    In development mode, attestation checks can be bypassed.
-    This should NEVER be enabled in production.
+    Development mode is determined by the execution environment:
+    frozen binaries (PyInstaller) are production, Python scripts
+    are development.  This cannot be overridden via environment
+    variables to prevent an attacker from disabling attestation
+    by setting a flag on the host.
 
     Returns:
-        True if development mode is enabled
+        True if running as a Python script (not a frozen binary)
     """
-    return _DEVELOPMENT_MODE
+    return not getattr(sys, 'frozen', False)
 
 
 def get_attestation_info() -> dict:

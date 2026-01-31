@@ -14,8 +14,15 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    /* Linting — strict mode enabled incrementally (SEC-17) */
+    /* Remaining strict flags to enable: noImplicitAny, strictNullChecks,
+       strictPropertyInitialization (requires strictNullChecks) */
     "strict": false,
+    "alwaysStrict": true,
+    "noImplicitThis": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "useUnknownInCatchVariables": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,

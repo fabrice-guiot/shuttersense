@@ -367,10 +367,10 @@ class AuthService:
         display_name = user_info.get("name")
         picture_url = user_info.get("picture")
 
-        # Debug: Log available user_info fields for troubleshooting
+        # Debug: Log available user_info field names (never values — may contain PII)
         logger.debug(f"OAuth user_info fields for {provider}: {list(user_info.keys())}")
         if not picture_url:
-            logger.debug(f"No 'picture' field in user_info. Available: {user_info}")
+            logger.debug(f"No 'picture' field in user_info. Available keys: {list(user_info.keys())}")
 
         self.user_service.update_oauth_profile(
             user=user,

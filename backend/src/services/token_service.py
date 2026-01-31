@@ -192,11 +192,12 @@ class TokenService:
             TenantContext if valid, None if invalid/expired/revoked
         """
         try:
-            # Decode and verify JWT
+            # Decode and verify JWT (explicit exp verification — SEC-18)
             payload = jwt.decode(
                 token,
                 self.jwt_secret,
                 algorithms=[TOKEN_ALGORITHM],
+                options={"verify_exp": True},
             )
 
             # Check token type

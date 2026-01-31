@@ -1,11 +1,14 @@
 """
 Super admin authorization configuration.
 
-Super admin status is determined by comparing email hashes against a predefined set.
+Super admin status is determined by comparing email hashes against a
+configurable set loaded from the ``SHUSAI_SUPER_ADMIN_HASHES`` environment
+variable.
+
 This approach:
 - Requires no database tables
-- Prevents email disclosure if code is compromised (SHA-256 hashed)
-- Changes require deployment (acceptable security measure for v1)
+- Prevents email disclosure if environment is compromised (SHA-256 hashed)
+- Can be changed without code deployment
 
 Usage:
     from backend.src.config.super_admins import is_super_admin
@@ -13,24 +16,39 @@ Usage:
     if is_super_admin(user.email):
         # Grant super admin access
         ...
+
+Configuration:
+    Set the SHUSAI_SUPER_ADMIN_HASHES environment variable to a
+    comma-separated list of SHA-256 email hashes::
+
+        export SHUSAI_SUPER_ADMIN_HASHES="hash1,hash2,hash3"
+
+    Generate a hash with::
+
+        python -c "import hashlib; print(hashlib.sha256('admin@example.com'.lower().encode()).hexdigest())"
 """
 
 import hashlib
+import os
 from typing import Set
 
 
-# SHA-256 hashed email addresses of super admins
-# To add a new super admin:
-# 1. Run: python -c "import hashlib; print(hashlib.sha256('admin@example.com'.lower().encode()).hexdigest())"
-# 2. Add the hash to this set
-# 3. Deploy the update
-SUPER_ADMIN_EMAIL_HASHES: Set[str] = set()
-# To add super admin emails:
-# 1. Run: python -c "import hashlib; print(hashlib.sha256('admin@example.com'.lower().encode()).hexdigest())"
-# 2. Add the hash to the set above: SUPER_ADMIN_EMAIL_HASHES.add("hash_here")
-#    Or modify this file to include the hash in the set literal
-# 3. Deploy the update
-SUPER_ADMIN_EMAIL_HASHES.add("bb3be22f0fbe8181dc7f0c7a6f406934beb84aab1d9b3d2cad3da2433cf1d1ed")
+def _load_super_admin_hashes() -> Set[str]:
+    """Load super admin email hashes from environment variable.
+
+    Returns:
+        Set of SHA-256 hex digests loaded from SHUSAI_SUPER_ADMIN_HASHES.
+    """
+    env_value = os.environ.get("SHUSAI_SUPER_ADMIN_HASHES", "")
+    hashes: Set[str] = set()
+    for entry in env_value.split(","):
+        entry = entry.strip()
+        if entry:
+            hashes.add(entry)
+    return hashes
+
+
+SUPER_ADMIN_EMAIL_HASHES: Set[str] = _load_super_admin_hashes()
 
 
 def is_super_admin(email: str) -> bool:

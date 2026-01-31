@@ -26,6 +26,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.src.db.database import get_db
+from backend.src.middleware.auth import require_super_admin, TenantContext
 from backend.src.services.auth_service import AuthService
 from backend.src.services.exceptions import ValidationError
 from backend.src.utils.logging_config import get_logger
@@ -339,26 +340,23 @@ class ProfileDebugResponse(BaseModel):
 @router.get(
     "/profile/debug",
     response_model=ProfileDebugResponse,
-    summary="Debug profile information",
-    description="Shows stored profile data for debugging. Log out and back in to refresh OAuth profile.",
+    summary="Debug profile information (super admin only)",
+    description="Shows stored profile data for debugging. Restricted to super admin.",
 )
 async def debug_profile(
     request: Request,
     db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_super_admin),
 ) -> ProfileDebugResponse:
     """
     Get debug information about the current user's profile.
 
-    Shows what's stored in the database for the authenticated user.
-    To refresh profile data from OAuth provider, log out and log back in.
+    Restricted to super admin to prevent exposure of OAuth identifiers.
 
     Returns:
         Profile debug information including OAuth fields
     """
     auth_service = AuthService(db)
-
-    if not auth_service.is_authenticated(request):
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     user = auth_service.get_session_user(request)
     if not user:

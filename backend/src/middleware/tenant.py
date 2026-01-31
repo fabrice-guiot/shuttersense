@@ -13,14 +13,74 @@ All tenant-scoped service operations should use the team_id from TenantContext
 to filter data appropriately.
 """
 
+import logging
+import time
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
-import uuid
 
 from fastapi import Request, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# SEC-13: Per-IP failed token validation tracking
+# ---------------------------------------------------------------------------
+# In-memory tracker for failed API token validation attempts. Limits brute
+# force attacks against the Bearer token endpoint without requiring Redis.
+# ---------------------------------------------------------------------------
+_TOKEN_FAILURE_WINDOW = 300  # 5 minutes
+_TOKEN_FAILURE_WARN = 5  # log warning after this many failures
+_TOKEN_FAILURE_BLOCK = 20  # block IP after this many failures
+_TOKEN_FAILURE_BLOCK_DURATION = 300  # block for 5 minutes
+
+_token_failures: dict[str, list[float]] = defaultdict(list)
+_token_blocked: dict[str, float] = {}
+
+
+def _record_token_failure(ip: str) -> None:
+    """Record a failed token validation attempt for an IP."""
+    now = time.monotonic()
+    _token_failures[ip].append(now)
+    # Prune old entries outside the window
+    cutoff = now - _TOKEN_FAILURE_WINDOW
+    _token_failures[ip] = [t for t in _token_failures[ip] if t > cutoff]
+
+    count = len(_token_failures[ip])
+    if count >= _TOKEN_FAILURE_BLOCK:
+        _token_blocked[ip] = now
+        logger.warning(
+            "SEC-13: Blocking IP %s for %ds after %d failed token validations",
+            ip, _TOKEN_FAILURE_BLOCK_DURATION, count,
+        )
+    elif count >= _TOKEN_FAILURE_WARN:
+        logger.warning(
+            "SEC-13: IP %s has %d failed token validations in %ds window",
+            ip, count, _TOKEN_FAILURE_WINDOW,
+        )
+
+
+def _is_token_blocked(ip: str) -> bool:
+    """Check if an IP is currently blocked from token validation."""
+    blocked_at = _token_blocked.get(ip)
+    if blocked_at is None:
+        return False
+    if time.monotonic() - blocked_at > _TOKEN_FAILURE_BLOCK_DURATION:
+        del _token_blocked[ip]
+        _token_failures.pop(ip, None)
+        return False
+    return True
+
+
+def _clear_token_failures(ip: str) -> None:
+    """Clear failure tracking for an IP after successful validation."""
+    _token_failures.pop(ip, None)
+    _token_blocked.pop(ip, None)
 
 
 @dataclass
@@ -111,8 +171,9 @@ async def get_tenant_context(
     # Try API token authentication first
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
+        client_ip = request.client.host if request.client else "unknown"
         return await _authenticate_api_token(
-            auth_header[7:], db, check_super_admin
+            auth_header[7:], db, check_super_admin, client_ip
         )
 
     # Try session authentication
@@ -157,7 +218,8 @@ async def get_optional_tenant_context(
 async def _authenticate_api_token(
     token: str,
     db: Session,
-    check_super_admin
+    check_super_admin,
+    client_ip: str = "unknown",
 ) -> TenantContext:
     """
     Authenticate using an API token.
@@ -165,10 +227,13 @@ async def _authenticate_api_token(
     API tokens use JWT format and are validated through the TokenService.
     API tokens NEVER grant super admin privileges (security requirement).
 
+    Includes per-IP rate limiting for failed validation attempts (SEC-13).
+
     Args:
         token: JWT token string
         db: Database session
         check_super_admin: Function to check super admin status (unused for tokens)
+        client_ip: Client IP address for rate limiting
 
     Returns:
         TenantContext for the token's user and team with:
@@ -178,7 +243,18 @@ async def _authenticate_api_token(
     Raises:
         HTTPException 401: If token is invalid, expired, or revoked
         HTTPException 403: If token, user, or team is inactive
+        HTTPException 429: If IP is blocked due to too many failed attempts
     """
+    # SEC-13: Check if IP is blocked from too many failures
+    if _is_token_blocked(client_ip):
+        logger.warning(
+            "SEC-13: Rejecting token validation from blocked IP %s", client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed authentication attempts. Try again later.",
+        )
+
     # Import TokenService here to avoid circular imports
     from backend.src.services.token_service import TokenService
     from backend.src.config.settings import get_settings
@@ -190,11 +266,15 @@ async def _authenticate_api_token(
     ctx = service.validate_token(token)
 
     if not ctx:
+        _record_token_failure(client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid, expired, or revoked API token",
             headers={"WWW-Authenticate": "Bearer"}
         )
+
+    # Successful validation — clear any failure tracking for this IP
+    _clear_token_failures(client_ip)
 
     # ctx from TokenService already has:
     # - is_api_token=True

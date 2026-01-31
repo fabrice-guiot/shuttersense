@@ -2,7 +2,12 @@
 Offline result storage for analysis results pending upload.
 
 Provides save/load/list_pending/mark_synced/delete operations for
-OfflineResult objects, stored as JSON files at {data_dir}/results/{result_id}.json.
+OfflineResult objects, stored as encrypted files at
+{data_dir}/results/{result_id}.json.
+
+Results are encrypted at rest using Fernet symmetric encryption.
+The encryption key is shared with the credential store
+(~/.shuttersense-agent/master.key) and auto-generated on first use.
 
 Results have no TTL — they persist until explicitly synced and deleted.
 
@@ -11,13 +16,48 @@ Task: T030
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import List, Optional
+
+from cryptography.fernet import Fernet
 
 from src.cache import OfflineResult
 from src.config import get_cache_paths
 
 logger = logging.getLogger(__name__)
+
+# Master key lives alongside the credential store
+_AGENT_DIR = Path.home() / ".shuttersense-agent"
+_MASTER_KEY_FILE = _AGENT_DIR / "master.key"
+_fernet: Optional[Fernet] = None
+
+
+def _get_fernet() -> Fernet:
+    """Get or create the Fernet cipher, reusing the credential store's master key."""
+    global _fernet
+    if _fernet is not None:
+        return _fernet
+
+    _AGENT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if _MASTER_KEY_FILE.exists():
+        key = _MASTER_KEY_FILE.read_bytes()
+    else:
+        key = Fernet.generate_key()
+        _MASTER_KEY_FILE.write_bytes(key)
+        try:
+            os.chmod(_MASTER_KEY_FILE, 0o600)
+        except OSError:
+            pass
+
+    try:
+        os.chmod(_AGENT_DIR, 0o700)
+    except OSError:
+        pass
+
+    _fernet = Fernet(key)
+    return _fernet
 
 
 def _get_results_dir() -> Path:
@@ -34,7 +74,7 @@ def _result_file(result_id: str) -> Path:
 
 def save(result: OfflineResult) -> Path:
     """
-    Save an offline result to disk.
+    Save an offline result to disk (encrypted).
 
     Args:
         result: OfflineResult to save
@@ -45,8 +85,10 @@ def save(result: OfflineResult) -> Path:
     Raises:
         OSError: If the file cannot be written
     """
+    fernet = _get_fernet()
     result_file = _result_file(result.result_id)
-    result_file.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+    encrypted = fernet.encrypt(result.model_dump_json(indent=2).encode("utf-8"))
+    result_file.write_bytes(encrypted)
     logger.debug(
         "Saved offline result %s (tool=%s, collection=%s) -> %s",
         result.result_id,
@@ -59,7 +101,7 @@ def save(result: OfflineResult) -> Path:
 
 def load(result_id: str) -> Optional[OfflineResult]:
     """
-    Load an offline result from disk.
+    Load an offline result from disk (decrypting).
 
     Args:
         result_id: UUID of the result to load
@@ -72,9 +114,18 @@ def load(result_id: str) -> Optional[OfflineResult]:
         return None
 
     try:
-        raw = result_file.read_text(encoding="utf-8")
+        encrypted = result_file.read_bytes()
+        fernet = _get_fernet()
+        raw = fernet.decrypt(encrypted).decode("utf-8")
         return OfflineResult.model_validate_json(raw)
     except Exception as e:
+        # Try reading as plaintext for backwards compatibility with
+        # results saved before encryption was added.
+        try:
+            raw = result_file.read_text(encoding="utf-8")
+            return OfflineResult.model_validate_json(raw)
+        except Exception:
+            pass
         logger.warning("Failed to load offline result %s: %s", result_id, e)
         return None
 
@@ -89,12 +140,12 @@ def list_all() -> List[OfflineResult]:
     results_dir = _get_results_dir()
     results = []
     for result_file in sorted(results_dir.glob("*.json")):
-        try:
-            raw = result_file.read_text(encoding="utf-8")
-            result = OfflineResult.model_validate_json(raw)
-            results.append(result)
-        except Exception as e:
-            logger.warning("Skipping corrupted result file %s: %s", result_file, e)
+        result_id = result_file.stem
+        loaded = load(result_id)
+        if loaded:
+            results.append(loaded)
+        else:
+            logger.warning("Skipping unreadable result file %s", result_file)
     return results
 
 

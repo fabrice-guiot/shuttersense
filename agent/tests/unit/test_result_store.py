@@ -120,12 +120,22 @@ class TestSaveLoad:
         result = load("bad-uuid")
         assert result is None
 
-    def test_saved_json_is_valid(self, results_dir, sample_result):
+    def test_saved_file_is_encrypted(self, results_dir, sample_result):
+        """Saved file should not be readable as plaintext JSON."""
         path = save(sample_result)
-        data = json.loads(path.read_text())
-        assert data["result_id"] == sample_result.result_id
-        assert data["tool"] == "photostats"
-        assert data["synced"] is False
+        raw = path.read_bytes()
+        # Encrypted Fernet tokens start with 'gAAAAA' (base64 prefix)
+        # and are NOT valid JSON
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(raw)
+
+    def test_roundtrip_preserves_fields(self, results_dir, sample_result):
+        save(sample_result)
+        loaded = load(sample_result.result_id)
+        assert loaded is not None
+        assert loaded.result_id == sample_result.result_id
+        assert loaded.tool == "photostats"
+        assert loaded.synced is False
 
 
 # ============================================================================

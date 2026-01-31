@@ -14,7 +14,6 @@ Security:
 - Nonce parameter prevents replay attacks
 """
 
-from functools import lru_cache
 from typing import Optional
 
 from authlib.integrations.starlette_client import OAuth
@@ -32,18 +31,54 @@ class MicrosoftOAuth2App(StarletteOAuth2App):
     """
     Custom OAuth2 client for Microsoft that handles multi-tenant issuer validation.
 
-    Microsoft's "common" endpoint returns tenant-specific issuers in ID tokens,
-    but the discovery document has a placeholder. This subclass overrides
-    parse_id_token to skip issuer validation.
+    Microsoft's "common" endpoint discovery document advertises the issuer as
+    ``https://login.microsoftonline.com/common/v2.0``, but actual ID tokens
+    contain a tenant-specific issuer like
+    ``https://login.microsoftonline.com/{tid}/v2.0``.
+
+    This subclass extracts the ``tid`` (tenant ID) claim from the ID token
+    and validates the issuer against the expected tenant-specific pattern,
+    rather than skipping issuer validation entirely.
     """
 
     async def parse_id_token(self, token, nonce, claims_options=None, claims_cls=None, leeway=120):
-        """Override to skip issuer validation for Microsoft multi-tenant."""
-        # Force skip issuer validation
+        """Override to validate issuer against tenant-specific pattern."""
         if claims_options is None:
             claims_options = {}
-        claims_options["iss"] = {"essential": False, "value": None}
+
+        tid = self._extract_tid(token.get("id_token", ""))
+        if tid:
+            expected_issuer = f"https://login.microsoftonline.com/{tid}/v2.0"
+            claims_options["iss"] = {"essential": True, "value": expected_issuer}
+        else:
+            # Cannot determine expected issuer — reject tokens without tid
+            logger.warning("Microsoft ID token missing tid claim; issuer cannot be validated")
+            claims_options["iss"] = {"essential": True}
+
         return await super().parse_id_token(token, nonce, claims_options, claims_cls, leeway)
+
+    @staticmethod
+    def _extract_tid(id_token: str) -> str | None:
+        """Extract the tenant ID from a JWT without full verification.
+
+        The signature is verified by the parent class; this only peeks at the
+        payload to learn which tenant issued the token so the correct issuer
+        value can be constructed for validation.
+        """
+        import base64
+        import json
+
+        try:
+            parts = id_token.split(".")
+            if len(parts) != 3:
+                return None
+            payload_b64 = parts[1]
+            # Restore padding stripped by JWT encoding
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            return payload.get("tid")
+        except Exception:
+            return None
 
 
 # Global OAuth registry instance
@@ -83,7 +118,8 @@ def _get_oauth_registry() -> OAuth:
 
     # Register Microsoft OAuth client using custom class that handles multi-tenant issuer
     # Note: Microsoft's "common" endpoint returns tenant-specific issuers in ID tokens,
-    # but the discovery document has a placeholder. MicrosoftOAuth2App skips issuer validation.
+    # but the discovery document has a placeholder. MicrosoftOAuth2App validates the
+    # issuer against the tenant-specific pattern extracted from the tid claim.
     if settings.microsoft_enabled:
         _oauth.register(
             name="microsoft",
@@ -217,7 +253,7 @@ async def fetch_token(
         raise ValueError(f"OAuth provider '{provider}' is not configured")
 
     # Authlib automatically verifies state and PKCE code_verifier
-    # Note: For Microsoft, MicrosoftOAuth2App handles issuer validation skip
+    # Note: For Microsoft, MicrosoftOAuth2App handles tenant-specific issuer validation
     token = await client.authorize_access_token(request)
 
     return token

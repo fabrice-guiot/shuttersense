@@ -9,6 +9,7 @@ Issue #90 - Distributed Agent Architecture (Phase 3)
 Task: T039
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -16,6 +17,8 @@ from typing import List, Optional
 
 import yaml
 from platformdirs import user_config_dir, user_data_dir
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -325,9 +328,18 @@ class AgentConfig:
             raise ConfigError(f"Failed to parse config file: {e}")
 
     def save(self) -> None:
-        """Save configuration to file."""
-        # Ensure directory exists
+        """Save configuration to file.
+
+        The config file contains the API key and is restricted to owner
+        read/write (0o600).  For production deployments, prefer setting
+        the SHUSAI_API_KEY environment variable instead.
+        """
+        # Ensure directory exists with restrictive permissions
         self._config_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self._config_dir, 0o700)
+        except OSError:
+            pass  # Best-effort on platforms that don't support chmod
 
         data = {
             "server_url": self._server_url,
@@ -343,6 +355,12 @@ class AgentConfig:
         with open(self._config_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False)
 
+        # Restrict config file to owner read/write — it contains the API key
+        try:
+            os.chmod(self._config_path, 0o600)
+        except OSError:
+            pass  # Best-effort on platforms that don't support chmod (Windows)
+
     def validate(self) -> None:
         """
         Validate the current configuration.
@@ -354,6 +372,14 @@ class AgentConfig:
         if self.server_url and not URL_PATTERN.match(self.server_url):
             raise ConfigValidationError(
                 f"Invalid server_url format: {self.server_url}"
+            )
+
+        # Warn when using HTTP — API key is sent in plaintext
+        if self.server_url and self.server_url.startswith("http://"):
+            logger.warning(
+                "Server URL uses HTTP (not HTTPS). "
+                "The API key and all data will be transmitted unencrypted. "
+                "Use HTTPS for production deployments."
             )
 
         # Validate heartbeat interval
