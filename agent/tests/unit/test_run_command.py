@@ -273,7 +273,7 @@ class TestOnlineMode:
             mock_cache.load.return_value = local_collection_cache
             result = runner.invoke(run, ["col_local123", "--tool", "photostats"])
         assert result.exit_code == 2
-        assert "Connection failed" in result.output
+        assert "Could not connect to the server" in result.output
         assert "--offline" in result.output  # Tip about offline mode
 
     def test_online_rejects_remote_collection(self, runner, mock_config, remote_collection_cache):

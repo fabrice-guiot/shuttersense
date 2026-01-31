@@ -15,7 +15,7 @@ echo "Building ShutterSense Agent for Windows..."
 cd "$AGENT_DIR"
 
 # Install build dependencies if needed
-pip install -q pyinstaller
+pip install -q "pyinstaller==6.18.0"
 
 # Build the agent binary
 pyinstaller \

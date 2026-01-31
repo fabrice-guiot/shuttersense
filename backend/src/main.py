@@ -150,8 +150,9 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     """
     Limit request body size to prevent resource exhaustion.
 
-    This middleware checks the Content-Length header and rejects
-    requests that exceed the configured maximum.
+    Checks Content-Length header for early rejection, and wraps the
+    request body stream to enforce the limit for chunked transfers
+    that omit Content-Length.
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -175,6 +176,27 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     )
             except ValueError:
                 pass  # Invalid Content-Length, let server handle it
+        elif request.method in ("POST", "PUT", "PATCH"):
+            # No Content-Length header (chunked transfer) — wrap the body
+            # stream to enforce the size limit while reading.
+            original_receive = request._receive
+            bytes_received = 0
+
+            async def size_limited_receive():
+                nonlocal bytes_received
+                message = await original_receive()
+                if message.get("type") == "http.request":
+                    body = message.get("body", b"")
+                    bytes_received += len(body)
+                    if bytes_received > MAX_REQUEST_SIZE:
+                        from starlette.exceptions import HTTPException as StarletteHTTPException
+                        raise StarletteHTTPException(
+                            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail=f"Request body exceeds maximum size of {MAX_REQUEST_SIZE // (1024 * 1024)}MB",
+                        )
+                return message
+
+            request._receive = size_limited_receive
 
         return await call_next(request)
 
@@ -441,6 +463,22 @@ async def lifespan(app: FastAPI):
     # for proper tenant isolation.
     logger.info("Skipping global configuration seeding (tenant-specific data is seeded per-team)")
 
+    # Validate session security configuration (SEC-03)
+    _env = os.environ.get("SHUSAI_ENV", "development").lower()
+    _session_settings = get_session_settings()
+    if _env == "production":
+        if not _session_settings.session_https_only:
+            logger.warning(
+                "SESSION_HTTPS_ONLY is False in production. "
+                "Session cookies will be sent over unencrypted HTTP. "
+                "Set SESSION_HTTPS_ONLY=true for production deployments."
+            )
+        if not _session_settings.is_configured:
+            logger.warning(
+                "SESSION_SECRET_KEY is not set. "
+                "Sessions will not work. Set a strong secret key (min 32 characters)."
+            )
+
     logger.info("ShutterSense backend started successfully")
 
     # Start dead agent safety net background task (Phase 8, T035)
@@ -644,8 +682,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     expose_headers=["Content-Disposition"],  # Expose for report download filenames
 )
 

@@ -549,7 +549,7 @@ Configuration values are resolved in this order (highest priority first):
 | `SHUSAI_LOG_LEVEL` | Override log level (DEBUG, INFO, WARNING, ERROR) |
 | `SHUSAI_CONFIG_PATH` | Override config file path |
 | `SHUSAI_DEBUG_COMMANDS` | Set to `1` to enable debug CLI commands |
-| `SHUSAI_AGENT_DEV_MODE` | Set to `1` to enable development mode |
+| ~~`SHUSAI_AGENT_DEV_MODE`~~ | Removed — dev mode is now determined automatically (script vs frozen binary) |
 | `SHUSAI_VERSION` | Override version string (for CI/CD without Git) |
 
 ## Storage Adapters

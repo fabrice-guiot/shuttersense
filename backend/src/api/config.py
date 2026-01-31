@@ -266,8 +266,15 @@ async def start_import(
     Returns:
         Import session with conflicts
     """
+    # Limit YAML import to 1MB to prevent memory exhaustion
+    max_import_size = 1 * 1024 * 1024  # 1MB
     try:
-        content = await file.read()
+        content = await file.read(max_import_size + 1)
+        if len(content) > max_import_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"YAML file exceeds maximum import size of {max_import_size // (1024 * 1024)}MB",
+            )
         yaml_content = content.decode("utf-8")
 
         session = service.start_import(yaml_content, team_id=ctx.team_id, filename=file.filename)

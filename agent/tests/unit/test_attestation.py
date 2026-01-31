@@ -200,35 +200,23 @@ class TestVerifyChecksum:
 class TestDevelopmentMode:
     """Tests for development mode handling."""
 
-    def test_dev_mode_disabled_by_default(self):
-        """Development mode is disabled by default."""
-        with patch.dict(os.environ, {}, clear=True):
-            # Need to reload module to pick up env change
-            import importlib
-            import agent.src.attestation as attestation_module
-            importlib.reload(attestation_module)
+    def test_dev_mode_true_for_scripts(self):
+        """Development mode is True when running as Python script."""
+        # sys.frozen is not set when running as script (our test environment)
+        assert is_development_mode() is True
 
-            # Should be False when env var not set
-            # Note: This test may not work perfectly due to module caching
-            # In practice, the env var is read at import time
+    @patch.object(__import__('sys'), 'frozen', True, create=True)
+    def test_dev_mode_false_for_frozen(self):
+        """Development mode is False for frozen binaries."""
+        assert is_development_mode() is False
 
-    @patch.dict(os.environ, {'SHUSAI_AGENT_DEV_MODE': 'true'})
-    def test_dev_mode_from_env(self):
-        """Development mode can be enabled via environment."""
-        import importlib
-        import agent.src.attestation as attestation_module
-        importlib.reload(attestation_module)
-
-        assert attestation_module.is_development_mode() is True
-
-    @patch.dict(os.environ, {'SHUSAI_AGENT_DEV_MODE': 'false'})
-    def test_dev_mode_false_string(self):
-        """'false' string disables dev mode."""
-        import importlib
-        import agent.src.attestation as attestation_module
-        importlib.reload(attestation_module)
-
-        assert attestation_module.is_development_mode() is False
+    def test_dev_mode_not_controlled_by_env(self):
+        """Development mode cannot be overridden via environment variable."""
+        with patch.dict(os.environ, {'SHUSAI_AGENT_DEV_MODE': 'true'}):
+            # Even with env var set, dev mode depends on sys.frozen
+            result = is_development_mode()
+            # We're running as a script, so True regardless of env var
+            assert result is True
 
 
 class TestGetAttestationInfo:

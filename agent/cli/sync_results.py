@@ -9,10 +9,14 @@ Task: T035
 """
 
 import asyncio
+import logging
 import sys
 from typing import Optional
 
 import click
+
+
+logger = logging.getLogger(__name__)
 
 from src.api_client import (
     AgentApiClient,
@@ -113,11 +117,13 @@ def sync(dry_run: bool) -> None:
             click.echo(click.style("done", fg="green"))
         except AgentConnectionError as e:
             failed += 1
-            click.echo(click.style(f"connection failed: {e}", fg="red"))
+            logger.debug("Sync connection failed: %s", e)
+            click.echo(click.style("connection failed", fg="red"))
         except AuthenticationError as e:
             # AuthenticationError extends ApiError, so must be caught first
             failed += 1
-            click.echo(click.style(f"auth failed: {e}", fg="red"))
+            logger.debug("Sync auth failed: %s", e)
+            click.echo(click.style("auth failed", fg="red"))
         except ApiError as e:
             if e.status_code == 409:
                 # Already uploaded - mark and clean up
@@ -127,10 +133,12 @@ def sync(dry_run: bool) -> None:
                 click.echo(click.style("already uploaded", fg="yellow"))
             else:
                 failed += 1
-                click.echo(click.style(f"failed: {e}", fg="red"))
+                logger.debug("Sync API error: %s", e)
+                click.echo(click.style("failed (check logs)", fg="red"))
         except Exception as e:
             failed += 1
-            click.echo(click.style(f"error: {e}", fg="red"))
+            logger.debug("Sync unexpected error", exc_info=True)
+            click.echo(click.style("error (check logs)", fg="red"))
 
     # --- Summary ---
     click.echo()

@@ -10,6 +10,7 @@ Task: T034
 """
 
 import asyncio
+import logging
 import sys
 import time
 from datetime import datetime, timezone
@@ -17,6 +18,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
+
+
+logger = logging.getLogger(__name__)
 
 from src import __version__
 from src.api_client import (
@@ -185,9 +189,10 @@ def run(
     try:
         analysis_data, report_html = _execute_tool(tool, file_infos, location, team_config)
     except Exception as e:
+        logger.debug("Analysis failed with exception", exc_info=True)
         click.echo(
             click.style("Error: ", fg="red", bold=True)
-            + f"Analysis failed: {e}"
+            + "Analysis failed. Check logs for details."
         )
         sys.exit(1)
 
@@ -257,28 +262,32 @@ def run(
                 )
             )
         except AgentConnectionError as e:
+            logger.debug("Connection failed: %s", e)
             click.echo(
                 click.style("Error: ", fg="red", bold=True)
-                + f"Connection failed: {e}"
+                + "Could not connect to the server. Check your configuration."
             )
             click.echo("Tip: Use --offline to save results locally for later sync.")
             sys.exit(2)
         except AuthenticationError as e:
+            logger.debug("Authentication failed: %s", e)
             click.echo(
                 click.style("Error: ", fg="red", bold=True)
-                + f"Authentication failed: {e}"
+                + "Authentication failed. Verify your API key."
             )
             sys.exit(2)
         except ApiError as e:
+            logger.debug("API error during upload: %s", e)
             click.echo(
                 click.style("Error: ", fg="red", bold=True)
-                + f"{e}"
+                + "Server rejected the upload. Check logs for details."
             )
             sys.exit(2)
         except Exception as e:
+            logger.debug("Unexpected upload error", exc_info=True)
             click.echo(
                 click.style("Error: ", fg="red", bold=True)
-                + f"Unexpected error: {e}"
+                + "An unexpected error occurred. Check logs for details."
             )
             sys.exit(2)
 
