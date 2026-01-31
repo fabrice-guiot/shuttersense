@@ -1254,9 +1254,19 @@ class JobCoordinatorService:
                 from backend.src.utils.websocket import get_connection_manager
 
                 manager = get_connection_manager()
-                asyncio.get_event_loop().create_task(
-                    manager.broadcast_notification_hint(job.team_id)
-                )
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        manager.broadcast_notification_hint(job.team_id)
+                    )
+                except RuntimeError as loop_err:
+                    logger.warning(
+                        "no running asyncio loop; cannot schedule "
+                        "broadcast_notification_hint after notify_inflection_point "
+                        "(get_connection_manager ok): %s",
+                        loop_err,
+                        extra={"job_guid": job.guid},
+                    )
         except Exception as e:
             # Non-blocking: notification failure must not affect job processing
             logger.error(
@@ -2268,9 +2278,13 @@ class JobCoordinatorService:
                 from backend.src.utils.websocket import get_connection_manager
 
                 manager = get_connection_manager()
-                asyncio.get_event_loop().create_task(
-                    manager.broadcast_notification_hint(job.team_id)
-                )
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        manager.broadcast_notification_hint(job.team_id)
+                    )
+                except RuntimeError:
+                    logger.debug("No event loop running, skipping notification hint broadcast")
         except Exception as e:
             # Non-blocking: notification failure must not affect job processing
             logger.error(
