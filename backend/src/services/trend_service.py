@@ -1585,8 +1585,16 @@ class TrendService:
         from backend.src.schemas.trends import StablePeriodInfo
 
         def get_stable_info(tool: str) -> tuple:
-            """Get stable period info for a specific tool."""
-            # Get latest result for this tool
+            """Get stable period info for a specific tool.
+
+            Algorithm:
+            1. Find the latest non-failed result for this tool
+            2. If it's a NO_CHANGE result, we're in a stable period
+            3. Duration = days between the most recent COMPLETED result and today
+               (the COMPLETED result marks the last inflection point / real change)
+            4. If the latest result is COMPLETED (not NO_CHANGE), not stable
+            """
+            # Get latest result for this tool (already filtered to COMPLETED/NO_CHANGE)
             latest = self.db.query(AnalysisResult).filter(
                 and_(*base_filter, AnalysisResult.tool == tool)
             ).order_by(AnalysisResult.completed_at.desc()).first()
@@ -1599,33 +1607,27 @@ class TrendService:
             if not is_stable:
                 return (False, 0)
 
-            # Count consecutive NO_CHANGE results going back
-            # Get all results for this tool, ordered by date desc
-            results = self.db.query(AnalysisResult).filter(
-                and_(*base_filter, AnalysisResult.tool == tool)
-            ).order_by(AnalysisResult.completed_at.desc()).limit(100).all()
+            # Find the most recent COMPLETED (non-NO_CHANGE) result for this tool.
+            # This is the last inflection point — when data actually changed.
+            last_change = self.db.query(AnalysisResult).filter(
+                and_(
+                    *base_filter,
+                    AnalysisResult.tool == tool,
+                    AnalysisResult.no_change_copy == False  # noqa: E712
+                )
+            ).order_by(AnalysisResult.completed_at.desc()).first()
 
-            # Count consecutive NO_CHANGE results
             stable_days = 0
-            first_stable_date = None
-            for result in results:
-                if result.no_change_copy:
-                    if first_stable_date is None:
-                        first_stable_date = result.completed_at
-                else:
-                    # Found a non-NO_CHANGE result, stop counting
-                    break
-
-            if first_stable_date:
-                # Calculate days since first stable result
-                # Handle both timezone-aware and naive datetimes
-                if first_stable_date.tzinfo is not None:
-                    now = datetime.now(first_stable_date.tzinfo)
+            if last_change and last_change.completed_at:
+                # Calculate days since last real change
+                if last_change.completed_at.tzinfo is not None:
+                    now = datetime.now(last_change.completed_at.tzinfo)
                 else:
                     now = datetime.utcnow()
-                delta = now - first_stable_date
-                # Ensure non-negative (could be negative if clock skew or future timestamp)
-                stable_days = max(0, delta.days)
+                delta = now - last_change.completed_at
+                # Round up: any partial day counts as a full day
+                total_seconds = delta.total_seconds()
+                stable_days = max(0, -(-int(total_seconds) // 86400))
 
             return (is_stable, stable_days)
 
