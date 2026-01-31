@@ -8,7 +8,7 @@ Issue #120: Audit Trail Visibility Enhancement
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -86,4 +86,47 @@ class AuditInfo(BaseModel):
                 },
             }
         },
+    }
+
+
+def _user_summary_dict(user: Any) -> Optional[dict]:
+    """Convert a User model instance to a dict suitable for AuditUserSummary."""
+    if user is None:
+        return None
+    return {
+        "guid": user.guid,
+        "display_name": user.display_name,
+        "email": user.email,
+    }
+
+
+def build_audit_info(
+    model: Any,
+    created_by_attr: str = "created_by_user",
+    updated_by_attr: str = "updated_by_user",
+) -> Optional[dict]:
+    """
+    Build an audit info dict from a SQLAlchemy model instance.
+
+    Returns a dict that Pydantic can validate into AuditInfo. Returns None
+    if the model lacks a created_at attribute (not an auditable entity).
+
+    Args:
+        model: SQLAlchemy model instance with audit columns.
+        created_by_attr: Name of the created-by user relationship.
+        updated_by_attr: Name of the updated-by user relationship.
+
+    Returns:
+        Dict with created_at, created_by, updated_at, updated_by keys,
+        or None if the model is not auditable.
+    """
+    created_at = getattr(model, "created_at", None)
+    if created_at is None:
+        return None
+
+    return {
+        "created_at": created_at,
+        "created_by": _user_summary_dict(getattr(model, created_by_attr, None)),
+        "updated_at": getattr(model, "updated_at", created_at),
+        "updated_by": _user_summary_dict(getattr(model, updated_by_attr, None)),
     }

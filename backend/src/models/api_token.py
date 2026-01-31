@@ -165,6 +165,12 @@ class ApiToken(Base, GuidMixin):
     )
 
     @property
+    def audit(self):
+        """Computed audit info dict for API serialization."""
+        from backend.src.schemas.audit import build_audit_info
+        return build_audit_info(self, created_by_attr="created_by")
+
+    @property
     def scopes(self) -> List[str]:
         """
         Get the list of allowed scopes.

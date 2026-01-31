@@ -71,6 +71,7 @@ from backend.src.schemas.user import (
 from backend.src.schemas.audit import (
     AuditUserSummary,
     AuditInfo,
+    build_audit_info,
 )
 from backend.src.schemas.team import (
     CreateTeamRequest,
@@ -143,6 +144,7 @@ __all__ = [
     # Audit schemas (Issue #120)
     "AuditUserSummary",
     "AuditInfo",
+    "build_audit_info",
     # Team schemas (Issue #73)
     "CreateTeamRequest",
     "TeamResponse",

@@ -14,6 +14,8 @@ from typing import Optional, List
 
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
+from backend.src.schemas.audit import AuditInfo
+
 
 # ============================================================================
 # Push Subscription Schemas
@@ -66,6 +68,7 @@ class PushSubscriptionResponse(BaseModel):
     device_name: Optional[str] = None
     created_at: datetime
     last_used_at: Optional[datetime] = None
+    audit: Optional[AuditInfo] = None
 
     @field_serializer("created_at", "last_used_at")
     @classmethod
@@ -161,6 +164,7 @@ class NotificationResponse(BaseModel):
     data: Optional[NotificationDataResponse] = None
     read_at: Optional[datetime] = None
     created_at: datetime
+    audit: Optional[AuditInfo] = None
 
     @field_serializer("read_at", "created_at")
     @classmethod

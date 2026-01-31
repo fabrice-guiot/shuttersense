@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
 from backend.src.middleware.tenant import TenantContext, get_tenant_context
+from backend.src.schemas.audit import AuditInfo
 from backend.src.services.token_service import TokenService
 from backend.src.services.exceptions import NotFoundError, ValidationError
 from backend.src.config.settings import get_settings
@@ -48,6 +49,7 @@ class TokenResponse(BaseModel):
     created_at: str
     created_by_guid: Optional[str]
     created_by_email: Optional[str]  # Audit trail: email of creator
+    audit: Optional[AuditInfo] = None
 
     class Config:
         from_attributes = True
@@ -97,6 +99,7 @@ def token_to_response(api_token) -> TokenResponse:
         created_at=api_token.created_at.isoformat() if api_token.created_at else None,
         created_by_guid=api_token.created_by.guid if api_token.created_by else None,
         created_by_email=api_token.created_by.email if api_token.created_by else None,
+        audit=api_token.audit,
     )
 
 

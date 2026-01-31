@@ -234,6 +234,12 @@ class Agent(Base, GuidMixin):
         lazy="dynamic"
     )
 
+    @property
+    def audit(self):
+        """Computed audit info dict for API serialization."""
+        from backend.src.schemas.audit import build_audit_info
+        return build_audit_info(self, created_by_attr="created_by")
+
     # Table-level indexes
     __table_args__ = (
         Index("ix_agents_team_status", "team_id", "status"),

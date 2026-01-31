@@ -18,6 +18,8 @@ from enum import Enum
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field
 
+from backend.src.schemas.audit import AuditInfo
+
 
 class ConfigCategory(str, Enum):
     """Valid configuration categories."""
@@ -146,6 +148,7 @@ class ConfigItemResponse(BaseModel):
     source: str = Field(..., description="Source: 'database' or 'yaml_import'")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True,

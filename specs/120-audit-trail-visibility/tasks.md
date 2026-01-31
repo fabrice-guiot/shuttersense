@@ -109,26 +109,26 @@
 
 ### Schema Updates — Add audit field to all entity response schemas
 
-- [ ] T049 [US4] Add a helper function to build AuditInfo from a model instance in backend/src/schemas/audit.py — accepts a model with created_at, updated_at, created_by_user, updated_by_user attributes and returns an AuditInfo object; handle null users gracefully
-- [ ] T050 [P] [US4] Add audit: Optional[AuditInfo] = None field to CollectionResponse in backend/src/schemas/collection.py and update the route handler or serialization to populate it using the helper from T049
-- [ ] T051 [P] [US4] Add audit field to ConnectorResponse in backend/src/schemas/collection.py (connectors are in the same schema file) and populate it
-- [ ] T052 [P] [US4] Add audit field to PipelineResponse and related schemas in backend/src/schemas/pipelines.py
-- [ ] T053 [P] [US4] Add audit field to JobResponse and related schemas in backend/src/schemas/tools.py
-- [ ] T054 [P] [US4] Add audit field to AnalysisResultSummary and AnalysisResultResponse in backend/src/schemas/results.py
-- [ ] T055 [P] [US4] Add audit field to EventResponse and EventDetailResponse in backend/src/schemas/event.py
-- [ ] T056 [P] [US4] Add audit field to EventSeriesResponse in backend/src/schemas/event_series.py
-- [ ] T057 [P] [US4] Add audit field to CategoryResponse in backend/src/schemas/category.py
-- [ ] T058 [P] [US4] Add audit field to LocationResponse in backend/src/schemas/location.py
-- [ ] T059 [P] [US4] Add audit field to OrganizerResponse in backend/src/schemas/organizer.py
-- [ ] T060 [P] [US4] Add audit field to PerformerResponse in backend/src/schemas/performer.py
-- [ ] T061 [P] [US4] Add audit field to NotificationResponse and PushSubscriptionResponse in backend/src/schemas/notifications.py
-- [ ] T062 [P] [US4] Add audit field to ConfigurationResponse in backend/src/schemas/config.py
-- [ ] T063 [P] [US4] Add audit field to AgentResponse, ApiTokenResponse, AgentRegistrationTokenResponse in backend/src/schemas/team.py (or wherever these response schemas live)
-- [ ] T064 [US4] Export AuditInfo and AuditUserSummary from backend/src/schemas/__init__.py
+- [X] T049 [US4] Add a helper function to build AuditInfo from a model instance in backend/src/schemas/audit.py — accepts a model with created_at, updated_at, created_by_user, updated_by_user attributes and returns an AuditInfo object; handle null users gracefully. Also added `audit` property to AuditMixin (delegates to build_audit_info) and Group B models (Agent, ApiToken, AgentRegistrationToken) so Pydantic `from_attributes=True` picks it up automatically.
+- [X] T050 [P] [US4] Add audit: Optional[AuditInfo] = None field to CollectionResponse in backend/src/schemas/collection.py — also added audit extraction in `@model_validator(mode='before')` since CollectionResponse manually builds a dict
+- [X] T051 [P] [US4] Add audit field to ConnectorResponse in backend/src/schemas/collection.py (connectors are in the same schema file)
+- [X] T052 [P] [US4] Add audit field to PipelineResponse and PipelineSummary in backend/src/schemas/pipelines.py
+- [X] T053 [P] [US4] Add audit field to JobResponse in backend/src/schemas/tools.py
+- [X] T054 [P] [US4] Add audit field to AnalysisResultSummary and AnalysisResultResponse in backend/src/schemas/results.py
+- [X] T055 [P] [US4] Add audit field to EventResponse in backend/src/schemas/event.py (EventDetailResponse inherits it)
+- [X] T056 [P] [US4] Add audit field to EventSeriesResponse in backend/src/schemas/event_series.py
+- [X] T057 [P] [US4] Add audit field to CategoryResponse in backend/src/schemas/category.py
+- [X] T058 [P] [US4] Add audit field to LocationResponse in backend/src/schemas/location.py
+- [X] T059 [P] [US4] Add audit field to OrganizerResponse in backend/src/schemas/organizer.py
+- [X] T060 [P] [US4] Add audit field to PerformerResponse in backend/src/schemas/performer.py
+- [X] T061 [P] [US4] Add audit field to NotificationResponse and PushSubscriptionResponse in backend/src/schemas/notifications.py
+- [X] T062 [P] [US4] Add audit field to ConfigItemResponse in backend/src/schemas/config.py
+- [X] T063 [P] [US4] Add audit field to AgentResponse, AgentDetailResponse, RegistrationTokenListItem in backend/src/api/agent/schemas.py and TokenResponse in backend/src/api/tokens.py — updated adapter functions in routes.py to pass audit=model.audit
+- [X] T064 [US4] Export AuditInfo, AuditUserSummary, and build_audit_info from backend/src/schemas/__init__.py
 
 ### Tests — Verify audit field in API responses (NFR-400.3)
 
-- [ ] T064a [US4] Create backend/tests/unit/test_audit_responses.py (or add to existing integration tests) with tests covering: build_audit_info helper (from T049) returns correct AuditInfo from a model instance with full user data, null users, and mixed null; entity API response includes audit field with created_by/updated_by user summaries (test at least CollectionResponse and one other); historical entity response has audit.created_by = null and audit.updated_by = null without error; audit field coexists with existing top-level created_at/updated_at fields (backward compatibility); AuditUserSummary contains guid (not internal id), display_name, and email
+- [X] T064a [US4] Created backend/tests/unit/test_audit_responses.py with 15 tests across 5 classes: TestBuildAuditInfo (7 tests: full data, null users, mixed null, no created_at, updated_at fallback, Group B attr, validates into AuditInfo), TestAuditUserSummary (3 tests), TestSchemaAuditFieldIntegration (3 tests: CategoryResponse with/without audit, PipelineResponse), TestAuditMixinProperty (2 tests with real DB). Full suite: 2484 passed, 7 failed (pre-existing), 14 skipped.
 
 **Checkpoint**: All API responses now include the `audit` field with test coverage. Verify with curl/httpie requests to list and detail endpoints.
 

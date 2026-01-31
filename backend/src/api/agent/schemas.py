@@ -14,6 +14,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, model_validator
 
 from backend.src.models.agent import AgentStatus
+from backend.src.schemas.audit import AuditInfo
 
 
 # ============================================================================
@@ -281,6 +282,9 @@ class AgentResponse(BaseModel):
     # Load info (Phase 12)
     running_jobs_count: int = Field(0, description="Number of running/assigned jobs")
 
+    # Audit trail (Issue #120)
+    audit: Optional[AuditInfo] = None
+
     model_config = {
         "from_attributes": True,
         "json_schema_extra": {
@@ -361,6 +365,9 @@ class AgentDetailResponse(BaseModel):
         default_factory=list,
         description="Recent job history (last 10 jobs)"
     )
+
+    # Audit trail (Issue #120)
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True,
@@ -541,6 +548,9 @@ class RegistrationTokenListItem(BaseModel):
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     created_by_email: Optional[str] = Field(None, description="Email of creator")
+
+    # Audit trail (Issue #120)
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True

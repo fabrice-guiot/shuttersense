@@ -73,3 +73,9 @@ class AuditMixin:
             foreign_keys=[cls.updated_by_user_id],
             lazy="select",
         )
+
+    @property
+    def audit(self):
+        """Computed audit info dict for API serialization via from_attributes."""
+        from backend.src.schemas.audit import build_audit_info
+        return build_audit_info(self)
