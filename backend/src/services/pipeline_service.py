@@ -73,7 +73,8 @@ class PipelineService:
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]],
         team_id: int,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        user_id: Optional[int] = None
     ) -> PipelineResponse:
         """
         Create a new pipeline.
@@ -116,7 +117,9 @@ class PipelineService:
             is_default=False,
             is_valid=is_valid,
             validation_errors=validation_errors if validation_errors else None,
-            team_id=team_id
+            team_id=team_id,
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(pipeline)
@@ -208,7 +211,8 @@ class PipelineService:
         description: Optional[str] = None,
         nodes: Optional[List[Dict[str, Any]]] = None,
         edges: Optional[List[Dict[str, Any]]] = None,
-        change_summary: Optional[str] = None
+        change_summary: Optional[str] = None,
+        user_id: Optional[int] = None
     ) -> PipelineResponse:
         """
         Update a pipeline.
@@ -270,6 +274,8 @@ class PipelineService:
         # Increment version
         pipeline.version += 1
 
+        if user_id is not None:
+            pipeline.updated_by_user_id = user_id
         self.db.commit()
         self.db.refresh(pipeline)
 
@@ -506,7 +512,7 @@ class PipelineService:
     # Activation
     # =========================================================================
 
-    def activate(self, pipeline_id: int) -> PipelineResponse:
+    def activate(self, pipeline_id: int, user_id: Optional[int] = None) -> PipelineResponse:
         """
         Activate a pipeline.
 
@@ -530,13 +536,15 @@ class PipelineService:
 
         # Activate this pipeline (multiple can be active)
         pipeline.is_active = True
+        if user_id is not None:
+            pipeline.updated_by_user_id = user_id
         self.db.commit()
         self.db.refresh(pipeline)
 
         logger.info(f"Activated pipeline {pipeline_id}")
         return self._to_response(pipeline)
 
-    def deactivate(self, pipeline_id: int) -> PipelineResponse:
+    def deactivate(self, pipeline_id: int, user_id: Optional[int] = None) -> PipelineResponse:
         """
         Deactivate a pipeline.
 
@@ -555,13 +563,15 @@ class PipelineService:
         pipeline.is_active = False
         if pipeline.is_default:
             pipeline.is_default = False
+        if user_id is not None:
+            pipeline.updated_by_user_id = user_id
         self.db.commit()
         self.db.refresh(pipeline)
 
         logger.info(f"Deactivated pipeline {pipeline_id}")
         return self._to_response(pipeline)
 
-    def set_default(self, pipeline_id: int) -> PipelineResponse:
+    def set_default(self, pipeline_id: int, user_id: Optional[int] = None) -> PipelineResponse:
         """
         Set a pipeline as the default for tool execution.
 
@@ -590,6 +600,8 @@ class PipelineService:
 
         # Set this pipeline as default
         pipeline.is_default = True
+        if user_id is not None:
+            pipeline.updated_by_user_id = user_id
         self.db.commit()
         self.db.refresh(pipeline)
 
@@ -812,13 +824,14 @@ class PipelineService:
     # Import/Export
     # =========================================================================
 
-    def import_from_yaml(self, yaml_content: str, team_id: int) -> PipelineResponse:
+    def import_from_yaml(self, yaml_content: str, team_id: int, user_id: Optional[int] = None) -> PipelineResponse:
         """
         Import pipeline from YAML string.
 
         Args:
             yaml_content: YAML content
             team_id: Team ID for tenant isolation
+            user_id: Optional user ID for audit attribution
 
         Returns:
             Created pipeline
@@ -850,7 +863,8 @@ class PipelineService:
             description=description,
             nodes=nodes,
             edges=edges,
-            team_id=team_id
+            team_id=team_id,
+            user_id=user_id
         )
 
     def export_to_yaml(self, pipeline_id: int) -> str:

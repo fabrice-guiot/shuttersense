@@ -23,7 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
 class EventStatus(enum.Enum):
@@ -61,7 +61,7 @@ class TravelStatus(enum.Enum):
     BOOKED = "booked"    # Green
 
 
-class Event(Base, GuidMixin):
+class Event(Base, GuidMixin, AuditMixin):
     """
     Calendar event model.
 

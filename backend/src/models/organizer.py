@@ -21,10 +21,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class Organizer(Base, GuidMixin):
+class Organizer(Base, GuidMixin, AuditMixin):
     """
     Event organizer model.
 

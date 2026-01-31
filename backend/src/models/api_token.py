@@ -129,6 +129,14 @@ class ApiToken(Base, GuidMixin):
     last_used_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
 
+    # Audit: who last updated this token
+    updated_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", name="fk_api_tokens_updated_by_user_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -144,6 +152,11 @@ class ApiToken(Base, GuidMixin):
         foreign_keys=[created_by_user_id],
         back_populates="created_api_tokens",
         lazy="joined"
+    )
+    updated_by_user = relationship(
+        "User",
+        foreign_keys=[updated_by_user_id],
+        lazy="select"
     )
     team = relationship(
         "Team",

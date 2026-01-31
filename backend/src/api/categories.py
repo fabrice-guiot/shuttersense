@@ -190,6 +190,7 @@ async def create_category(
         created_category = category_service.create(
             name=category.name,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             icon=category.icon,
             color=category.color,
             is_active=category.is_active,
@@ -311,6 +312,7 @@ async def update_category(
         updated_category = category_service.update(
             guid=guid,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             name=category_update.name,
             icon=category_update.icon,
             color=category_update.color,

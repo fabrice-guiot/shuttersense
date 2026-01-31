@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 if TYPE_CHECKING:
     from backend.src.models.team import Team
@@ -55,7 +55,7 @@ class JobStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
-class Job(Base, GuidMixin):
+class Job(Base, GuidMixin, AuditMixin):
     """
     Job model representing a unit of work for tool execution.
 

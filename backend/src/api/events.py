@@ -364,6 +364,7 @@ async def create_event(
     try:
         event = event_service.create(
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             title=event_data.title,
             category_guid=event_data.category_guid,
             event_date=event_data.event_date,
@@ -463,6 +464,7 @@ async def create_event_series(
     try:
         series = event_service.create_series(
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             title=series_data.title,
             category_guid=series_data.category_guid,
             event_dates=series_data.event_dates,
@@ -610,7 +612,7 @@ async def update_event_series(
 
         updates = series_data.model_dump(exclude_unset=True)
 
-        series = event_service.update_series(guid=guid, **updates)
+        series = event_service.update_series(guid=guid, user_id=ctx.user_id, **updates)
 
         logger.info(f"Updated event series: {guid}")
 
@@ -711,6 +713,7 @@ async def update_event(
 
         event = event_service.update(
             guid=guid,
+            user_id=ctx.user_id,
             scope=event_data.scope.value,
             **updates
         )
@@ -817,6 +820,7 @@ async def delete_event(
 
         event = event_service.soft_delete(
             guid=guid,
+            user_id=ctx.user_id,
             scope=scope.value,
         )
 
@@ -886,7 +890,7 @@ async def restore_event(
         # Verify team ownership before restore (use include_deleted to find deleted events)
         event_service.get_by_guid(guid, include_deleted=True, team_id=ctx.team_id)
 
-        event = event_service.restore(guid=guid)
+        event = event_service.restore(guid=guid, user_id=ctx.user_id)
 
         # Reload with relationships
         event = event_service.get_by_guid(event.guid, team_id=ctx.team_id)

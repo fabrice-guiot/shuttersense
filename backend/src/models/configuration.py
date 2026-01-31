@@ -19,6 +19,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Enum, Index, JSO
 from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.src.models import Base
+from backend.src.models.mixins import AuditMixin
 
 
 class ConfigSource(enum.Enum):
@@ -33,7 +34,7 @@ class ConfigSource(enum.Enum):
     YAML_IMPORT = "yaml_import"
 
 
-class Configuration(Base):
+class Configuration(Base, AuditMixin):
     """
     Configuration model for application settings.
 

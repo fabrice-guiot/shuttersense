@@ -18,10 +18,10 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Index, Foreig
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class Category(Base, GuidMixin):
+class Category(Base, GuidMixin, AuditMixin):
     """
     Event category model.
 

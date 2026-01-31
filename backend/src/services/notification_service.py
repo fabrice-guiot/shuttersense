@@ -122,6 +122,9 @@ class NotificationService:
             title=title[:200],
             body=body[:500],
             data=data,
+            # Audit tracking
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
         self.db.add(notification)
         self.db.commit()

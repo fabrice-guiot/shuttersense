@@ -626,6 +626,7 @@ class EventService:
         travel_required: Optional[bool] = None,
         deadline_date: Optional[date] = None,
         deadline_time: Optional[Any] = None,
+        user_id: Optional[int] = None,
     ) -> Event:
         """
         Create a new standalone event.
@@ -649,6 +650,7 @@ class EventService:
             travel_required: Optional travel requirement
             deadline_date: Optional workflow deadline date
             deadline_time: Optional workflow deadline time
+            user_id: Optional user ID for audit tracking
 
         Returns:
             Created Event instance
@@ -698,6 +700,8 @@ class EventService:
             travel_required=effective_travel_required,
             deadline_date=deadline_date,
             deadline_time=deadline_time,
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(event)
@@ -733,6 +737,7 @@ class EventService:
         attendance: str = "planned",
         deadline_date: Optional[date] = None,
         deadline_time: Optional[Any] = None,
+        user_id: Optional[int] = None,
     ) -> EventSeries:
         """
         Create a new event series with individual events.
@@ -756,6 +761,7 @@ class EventService:
             attendance: Initial attendance for all events (default: planned)
             deadline_date: Optional deadline date for deliverables
             deadline_time: Optional deadline time
+            user_id: Optional user ID for audit tracking
 
         Returns:
             Created EventSeries instance with events
@@ -810,6 +816,8 @@ class EventService:
             total_events=len(sorted_dates),
             deadline_date=deadline_date,
             deadline_time=deadline_time,
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(series)
@@ -840,6 +848,8 @@ class EventService:
                 # Deadline is synced across all events in series
                 deadline_date=deadline_date,
                 deadline_time=deadline_time,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(event)
 
@@ -859,6 +869,7 @@ class EventService:
     def update_series(
         self,
         guid: str,
+        user_id: Optional[int] = None,
         **updates: Any
     ) -> EventSeries:
         """
@@ -938,6 +949,9 @@ class EventService:
             # Sync the deadline entry (create/update/delete)
             self._sync_deadline_entry(series)
 
+        if user_id is not None:
+            series.updated_by_user_id = user_id
+
         self.db.commit()
         self.db.refresh(series)
 
@@ -1005,6 +1019,7 @@ class EventService:
         self,
         guid: str,
         scope: str = "single",
+        user_id: Optional[int] = None,
         **updates: Any
     ) -> Event:
         """
@@ -1156,6 +1171,9 @@ class EventService:
                 self._sync_standalone_deadline_entry(event)
                 logger.info(f"Synced deadline entry for standalone event: {event.guid}")
 
+        if user_id is not None:
+            event.updated_by_user_id = user_id
+
         self.db.commit()
         self.db.refresh(event)
 
@@ -1201,7 +1219,8 @@ class EventService:
     def soft_delete(
         self,
         guid: str,
-        scope: str = "single"
+        scope: str = "single",
+        user_id: Optional[int] = None,
     ) -> Event:
         """
         Soft delete an event.
@@ -1236,13 +1255,16 @@ class EventService:
         if event.series and scope != "single":
             self._update_series_total(event.series)
 
+        if user_id is not None:
+            event.updated_by_user_id = user_id
+
         self.db.commit()
         self.db.refresh(event)
 
         logger.info(f"Soft deleted event: {event.guid} (scope: {scope}, events: {len(events_to_delete)})")
         return event
 
-    def restore(self, guid: str) -> Event:
+    def restore(self, guid: str, user_id: Optional[int] = None) -> Event:
         """
         Restore a soft-deleted event.
 
@@ -1266,6 +1288,9 @@ class EventService:
         # Update series total if part of series
         if event.series:
             self._update_series_total(event.series)
+
+        if user_id is not None:
+            event.updated_by_user_id = user_id
 
         self.db.commit()
         self.db.refresh(event)

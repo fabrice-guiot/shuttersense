@@ -185,12 +185,14 @@ class User(Base, GuidMixin):
     # Push notification subscriptions (one-to-many, Issue #114)
     push_subscriptions = relationship(
         "PushSubscription",
+        foreign_keys="PushSubscription.user_id",
         back_populates="user",
         lazy="dynamic"
     )
     # Notification history (one-to-many, Issue #114)
     notifications = relationship(
         "Notification",
+        foreign_keys="Notification.user_id",
         back_populates="user",
         lazy="dynamic"
     )

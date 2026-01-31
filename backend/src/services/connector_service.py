@@ -66,7 +66,8 @@ class ConnectorService:
         credential_location: CredentialLocation = CredentialLocation.SERVER,
         credentials: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        is_active: bool = True
+        is_active: bool = True,
+        user_id: Optional[int] = None
     ) -> Connector:
         """
         Create a new connector with optional encrypted credentials.
@@ -124,7 +125,9 @@ class ConnectorService:
                 credentials=encrypted_credentials,
                 team_id=team_id,
                 metadata_json=metadata_json,
-                is_active=is_active
+                is_active=is_active,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
 
             self.db.add(connector)
@@ -290,7 +293,8 @@ class ConnectorService:
         credentials: Optional[Dict[str, Any]] = None,
         update_credentials: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
+        user_id: Optional[int] = None
     ) -> Connector:
         """
         Update connector properties.
@@ -373,6 +377,9 @@ class ConnectorService:
                 if is_active and effective_location == CredentialLocation.PENDING:
                     raise ValueError("Cannot activate connector with pending credentials. Configure credentials first.")
                 connector.is_active = is_active
+
+            if user_id is not None:
+                connector.updated_by_user_id = user_id
 
             self.db.commit()
             self.db.refresh(connector)

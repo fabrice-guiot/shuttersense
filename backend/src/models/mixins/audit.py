@@ -2,8 +2,8 @@
 Audit mixin for SQLAlchemy models.
 
 Provides user attribution columns and relationships to track who created
-and last modified each record. Uses eager-loaded joins (lazy="joined")
-to avoid N+1 queries in list views.
+and last modified each record. Uses select loading (lazy="select") to
+avoid cascading JOIN chains through User's own eager relationships.
 
 Design:
 - created_by_user_id: Set once on creation, never modified afterward.
@@ -30,8 +30,8 @@ class AuditMixin:
     Adds:
     - created_by_user_id: FK to users.id (who created the record)
     - updated_by_user_id: FK to users.id (who last modified the record)
-    - created_by_user: Eagerly loaded User relationship for created_by
-    - updated_by_user: Eagerly loaded User relationship for updated_by
+    - created_by_user: User relationship for created_by (lazy select)
+    - updated_by_user: User relationship for updated_by (lazy select)
 
     Usage:
         class MyEntity(Base, GuidMixin, AuditMixin):
@@ -63,7 +63,7 @@ class AuditMixin:
         return relationship(
             "User",
             foreign_keys=[cls.created_by_user_id],
-            lazy="joined",
+            lazy="select",
         )
 
     @declared_attr
@@ -71,5 +71,5 @@ class AuditMixin:
         return relationship(
             "User",
             foreign_keys=[cls.updated_by_user_id],
-            lazy="joined",
+            lazy="select",
         )

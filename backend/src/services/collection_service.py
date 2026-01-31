@@ -87,7 +87,8 @@ class CollectionService:
         connector_id: Optional[int] = None,
         bound_agent_id: Optional[int] = None,
         pipeline_id: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[int] = None
     ) -> Collection:
         """
         Create a new collection with accessibility test.
@@ -208,7 +209,9 @@ class CollectionService:
                 pipeline_version=pipeline_version,
                 is_accessible=is_accessible,
                 last_error=last_error,
-                metadata_json=metadata_json
+                metadata_json=metadata_json,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
 
             self.db.add(collection)
@@ -355,7 +358,8 @@ class CollectionService:
         state: Optional[CollectionState] = None,
         pipeline_id: Optional[int] = None,
         bound_agent_id: Optional[int] = ...,  # Use sentinel to differentiate None (unbind) from not provided
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[int] = None
     ) -> Collection:
         """
         Update collection properties.
@@ -508,6 +512,9 @@ class CollectionService:
 
                 # Invalidate cache since connectivity changed
                 self.file_cache.invalidate(collection_id)
+
+            if user_id is not None:
+                collection.updated_by_user_id = user_id
 
             self.db.commit()
             self.db.refresh(collection)

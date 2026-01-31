@@ -20,10 +20,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class Pipeline(Base, GuidMixin):
+class Pipeline(Base, GuidMixin, AuditMixin):
     """
     Pipeline model for photo processing workflows.
 

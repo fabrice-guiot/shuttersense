@@ -291,6 +291,7 @@ async def create_performer(
             name=performer.name,
             category_guid=performer.category_guid,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             website=performer.website,
             instagram_handle=performer.instagram_handle,
             additional_info=performer.additional_info,
@@ -414,6 +415,7 @@ async def update_performer(
         updated_performer = performer_service.update(
             guid=guid,
             team_id=ctx.team_id,
+            user_id=ctx.user_id,
             name=performer_update.name,
             category_guid=performer_update.category_guid,
             website=performer_update.website,

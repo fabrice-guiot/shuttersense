@@ -751,6 +751,7 @@ async def complete_job_no_change(
             source_result_guid=data.source_result_guid,
             signature=data.signature,
             input_state_json=data.input_state_json,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
 
         # Refresh job to get result relationship
@@ -848,6 +849,7 @@ async def complete_job(
             agent_id=ctx.agent_id,
             team_id=ctx.team_id,
             completion_data=completion_data,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
 
         # Refresh job to get result relationship
@@ -918,6 +920,7 @@ async def fail_job(
             team_id=ctx.team_id,
             error_message=data.error_message,
             signature=data.signature,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
 
         # Refresh job to get result relationship

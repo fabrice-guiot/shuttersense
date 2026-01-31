@@ -23,10 +23,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
-from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins import GuidMixin, AuditMixin
 
 
-class Location(Base, GuidMixin):
+class Location(Base, GuidMixin, AuditMixin):
     """
     Event location model.
 

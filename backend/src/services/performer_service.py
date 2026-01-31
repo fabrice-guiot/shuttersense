@@ -60,6 +60,7 @@ class PerformerService:
         website: Optional[str] = None,
         instagram_handle: Optional[str] = None,
         additional_info: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> Performer:
         """
         Create a new performer.
@@ -97,6 +98,8 @@ class PerformerService:
                 website=website,
                 instagram_handle=instagram_handle,
                 additional_info=additional_info,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(performer)
             self.db.commit()
@@ -222,6 +225,7 @@ class PerformerService:
         website: Optional[str] = None,
         instagram_handle: Optional[str] = None,
         additional_info: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> Performer:
         """
         Update an existing performer.
@@ -263,6 +267,9 @@ class PerformerService:
             performer.instagram_handle = instagram_handle if instagram_handle else None
         if additional_info is not None:
             performer.additional_info = additional_info if additional_info else None
+
+        if user_id is not None:
+            performer.updated_by_user_id = user_id
 
         try:
             self.db.commit()

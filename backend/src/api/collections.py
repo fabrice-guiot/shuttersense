@@ -316,7 +316,8 @@ async def create_collection(
             connector_id=connector_id,
             bound_agent_id=bound_agent_id,
             pipeline_id=pipeline_id,
-            metadata=collection.metadata
+            metadata=collection.metadata,
+            user_id=ctx.user_id
         )
 
         logger.info(
@@ -528,7 +529,8 @@ async def update_collection(
             state=collection_update.state,
             pipeline_id=pipeline_id,
             bound_agent_id=bound_agent_id,
-            metadata=collection_update.metadata
+            metadata=collection_update.metadata,
+            user_id=ctx.user_id
         )
 
         logger.info(
@@ -1351,7 +1353,8 @@ async def create_collections_from_inventory(
                     team_id=ctx.team_id,
                     state=state,
                     connector_id=connector.id,
-                    pipeline_id=pipeline_id
+                    pipeline_id=pipeline_id,
+                    user_id=ctx.user_id
                 )
 
                 # Map folder to collection
