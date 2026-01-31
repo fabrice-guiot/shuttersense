@@ -310,11 +310,18 @@ async def dead_agent_safety_net() -> None:
                                 vapid_private_key=settings.vapid_private_key,
                                 vapid_claims=vapid_claims,
                             )
-                            notification_service.notify_agent_status(
+                            sent_count = notification_service.notify_agent_status(
                                 agent=representative_agent,
                                 team_id=team_id,
                                 transition_type="pool_offline",
                             )
+
+                            # Broadcast hint so frontend refreshes unread badge
+                            if sent_count > 0:
+                                from backend.src.utils.websocket import get_connection_manager
+
+                                manager = get_connection_manager()
+                                await manager.broadcast_notification_hint(team_id)
                         except Exception as e:
                             safety_logger.error(
                                 f"Failed to send pool_offline notification: {e}",
@@ -389,6 +396,13 @@ async def deadline_check_scheduler() -> None:
                     )
                     sent = notification_service.check_deadlines(team_id=team_id)
                     total_sent += sent
+
+                    # Broadcast hint so frontend refreshes unread badge
+                    if sent > 0:
+                        from backend.src.utils.websocket import get_connection_manager
+
+                        manager = get_connection_manager()
+                        await manager.broadcast_notification_hint(team_id)
                 except Exception as e:
                     deadline_logger.error(
                         f"Error checking deadlines for team: {e}",

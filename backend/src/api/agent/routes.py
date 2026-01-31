@@ -167,12 +167,19 @@ async def _trigger_agent_notification_async(
             )
             return
 
-        notification_service.notify_agent_status(
+        sent_count = notification_service.notify_agent_status(
             agent=agent,
             team_id=team_id,
             transition_type=transition_type,
             error_description=error_description,
         )
+
+        # Broadcast hint so frontend refreshes unread badge immediately
+        if sent_count > 0:
+            from backend.src.utils.websocket import get_connection_manager
+
+            manager = get_connection_manager()
+            await manager.broadcast_notification_hint(team_id)
     except Exception as e:
         logger.error(
             f"Failed to send agent status notification: {e}",

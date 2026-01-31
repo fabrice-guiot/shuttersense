@@ -173,6 +173,15 @@ export const useNotifications = (
     return () => clearInterval(interval)
   }, [autoFetch, refreshUnreadCount])
 
+  // Refresh immediately when server broadcasts a new notification via WebSocket
+  useEffect(() => {
+    if (!autoFetch) return
+
+    const handler = () => { refreshUnreadCount() }
+    window.addEventListener('notification-created', handler)
+    return () => window.removeEventListener('notification-created', handler)
+  }, [autoFetch, refreshUnreadCount])
+
   return {
     notifications,
     total,
