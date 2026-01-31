@@ -19,8 +19,8 @@ Today, setting up an agent requires switching between the web UI (to create a re
 
 Key design decisions:
 - **OS auto-detection with manual override** — `navigator.userAgent` / `navigator.platform` is used for initial detection; the user can override if they are setting up a remote machine.
-- **Primarily frontend wizard UI** — All wizard logic lives in the frontend. One new read-only backend endpoint (`GET /api/agent/v1/releases/active`) is needed to expose the active release manifest to regular users, since the existing admin endpoints require super-admin privileges.
-- **Agent binaries served from a static distribution folder** — The server hosts pre-built agent binaries at a well-known path; the wizard constructs download links from the release manifest metadata.
+- **Primarily frontend wizard UI with one new backend endpoint** — All wizard logic lives in the frontend. This feature requires adding one new read-only backend endpoint (`GET /api/agent/v1/releases/active`) that does not exist today; the existing release manifest endpoints at `/api/admin/release-manifests` require super-admin privileges and cannot be called by regular users.
+- **Agent binaries served from a static distribution folder** — The server hosts pre-built agent binaries at a well-known path configured via the `AGENT_DIST_BASE_URL` environment variable; the wizard constructs download links from the release manifest metadata returned by the new endpoint.
 
 ---
 
@@ -125,7 +125,9 @@ May need to set up an agent on their personal machine to process local photo col
 
 **FR-200.6**: The wizard MUST fetch the active release manifest from a **new** user-accessible endpoint `GET /api/agent/v1/releases/active` (see [Release Manifest API](#release-manifest-api)). The existing admin endpoints at `/api/admin/release-manifests` require super-admin privileges and are not suitable for regular wizard users. The response contains an `artifacts` array with per-platform entries, each specifying `platform`, `filename`, and `checksum`.
 
-**FR-200.7**: If a matching artifact exists for the selected platform in the manifest's `artifacts` array **and** `download_base_url` is non-null, the wizard MUST display a **"Download Agent"** button that initiates a download of the binary using `{download_base_url}/{artifact.filename}`. If `download_base_url` is `null` (server's `AGENT_DIST_BASE_URL` env var is not configured), the wizard MUST hide the download button and show the same warning banner as FR-200.9.
+**FR-200.7**: If a matching artifact exists for the selected platform in the manifest's `artifacts` array **and** `download_base_url` is non-null **and** passes the HTTPS check (FR-200.7a), the wizard MUST display a **"Download Agent"** button that initiates a download of the binary using `{download_base_url}/{artifact.filename}`. If `download_base_url` is `null` (server's `AGENT_DIST_BASE_URL` env var is not configured), the wizard MUST hide the download button and show the same warning banner as FR-200.9.
+
+**FR-200.7a**: Before enabling the download button, the wizard MUST validate that `download_base_url` starts with `https://` and parses as a well-formed URL. If the check fails (e.g., `http://` or malformed), the wizard MUST NOT show the download button and MUST display a warning: *"The agent download URL is not served over HTTPS. Downloads are disabled for security. Contact your administrator to configure a secure distribution URL."* The "Next" button MUST remain enabled (same degradation as FR-200.9). **Exception**: `http://localhost` and `http://127.0.0.1` are permitted for local development environments.
 
 **FR-200.8**: If no matching artifact exists for the selected platform, the wizard MUST display an informational message: *"No agent build is available for {platform}. Please contact your administrator."* The "Next" button MUST be disabled.
 
@@ -160,7 +162,7 @@ May need to set up an agent on their personal machine to process local photo col
 shuttersense-agent register --server {server_url} --token {token}
 ```
 
-**FR-400.3**: The `{server_url}` MUST be resolved from the application's API base URL configuration (e.g., the `apiBaseUrl` value already used by the frontend HTTP client in `frontend/src/services/`). If the config value is not set, `window.location.origin` MUST be used as a fallback. Before substitution, the resolved URL MUST be validated (well-formed URL with scheme) and normalized (trailing slashes stripped).
+**FR-400.3**: The `{server_url}` MUST be resolved from the application's API base URL configuration (e.g., the `apiBaseUrl` value already used by the frontend HTTP client in `frontend/src/services/`). If the config value is not set, `window.location.origin` MUST be used as a fallback. Before substitution, the resolved URL MUST be validated (well-formed URL with scheme) and normalized (trailing slashes stripped). If validation fails (malformed URL), the wizard MUST display an error: *"Cannot determine the server URL. Check the application's API base URL configuration."* and MUST disable the register command's "Copy" button. The `{server_url}` placeholder MUST NOT be substituted with an invalid value.
 
 **FR-400.4**: The `{token}` MUST be the token generated in Step 2.
 
@@ -352,7 +354,7 @@ sudo systemctl status shuttersense-agent
 
 **NFR-300.2**: The wizard MUST NOT embed the API key or any post-registration secret. The API key is displayed only in the terminal by the agent CLI.
 
-**NFR-300.3**: The download link for the agent binary MUST use HTTPS.
+**NFR-300.3**: The download link for the agent binary MUST use HTTPS. Enforced by the frontend validation in FR-200.7a; `http://localhost` and `http://127.0.0.1` are exempt for local development.
 
 #### NFR-400: Testing
 
@@ -555,7 +557,7 @@ interface WizardState {
   releaseManifest: ReleaseManifest | null
   createdToken: string | null      // plaintext token (in-memory only)
   tokenName: string | null
-  serverUrl: string                // resolved once on wizard init (see getServerUrl)
+  serverUrl: string | null         // null = invalid config (see getServerUrl)
   binaryPath: string               // user-provided for service setup
   serviceUser: string              // user-provided for systemd
   skippedService: boolean
@@ -565,14 +567,19 @@ interface WizardState {
  * Resolve the server URL for the register command.
  * Reads the app-level API base URL config (apiBaseUrl) used by the
  * frontend HTTP client. Falls back to window.location.origin when
- * the config value is not set. The returned URL is validated
- * (must have a scheme) and normalized (trailing slashes stripped).
+ * the config value is not set. Returns null if the value cannot be
+ * parsed as a valid URL — callers MUST treat null as "invalid API
+ * base URL", display an error, and disable register-command generation.
  */
-function getServerUrl(): string {
+function getServerUrl(): string | null {
   const configured = import.meta.env.VITE_API_BASE_URL  // or appConfig.apiBaseUrl
     || window.location.origin
-  const url = new URL(configured) // throws on invalid URL
-  return url.origin               // scheme + host, no trailing slash
+  try {
+    const url = new URL(configured)
+    return url.origin              // scheme + host, no trailing slash
+  } catch {
+    return null                    // malformed URL — surface error in UI
+  }
 }
 
 const WIZARD_STEPS = [
@@ -759,6 +766,7 @@ The frontend constructs the download URL as:
 
 ## Revision History
 
+- **2026-01-31 (v1.4)**: Remove backend ambiguity (endpoint is new, not pre-existing); add HTTPS validation for download URLs (FR-200.7a); make `getServerUrl` return `null` on invalid URL instead of throwing, with caller error handling in FR-400.3 — AI Assistant
 - **2026-01-31 (v1.3)**: Clarify `download_base_url` is derived at runtime from `AGENT_DIST_BASE_URL` env var + version, not a DB field; handle `null` case in FR-200.7 — AI Assistant
 - **2026-01-31 (v1.2)**: Clarify release manifest endpoint: new user-accessible `GET /api/agent/v1/releases/active` required (existing admin endpoints need super-admin auth) — AI Assistant
 - **2026-01-31 (v1.1)**: Config-based server URL, allow wizard progression without manifests, per-platform artifacts schema, MD040/MD060 fixes — AI Assistant
