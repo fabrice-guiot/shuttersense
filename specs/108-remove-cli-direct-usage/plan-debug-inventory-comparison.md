@@ -66,7 +66,7 @@ Single file following the existing CLI patterns (Click group with subcommands, `
 
 ```python
 import os as _os
-if _os.environ.get("SHUTTERSENSE_DEBUG_COMMANDS", "").lower() in ("1", "true", "yes"):
+if _os.environ.get("SHUSAI_DEBUG_COMMANDS", "").lower() in ("1", "true", "yes"):
     try:
         from cli.debug import debug
         cli.add_command(debug)
@@ -136,6 +136,6 @@ No changes to build scripts, no changes to existing agent modules.
 ## Verification
 
 1. **Unit test:** Run existing agent tests to confirm no regressions: `python3 -m pytest agent/tests/ -v`
-2. **Manual test — env var gating:** Without `SHUTTERSENSE_DEBUG_COMMANDS=1`, run `shuttersense-agent --help` and verify `debug` does NOT appear in commands list
-3. **Manual test — env var enabled:** With `SHUTTERSENSE_DEBUG_COMMANDS=1`, run `shuttersense-agent debug --help` and verify `compare-inventory` appears
-4. **Manual test — full flow:** With env var set and a configured connector with inventory, run `SHUTTERSENSE_DEBUG_COMMANDS=1 shuttersense-agent debug compare-inventory <connector_guid>` and verify comparison output
+2. **Manual test — env var gating:** Without `SHUSAI_DEBUG_COMMANDS=1`, run `shuttersense-agent --help` and verify `debug` does NOT appear in commands list
+3. **Manual test — env var enabled:** With `SHUSAI_DEBUG_COMMANDS=1`, run `shuttersense-agent debug --help` and verify `compare-inventory` appears
+4. **Manual test — full flow:** With env var set and a configured connector with inventory, run `SHUSAI_DEBUG_COMMANDS=1 shuttersense-agent debug compare-inventory <connector_guid>` and verify comparison output

@@ -37,7 +37,7 @@ This specification covers the complete rebranding of the "photo-admin" applicati
 |------------------------------------|-----------------|-----------------------------------------------|
 | UI display, documentation          | ShutterSense.ai | "Welcome to ShutterSense.ai"                  |
 | File names, package names          | shuttersense    | `shuttersense.py`, `@shuttersense/ui`         |
-| Environment variables              | SHUSAI_         | `SHUSAI_VERSION`, `SHUSAI_DEBUG`              |
+| Environment variables              | SHUSAI_         | `SHUSAI_VERSION`, `SHUSAI_DEBUG`        |
 | CSS classes, code identifiers      | shuttersense    | `.shuttersense-header`, `shuttersenseConfig`  |
 | CLI tool prefix (optional)         | shusai-         | `shusai-stats`, `shusai-pairing`              |
 

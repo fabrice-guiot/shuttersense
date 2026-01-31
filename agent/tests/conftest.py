@@ -256,10 +256,10 @@ def clean_environment(monkeypatch) -> None:
     test isolation.
     """
     env_vars_to_remove = [
-        "SHUTTERSENSE_SERVER_URL",
-        "SHUTTERSENSE_API_KEY",
-        "SHUTTERSENSE_LOG_LEVEL",
-        "SHUTTERSENSE_CONFIG_PATH",
+        "SHUSAI_SERVER_URL",
+        "SHUSAI_API_KEY",
+        "SHUSAI_LOG_LEVEL",
+        "SHUSAI_CONFIG_PATH",
     ]
     for var in env_vars_to_remove:
         monkeypatch.delenv(var, raising=False)

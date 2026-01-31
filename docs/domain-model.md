@@ -1,7 +1,7 @@
-# Photo-Admin Domain Model
+# ShutterSense Domain Model
 
-**Version:** 1.2.0
-**Last Updated:** 2026-01-12
+**Version:** 2.0.0
+**Last Updated:** 2026-01-30
 **Status:** Living Document
 
 ---
@@ -22,7 +22,7 @@
 
 ## Executive Summary
 
-This document defines the domain model for the Photo-Admin application, a comprehensive toolbox designed to help photographers manage their daily workflows, organize photo collections, and gain insights through analytics. It serves as the authoritative reference for all current and future development efforts.
+This document defines the domain model for the ShutterSense application, a comprehensive toolbox designed to help photographers manage their daily workflows, organize photo collections, and gain insights through analytics. It serves as the authoritative reference for all current and future development efforts.
 
 The domain model is divided into two categories:
 - **Implemented Entities**: Currently available in the codebase (Branch: `007-remote-photos-completion`)
@@ -88,14 +88,17 @@ Example: `col_01hgw2bbg0000000000000001`
 | Location | `loc_` | `loc_01hgw2bbg0000000000000009` | Implemented (Issue #39) |
 | Organizer | `org_` | `org_01hgw2bbg000000000000000a` | Implemented (Issue #39) |
 | Performer | `prf_` | `prf_01hgw2bbg000000000000000b` | Implemented (Issue #39) |
-| User | `usr_` | `usr_01hgw2bbg000000000000000c` | Planned |
-| Team | `ten_` | `ten_01hgw2bbg000000000000000d` | Planned |
-| Camera | `cam_` | `cam_01hgw2bbg000000000000000e` | Planned |
-| Album | `alb_` | `alb_01hgw2bbg000000000000000f` | Planned |
-| Image | `img_` | `img_01hgw2bbg0000000000000010` | Planned |
-| File | `fil_` | `fil_01hgw2bbg0000000000000011` | Planned |
-| Workflow | `wfl_` | `wfl_01hgw2bbg0000000000000012` | Planned |
-| Agent | `agt_` | `agt_01hgw2bbg0000000000000013` | Planned |
+| User | `usr_` | `usr_01hgw2bbg000000000000000c` | Implemented (Issue #73) |
+| Team | `tea_` | `tea_01hgw2bbg000000000000000d` | Implemented (Issue #73) |
+| ApiToken | `tok_` | `tok_01hgw2bbg000000000000000e` | Implemented (Issue #73) |
+| Agent | `agt_` | `agt_01hgw2bbg000000000000000f` | Implemented (Issue #90) |
+| AgentRegistrationToken | `art_` | `art_01hgw2bbg0000000000000010` | Implemented (Issue #90) |
+| ReleaseManifest | `rel_` | `rel_01hgw2bbg0000000000000011` | Implemented (Issue #90) |
+| Camera | `cam_` | `cam_01hgw2bbg0000000000000012` | Planned |
+| Album | `alb_` | `alb_01hgw2bbg0000000000000013` | Planned |
+| Image | `img_` | `img_01hgw2bbg0000000000000014` | Planned |
+| File | `fil_` | `fil_01hgw2bbg0000000000000015` | Planned |
+| Workflow | `wfl_` | `wfl_01hgw2bbg0000000000000016` | Planned |
 
 **Key Implementation Files:**
 - `backend/src/services/guid.py` - GuidService for generation, encoding, validation
@@ -139,8 +142,16 @@ The application implements team-based data isolation:
 | [Organizer](#organizer-1) | :white_check_mark: | Reference | Completed (#39) |
 | [Performer](#performer-1) | :white_check_mark: | Reference | Completed (#39) |
 | [EventPerformer](#eventperformer-junction-table) | :white_check_mark: | Junction | Completed (#39) |
-| [User](#user) | :construction: | Identity | High |
-| [Team](#team) | :construction: | Identity | High |
+| [User](#user) | :white_check_mark: | Identity | Completed (#73) |
+| [Team](#team) | :white_check_mark: | Identity | Completed (#73) |
+| [Job](#job) | :white_check_mark: | Workflow | Completed (#90) |
+| [ApiToken](#apitoken) | :white_check_mark: | Identity | Completed (#73) |
+| [Notification](#notification) | :white_check_mark: | System | Completed (#114) |
+| [PushSubscription](#pushsubscription) | :white_check_mark: | System | Completed (#114) |
+| [StorageMetrics](#storagemetrics) | :white_check_mark: | Analytics | Completed (#92) |
+| [InventoryFolder](#inventoryfolder) | :white_check_mark: | Storage | Completed (#107) |
+| [AgentRegistrationToken](#agentregistrationtoken) | :white_check_mark: | Infrastructure | Completed (#90) |
+| [ReleaseManifest](#releasemanifest) | :white_check_mark: | Infrastructure | Completed (#90) |
 | [Camera](#camera) | :construction: | Equipment | Medium |
 | [Album](#album) | :construction: | Content | Medium |
 | [Image](#image) | :construction: | Content | Medium |
@@ -149,7 +160,7 @@ The application implements team-based data isolation:
 | [WorkflowCollection](#workflowcollection-junction-table) | :construction: | Junction | Medium |
 | [ImageWorkflowProgress](#imageworkflowprogress) | :construction: | Junction | Medium |
 | [ImagePerformer](#imageperformer-junction-table) | :construction: | Junction | Medium |
-| [Agent](#agent) | :thought_balloon: | Infrastructure | Future |
+| [Agent](#agent) | :white_check_mark: | Infrastructure | Completed (#90) |
 
 ---
 
@@ -813,10 +824,10 @@ Organizers can define default logistics requirements that auto-populate when ass
 
 ## Planned Entities
 
-### User
+### User (Implemented - Issue #73)
 
-**Priority:** High
-**Target Epic:** 008 or 009
+**Status:** Implemented
+**Implementation:** `backend/src/models/user.py`
 
 **Purpose:** Individual photographer identity and authentication.
 
@@ -835,10 +846,10 @@ Organizers can define default logistics requirements that auto-populate when ass
 
 ---
 
-### Team
+### Team (Implemented - Issue #73)
 
-**Priority:** High
-**Target Epic:** 008 or 009
+**Status:** Implemented
+**Implementation:** `backend/src/models/team.py`
 
 **Purpose:** Multi-tenancy boundary for data isolation.
 
@@ -1278,10 +1289,10 @@ A Workflow is the **runtime instance** of applying a Pipeline to an Album. It tr
 
 ---
 
-### Agent
+### Agent (Implemented - Issue #90)
 
-**Priority:** Future
-**Target Epic:** 010+
+**Status:** Implemented
+**Implementation:** `backend/src/models/agent.py`
 
 **Purpose:** Local workers for accessing physical storage and offloading computation.
 
@@ -1312,12 +1323,27 @@ A Workflow is the **runtime instance** of applying a Pipeline to an Album. It tr
 ### Current State (Implemented)
 
 ```
-                                    ┌─────────────────┐
-                                    │  Configuration  │
-                                    │  (standalone)   │
-                                    └─────────────────┘
-
-┌─────────────────┐     1:*        ┌─────────────────┐
+┌─────────────────┐                ┌─────────────────┐
+│      Team       │◄───────────────│      User       │
+│  (tenant root)  │    belongs to  │  (identity)     │
+└────────┬────────┘                └─────────────────┘
+         │ scopes all entities
+         │
+         ├──────────────────────────────────────────────────────┐
+         │                                                      │
+         │  ┌─────────────────┐                ┌─────────────────┐
+         │  │  Configuration  │                │     Agent       │
+         │  │  (standalone)   │                │  (job executor) │
+         │  └─────────────────┘                └────────┬────────┘
+         │                                              │
+         │                                       claims │ 1:*
+         │                                              ▼
+         │                                     ┌─────────────────┐
+         │                                     │      Job        │
+         │                                     │  (work queue)   │
+         │                                     └─────────────────┘
+         │
+┌────────┴────────┐     1:*        ┌─────────────────┐
 │    Connector    │◄───────────────│   Collection    │
 │  (credentials)  │                │   (storage)     │
 └─────────────────┘                └────────┬────────┘
@@ -1530,16 +1556,18 @@ Avoid JSONB for:
 
 ### A. Migration Roadmap
 
-| Phase | Entities | Dependencies | Description |
-|-------|----------|--------------|-------------|
-| Current | Collection, Connector, Pipeline, PipelineHistory, AnalysisResult, Configuration | - | Storage, tools, and analysis |
-| Phase 1 | Team, User | Auth system | Multi-tenancy foundation |
-| Phase 2 | Event, Category, Location, Organizer | Team, User | Calendar and planning |
-| Phase 3 | Album, Image, File | Team, Collection | Content management core |
-| Phase 4 | Workflow, WorkflowCollection, ImageWorkflowProgress | Album, Pipeline | Processing orchestration |
-| Phase 5 | Performer, ImagePerformer | Team, Image | Subject tracking |
-| Phase 6 | Camera | Team | Equipment tracking |
-| Phase 7 | Agent | Team, Infrastructure | Distributed processing |
+| Phase | Entities | Dependencies | Description | Status |
+|-------|----------|--------------|-------------|--------|
+| Foundation | Collection, Connector, Pipeline, PipelineHistory, AnalysisResult, Configuration | - | Storage, tools, and analysis | Completed |
+| Phase 1 | Team, User, ApiToken | Auth system | Multi-tenancy foundation (Issue #73) | Completed |
+| Phase 2 | Event, EventSeries, Category, Location, Organizer, Performer | Team, User | Calendar and planning (Issue #39) | Completed |
+| Phase 3 | Agent, AgentRegistrationToken, ReleaseManifest, Job | Team, Infrastructure | Distributed processing (Issue #90) | Completed |
+| Phase 4 | Notification, PushSubscription | Team, User | PWA push notifications (Issue #114) | Completed |
+| Phase 5 | StorageMetrics, InventoryFolder | Collection, Connector | Storage analytics & inventory import (Issues #92, #107) | Completed |
+| Phase 6 | Album, Image, File | Team, Collection | Content management core | Planned |
+| Phase 7 | Workflow, WorkflowCollection, ImageWorkflowProgress | Album, Pipeline | Processing orchestration | Planned |
+| Phase 8 | ImagePerformer | Team, Image | Subject tracking | Planned |
+| Phase 9 | Camera | Team | Equipment tracking | Planned |
 
 **Critical Path:**
 1. Team/User must precede all user-facing entities

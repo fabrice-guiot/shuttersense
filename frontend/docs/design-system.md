@@ -1,6 +1,6 @@
-# Photo Admin Design System
+# ShutterSense Design System
 
-This document establishes UI/UX guidelines to ensure consistency across all screens, components, and interactions in the Photo Admin application.
+This document establishes UI/UX guidelines to ensure consistency across all screens, components, and interactions in the ShutterSense application.
 
 ## Table of Contents
 

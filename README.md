@@ -4,7 +4,7 @@
   <img src="frontend/public/og-image.png" alt="ShutterSense.ai - Capture. Process. Analyze." width="600">
 </p>
 
-[![Tests](https://github.com/fabrice-guiot/photo-admin/actions/workflows/test.yml/badge.svg)](https://github.com/fabrice-guiot/photo-admin/actions/workflows/test.yml)
+[![Tests](https://github.com/fabrice-guiot/shuttersense/actions/workflows/test.yml/badge.svg)](https://github.com/fabrice-guiot/shuttersense/actions/workflows/test.yml)
 
 A comprehensive solution for analyzing, managing, and validating photo collections across local and remote storage.
 
@@ -15,6 +15,10 @@ ShutterSense provides:
 - **Web Application** - Modern React/FastAPI application for managing and analyzing photo collections
   - **Backend** (FastAPI) - RESTful API with PostgreSQL storage, encrypted credentials, job queuing
   - **Frontend** (React/TypeScript) - Modern, accessible UI with real-time progress updates
+  - **Authentication** - OAuth 2.0 (Google, Microsoft) with session-based auth and API tokens
+  - **Multi-Tenancy** - Team-based data isolation with automatic scoping
+  - **PWA** - Progressive Web App with push notifications and offline support
+  - **Dashboard** - KPI overview with activity feed and queue status
 - **Agent** (Python binary) - Distributed executor running on user machines, providing:
   - **PhotoStats** - Analyze photo collections for statistics, file pairing, and metadata
   - **Photo Pairing** - Group related files by filename patterns, track camera usage
@@ -89,6 +93,15 @@ Product requirement documents are stored in [docs/prd/](docs/prd/) for feature p
 - **[Agent README](agent/README.md)** - Agent setup, commands, and configuration
 - **[Agent Build Guide](docs/agent-build.md)** - For developers building agent binaries
 
+### Reference
+
+- [Architecture Overview](docs/architecture.md) - System architecture and data flow
+- [Authentication Guide](docs/authentication.md) - OAuth setup and token management
+- [Deployment Guide](docs/deployment.md) - Production deployment instructions
+- [API Reference](docs/api/README.md) - API conventions and endpoint index
+- [Notifications](docs/notifications.md) - Push notification setup
+- [Contributing](CONTRIBUTING.md) - Development setup and contribution guidelines
+
 ## Project Structure
 
 ```
@@ -134,9 +147,9 @@ cd agent && python -m pytest tests/ -v
 ### Test Coverage
 
 The project has comprehensive test coverage:
-- **Agent**: 50+ tests (CLI commands, caching, API client, analysis modules)
-- **Backend**: 300+ tests (unit + integration)
-- **Frontend**: Component and hook tests
+- **Agent**: 678 tests across 39 test files
+- **Backend**: ~2,454 tests across 110 test files
+- **Frontend**: 57 test files with component and hook tests
 
 See [CLAUDE.md](CLAUDE.md) for development guidelines and coding standards.
 
@@ -158,6 +171,30 @@ Plan and track photo-related events with comprehensive management:
 - **Performers** - Track performers with social media links and status
 - **Logistics** - Track tickets, time-off, and travel requirements per event
 - **Configurable Statuses** - Define custom event status workflows
+
+### Authentication & Multi-Tenancy
+- **OAuth 2.0** - Sign in with Google or Microsoft accounts
+- **API Tokens** - Scoped tokens for agent and programmatic access
+- **Multi-Tenancy** - Team-based data isolation
+- **Session Management** - Configurable session cookies with secure defaults
+
+### Dashboard
+- **KPI Overview** - Collections, agents, jobs, and storage metrics at a glance
+- **Activity Feed** - Recent analysis results and agent activity
+- **Queue Status** - Real-time job queue monitoring
+
+### Notifications
+- **Push Notifications** - Web push for job completions and deadline reminders
+- **In-App Notifications** - Bell icon with notification center
+- **Preferences** - Per-category notification preferences
+
+### Cloud Inventory Import
+- **S3 Inventory** - Import collections from AWS S3 Inventory reports
+- **GCS Storage Insights** - Import from Google Cloud Storage Insights
+
+### Mobile Responsive
+- **Responsive Tables** - Card-based layout on mobile
+- **Responsive Tabs** - Dropdown navigation on small screens
 
 ### Security
 

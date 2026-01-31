@@ -1,11 +1,11 @@
 """
 Debug CLI commands for ShutterSense agent diagnostics.
 
-NOT included in production builds. Requires SHUTTERSENSE_DEBUG_COMMANDS=1
+NOT included in production builds. Requires SHUSAI_DEBUG_COMMANDS=1
 environment variable to be available in development mode.
 
 Usage:
-    SHUTTERSENSE_DEBUG_COMMANDS=1 shuttersense-agent debug compare-inventory con_xxx
+    SHUSAI_DEBUG_COMMANDS=1 shuttersense-agent debug compare-inventory con_xxx
 """
 
 import json
@@ -561,7 +561,7 @@ def debug():
     They help diagnose issues with inventory processing and
     Input State hash computation.
 
-    Requires SHUTTERSENSE_DEBUG_COMMANDS=1 environment variable.
+    Requires SHUSAI_DEBUG_COMMANDS=1 environment variable.
     """
     pass
 

@@ -138,7 +138,7 @@ Previous Amendment (v1.1.0 - CLI Standards):
   - Shared Infrastructure Standards: Added HTML Report Consistency requirement
 -->
 
-# photo-admin Constitution
+# ShutterSense Constitution
 
 ## Core Principles
 
@@ -318,7 +318,7 @@ All asynchronous job processing MUST be executed by agents. The server MUST NOT 
 ## Shared Infrastructure Standards
 
 - **Configuration Management**: All tools MUST use `PhotoAdminConfig` from `config_manager.py` for loading and managing YAML configuration
-- **Config File Location**: Standard locations are `./config/config.yaml` or `~/.photo-admin/config.yaml`
+- **Config File Location**: Standard locations are `./config/config.yaml` or the platform-specific config directory (e.g., `~/.config/shuttersense/` on Linux, `~/Library/Application Support/shuttersense/` on macOS)
 - **Interactive Setup**: Tools MUST prompt users to create configuration from template on first run if config is missing
 - **Config Schema**: New tools MAY extend the shared config schema by adding top-level keys; existing keys MUST NOT be redefined
 - **File Type Support**: Tools MUST respect `photo_extensions` and `metadata_extensions` from shared config
@@ -406,7 +406,7 @@ All action rows MUST stack vertically on mobile using the responsive pattern:
 
 ## Governance
 
-**Constitution Authority**: This constitution defines the core principles and standards for the photo-admin project. All design decisions, code reviews, and feature implementations MUST comply with these principles.
+**Constitution Authority**: This constitution defines the core principles and standards for the ShutterSense project. All design decisions, code reviews, and feature implementations MUST comply with these principles.
 
 **Amendment Process**:
 - Amendments require documentation of rationale and impact analysis
