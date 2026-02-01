@@ -5,6 +5,8 @@
  * Issue #39 - Calendar Events feature (Phase 8)
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Embedded Types
 // ============================================================================
@@ -41,6 +43,7 @@ export interface Location {
   is_known: boolean          // Whether this is a saved "known location"
   created_at: string         // ISO 8601 timestamp
   updated_at: string         // ISO 8601 timestamp
+  audit?: AuditInfo | null
 }
 
 // ============================================================================

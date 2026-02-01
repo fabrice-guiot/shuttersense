@@ -7,6 +7,8 @@
  * Part of Issue #90 - Distributed Agent Architecture
  */
 
+import type { AuditInfo } from './audit-api'
+
 /**
  * Release manifest entity.
  */
@@ -27,6 +29,7 @@ export interface ReleaseManifest {
   created_at: string
   /** Last update timestamp (ISO 8601) */
   updated_at: string
+  audit?: AuditInfo | null
 }
 
 /**

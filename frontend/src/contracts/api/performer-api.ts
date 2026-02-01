@@ -5,6 +5,8 @@
  * Issue #39 - Calendar Events feature (Phase 11)
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Embedded Types
 // ============================================================================
@@ -30,6 +32,7 @@ export interface Performer {
   additional_info: string | null
   created_at: string              // ISO 8601 timestamp
   updated_at: string              // ISO 8601 timestamp
+  audit?: AuditInfo | null
 }
 
 /** Performer status when associated with an event */

@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
+from backend.src.schemas.audit import AuditInfo
+
 
 # ============================================================================
 # Request Schemas
@@ -58,6 +60,7 @@ class TeamResponse(BaseModel):
     user_count: int = Field(0, description="Number of users in team")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+    audit: Optional[AuditInfo] = Field(None, description="Audit trail")
 
     class Config:
         """Pydantic config."""
@@ -169,4 +172,5 @@ def team_to_response(team, user_count: int = 0) -> TeamResponse:
         user_count=user_count,
         created_at=team.created_at,
         updated_at=team.updated_at,
+        audit=team.audit,
     )

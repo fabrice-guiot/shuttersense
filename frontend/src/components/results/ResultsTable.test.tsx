@@ -38,7 +38,13 @@ const mockResults: AnalysisResultSummary[] = [
     input_state_hash: 'abc123',
     no_change_copy: false,
     connector_guid: null,
-    connector_name: null
+    connector_name: null,
+    audit: {
+      created_at: '2025-01-01T10:05:00Z',
+      created_by: { guid: 'usr_01hgw2bbg00000000000000001', display_name: 'Alice Smith', email: 'alice@example.com' },
+      updated_at: '2025-01-01T10:05:00Z',
+      updated_by: { guid: 'usr_01hgw2bbg00000000000000001', display_name: 'Alice Smith', email: 'alice@example.com' },
+    },
   },
   {
     guid: 'res_01hgw2bbg00000000000000002',
@@ -58,7 +64,13 @@ const mockResults: AnalysisResultSummary[] = [
     input_state_hash: 'abc123',
     no_change_copy: true,
     connector_guid: null,
-    connector_name: null
+    connector_name: null,
+    audit: {
+      created_at: '2025-01-02T10:01:00Z',
+      created_by: { guid: 'usr_01hgw2bbg00000000000000002', display_name: 'Bob Jones', email: 'bob@example.com' },
+      updated_at: '2025-01-02T10:01:00Z',
+      updated_by: { guid: 'usr_01hgw2bbg00000000000000002', display_name: 'Bob Jones', email: 'bob@example.com' },
+    },
   },
   {
     guid: 'res_01hgw2bbg00000000000000003',
@@ -78,7 +90,7 @@ const mockResults: AnalysisResultSummary[] = [
     input_state_hash: null,
     no_change_copy: false,
     connector_guid: null,
-    connector_name: null
+    connector_name: null,
   }
 ]
 
@@ -188,6 +200,46 @@ describe('ResultsTable', () => {
 
       const badge = screen.getAllByText('No Change')[0]
       expect(badge).toBeInTheDocument()
+    })
+  })
+
+  describe('Created by column', () => {
+    test('shows user display name when audit data is available', () => {
+      render(<ResultsTable {...defaultProps} />)
+
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
+    })
+
+    test('shows em dash when audit data is not available', () => {
+      const resultsWithoutAudit: AnalysisResultSummary[] = [
+        { ...mockResults[2] } // Third result has no audit
+      ]
+
+      render(<ResultsTable {...defaultProps} results={resultsWithoutAudit} total={1} />)
+
+      // The data row should render an em dash in the "Created by" cell
+      const rows = screen.getAllByRole('row')
+      const dataRow = rows[1] // Skip header row
+      expect(within(dataRow).getByText('\u2014')).toBeInTheDocument()
+    })
+
+    test('falls back to email when display_name is null', () => {
+      const resultsWithEmailOnly: AnalysisResultSummary[] = [
+        {
+          ...mockResults[0],
+          audit: {
+            created_at: '2025-01-01T10:05:00Z',
+            created_by: { guid: 'usr_01hgw2bbg00000000000000003', display_name: null, email: 'fallback@example.com' },
+            updated_at: '2025-01-01T10:05:00Z',
+            updated_by: null,
+          },
+        }
+      ]
+
+      render(<ResultsTable {...defaultProps} results={resultsWithEmailOnly} total={1} />)
+
+      expect(screen.getByText('fallback@example.com')).toBeInTheDocument()
     })
   })
 

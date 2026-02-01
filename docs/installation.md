@@ -26,14 +26,12 @@ cd shuttersense
 ### 2. Backend Setup
 
 ```bash
-cd backend
-
-# Create virtual environment (recommended)
+# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 
 # Set required environment variables
 export SHUSAI_MASTER_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
@@ -41,11 +39,15 @@ export SHUSAI_DB_URL="postgresql://user:password@localhost:5432/shuttersense"
 
 # Create database and run migrations
 createdb shuttersense  # Or use your PostgreSQL admin tool
-alembic upgrade head
+cd backend && alembic upgrade head && cd ..
 
-# Start the backend server
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+# Start the backend server (venv must be activated)
+python3 web_server.py --reload
 ```
+
+> **Note:** Always activate the virtual environment (`source venv/bin/activate`)
+> before running `web_server.py`. The script must use the Python interpreter
+> that has the project dependencies installed.
 
 The API will be available at:
 - API: http://localhost:8000/api
@@ -285,9 +287,8 @@ shuttersense-agent self-test
 For contributing or running tests:
 
 ```bash
-# Backend tests
-cd backend
-python -m pytest tests/ -v
+# Backend tests (run from repo root)
+PYTHONPATH=. python -m pytest backend/tests/ -v
 
 # Frontend tests
 cd frontend

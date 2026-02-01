@@ -5,6 +5,8 @@
  * These contracts mirror the backend FastAPI endpoints (unchanged).
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Entity Types
 // ============================================================================
@@ -77,6 +79,7 @@ export interface Collection {
   created_at: string  // ISO 8601 timestamp
   updated_at: string  // ISO 8601 timestamp
   last_scanned_at: string | null  // ISO 8601 timestamp
+  audit?: AuditInfo | null
 }
 
 // ============================================================================

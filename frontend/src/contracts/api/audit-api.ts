@@ -12,7 +12,7 @@
 export interface AuditUserSummary {
   /** User GUID (usr_xxx format) — never the internal numeric ID. */
   guid: string
-  /** Human-readable name. May be null for system users. */
+  /** Human-readable name. Null for historical records or deleted users. */
   display_name: string | null
   /** User email address. Optional — populated only when authorized to view PII. */
   email: string | null

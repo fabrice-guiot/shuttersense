@@ -134,36 +134,47 @@ export default function CollectionsPage() {
   }
 
   const handleInfo = (collection: Collection) => {
-    testCollection(collection.guid).catch(() => {
-      // Error handled by hook
+    const toastId = toast.loading('Testing accessibility...', {
+      description: collection.name,
     })
+    testCollection(collection.guid)
+      .then(() => {
+        toast.success('Accessibility test complete', { id: toastId, description: collection.name })
+      })
+      .catch(() => {
+        toast.error('Accessibility test failed', { id: toastId, description: collection.name })
+      })
   }
 
   const handleRefresh = (collection: Collection) => {
-    runAllTools(collection.guid).catch(() => {
-      // Error handled by hook with toast notifications
+    const toastId = toast.loading('Starting analysis...', {
+      description: collection.name,
+    })
+    runAllTools(collection.guid, toastId).catch(() => {
+      // Error toast already shown by runAllTools via toastId
     })
   }
 
   // T075: Refresh from Cloud - clear inventory cache then run all tools
   const handleRefreshFromCloud = async (collection: Collection) => {
+    const toastId = toast.loading('Refreshing from cloud storage...', {
+      description: collection.name,
+    })
     try {
       // First, clear the inventory cache
       const result = await clearInventoryCache(collection.guid)
       if (result.cleared_count > 0) {
-        toast.info('Inventory cache cleared', {
-          description: `${result.cleared_count.toLocaleString()} cached entries removed`
+        toast.loading('Cache cleared, starting analysis...', {
+          id: toastId,
+          description: `${result.cleared_count.toLocaleString()} cached entries removed`,
         })
       }
 
       // Then run all tools (they will fetch fresh listings from cloud)
-      await runAllTools(collection.guid)
+      await runAllTools(collection.guid, toastId)
     } catch (err: any) {
-      // Handle clear cache errors separately
       const errorMessage = err.userMessage || err?.response?.data?.detail || 'Failed to refresh from cloud'
-      toast.error('Refresh from Cloud failed', {
-        description: errorMessage
-      })
+      toast.error('Refresh from Cloud failed', { id: toastId, description: errorMessage })
     }
   }
 

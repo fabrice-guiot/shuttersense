@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailSection } from '@/components/audit'
 import type { NotificationResponse } from '@/contracts/api/notification-api'
 import {
   NOTIFICATION_CATEGORY_ICONS,
@@ -66,6 +67,7 @@ export function NotificationDetailDialog({
         <div className="text-sm text-foreground whitespace-pre-wrap">
           {notification.body}
         </div>
+        <AuditTrailSection audit={notification.audit} />
         {notification.data?.url && notification.data.url !== location.pathname && (
           <DialogFooter>
             <Button onClick={handleNavigate} size="sm">

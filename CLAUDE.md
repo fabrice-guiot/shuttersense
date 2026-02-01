@@ -480,6 +480,52 @@ All asynchronous job processing MUST be executed by agents. The server acts as a
 | AgentRegistrationToken | `art_` |
 | ReleaseManifest | `rel_` |
 
+### 8. Audit Trail & User Attribution - Issue #120
+
+All tenant-scoped entities MUST record who created and last modified each record. Audit trail is a cross-cutting requirement for all features.
+
+**Database Requirements:**
+- All tenant-scoped entities MUST include `created_by_user_id` and `updated_by_user_id` columns
+- New entities MUST use `AuditMixin` from `backend/src/models/mixins/audit.py`
+- `created_by_user_id` is immutable after creation (enforced by service layer + PostgreSQL trigger)
+- FK ON DELETE SET NULL preserves audit trail when users are deleted
+
+**Backend Requirements:**
+- All response schemas MUST include `audit: Optional[AuditInfo] = None`
+- Service create methods MUST set both `created_by_user_id` and `updated_by_user_id` from `TenantContext.user_id`
+- Service update methods MUST set `updated_by_user_id` from `TenantContext.user_id`
+
+**Backend Pattern:**
+```python
+from backend.src.models.mixins.audit import AuditMixin
+
+class MyEntity(Base, GuidMixin, AuditMixin):
+    __tablename__ = "my_entities"
+    # AuditMixin adds: created_by_user_id, updated_by_user_id, .audit property
+```
+
+**Frontend Requirements:**
+- All entity API contracts MUST include `audit?: AuditInfo`
+- List views MUST display a "Modified" column using `AuditTrailPopover`
+- Detail views MUST display an `AuditSection` component
+- Missing audit data renders an em dash (\u2014) fallback
+
+**Frontend Pattern:**
+```typescript
+import { AuditTrailPopover } from '@/components/audit'
+import type { AuditInfo } from '@/contracts/api/audit-api'
+
+// List view column:
+{ header: 'Modified', cell: (row) => <AuditTrailPopover audit={row.audit} /> }
+```
+
+**Key Files:**
+- `backend/src/models/mixins/audit.py` - AuditMixin for models
+- `backend/src/schemas/audit.py` - AuditInfo, AuditUserSummary schemas
+- `frontend/src/contracts/api/audit-api.ts` - TypeScript audit types
+- `frontend/src/components/audit/AuditTrailPopover.tsx` - List view popover
+- `frontend/src/components/audit/AuditSection.tsx` - Detail view section
+
 ## Configuration
 
 ### Config File Locations (Priority Order)

@@ -29,6 +29,7 @@ from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
 from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins.audit import AuditMixin
 
 if TYPE_CHECKING:
     from backend.src.models.team import Team
@@ -60,7 +61,7 @@ class UserStatus(enum.Enum):
     DEACTIVATED = "deactivated"  # Admin disabled
 
 
-class User(Base, GuidMixin):
+class User(Base, GuidMixin, AuditMixin):
     """
     User model representing an authenticated person.
 
@@ -165,6 +166,7 @@ class User(Base, GuidMixin):
     team = relationship(
         "Team",
         back_populates="users",
+        foreign_keys=[team_id],
         lazy="joined"
     )
     # For system users: the API token this system user represents (one-to-one)
@@ -195,6 +197,20 @@ class User(Base, GuidMixin):
         foreign_keys="Notification.user_id",
         back_populates="user",
         lazy="dynamic"
+    )
+    # Override AuditMixin relationships — self-referencing FK requires remote_side
+    # to tell SQLAlchemy this is many-to-one (not one-to-many).
+    created_by_user = relationship(
+        "User",
+        foreign_keys="User.created_by_user_id",
+        remote_side="User.id",
+        lazy="select",
+    )
+    updated_by_user = relationship(
+        "User",
+        foreign_keys="User.updated_by_user_id",
+        remote_side="User.id",
+        lazy="select",
     )
 
     @property

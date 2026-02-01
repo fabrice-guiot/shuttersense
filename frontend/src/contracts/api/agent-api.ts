@@ -6,6 +6,8 @@
  * Issue #90 - Distributed Agent Architecture (Phase 3)
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Agent Status Enum
 // ============================================================================
@@ -31,6 +33,7 @@ export interface Agent {
   team_guid: string
   current_job_guid: string | null
   running_jobs_count: number
+  audit?: AuditInfo | null
 }
 
 export interface AgentListResponse {
@@ -82,6 +85,7 @@ export interface RegistrationTokenListItem {
   used_by_agent_guid: string | null
   created_at: string
   created_by_email: string | null
+  audit?: AuditInfo | null
 }
 
 export interface RegistrationTokenListResponse {
@@ -154,4 +158,5 @@ export interface AgentDetailResponse {
   total_jobs_completed: number
   total_jobs_failed: number
   recent_jobs: AgentJobHistoryItem[]
+  audit?: AuditInfo | null
 }

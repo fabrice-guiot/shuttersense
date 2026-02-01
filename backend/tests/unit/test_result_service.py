@@ -50,6 +50,8 @@ class TestResultServiceList:
         result.input_state_hash = None
         result.no_change_copy = False
         result.download_report_from = None
+        # Audit trail (Issue #120)
+        result.audit = None
         return result
 
     @pytest.fixture
@@ -83,6 +85,7 @@ class TestResultServiceList:
         assert total == 1
         assert len(items) == 1
         assert items[0].tool == "photostats"
+        assert items[0].audit is None  # No audit user set on mock
 
     def test_list_results_with_filters(self, mock_db):
         """Test listing results with filters."""
@@ -146,6 +149,8 @@ class TestResultServiceGet:
         result.input_state_hash = None
         result.no_change_copy = False
         result.download_report_from = None
+        # Audit trail (Issue #120)
+        result.audit = None
         return result
 
     def test_get_result_returns_details(self, mock_db, sample_result):

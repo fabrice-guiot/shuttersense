@@ -142,40 +142,40 @@
 
 ### Frontend Components
 
-- [ ] T065 [US1] Create AuditTrailPopover component in frontend/src/components/ui/audit-trail-popover.tsx — trigger shows formatRelativeTime(updated_at) with dotted underline; popover content shows created date/by and modified date/by; handle null users with "—"; skip modified section when created_at === updated_at; use Radix Popover from shadcn/ui
-- [ ] T066 [US1] Create AuditTrailSection component (exported from same file frontend/src/components/ui/audit-trail-popover.tsx) — inline display for detail dialogs with border-t separator; shows created/modified rows with formatDateTime and user display_name || email; null users show "—"
+- [X] T065 [US1] Create AuditTrailPopover component in frontend/src/components/audit/AuditTrailPopover.tsx — trigger shows formatRelativeTime(updated_at) with dotted underline; popover content shows created date/by and modified date/by; handle null users with "—"; skip modified section when created_at === updated_at; use Radix Popover from shadcn/ui. Barrel export from frontend/src/components/audit/index.ts.
+- [X] T066 [US1] Create AuditTrailSection component in frontend/src/components/audit/AuditTrailSection.tsx — inline display for detail dialogs with border-t separator; shows created/modified rows with formatDateTime and user display_name || email; null users show "—". Exported via barrel index.ts.
 
 ### Tests — Verify frontend audit components (NFR-400.4)
 
-- [ ] T066a [US1] Create frontend tests for AuditTrailPopover covering: renders relative time trigger text; popover displays created date/time and user display_name; popover displays modified date/time and user display_name; handles null created_by/updated_by by displaying "—"; hides modified section when created_at === updated_at (unmodified record); falls back to email when display_name is null
-- [ ] T066b [P] [US1] Create frontend tests for AuditTrailSection covering: renders created and modified rows with full formatted timestamps; shows user display_name with fallback to email; handles null users by displaying "—"; handles same created_at/updated_at timestamps correctly
+- [X] T066a [US1] Create frontend tests for AuditTrailPopover (9 tests) in frontend/src/components/audit/__tests__/AuditTrailPopover.test.tsx — covers: renders relative time trigger text; dotted underline styling; no underline for fallback; em-dash when null; email fallback; fallbackTimestamp usage; same timestamps; null users
+- [X] T066b [P] [US1] Create frontend tests for AuditTrailSection (7 tests) in frontend/src/components/audit/__tests__/AuditTrailSection.test.tsx — covers: null returns null; renders created date/user; modified section when timestamps differ; hidden when timestamps match; email fallback; em-dash for null users
 
 ### Entity Type Updates — Add audit field to frontend API types
 
-- [ ] T067 [P] [US1] Add audit?: AuditInfo | null field to Collection type in frontend/src/contracts/api/collection-api.ts (import AuditInfo from audit-api.ts)
-- [ ] T068 [P] [US1] Add audit field to Connector type in frontend/src/contracts/api/collection-api.ts (or wherever ConnectorResponse type is defined)
-- [ ] T069 [P] [US1] Add audit field to Pipeline type in the relevant contract file
-- [ ] T070 [P] [US1] Add audit field to Job type in the relevant contract file
-- [ ] T071 [P] [US1] Add audit field to AnalysisResult type in the relevant contract file
-- [ ] T072 [P] [US1] Add audit field to Event and EventDetail types in frontend/src/contracts/api/event-api.ts
-- [ ] T073 [P] [US1] Add audit field to EventSeries type in the relevant contract file
-- [ ] T074 [P] [US1] Add audit field to Category, Location, Organizer, Performer types in their respective contract files
-- [ ] T075 [P] [US1] Add audit field to Notification, PushSubscription types in the relevant contract file
-- [ ] T076 [P] [US1] Add audit field to Agent, ApiToken, AgentRegistrationToken types in the relevant contract files
+- [X] T067 [P] [US1] Add audit?: AuditInfo | null field to Collection type in frontend/src/contracts/api/collection-api.ts
+- [X] T068 [P] [US1] Add audit field to Connector type in frontend/src/contracts/api/connector-api.ts
+- [X] T069 [P] [US1] Add audit field to PipelineSummary and Pipeline types in frontend/src/contracts/api/pipelines-api.ts
+- [X] T070 [P] [US1] Add audit field to Job type in frontend/src/contracts/api/tools-api.ts
+- [X] T071 [P] [US1] Add audit field to AnalysisResultSummary and AnalysisResult types in frontend/src/contracts/api/results-api.ts
+- [X] T072 [P] [US1] Add audit field to Event type in frontend/src/contracts/api/event-api.ts
+- [X] T073 [P] [US1] Add audit field to Category, Location, Organizer, Performer types in their respective contract files (category-api.ts, location-api.ts, organizer-api.ts, performer-api.ts)
+- [X] T074 [P] [US1] Add audit field to Category, Location, Organizer, Performer types in their respective contract files
+- [X] T075 [P] [US1] Add audit field to NotificationResponse, PushSubscriptionResponse types in frontend/src/contracts/api/notification-api.ts
+- [X] T076 [P] [US1] Add audit field to Agent, AgentDetailResponse, RegistrationTokenListItem, ApiToken, ReleaseManifest, Team types in their respective contract/service files
 
 ### List View Integration — Add/replace Modified column in all 11 list views
 
-- [ ] T077 [US1] Add "Modified" column to CollectionList in frontend/src/components/collections/CollectionList.tsx — position before Actions column; cell renders AuditTrailPopover if item.audit exists, fallback to formatRelativeTime(item.updated_at); cardRole='detail'
-- [ ] T078 [P] [US1] Replace "Created" column with "Modified" column in ConnectorList in frontend/src/components/connectors/ConnectorList.tsx — same pattern as T077
-- [ ] T079 [P] [US1] Add "Modified" column to ResultsTable in frontend/src/components/results/ResultsTable.tsx — same pattern
-- [ ] T080 [P] [US1] Replace "Created" column with "Modified" column in LocationsTab in frontend/src/components/settings/LocationsTab.tsx — same pattern
-- [ ] T081 [P] [US1] Replace "Created" column with "Modified" column in OrganizersTab in frontend/src/components/settings/OrganizersTab.tsx — same pattern
-- [ ] T082 [P] [US1] Replace "Created" column with "Modified" column in PerformersTab in frontend/src/components/settings/PerformersTab.tsx — same pattern
-- [ ] T083 [P] [US1] Add "Modified" column to AgentsPage in frontend/src/pages/AgentsPage.tsx — same pattern
-- [ ] T084 [P] [US1] Replace "Created" column with "Modified" column in CategoriesTab in frontend/src/components/settings/CategoriesTab.tsx — same pattern
-- [ ] T085 [P] [US1] Replace "Created" column with "Modified" column in TokensTab in frontend/src/components/admin/TokensTab.tsx — same pattern
-- [ ] T086 [P] [US1] Add "Modified" column to TeamsTab in frontend/src/components/admin/TeamsTab.tsx — same pattern
-- [ ] T087 [P] [US1] Add "Modified" column to ReleaseManifestsTab in frontend/src/components/admin/ReleaseManifestsTab.tsx — same pattern
+- [X] T077 [US1] Add "Modified" column to CollectionList in frontend/src/components/collections/CollectionList.tsx — before Actions, cardRole='hidden', fallback to collection.updated_at
+- [X] T078 [P] [US1] Replace "Created" column with "Modified" in ConnectorList in frontend/src/components/connectors/ConnectorList.tsx — fallback to connector.updated_at
+- [X] T079 [P] [US1] Add "Modified" column to ResultsTable in frontend/src/components/results/ResultsTable.tsx — before Actions, cardRole='hidden', kept existing "Completed" column, fallback to result.completed_at
+- [X] T080 [P] [US1] Replace "Created" column with "Modified" in LocationsTab in frontend/src/components/directory/LocationsTab.tsx — fallback to location.updated_at
+- [X] T081 [P] [US1] Replace "Created" column with "Modified" in OrganizersTab in frontend/src/components/directory/OrganizersTab.tsx — fallback to organizer.updated_at
+- [X] T082 [P] [US1] Replace "Created" column with "Modified" in PerformersTab in frontend/src/components/directory/PerformersTab.tsx — fallback to performer.updated_at
+- [X] T083 [P] [US1] Add "Modified" column to AgentsPage in frontend/src/pages/AgentsPage.tsx — before Actions, cardRole='hidden', kept "Last Heartbeat", fallback to agent.created_at
+- [X] T084 [P] [US1] Replace "Created" column with "Modified" in CategoriesTab in frontend/src/components/settings/CategoriesTab.tsx — fallback to category.updated_at
+- [X] T085 [P] [US1] Replace "Created" column with "Modified" in TokensTab in frontend/src/components/settings/TokensTab.tsx — audit popover replaces created_by_email display, fallback to token.created_at
+- [X] T086 [P] [US1] Add "Modified" column to TeamsTab in frontend/src/components/settings/TeamsTab.tsx — before Actions, cardRole='hidden', fallback to team.updated_at
+- [X] T087 [P] [US1] Add "Modified" column to ReleaseManifestsTab in frontend/src/components/settings/ReleaseManifestsTab.tsx — before Actions, cardRole='hidden', fallback to manifest.updated_at
 
 **Checkpoint**: All 11 list views show the "Modified" column with hover popover. Historical records show "—" for attribution.
 
@@ -187,8 +187,8 @@
 
 **Independent Test**: Open any record's detail dialog, verify the bottom section shows "Created [date] by [user]" and "Modified [date] by [user]".
 
-- [ ] T088 [US3] Add AuditTrailSection to AgentDetailsDialog in frontend/src/components/agents/AgentDetailsDialog.tsx — render at the bottom of the dialog content, passing the agent's audit data; conditionally render only when audit data exists
-- [ ] T089 [P] [US3] Add AuditTrailSection to NotificationDetailDialog in frontend/src/components/notifications/NotificationDetailDialog.tsx — same pattern as T088
+- [X] T088 [US3] Add AuditTrailSection to AgentDetailsDialog in frontend/src/components/agents/AgentDetailsDialog.tsx — render at the bottom of the dialog content, passing the agent's audit data; conditionally render only when audit data exists
+- [X] T089 [P] [US3] Add AuditTrailSection to NotificationDetailDialog in frontend/src/components/notifications/NotificationDetailDialog.tsx — same pattern as T088
 
 **Checkpoint**: Detail dialogs show complete audit trail inline. All user stories are functional.
 

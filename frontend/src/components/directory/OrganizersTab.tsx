@@ -27,7 +27,7 @@ import { GuidBadge } from '@/components/GuidBadge'
 import type { Organizer } from '@/contracts/api/organizer-api'
 import type { Category } from '@/contracts/api/category-api'
 import { cn } from '@/lib/utils'
-import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 
 // ============================================================================
 // Rating Display Component
@@ -221,8 +221,10 @@ function OrganizerList({ organizers, loading, onEdit, onDelete }: OrganizerListP
       cardRole: 'detail',
     },
     {
-      header: 'Created',
-      cell: (organizer) => formatRelativeTime(organizer.created_at),
+      header: 'Modified',
+      cell: (organizer) => (
+        <AuditTrailPopover audit={organizer.audit} fallbackTimestamp={organizer.updated_at} />
+      ),
       cellClassName: 'text-muted-foreground',
       cardRole: 'hidden',
     },

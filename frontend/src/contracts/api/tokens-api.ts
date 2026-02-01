@@ -5,6 +5,8 @@
  * Phase 10: User Story 7 - API Token Authentication
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Entity Types
 // ============================================================================
@@ -24,6 +26,7 @@ export interface ApiToken {
   created_at: string        // ISO 8601 timestamp
   created_by_guid: string | null // GUID of user who created it
   created_by_email: string | null // Email of user who created it (audit trail)
+  audit?: AuditInfo | null
 }
 
 /**

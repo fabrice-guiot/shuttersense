@@ -190,7 +190,8 @@ async def run_tool(
             team_id=ctx.team_id,
             collection_id=collection_id,
             pipeline_id=pipeline_id,
-            mode=tool_request.mode
+            mode=tool_request.mode,
+            user_id=ctx.user_id,
         )
 
         # Check if this job uses the in-memory queue (server-side execution)
@@ -302,7 +303,8 @@ async def run_all_tools(
             job = service.run_tool(
                 tool=tool,
                 team_id=ctx.team_id,
-                collection_id=collection_id
+                collection_id=collection_id,
+                user_id=ctx.user_id,
             )
             created_jobs.append(job)
             logger.info(f"Job {job.id} queued: {tool.value} on collection {collection_guid}")

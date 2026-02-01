@@ -5,6 +5,8 @@
  * These contracts mirror the backend FastAPI endpoints for Phase 4 implementation.
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Entity Types
 // ============================================================================
@@ -61,6 +63,7 @@ export interface Job {
   agent_guid: string | null
   /** Name of assigned agent, null for in-memory jobs */
   agent_name: string | null
+  audit?: AuditInfo | null
 }
 
 // ============================================================================

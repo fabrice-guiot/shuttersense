@@ -3332,6 +3332,7 @@ async def agent_upload_result(
             analysis_data=analysis_data,
             html_report=html_report,
             input_state_hash=data.input_state_hash,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
 
         # Store the offline_result_id in job's progress_json for idempotency tracking
@@ -3434,6 +3435,7 @@ async def agent_record_no_change_result(
             tool=data.tool,
             input_state_hash=data.input_state_hash,
             source_result_guid=data.source_result_guid,
+            user_id=ctx.agent.system_user_id if ctx.agent else None,
         )
     except ValueError as e:
         raise HTTPException(

@@ -257,3 +257,90 @@ class TestAuditMixinMutability:
         test_db_session.refresh(collection)
 
         assert collection.updated_by_user_id == other_user.id
+
+
+class TestAuditMixinSelfReferencing:
+    """Tests that AuditMixin works on User model (self-referencing FK)."""
+
+    def test_user_created_by_returns_single_user(
+        self, test_db_session, test_team, test_user
+    ):
+        """User.created_by_user should return a single User, not a list."""
+        new_user = User(
+            team_id=test_team.id,
+            email="created-by-test@example.com",
+            display_name="Created By Test",
+            status=UserStatus.ACTIVE,
+            created_by_user_id=test_user.id,
+        )
+        test_db_session.add(new_user)
+        test_db_session.commit()
+        test_db_session.refresh(new_user)
+
+        creator = new_user.created_by_user
+        assert creator is not None
+        assert not isinstance(creator, list)
+        assert creator.id == test_user.id
+        assert creator.email == test_user.email
+
+    def test_user_updated_by_returns_single_user(
+        self, test_db_session, test_team, test_user
+    ):
+        """User.updated_by_user should return a single User, not a list."""
+        new_user = User(
+            team_id=test_team.id,
+            email="updated-by-test@example.com",
+            display_name="Updated By Test",
+            status=UserStatus.ACTIVE,
+            updated_by_user_id=test_user.id,
+        )
+        test_db_session.add(new_user)
+        test_db_session.commit()
+        test_db_session.refresh(new_user)
+
+        updater = new_user.updated_by_user
+        assert updater is not None
+        assert not isinstance(updater, list)
+        assert updater.id == test_user.id
+
+    def test_user_audit_property_works(
+        self, test_db_session, test_team, test_user
+    ):
+        """User.audit should return a valid dict (not crash on self-reference)."""
+        new_user = User(
+            team_id=test_team.id,
+            email="audit-prop-test@example.com",
+            display_name="Audit Prop Test",
+            status=UserStatus.ACTIVE,
+            created_by_user_id=test_user.id,
+            updated_by_user_id=test_user.id,
+        )
+        test_db_session.add(new_user)
+        test_db_session.commit()
+        test_db_session.refresh(new_user)
+
+        audit = new_user.audit
+        assert audit is not None
+        assert "created_at" in audit
+        assert "created_by" in audit
+        assert "updated_at" in audit
+        assert "updated_by" in audit
+        assert audit["created_by"]["guid"] == test_user.guid
+        assert audit["updated_by"]["guid"] == test_user.guid
+
+    def test_user_audit_null_attribution(self, test_db_session, test_team):
+        """User.audit should handle null attribution (historical records)."""
+        new_user = User(
+            team_id=test_team.id,
+            email="no-attrib-test@example.com",
+            display_name="No Attrib",
+            status=UserStatus.ACTIVE,
+        )
+        test_db_session.add(new_user)
+        test_db_session.commit()
+        test_db_session.refresh(new_user)
+
+        audit = new_user.audit
+        assert audit is not None
+        assert audit["created_by"] is None
+        assert audit["updated_by"] is None

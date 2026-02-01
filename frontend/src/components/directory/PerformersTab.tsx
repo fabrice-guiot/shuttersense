@@ -26,7 +26,7 @@ import { PerformerForm } from './PerformerForm'
 import { GuidBadge } from '@/components/GuidBadge'
 import type { Performer } from '@/contracts/api/performer-api'
 import type { Category } from '@/contracts/api/category-api'
-import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 
 // ============================================================================
 // Category Badge Component
@@ -172,8 +172,10 @@ function PerformerList({ performers, loading, onEdit, onDelete }: PerformerListP
       cardRole: 'detail',
     },
     {
-      header: 'Created',
-      cell: (performer) => formatRelativeTime(performer.created_at),
+      header: 'Modified',
+      cell: (performer) => (
+        <AuditTrailPopover audit={performer.audit} fallbackTimestamp={performer.updated_at} />
+      ),
       cellClassName: 'text-muted-foreground',
       cardRole: 'hidden',
     },

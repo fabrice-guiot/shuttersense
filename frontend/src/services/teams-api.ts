@@ -8,6 +8,7 @@
  */
 
 import api from './api'
+import type { AuditInfo } from '@/contracts/api/audit-api'
 
 // ============================================================================
 // Types
@@ -21,6 +22,7 @@ export interface Team {
   user_count: number
   created_at: string
   updated_at: string | null
+  audit?: AuditInfo | null
 }
 
 export interface TeamWithAdmin {

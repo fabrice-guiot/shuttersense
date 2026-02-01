@@ -21,6 +21,7 @@ from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
 from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins.audit import AuditMixin
 
 if TYPE_CHECKING:
     from backend.src.models.user import User
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
     from backend.src.models.agent import Agent
 
 
-class Team(Base, GuidMixin):
+class Team(Base, GuidMixin, AuditMixin):
     """
     Team model representing a tenancy boundary.
 
@@ -93,6 +94,7 @@ class Team(Base, GuidMixin):
     users = relationship(
         "User",
         back_populates="team",
+        foreign_keys="[User.team_id]",
         lazy="dynamic",
         cascade="all, delete-orphan"
     )

@@ -141,27 +141,19 @@ def upgrade() -> None:
                   EXECUTE FUNCTION prevent_created_by_mutation();
             """))
 
-    # --- Phase 4: CONCURRENTLY indexes on large tables (PostgreSQL only) ---
-    # These must run outside a transaction block.
+    # --- Phase 4: Indexes on large tables ---
+    # Use regular CREATE INDEX (not CONCURRENTLY) to stay within Alembic's
+    # transaction. CONCURRENTLY requires running outside a transaction block
+    # which is incompatible with Alembic's default transactional DDL.
 
-    if is_pg:
-        connection = op.get_bind()
-        # Commit the current transaction so we can use AUTOCOMMIT
-        connection.execute(sa.text("COMMIT"))
-
-        for table in sorted(LARGE_TABLES):
-            connection.execute(sa.text(
-                f"CREATE INDEX CONCURRENTLY IF NOT EXISTS "
-                f"ix_{table}_updated_by_user_id ON {table} (updated_by_user_id)"
-            ))
-            if table in GROUP_A_TABLES:
-                connection.execute(sa.text(
-                    f"CREATE INDEX CONCURRENTLY IF NOT EXISTS "
-                    f"ix_{table}_created_by_user_id ON {table} (created_by_user_id)"
-                ))
-
-        # Re-open a transaction for Alembic to close cleanly
-        connection.execute(sa.text("BEGIN"))
+    for table in sorted(LARGE_TABLES):
+        op.create_index(
+            f"ix_{table}_updated_by_user_id", table, ["updated_by_user_id"]
+        )
+        if table in GROUP_A_TABLES:
+            op.create_index(
+                f"ix_{table}_created_by_user_id", table, ["created_by_user_id"]
+            )
 
 
 def downgrade() -> None:
@@ -196,32 +188,13 @@ def downgrade() -> None:
             "DROP FUNCTION IF EXISTS prevent_created_by_mutation()"
         ))
 
-    # --- Phase 2: Drop CONCURRENTLY indexes on large tables (PostgreSQL) ---
+    # --- Phase 2: Drop indexes ---
 
-    if is_pg:
-        connection = op.get_bind()
-        connection.execute(sa.text("COMMIT"))
-
-        for table in sorted(LARGE_TABLES):
-            connection.execute(sa.text(
-                f"DROP INDEX CONCURRENTLY IF EXISTS ix_{table}_updated_by_user_id"
-            ))
-            if table in GROUP_A_TABLES:
-                connection.execute(sa.text(
-                    f"DROP INDEX CONCURRENTLY IF EXISTS ix_{table}_created_by_user_id"
-                ))
-
-        connection.execute(sa.text("BEGIN"))
-
-    # --- Phase 3: Drop standard indexes on small tables ---
-
-    small_group_a = [t for t in GROUP_A_TABLES if t not in LARGE_TABLES]
-    for table in small_group_a:
-        op.drop_index(f"ix_{table}_created_by_user_id", table_name=table)
-
-    small_tables = [t for t in ALL_TABLES if t not in LARGE_TABLES]
-    for table in small_tables:
+    for table in ALL_TABLES:
         op.drop_index(f"ix_{table}_updated_by_user_id", table_name=table)
+
+    for table in GROUP_A_TABLES:
+        op.drop_index(f"ix_{table}_created_by_user_id", table_name=table)
 
     # --- Phase 4: Drop columns ---
 

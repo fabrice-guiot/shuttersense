@@ -172,6 +172,11 @@ def main() -> None:
     # Parse command-line arguments first (allows --help without master key)
     args = parse_arguments()
 
+    # Ensure the repo root is on sys.path so "backend.src.main" is importable
+    repo_root = str(Path(__file__).parent)
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+
     # Load environment variables from backend/.env
     load_env_file()
 
@@ -184,11 +189,16 @@ def main() -> None:
     except ImportError:
         print(
             "\n" + "=" * 70,
-            "\nERROR: uvicorn is not installed.",
-            "\n\nThe uvicorn ASGI server is required to run the FastAPI application.",
-            "\n\nTo install dependencies, run:",
-            "\n  cd backend",
-            "\n  pip install -r requirements.txt",
+            "\nERROR: Cannot import uvicorn.",
+            f"\n\nCurrent Python interpreter: {sys.executable} (Python {sys.version.split()[0]})",
+            "\n\nThis usually means the script is running under a Python interpreter",
+            "\nthat does not have the project dependencies installed.",
+            "\n\nTo fix this, either:",
+            "\n  1. Activate your virtual environment first:",
+            "\n       source venv/bin/activate",
+            "\n       python3 web_server.py --reload",
+            "\n  2. Or run the script with the correct interpreter directly:",
+            "\n       /path/to/your/python web_server.py --reload",
             "\n" + "=" * 70 + "\n",
             file=sys.stderr
         )

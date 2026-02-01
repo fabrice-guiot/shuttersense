@@ -1,4 +1,42 @@
 <!--
+SYNC IMPACT REPORT (Constitution v1.7.0 - Audit Trail & User Attribution)
+
+Version change: 1.6.0 → 1.7.0 (MINOR)
+Modified sections:
+  - Added new Core Principle: VII. Audit Trail & User Attribution
+
+Added requirements:
+  - All tenant-scoped database entities MUST include user attribution columns (created_by_user_id, updated_by_user_id)
+  - New entities MUST use AuditMixin from backend/src/models/mixins/audit.py
+  - All API response schemas MUST include an optional audit: AuditInfo field
+  - Frontend entity contracts MUST include audit?: AuditInfo
+  - List views MUST display a "Modified" column with AuditTrailPopover
+  - Detail views MUST display an AuditSection with full attribution history
+  - created_by_user_id MUST be immutable after creation (enforced by service layer and PostgreSQL trigger)
+  - User deletion MUST preserve audit trail (FK ON DELETE SET NULL)
+  - Services MUST set created_by_user_id and updated_by_user_id from TenantContext on create/update operations
+
+Rationale:
+  - Issue #120 established audit trail visibility as a cross-cutting concern
+  - Provides accountability for all data mutations (who changed what, when)
+  - Supports compliance, debugging, and team collaboration workflows
+  - Consistent pattern across all entities reduces implementation variance
+
+Impact:
+  - All new database entities MUST add AuditMixin (or manually add audit columns for Group B entities)
+  - All new API response schemas MUST include audit: Optional[AuditInfo] = None
+  - All new frontend entity contracts MUST include audit?: AuditInfo
+  - All new list views MUST render AuditTrailPopover in a "Modified" column
+  - All new detail views MUST render AuditSection
+  - All new service create/update methods MUST propagate user_id from TenantContext
+  - Code reviews MUST verify audit trail compliance
+
+Templates requiring updates:
+  ✅ No template changes needed - this is an architecture standard
+
+Previous Amendment (v1.6.0 - Agent-Only Execution):
+  - Added new Core Principle: VI. Agent-Only Execution (Distributed Processing)
+
 SYNC IMPACT REPORT (Constitution v1.6.0 - Agent-Only Execution)
 
 Version change: 1.5.0 → 1.6.0 (MINOR)
@@ -315,6 +353,76 @@ All asynchronous job processing MUST be executed by agents. The server MUST NOT 
 
 **Rationale**: Agent-only execution enables distributed processing where tools run close to the data. This architecture supports local filesystem access (impossible for a cloud server), reduces server load, and provides horizontal scaling. Users control where their data is processed by deploying agents in their environment.
 
+### VII. Audit Trail & User Attribution
+
+All tenant-scoped entities MUST record who created and who last modified each record. This is a cross-cutting architectural requirement, not optional per-feature decoration.
+
+**Database Requirements**:
+- All tenant-scoped entities MUST include `created_by_user_id` and `updated_by_user_id` columns (FK to `users.id`, ON DELETE SET NULL)
+- New entities MUST use `AuditMixin` from `backend/src/models/mixins/audit.py`
+- Group B entities (Agent, ApiToken, AgentRegistrationToken) that already have `created_by_user_id` MUST add `updated_by_user_id` manually
+- `created_by_user_id` MUST be immutable after record creation (enforced by service layer and PostgreSQL BEFORE UPDATE trigger)
+- Both columns are nullable to support historical records migrated before audit tracking
+
+**Backend API Requirements**:
+- All entity response schemas MUST include `audit: Optional[AuditInfo] = None` using the schema from `backend/src/schemas/audit.py`
+- Service create methods MUST set `created_by_user_id` and `updated_by_user_id` from `TenantContext.user_id`
+- Service update methods MUST set `updated_by_user_id` from `TenantContext.user_id` (MUST NOT modify `created_by_user_id`)
+- The `AuditMixin.audit` computed property handles serialization via `build_audit_info()`
+
+**Backend Implementation Pattern**:
+```python
+from backend.src.models.mixins.audit import AuditMixin
+
+class MyEntity(Base, GuidMixin, AuditMixin):
+    __tablename__ = "my_entities"
+    # AuditMixin adds: created_by_user_id, updated_by_user_id, relationships, .audit property
+
+# In service:
+def create(self, data, user_id: int):
+    entity = MyEntity(**data, created_by_user_id=user_id, updated_by_user_id=user_id)
+
+def update(self, entity, data, user_id: int):
+    entity.updated_by_user_id = user_id
+```
+
+**Frontend Contract Requirements**:
+- All entity API contracts MUST include `audit?: AuditInfo` using types from `@/contracts/api/audit-api`
+- The `AuditInfo` interface provides `created_at`, `created_by`, `updated_at`, `updated_by` fields
+
+**Frontend UI Requirements**:
+- List views MUST display a "Modified" column using `AuditTrailPopover` from `@/components/audit`
+- Detail views MUST display an `AuditSection` component showing full attribution history
+- When audit data is unavailable (historical records), display an em dash (\u2014) fallback
+- The `AuditTrailPopover` shows relative time with a hover popover for full details (created/modified by whom, when)
+
+**Frontend Implementation Pattern**:
+```typescript
+import { AuditTrailPopover } from '@/components/audit'
+import type { AuditInfo } from '@/contracts/api/audit-api'
+
+// In list view column definition:
+{
+  header: 'Modified',
+  cell: (row) => <AuditTrailPopover audit={row.audit} fallbackTimestamp={row.created_at} />,
+}
+
+// In entity contract:
+interface MyEntityResponse {
+  // ... entity fields
+  audit?: AuditInfo
+}
+```
+
+**Key Files**:
+- `backend/src/models/mixins/audit.py` - AuditMixin for SQLAlchemy models
+- `backend/src/schemas/audit.py` - AuditInfo and AuditUserSummary Pydantic schemas
+- `frontend/src/contracts/api/audit-api.ts` - TypeScript audit types
+- `frontend/src/components/audit/AuditTrailPopover.tsx` - List view popover component
+- `frontend/src/components/audit/AuditSection.tsx` - Detail view section component
+
+**Rationale**: User attribution provides accountability for all data mutations. Recording who created and who last modified each record supports compliance requirements, simplifies debugging, and enables team collaboration by making authorship visible. The consistent mixin-based pattern ensures audit compliance cannot be accidentally omitted when adding new entities. ON DELETE SET NULL preserves the audit trail even when users are removed from the system.
+
 ## Shared Infrastructure Standards
 
 - **Configuration Management**: All tools MUST use `PhotoAdminConfig` from `config_manager.py` for loading and managing YAML configuration
@@ -426,4 +534,4 @@ All action rows MUST stack vertically on mobile using the responsive pattern:
 - Repeated exceptions to a principle suggest it needs revision
 - Project direction or scope changes significantly
 
-**Version**: 1.6.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-01-21
+**Version**: 1.7.0 | **Ratified**: 2025-12-23 | **Last Amended**: 2026-02-01

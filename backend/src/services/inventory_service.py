@@ -1656,7 +1656,8 @@ class InventoryService:
         self,
         connector_id: int,
         team_id: int,
-        scheduled_for: datetime
+        scheduled_for: datetime,
+        user_id: Optional[int] = None,
     ) -> Job:
         """
         Create a scheduled inventory import job.
@@ -1692,6 +1693,8 @@ class InventoryService:
             status=JobStatus.SCHEDULED,
             scheduled_for=scheduled_for,
             priority=3,  # Normal priority
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         # Store connector info in job metadata for agent to use
@@ -1775,7 +1778,8 @@ class InventoryService:
     def on_import_completed(
         self,
         connector_id: int,
-        team_id: int
+        team_id: int,
+        user_id: Optional[int] = None,
     ) -> Optional[Job]:
         """
         Handle inventory import completion - create next scheduled job if needed.
@@ -1809,7 +1813,8 @@ class InventoryService:
         job = self.create_scheduled_import_job(
             connector_id=connector_id,
             team_id=team_id,
-            scheduled_for=next_scheduled
+            scheduled_for=next_scheduled,
+            user_id=user_id,
         )
 
         logger.info(

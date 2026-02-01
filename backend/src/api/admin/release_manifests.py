@@ -13,6 +13,8 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+
+from backend.src.schemas.audit import AuditInfo
 from pydantic import BaseModel, Field
 
 from backend.src.db.database import get_db
@@ -101,6 +103,7 @@ class ReleaseManifestResponse(BaseModel):
     notes: Optional[str] = Field(None, description="Optional notes")
     created_at: str = Field(..., description="Creation timestamp")
     updated_at: str = Field(..., description="Last update timestamp")
+    audit: Optional[AuditInfo] = Field(None, description="Audit trail")
 
     model_config = {"from_attributes": True}
 
@@ -138,6 +141,7 @@ def manifest_to_response(manifest: ReleaseManifest) -> ReleaseManifestResponse:
         notes=manifest.notes,
         created_at=manifest.created_at.isoformat(),
         updated_at=manifest.updated_at.isoformat(),
+        audit=manifest.audit,
     )
 
 
@@ -191,6 +195,8 @@ async def create_release_manifest(
             checksum=request.checksum,
             notes=request.notes,
             is_active=request.is_active,
+            created_by_user_id=ctx.user_id,
+            updated_by_user_id=ctx.user_id,
         )
         # Set platforms using the property setter (normalizes to lowercase)
         manifest.platforms = request.platforms
@@ -388,6 +394,8 @@ async def update_release_manifest(
 
     if request.notes is not None:
         manifest.notes = request.notes
+
+    manifest.updated_by_user_id = ctx.user_id
 
     db.commit()
     db.refresh(manifest)

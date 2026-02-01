@@ -63,6 +63,7 @@ async def create_team(
         team, admin_user = service.create_with_admin(
             name=request.name,
             admin_email=request.admin_email,
+            acting_user_id=ctx.user_id,
         )
 
         logger.info(
@@ -196,7 +197,7 @@ async def deactivate_team(
                 detail="Cannot deactivate your own team"
             )
 
-        updated = team_service.deactivate(guid)
+        updated = team_service.deactivate(guid, acting_user_id=ctx.user_id)
         user_count = len(user_service.list_by_team(team.id))
 
         logger.info(
@@ -234,7 +235,7 @@ async def reactivate_team(
 
     try:
         team = team_service.get_by_guid(guid)
-        updated = team_service.activate(guid)
+        updated = team_service.activate(guid, acting_user_id=ctx.user_id)
         user_count = len(user_service.list_by_team(team.id))
 
         logger.info(

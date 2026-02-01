@@ -22,7 +22,8 @@ class AuditUserSummary(BaseModel):
 
     Attributes:
         guid: User GUID (usr_xxx format) — never the internal numeric ID.
-        display_name: Human-readable name (may be null for system users).
+        display_name: Human-readable name. Null for historical records
+            created before audit tracking or for deleted users.
         email: User email address (optional — populated only when the
             requester is authorized to view PII; null otherwise).
     """

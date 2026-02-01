@@ -49,6 +49,7 @@ import { AgentDetailsDialog } from '@/components/agents/AgentDetailsDialog'
 import { RegistrationTokenDialog } from '@/components/agents/RegistrationTokenDialog'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 import type { Agent } from '@/contracts/api/agent-api'
 
 export default function AgentsPage() {
@@ -187,6 +188,14 @@ export default function AgentsPage() {
         <span className="text-muted-foreground">Never</span>
       ),
       cardRole: 'detail',
+    },
+    {
+      header: 'Modified',
+      cell: (agent) => (
+        <AuditTrailPopover audit={agent.audit} fallbackTimestamp={agent.created_at} />
+      ),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
     },
     {
       header: '',

@@ -282,7 +282,7 @@ describe('JobProgressCard', () => {
     expect(screen.getByText('col_01hgw2bbg0000000000000001')).toBeInTheDocument()
   })
 
-  it('should display created timestamp', () => {
+  it('should display modified timestamp', () => {
     render(
       <JobProgressCard
         job={baseJob}
@@ -291,8 +291,8 @@ describe('JobProgressCard', () => {
       />
     )
 
-    expect(screen.getByText('Created:')).toBeInTheDocument()
-    // Should show the formatted date (locale-dependent)
+    expect(screen.getByText('Modified:')).toBeInTheDocument()
+    // Should show the formatted date via AuditTrailPopover (locale-dependent)
     expect(screen.getByText(/1\/1\/2025|01\/01\/2025|2025/)).toBeInTheDocument()
   })
 

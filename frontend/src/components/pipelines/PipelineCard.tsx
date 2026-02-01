@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { formatDate } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 
 interface PipelineCardProps {
   pipeline: PipelineSummary
@@ -210,7 +210,7 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
         {/* Metadata */}
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{pipeline.node_count} nodes</span>
-          <span>Updated {formatDate(pipeline.updated_at)}</span>
+          <AuditTrailPopover audit={pipeline.audit} fallbackTimestamp={pipeline.updated_at} />
         </div>
       </CardContent>
     </Card>

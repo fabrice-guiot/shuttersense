@@ -38,6 +38,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { GuidBadge } from '@/components/GuidBadge'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 
 // ============================================================================
 // Status Badge Component
@@ -235,6 +236,14 @@ function UserList({
     {
       header: 'ID',
       cell: (user) => <GuidBadge guid={user.guid} />,
+      cardRole: 'hidden',
+    },
+    {
+      header: 'Modified',
+      cell: (user) => (
+        <AuditTrailPopover audit={user.audit} fallbackTimestamp={user.updated_at ?? user.created_at} />
+      ),
+      cellClassName: 'text-muted-foreground',
       cardRole: 'hidden',
     },
     {

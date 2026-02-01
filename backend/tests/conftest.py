@@ -13,7 +13,7 @@ import os
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, MagicMock
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text as sa_text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
@@ -79,7 +79,15 @@ def test_db_engine():
 
     Base.metadata.create_all(engine)
     yield engine
-    Base.metadata.drop_all(engine)
+    # Disable FK checks before dropping to handle circular dependencies
+    # (teams.created_by_user_id → users, users.team_id → teams).
+    # Both operations must use the same connection so the PRAGMA setting
+    # is still active when drop_all executes (the event listener would
+    # re-enable FK checks on any new connection).
+    with engine.connect() as conn:
+        conn.execute(sa_text('pragma foreign_keys=OFF'))
+        Base.metadata.drop_all(bind=conn)
+        conn.commit()
     engine.dispose()
 
 
