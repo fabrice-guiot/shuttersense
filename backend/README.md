@@ -20,7 +20,7 @@ FastAPI backend for the ShutterSense.ai web application. Provides a comprehensiv
 
 ## Tech Stack
 
-- **Python 3.10+** -- Required for match/case syntax and modern type hinting
+- **Python 3.11+** -- Required for ExceptionGroup, tomllib, and modern type hinting
 - **FastAPI** -- Modern web framework with automatic OpenAPI documentation
 - **PostgreSQL 12+** -- Primary database with JSONB support (SQLite for tests)
 - **SQLAlchemy 2.0** -- ORM with connection pooling
@@ -197,7 +197,7 @@ backend/
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - PostgreSQL 12+ (for production) or SQLite (for testing)
 - Virtual environment (recommended)
 

@@ -8,7 +8,7 @@ The ShutterSense Agent is a lightweight binary that runs on user machines to exe
 
 ## Prerequisites
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - pip package manager
 - Git (for version detection)
 

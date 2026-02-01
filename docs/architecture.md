@@ -238,7 +238,7 @@ In production, FastAPI serves both the API and the React SPA from the same serve
 | Frontend | React 18, TypeScript 5.9, Tailwind CSS 4.x | UI framework |
 | UI Components | shadcn/ui, Radix UI, Lucide React | Component library |
 | Build | Vite 6, Vitest | Build and test tooling |
-| Backend | FastAPI, Python 3.10+ | API framework |
+| Backend | FastAPI, Python 3.11+ | API framework |
 | ORM | SQLAlchemy 2.0, Alembic | Database access and migrations |
 | Database | PostgreSQL 12+ | Primary data store |
 | Auth | Authlib (OAuth), PyJWT (tokens) | Authentication |

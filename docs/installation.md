@@ -5,13 +5,13 @@ This guide covers installing the ShutterSense web application and agent.
 ## Requirements
 
 ### Web Application
-- Python 3.10 or higher (backend)
+- Python 3.11 or higher (backend)
 - Node.js 18+ and npm (frontend)
 - PostgreSQL 12+ (database)
 - Git (for cloning the repository)
 
 ### Agent
-- Python 3.10 or higher (for building from source)
+- Python 3.11 or higher (for building from source)
 - Or: pre-built binary for your platform (macOS, Linux, Windows)
 
 ## Web Application Setup
@@ -303,7 +303,7 @@ python -m pytest tests/ -v
 ## Troubleshooting
 
 ### Python Version
-Ensure you have Python 3.10+:
+Ensure you have Python 3.11+:
 ```bash
 python --version
 ```
