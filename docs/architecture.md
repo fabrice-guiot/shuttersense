@@ -74,7 +74,7 @@ Browser ← JSON Response ← Pydantic Schema ← Service Result ─────
 4. **Router** dispatches to appropriate endpoint handler
 5. **Service** executes business logic with `team_id` scoping
 6. **SQLAlchemy** queries PostgreSQL with tenant filter
-7. **Pydantic** serializes response (GUIDs, not internal IDs)
+7. **Pydantic** serializes response (GUIDs, not internal IDs; audit trail with user attribution)
 
 ### Job Execution Flow
 
@@ -265,3 +265,5 @@ The backend runs periodic background tasks:
 4. **Team-scoped everything** - Every query includes `team_id` filtering. There is no global data access except for super admin endpoints.
 
 5. **Offline-capable agents** - Agents can execute jobs offline and sync results later, supporting disconnected environments.
+
+6. **Audit trail on all entities** - Every tenant-scoped entity records who created and last modified it. The `AuditMixin` adds `created_by_user_id` and `updated_by_user_id` columns with ON DELETE SET NULL semantics, ensuring the audit trail survives user deletion. All API responses include a structured `audit` field (`AuditInfo`) with timestamps and user summaries. Frontend list views render an `AuditTrailPopover` (relative time with hover details), and detail views render an `AuditSection`.

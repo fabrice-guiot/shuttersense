@@ -218,8 +218,10 @@ describe('ResultsTable', () => {
 
       render(<ResultsTable {...defaultProps} results={resultsWithoutAudit} total={1} />)
 
-      // The "Created by" column header should be present
-      expect(screen.getByText('Created by')).toBeInTheDocument()
+      // The data row should render an em dash in the "Created by" cell
+      const rows = screen.getAllByRole('row')
+      const dataRow = rows[1] // Skip header row
+      expect(within(dataRow).getByText('\u2014')).toBeInTheDocument()
     })
 
     test('falls back to email when display_name is null', () => {

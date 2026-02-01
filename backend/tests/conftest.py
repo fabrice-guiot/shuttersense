@@ -80,11 +80,14 @@ def test_db_engine():
     Base.metadata.create_all(engine)
     yield engine
     # Disable FK checks before dropping to handle circular dependencies
-    # (teams.created_by_user_id → users, users.team_id → teams)
+    # (teams.created_by_user_id → users, users.team_id → teams).
+    # Both operations must use the same connection so the PRAGMA setting
+    # is still active when drop_all executes (the event listener would
+    # re-enable FK checks on any new connection).
     with engine.connect() as conn:
         conn.execute(sa_text('pragma foreign_keys=OFF'))
+        Base.metadata.drop_all(bind=conn)
         conn.commit()
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
