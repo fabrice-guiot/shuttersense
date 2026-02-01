@@ -136,6 +136,38 @@ export interface AgentJobHistoryResponse {
 }
 
 // ============================================================================
+// Active Release Types (Issue #136 - Agent Setup Wizard)
+// ============================================================================
+
+export interface ReleaseArtifact {
+  /** Platform identifier (e.g., "darwin-arm64") */
+  platform: string
+  /** Binary filename (e.g., "shuttersense-agent-darwin-arm64") */
+  filename: string
+  /** sha256:-prefixed hex checksum */
+  checksum: string
+  /** File size in bytes, or null if unknown */
+  file_size: number | null
+  /** Relative URL for session-authenticated download. Null if dist dir not configured. */
+  download_url: string | null
+  /** Time-limited signed URL (default 1 hour expiry). Null if dist dir not configured. */
+  signed_url: string | null
+}
+
+export interface ActiveReleaseResponse {
+  /** Release manifest GUID (rel_xxx format) */
+  guid: string
+  /** Semantic version */
+  version: string
+  /** Per-platform artifact entries */
+  artifacts: ReleaseArtifact[]
+  /** Optional release notes */
+  notes: string | null
+  /** True if the server is in dev/QA mode (no dist dir configured) */
+  dev_mode: boolean
+}
+
+// ============================================================================
 // Agent Detail Response (Phase 11 - Health Monitoring)
 // ============================================================================
 

@@ -79,6 +79,8 @@ from backend.src.models.api_token import ApiToken
 
 # Agent Attestation (Issue #90 - Phase 14)
 from backend.src.models.release_manifest import ReleaseManifest
+# Agent Setup Wizard (Issue #136) — must come after ReleaseManifest (FK dependency)
+from backend.src.models.release_artifact import ReleaseArtifact
 
 # Storage Optimization (Issue #92)
 from backend.src.models.storage_metrics import StorageMetrics
@@ -140,6 +142,8 @@ __all__ = [
     "ApiToken",
     # Agent Attestation (Issue #90 - Phase 14)
     "ReleaseManifest",
+    # Agent Setup Wizard (Issue #136)
+    "ReleaseArtifact",
     # Storage Optimization (Issue #92)
     "StorageMetrics",
     # Inventory Import (Issue #107)

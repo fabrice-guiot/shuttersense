@@ -2414,3 +2414,87 @@ class AgentUploadResultResponse(BaseModel):
             }
         }
     }
+
+
+# ============================================================================
+# Active Release Schemas (Issue #136 - Agent Setup Wizard)
+# ============================================================================
+
+class ReleaseArtifactResponse(BaseModel):
+    """Per-platform artifact details within an active release."""
+
+    platform: str = Field(
+        ..., description="Platform identifier (e.g., 'darwin-arm64')"
+    )
+    filename: str = Field(
+        ..., description="Binary filename (e.g., 'shuttersense-agent-darwin-arm64')"
+    )
+    checksum: str = Field(
+        ..., description="sha256:-prefixed hex checksum"
+    )
+    file_size: Optional[int] = Field(
+        default=None, description="File size in bytes, null if unknown"
+    )
+    download_url: Optional[str] = Field(
+        default=None,
+        description="Relative URL for session-authenticated download. Null if binary distribution is not configured."
+    )
+    signed_url: Optional[str] = Field(
+        default=None,
+        description="Time-limited signed URL (default 1 hour expiry). Null if binary distribution is not configured."
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "platform": "darwin-arm64",
+                "filename": "shuttersense-agent-darwin-arm64",
+                "checksum": "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+                "file_size": 52428800,
+                "download_url": "/api/agent/v1/releases/rel_01hgw2bbg.../download/darwin-arm64",
+                "signed_url": "/api/agent/v1/releases/rel_01hgw2bbg.../download/darwin-arm64?expires=1706832000&signature=abc123..."
+            }
+        }
+    }
+
+
+class ActiveReleaseResponse(BaseModel):
+    """Response for the active release manifest endpoint."""
+
+    guid: str = Field(
+        ..., description="Release manifest GUID (rel_ prefix)"
+    )
+    version: str = Field(
+        ..., description="Semantic version of this release"
+    )
+    artifacts: List[ReleaseArtifactResponse] = Field(
+        default_factory=list, description="Per-platform artifact entries"
+    )
+    notes: Optional[str] = Field(
+        default=None, description="Optional release notes"
+    )
+    dev_mode: bool = Field(
+        default=False,
+        description="True if the server's binary distribution directory is not configured (dev/QA mode)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "guid": "rel_01hgw2bbg0000000000000001",
+                "version": "1.0.0",
+                "artifacts": [
+                    {
+                        "platform": "darwin-arm64",
+                        "filename": "shuttersense-agent-darwin-arm64",
+                        "checksum": "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+                        "file_size": 52428800,
+                        "download_url": "/api/agent/v1/releases/rel_01hgw2bbg.../download/darwin-arm64",
+                        "signed_url": "/api/agent/v1/releases/rel_01hgw2bbg.../download/darwin-arm64?expires=1706832000&signature=abc123..."
+                    }
+                ],
+                "notes": "Initial stable release",
+                "dev_mode": False
+            }
+        }
+    }

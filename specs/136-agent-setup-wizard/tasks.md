@@ -19,14 +19,14 @@
 
 **Purpose**: Configuration, shared types, and utility modules that multiple stories depend on
 
-- [ ] T001 Add `SHUSAI_AGENT_DIST_DIR` setting to backend/src/config/settings.py (optional string, no default, with docstring explaining directory structure `{dir}/{version}/{filename}`)
-- [ ] T002 [P] Add `ActiveReleaseResponse`, `ReleaseArtifactResponse` Pydantic schemas to backend/src/api/agent/routes.py (or a new backend/src/api/agent/schemas.py if the file grows too large) per contracts/active-release.md
-- [ ] T003 [P] Add `ReleaseArtifact` and `ActiveReleaseResponse` TypeScript types to frontend/src/contracts/api/agent-api.ts per data-model.md Frontend Type Additions
-- [ ] T004 [P] Create OS detection utility in frontend/src/lib/os-detection.ts — export `detectPlatform()` returning `{ platform, label, confidence }` with Apple Silicon WebGL heuristic, per PRD OS Detection Logic section
-- [ ] T005 [P] Create service file generator utility in frontend/src/lib/service-file-generator.ts — export `generateLaunchdPlist(binaryPath)` and `generateSystemdUnit(binaryPath, user)` per PRD Service File Generation section
-- [ ] T006 [P] Create CopyableCodeBlock component in frontend/src/components/agents/wizard/CopyableCodeBlock.tsx — code block with per-block "Copy" button using `useClipboard()` hook, with Copy→Check visual feedback (FR-024)
-- [ ] T007 [P] Write unit tests for OS detection in frontend/tests/lib/os-detection.test.ts — mock `navigator.userAgent`, `navigator.platform`, and WebGL renderer for all 5 platforms + fallback case
-- [ ] T008 [P] Write unit tests for service file generators in frontend/tests/lib/service-file-generator.test.ts — test plist and systemd output with various binary paths including paths with spaces, and edge cases (empty path, relative path)
+- [x] T001 Add `SHUSAI_AGENT_DIST_DIR` setting to backend/src/config/settings.py (optional string, no default, with docstring explaining directory structure `{dir}/{version}/{filename}`)
+- [x] T002 [P] Add `ActiveReleaseResponse`, `ReleaseArtifactResponse` Pydantic schemas to backend/src/api/agent/schemas.py per contracts/active-release.md
+- [x] T003 [P] Add `ReleaseArtifact` and `ActiveReleaseResponse` TypeScript types to frontend/src/contracts/api/agent-api.ts per data-model.md Frontend Type Additions
+- [x] T004 [P] Create OS detection utility in frontend/src/lib/os-detection.ts — export `detectPlatform()` returning `{ platform, label, confidence }` with Apple Silicon WebGL heuristic, per PRD OS Detection Logic section
+- [x] T005 [P] Create service file generator utility in frontend/src/lib/service-file-generator.ts — export `generateLaunchdPlist(binaryPath)` and `generateSystemdUnit(binaryPath, user)` per PRD Service File Generation section
+- [x] T006 [P] Create CopyableCodeBlock component in frontend/src/components/agents/wizard/CopyableCodeBlock.tsx — code block with per-block "Copy" button using `useClipboard()` hook, with Copy→Check visual feedback (FR-024)
+- [x] T007 [P] Write unit tests for OS detection in frontend/tests/lib/os-detection.test.ts — mock `navigator.userAgent`, `navigator.platform`, and WebGL renderer for all 5 platforms + fallback case
+- [x] T008 [P] Write unit tests for service file generators in frontend/tests/lib/service-file-generator.test.ts — test plist and systemd output with various binary paths including paths with spaces, and edge cases (empty path, relative path)
 
 **Checkpoint**: Shared types, utilities, and reusable components ready. OS detection and service file generation tested independently.
 
@@ -38,17 +38,17 @@
 
 **⚠️ CRITICAL**: Frontend wizard steps depend on these endpoints being available.
 
-- [ ] T009 Create `ReleaseArtifact` SQLAlchemy model in backend/src/models/release_artifact.py — fields: id, manifest_id (FK CASCADE), platform, filename, checksum, file_size, created_at, updated_at; unique constraint on (manifest_id, platform); per data-model.md
-- [ ] T010 Add `artifacts` relationship to `ReleaseManifest` model in backend/src/models/release_manifest.py — one-to-many to ReleaseArtifact, cascade all/delete-orphan; add `artifact_platforms` property
-- [ ] T011 Create Alembic migration in backend/src/db/migrations/versions/ for `release_artifacts` table — dialect-aware (PostgreSQL + SQLite), with indexes on manifest_id and platform; per data-model.md Migration Plan
-- [ ] T012 Implement signed URL generation and verification functions in backend/src/services/download_service.py — `generate_signed_download_url()` and `verify_signed_download_url()` using HMAC-SHA256 with `JWT_SECRET_KEY`; include path traversal prevention for file resolution; per contracts/binary-download.md
-- [ ] T013 Implement `GET /api/agent/v1/releases/active` endpoint in backend/src/api/agent/routes.py — query active manifest with highest version, load artifacts, construct download_url and signed_url per artifact, include dev_mode flag based on SHUSAI_AGENT_DIST_DIR presence; require `get_tenant_context`; per contracts/active-release.md
-- [ ] T014 Implement `GET /api/agent/v1/releases/{manifest_guid}/download/{platform}` endpoint in backend/src/api/agent/routes.py — dual auth (session cookie via get_tenant_context OR signed URL query params), resolve file from `SHUSAI_AGENT_DIST_DIR/{version}/{filename}`, stream file with Content-Disposition header; per contracts/binary-download.md
-- [ ] T015 Extend admin `POST /api/admin/release-manifests` to accept optional `artifacts` array in backend/src/api/admin/release_manifests.py — create ReleaseArtifact rows alongside manifest; existing requests without artifacts continue to work unchanged (backward compatible)
-- [ ] T016 Extend admin `GET /api/admin/release-manifests/{guid}` to include artifacts in response in backend/src/api/admin/release_manifests.py
-- [ ] T017 [P] Write unit tests for ReleaseArtifact model and relationships in backend/tests/unit/test_release_artifact.py — CRUD, cascade delete, unique constraint, validation (platform values, checksum format, filename no slashes)
-- [ ] T018 [P] Write unit tests for download service in backend/tests/unit/test_download_service.py — signed URL generation/verification, expiry, path traversal prevention, HMAC constant-time comparison
-- [ ] T019 Write unit tests for active release and download endpoints in backend/tests/unit/test_agent_release_endpoints.py — active release with/without artifacts, dev_mode flag, download with session auth, download with signed URL, expired signature, missing file, missing dist dir
+- [x] T009 Create `ReleaseArtifact` SQLAlchemy model in backend/src/models/release_artifact.py — fields: id, manifest_id (FK CASCADE), platform, filename, checksum, file_size, created_at, updated_at; unique constraint on (manifest_id, platform); per data-model.md
+- [x] T010 Add `artifacts` relationship to `ReleaseManifest` model in backend/src/models/release_manifest.py — one-to-many to ReleaseArtifact, cascade all/delete-orphan; add `artifact_platforms` property
+- [x] T011 Create Alembic migration in backend/src/db/migrations/versions/ for `release_artifacts` table — dialect-aware (PostgreSQL + SQLite), with indexes on manifest_id and platform; per data-model.md Migration Plan
+- [x] T012 Implement signed URL generation and verification functions in backend/src/services/download_service.py — `generate_signed_download_url()` and `verify_signed_download_url()` using HMAC-SHA256 with `JWT_SECRET_KEY`; include path traversal prevention for file resolution; per contracts/binary-download.md
+- [x] T013 Implement `GET /api/agent/v1/releases/active` endpoint in backend/src/api/agent/routes.py — query active manifest with highest version, load artifacts, construct download_url and signed_url per artifact, include dev_mode flag based on SHUSAI_AGENT_DIST_DIR presence; require `get_tenant_context`; per contracts/active-release.md
+- [x] T014 Implement `GET /api/agent/v1/releases/{manifest_guid}/download/{platform}` endpoint in backend/src/api/agent/routes.py — dual auth (session cookie via get_tenant_context OR signed URL query params), resolve file from `SHUSAI_AGENT_DIST_DIR/{version}/{filename}`, stream file with Content-Disposition header; per contracts/binary-download.md
+- [x] T015 Extend admin `POST /api/admin/release-manifests` to accept optional `artifacts` array in backend/src/api/admin/release_manifests.py — create ReleaseArtifact rows alongside manifest; existing requests without artifacts continue to work unchanged (backward compatible)
+- [x] T016 Extend admin `GET /api/admin/release-manifests/{guid}` to include artifacts in response in backend/src/api/admin/release_manifests.py
+- [x] T017 [P] Write unit tests for ReleaseArtifact model and relationships in backend/tests/unit/test_release_artifact.py — CRUD, cascade delete, unique constraint, validation (platform values, checksum format, filename no slashes)
+- [x] T018 [P] Write unit tests for download service in backend/tests/unit/test_download_service.py — signed URL generation/verification, expiry, path traversal prevention, HMAC constant-time comparison
+- [x] T019 Write unit tests for active release and download endpoints in backend/tests/unit/test_agent_release_endpoints.py — active release with/without artifacts, dev_mode flag, download with session auth, download with signed URL, expired signature, missing file, missing dist dir
 
 **Checkpoint**: Backend fully functional — active release endpoint returns artifacts with download URLs, binary download works with both session and signed URL auth. All backend tests pass.
 

@@ -105,13 +105,13 @@ python3 -m pytest backend/tests/unit/test_download_service.py -v
 cd frontend
 
 # Run OS detection tests
-npx vitest run src/tests/lib/os-detection.test.ts
+npx vitest run tests/lib/os-detection.test.ts
 
 # Run service file generator tests
-npx vitest run src/tests/lib/service-file-generator.test.ts
+npx vitest run tests/lib/service-file-generator.test.ts
 
 # Run wizard component tests
-npx vitest run src/tests/components/agents/wizard/
+npx vitest run tests/components/agents/wizard/
 ```
 
 ## Key Files Reference

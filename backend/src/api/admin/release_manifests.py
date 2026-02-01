@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from backend.src.db.database import get_db
 from backend.src.middleware.auth import require_super_admin, TenantContext
 from backend.src.models.release_manifest import ReleaseManifest
+from backend.src.models.release_artifact import ReleaseArtifact
 from backend.src.services.exceptions import NotFoundError, ValidationError
 from backend.src.utils.logging_config import get_logger
 
@@ -32,6 +33,31 @@ router = APIRouter(prefix="/release-manifests", tags=["Admin - Release Manifests
 # ============================================================================
 # Schemas
 # ============================================================================
+
+
+class ArtifactCreateRequest(BaseModel):
+    """Request schema for creating a release artifact alongside a manifest."""
+
+    platform: str = Field(
+        ...,
+        description="Platform identifier (e.g., 'darwin-arm64')"
+    )
+    filename: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Binary filename (no path separators)"
+    )
+    checksum: str = Field(
+        ...,
+        pattern=r'^(sha256:)?[0-9a-fA-F]{64}$',
+        description="sha256:-prefixed hex checksum (or plain 64 hex chars)"
+    )
+    file_size: Optional[int] = Field(
+        None,
+        ge=0,
+        description="File size in bytes"
+    )
 
 
 class ReleaseManifestCreateRequest(BaseModel):
@@ -64,6 +90,10 @@ class ReleaseManifestCreateRequest(BaseModel):
         True,
         description="Whether this manifest is active (allows registration)"
     )
+    artifacts: Optional[List[ArtifactCreateRequest]] = Field(
+        None,
+        description="Optional per-platform binary artifacts. If omitted, no artifacts are created."
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -73,6 +103,14 @@ class ReleaseManifestCreateRequest(BaseModel):
                 "checksum": "a" * 64,
                 "notes": "macOS universal binary (Apple Silicon + Intel)",
                 "is_active": True,
+                "artifacts": [
+                    {
+                        "platform": "darwin-arm64",
+                        "filename": "shuttersense-agent-darwin-arm64",
+                        "checksum": "sha256:" + "b" * 64,
+                        "file_size": 15728640,
+                    }
+                ],
             }
         }
     }
@@ -92,6 +130,18 @@ class ReleaseManifestUpdateRequest(BaseModel):
     )
 
 
+class ArtifactResponse(BaseModel):
+    """Response schema for a release artifact."""
+
+    platform: str = Field(..., description="Platform identifier")
+    filename: str = Field(..., description="Binary filename")
+    checksum: str = Field(..., description="sha256:-prefixed hex checksum")
+    file_size: Optional[int] = Field(None, description="File size in bytes")
+    created_at: str = Field(..., description="Creation timestamp")
+
+    model_config = {"from_attributes": True}
+
+
 class ReleaseManifestResponse(BaseModel):
     """Response schema for a release manifest."""
 
@@ -101,6 +151,7 @@ class ReleaseManifestResponse(BaseModel):
     checksum: str = Field(..., description="SHA-256 checksum")
     is_active: bool = Field(..., description="Whether manifest is active")
     notes: Optional[str] = Field(None, description="Optional notes")
+    artifacts: List[ArtifactResponse] = Field(default_factory=list, description="Per-platform binary artifacts")
     created_at: str = Field(..., description="Creation timestamp")
     updated_at: str = Field(..., description="Last update timestamp")
     audit: Optional[AuditInfo] = Field(None, description="Audit trail")
@@ -130,6 +181,17 @@ class ReleaseManifestStatsResponse(BaseModel):
 # ============================================================================
 
 
+def artifact_to_response(artifact: ReleaseArtifact) -> ArtifactResponse:
+    """Convert ReleaseArtifact model to response schema."""
+    return ArtifactResponse(
+        platform=artifact.platform,
+        filename=artifact.filename,
+        checksum=artifact.checksum,
+        file_size=artifact.file_size,
+        created_at=artifact.created_at.isoformat(),
+    )
+
+
 def manifest_to_response(manifest: ReleaseManifest) -> ReleaseManifestResponse:
     """Convert ReleaseManifest model to response schema."""
     return ReleaseManifestResponse(
@@ -139,6 +201,7 @@ def manifest_to_response(manifest: ReleaseManifest) -> ReleaseManifestResponse:
         checksum=manifest.checksum,
         is_active=manifest.is_active,
         notes=manifest.notes,
+        artifacts=[artifact_to_response(a) for a in manifest.artifacts] if manifest.artifacts else [],
         created_at=manifest.created_at.isoformat(),
         updated_at=manifest.updated_at.isoformat(),
         audit=manifest.audit,
@@ -169,6 +232,7 @@ async def create_release_manifest(
     - **checksum**: SHA-256 hash of the binary (64 hex chars)
     - **notes**: Optional notes about this release
     - **is_active**: Whether to allow registration with this checksum
+    - **artifacts**: Optional per-platform binary metadata (filename, checksum, file_size)
     """
     try:
         # Validate platforms list is not empty
@@ -202,6 +266,20 @@ async def create_release_manifest(
         manifest.platforms = request.platforms
 
         db.add(manifest)
+        db.flush()  # Flush to get manifest.id for FK references
+
+        # Create per-platform artifacts if provided (Issue #136)
+        if request.artifacts:
+            for art_req in request.artifacts:
+                artifact = ReleaseArtifact(
+                    manifest_id=manifest.id,
+                    platform=art_req.platform,
+                    filename=art_req.filename,
+                    checksum=art_req.checksum,
+                    file_size=art_req.file_size,
+                )
+                db.add(artifact)
+
         db.commit()
         db.refresh(manifest)
 

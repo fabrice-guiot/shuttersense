@@ -29,6 +29,7 @@ class AppSettings(BaseSettings):
         SHUSAI_GEOIP_DB_PATH: Path to MaxMind GeoLite2-Country .mmdb file (default: "" = disabled)
         SHUSAI_GEOIP_ALLOWED_COUNTRIES: Comma-separated allowed country codes (default: "" = none)
         SHUSAI_GEOIP_FAIL_OPEN: Allow unknown IPs through when True (default: False)
+        SHUSAI_AGENT_DIST_DIR: Path to agent binary distribution directory (default: "" = disabled)
     """
 
     # JWT settings for API tokens
@@ -97,6 +98,17 @@ class AppSettings(BaseSettings):
         description="If True, allow requests when GeoIP lookup returns no country. Default: False (block unknown)."
     )
 
+    # Agent binary distribution (optional)
+    # When set, the server can serve agent binaries from this local directory.
+    # Directory structure: {SHUSAI_AGENT_DIST_DIR}/{version}/{filename}
+    # Example: /opt/shuttersense/agent-dist/1.0.0/shuttersense-agent-darwin-arm64
+    # When not set, the Agent Setup Wizard operates in dev/QA mode (downloads disabled).
+    agent_dist_dir: str = Field(
+        default="",
+        validation_alias="SHUSAI_AGENT_DIST_DIR",
+        description="Absolute path to agent binary distribution directory. Empty = dev/QA mode (downloads disabled)."
+    )
+
     # Job execution settings
     # By default, all jobs are persisted to DB for agent execution.
     # Only tool types listed here will use in-memory queue for server-side execution.
@@ -140,6 +152,11 @@ class AppSettings(BaseSettings):
         if not self.inmemory_job_types:
             return set()
         return {t.strip().lower() for t in self.inmemory_job_types.split(",") if t.strip()}
+
+    @property
+    def agent_dist_configured(self) -> bool:
+        """Check if agent binary distribution directory is configured."""
+        return bool(self.agent_dist_dir)
 
     @property
     def geoip_configured(self) -> bool:
