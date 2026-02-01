@@ -38,6 +38,7 @@ import { useAgentDetail, useAgentJobHistory } from '@/hooks/useAgentDetail'
 import { AgentStatusBadge } from '@/components/agents/AgentStatusBadge'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime, formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailSection } from '@/components/audit'
 import type { AgentJobHistoryItem } from '@/contracts/api/agent-api'
 
 // ============================================================================
@@ -471,6 +472,8 @@ export default function AgentDetailPage() {
               </div>
             </>
           )}
+
+          <AuditTrailSection audit={agent.audit} />
         </CardContent>
       </Card>
 

@@ -5,6 +5,8 @@
  * Issue #39 - Calendar Events feature (Phase 3)
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Entity Types
 // ============================================================================
@@ -18,6 +20,7 @@ export interface Category {
   display_order: number
   created_at: string        // ISO 8601 timestamp
   updated_at: string        // ISO 8601 timestamp
+  audit?: AuditInfo | null
 }
 
 // ============================================================================

@@ -56,6 +56,7 @@ class TeamService:
         slug: Optional[str] = None,
         is_active: bool = True,
         settings: Optional[dict] = None,
+        acting_user_id: Optional[int] = None,
     ) -> Team:
         """
         Create a new team.
@@ -117,6 +118,8 @@ class TeamService:
                 slug=slug,
                 is_active=is_active,
                 settings_json=json.dumps(settings) if settings else None,
+                created_by_user_id=acting_user_id,
+                updated_by_user_id=acting_user_id,
             )
             self.db.add(team)
             self.db.commit()
@@ -241,6 +244,7 @@ class TeamService:
         name: Optional[str] = None,
         is_active: Optional[bool] = None,
         settings: Optional[dict] = None,
+        acting_user_id: Optional[int] = None,
     ) -> Team:
         """
         Update an existing team.
@@ -293,6 +297,9 @@ class TeamService:
             import json
             team.settings_json = json.dumps(settings)
 
+        if acting_user_id is not None:
+            team.updated_by_user_id = acting_user_id
+
         try:
             self.db.commit()
             self.db.refresh(team)
@@ -304,7 +311,7 @@ class TeamService:
             logger.error(f"Failed to update team {guid}: {e}")
             raise ConflictError(f"Team update failed due to conflict")
 
-    def deactivate(self, guid: str) -> Team:
+    def deactivate(self, guid: str, acting_user_id: Optional[int] = None) -> Team:
         """
         Deactivate a team.
 
@@ -312,6 +319,7 @@ class TeamService:
 
         Args:
             guid: Team GUID
+            acting_user_id: ID of user performing this action
 
         Returns:
             Updated Team instance
@@ -319,14 +327,15 @@ class TeamService:
         Raises:
             NotFoundError: If team not found
         """
-        return self.update(guid, is_active=False)
+        return self.update(guid, is_active=False, acting_user_id=acting_user_id)
 
-    def activate(self, guid: str) -> Team:
+    def activate(self, guid: str, acting_user_id: Optional[int] = None) -> Team:
         """
         Activate a team.
 
         Args:
             guid: Team GUID
+            acting_user_id: ID of user performing this action
 
         Returns:
             Updated Team instance
@@ -334,7 +343,7 @@ class TeamService:
         Raises:
             NotFoundError: If team not found
         """
-        return self.update(guid, is_active=True)
+        return self.update(guid, is_active=True, acting_user_id=acting_user_id)
 
     def count(self) -> int:
         """
@@ -375,6 +384,7 @@ class TeamService:
         name: str,
         admin_email: str,
         slug: Optional[str] = None,
+        acting_user_id: Optional[int] = None,
     ) -> tuple[Team, User]:
         """
         Create a new team with a pending admin user.
@@ -415,7 +425,7 @@ class TeamService:
             raise ConflictError(f"User with email '{admin_email}' already exists")
 
         # Create the team first (validates name/slug uniqueness)
-        team = self.create(name=name, slug=slug)
+        team = self.create(name=name, slug=slug, acting_user_id=acting_user_id)
 
         try:
             # Create the admin user with PENDING status
@@ -424,6 +434,8 @@ class TeamService:
                 team_id=team.id,
                 status=UserStatus.PENDING,
                 is_active=True,
+                created_by_user_id=acting_user_id,
+                updated_by_user_id=acting_user_id,
             )
             self.db.add(admin_user)
             self.db.commit()

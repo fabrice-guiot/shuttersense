@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { AgentStatusBadge } from '@/components/agents/AgentStatusBadge'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime } from '@/utils/dateFormat'
+import { AuditTrailSection } from '@/components/audit'
 import type { Agent } from '@/contracts/api/agent-api'
 
 interface AgentDetailsDialogProps {
@@ -147,6 +148,8 @@ export function AgentDetailsDialog({ agent, open, onOpenChange }: AgentDetailsDi
               <GuidBadge guid={agent.current_job_guid} />
             </div>
           )}
+
+          <AuditTrailSection audit={agent.audit} />
         </div>
 
         <DialogFooter>

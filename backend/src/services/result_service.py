@@ -268,6 +268,8 @@ class ResultService:
                 # Storage Optimization Fields (Issue #92)
                 input_state_hash=result.input_state_hash,
                 no_change_copy=result.no_change_copy,
+                # Audit trail (Issue #120)
+                audit=result.audit,
             ))
 
         return summaries, total
@@ -394,6 +396,7 @@ class ResultService:
             no_change_copy=result.no_change_copy,
             download_report_from=result.download_report_from,
             source_result_exists=source_result_exists,
+            audit=result.audit,
         )
 
     def delete_result(self, result_id: int, team_id: Optional[int] = None) -> str:

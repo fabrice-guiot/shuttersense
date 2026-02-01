@@ -32,6 +32,7 @@ import {
 import { useCalendar, useEventStats, useEventMutations } from '@/hooks/useEvents'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
+import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest } from '@/contracts/api/event-api'
 
@@ -593,6 +594,9 @@ export default function EventsPage() {
                   </AlertDescription>
                 </Alert>
               )}
+
+              {/* Audit Trail (Issue #120) */}
+              <AuditTrailSection audit={selectedEvent.audit} />
             </div>
           )}
           {/* Edit/Delete buttons hidden for deadline entries (T036-T037) */}

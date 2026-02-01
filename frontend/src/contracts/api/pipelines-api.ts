@@ -5,6 +5,8 @@
  * These contracts mirror the backend FastAPI endpoints for Phase 5 implementation.
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Entity Types
 // ============================================================================
@@ -61,6 +63,7 @@ export interface PipelineSummary {
   node_count: number
   created_at: string // ISO 8601 timestamp
   updated_at: string // ISO 8601 timestamp
+  audit?: AuditInfo | null
 }
 
 export interface Pipeline {
@@ -76,6 +79,7 @@ export interface Pipeline {
   validation_errors: string[] | null
   created_at: string // ISO 8601 timestamp
   updated_at: string // ISO 8601 timestamp
+  audit?: AuditInfo | null
 }
 
 // ============================================================================

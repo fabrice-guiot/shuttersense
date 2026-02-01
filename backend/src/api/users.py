@@ -59,6 +59,7 @@ async def invite_user(
         user = service.invite(
             team_id=tenant.team_id,
             email=request.email,
+            acting_user_id=tenant.user_id,
         )
         logger.info(
             f"User invited: {user.email} to team {tenant.team_id} by user {tenant.user_id}"
@@ -238,7 +239,7 @@ async def deactivate_user(
                 detail="Cannot deactivate yourself"
             )
 
-        updated = service.deactivate(guid)
+        updated = service.deactivate(guid, acting_user_id=tenant.user_id)
         logger.info(
             f"User deactivated: {user.email} by user {tenant.user_id}"
         )
@@ -270,7 +271,7 @@ async def reactivate_user(
         if user.team_id != tenant.team_id:
             raise HTTPException(status_code=404, detail="User not found")
 
-        updated = service.activate(guid)
+        updated = service.activate(guid, acting_user_id=tenant.user_id)
         logger.info(
             f"User reactivated: {user.email} by user {tenant.user_id}"
         )

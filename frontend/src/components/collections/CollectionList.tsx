@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsTrigger } from '@/components/ui/tabs'
 import { ResponsiveTabsList, type TabOption } from '@/components/ui/responsive-tabs-list'
 import { CollectionStatus } from './CollectionStatus'
 import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 import type { CollectionListProps } from '@/contracts/components/collection-components'
 import type { Collection, CollectionType } from '@/contracts/api/collection-api'
 import {
@@ -321,6 +322,14 @@ export function CollectionList({
       header: 'Status',
       cell: (collection) => <CollectionStatus collection={collection} />,
       cardRole: 'detail',
+    },
+    {
+      header: 'Modified',
+      cell: (collection) => (
+        <AuditTrailPopover audit={collection.audit} fallbackTimestamp={collection.updated_at} />
+      ),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
     },
     {
       header: 'Actions',

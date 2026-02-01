@@ -10,6 +10,7 @@ import type {
   InventoryValidationStatus,
   InventorySchedule
 } from './inventory-api'
+import type { AuditInfo } from './audit-api'
 
 // ============================================================================
 // Entity Types
@@ -43,6 +44,7 @@ export interface Connector {
   inventory_schedule?: InventorySchedule | null
   created_at: string  // ISO 8601 timestamp
   updated_at: string  // ISO 8601 timestamp
+  audit?: AuditInfo | null
 }
 
 export type ConnectorCredentials =

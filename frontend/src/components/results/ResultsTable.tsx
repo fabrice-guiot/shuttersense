@@ -234,6 +234,16 @@ export function ResultsTable({
       cardRole: 'detail',
     },
     {
+      header: 'Created by',
+      cell: (result) => {
+        const user = result.audit?.created_by
+        if (!user) return <span className="text-muted-foreground text-sm">{'\u2014'}</span>
+        return <span className="text-sm">{user.display_name || user.email || '\u2014'}</span>
+      },
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
+    },
+    {
       header: 'Actions',
       headerClassName: 'text-right',
       cell: (result) => (

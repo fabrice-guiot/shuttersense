@@ -31,6 +31,7 @@ import type { Job, JobStatus, ProgressData } from '@/contracts/api/tools-api'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/utils/dateFormat'
 import { GuidBadge } from '@/components/GuidBadge'
+import { AuditTrailPopover } from '@/components/audit'
 
 // ============================================================================
 // Types
@@ -236,8 +237,10 @@ export function JobProgressCard({
             </>
           )}
 
-          <div className="text-muted-foreground">Created:</div>
-          <div>{formatJobDate(job.created_at)}</div>
+          <div className="text-muted-foreground">Modified:</div>
+          <div>
+            <AuditTrailPopover audit={job.audit} fallbackTimestamp={job.created_at} />
+          </div>
 
           {job.started_at && (
             <>

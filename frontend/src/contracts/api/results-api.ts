@@ -5,6 +5,8 @@
  * These contracts mirror the backend FastAPI endpoints for Phase 4 implementation.
  */
 
+import type { AuditInfo } from './audit-api'
+
 // ============================================================================
 // Entity Types
 // ============================================================================
@@ -134,6 +136,7 @@ export interface AnalysisResultSummary {
   input_state_hash: string | null
   /** True if this result references a previous result */
   no_change_copy: boolean
+  audit?: AuditInfo | null
 }
 
 export interface AnalysisResult {
@@ -172,6 +175,7 @@ export interface AnalysisResult {
   download_report_from: string | null
   /** Whether source result still exists (for NO_CHANGE results) */
   source_result_exists: boolean | null
+  audit?: AuditInfo | null
 }
 
 export interface ResultListResponse {

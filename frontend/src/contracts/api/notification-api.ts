@@ -6,6 +6,7 @@
  */
 
 import type { NotificationCategory } from '../domain-labels'
+import type { AuditInfo } from './audit-api'
 
 // ============================================================================
 // Push Subscription Types
@@ -30,6 +31,7 @@ export interface PushSubscriptionResponse {
   device_name: string | null
   created_at: string
   last_used_at: string | null
+  audit?: AuditInfo | null
 }
 
 /**
@@ -108,6 +110,7 @@ export interface NotificationResponse {
   data: NotificationData | null
   read_at: string | null
   created_at: string
+  audit?: AuditInfo | null
 }
 
 /**

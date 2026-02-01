@@ -27,7 +27,7 @@ import { GuidBadge } from '@/components/GuidBadge'
 import type { Location } from '@/contracts/api/location-api'
 import type { Category } from '@/contracts/api/category-api'
 import { cn } from '@/lib/utils'
-import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 
 // ============================================================================
 // Rating Display Component
@@ -209,8 +209,10 @@ function LocationList({ locations, loading, onEdit, onDelete }: LocationListProp
       cardRole: 'badge',
     },
     {
-      header: 'Created',
-      cell: (location) => formatRelativeTime(location.created_at),
+      header: 'Modified',
+      cell: (location) => (
+        <AuditTrailPopover audit={location.audit} fallbackTimestamp={location.updated_at} />
+      ),
       cellClassName: 'text-muted-foreground',
       cardRole: 'hidden',
     },

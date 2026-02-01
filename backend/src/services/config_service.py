@@ -871,7 +871,8 @@ class ConfigService:
             description=config.description,
             source=config.source.value if config.source else "database",
             created_at=config.created_at,
-            updated_at=config.updated_at
+            updated_at=config.updated_at,
+            audit=config.audit,
         )
 
     def _parse_yaml_config(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:

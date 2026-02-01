@@ -49,7 +49,7 @@ interface UseToolsReturn {
   offset: number
   fetchJobs: (params?: JobListQueryParams) => Promise<JobListResponse>
   runTool: (request: ToolRunRequest) => Promise<Job>
-  runAllTools: (collectionGuid: string) => Promise<RunAllToolsResponse>
+  runAllTools: (collectionGuid: string, toastId?: string | number) => Promise<RunAllToolsResponse>
   cancelJob: (jobId: string) => Promise<Job>
   retryJob: (jobId: string) => Promise<Job>
   getJob: (jobId: string) => Promise<Job>
@@ -131,7 +131,7 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
   /**
    * Run all analysis tools on a collection
    */
-  const runAllTools = useCallback(async (collectionGuid: string) => {
+  const runAllTools = useCallback(async (collectionGuid: string, toastId?: string | number) => {
     setLoading(true)
     setError(null)
     try {
@@ -145,7 +145,8 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
         })
       }
       toast.success('Analysis started', {
-        description: result.message
+        description: result.message,
+        ...(toastId != null && { id: toastId })
       })
       return result
     } catch (err: any) {
@@ -153,13 +154,15 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
       const detail = err.response?.data?.detail
       if (detail?.message) {
         toast.warning('Cannot run analysis', {
-          description: detail.message
+          description: detail.message,
+          ...(toastId != null && { id: toastId })
         })
       } else {
         const errorMessage = err.userMessage || 'Failed to start analysis'
         setError(errorMessage)
         toast.error('Failed to start analysis', {
-          description: errorMessage
+          description: errorMessage,
+          ...(toastId != null && { id: toastId })
         })
       }
       throw err

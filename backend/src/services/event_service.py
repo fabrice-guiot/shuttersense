@@ -434,6 +434,8 @@ class EventService:
             "is_deadline": event.is_deadline,
             "created_at": event.created_at,
             "updated_at": event.updated_at,
+            # Audit trail (Issue #120)
+            "audit": event.audit,
         }
 
         return response
@@ -1013,6 +1015,8 @@ class EventService:
             "events": events_data,
             "created_at": series.created_at,
             "updated_at": series.updated_at,
+            # Audit trail (Issue #120)
+            "audit": series.audit,
         }
 
     def update(

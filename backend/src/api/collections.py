@@ -341,6 +341,8 @@ async def create_collection(
                 status=PersistentJobStatus.PENDING,
                 bound_agent_id=created_collection.bound_agent_id,
                 required_capabilities=["local_filesystem"],
+                created_by_user_id=ctx.user_id,
+                updated_by_user_id=ctx.user_id,
             )
             db.add(test_job)
             db.commit()
@@ -555,6 +557,8 @@ async def update_collection(
                 status=PersistentJobStatus.PENDING,
                 bound_agent_id=updated_collection.bound_agent_id,
                 required_capabilities=["local_filesystem"],
+                created_by_user_id=ctx.user_id,
+                updated_by_user_id=ctx.user_id,
             )
             db.add(test_job)
             db.commit()
@@ -791,6 +795,8 @@ async def test_collection(
                 status=PersistentJobStatus.PENDING,
                 bound_agent_id=collection.bound_agent_id,
                 required_capabilities=["local_filesystem"],
+                created_by_user_id=ctx.user_id,
+                updated_by_user_id=ctx.user_id,
             )
 
             db.add(job)
@@ -838,6 +844,8 @@ async def test_collection(
                 status=PersistentJobStatus.PENDING,
                 bound_agent_id=None,  # Not bound - any capable agent can claim
                 required_capabilities=[f"connector:{connector_guid}"],
+                created_by_user_id=ctx.user_id,
+                updated_by_user_id=ctx.user_id,
             )
 
             db.add(job)
@@ -1395,6 +1403,8 @@ async def create_collections_from_inventory(
                         status=PersistentJobStatus.PENDING,
                         bound_agent_id=None,  # Any agent with connector credentials
                         required_capabilities=[f"connector:{connector.guid}"],
+                        created_by_user_id=ctx.user_id,
+                        updated_by_user_id=ctx.user_id,
                     )
                     db.add(test_job)
                     db.flush()  # Flush to persist job and generate GUID

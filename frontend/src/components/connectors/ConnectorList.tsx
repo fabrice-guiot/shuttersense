@@ -29,7 +29,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import type { Connector, ConnectorType, CredentialLocation } from '@/contracts/api/connector-api'
 import type { Agent } from '@/contracts/api/agent-api'
 import { cn } from '@/lib/utils'
-import { formatDateTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 import { InventoryConfigSection } from '@/components/inventory'
 
 // ============================================================================
@@ -243,9 +243,11 @@ export function ConnectorList({
       cardRole: 'badge',
     },
     {
-      header: 'Created',
-      cell: (connector) => formatDateTime(connector.created_at),
-      cellClassName: 'text-sm text-muted-foreground',
+      header: 'Modified',
+      cell: (connector) => (
+        <AuditTrailPopover audit={connector.audit} fallbackTimestamp={connector.updated_at} />
+      ),
+      cellClassName: 'text-muted-foreground',
       cardRole: 'detail',
     },
     {

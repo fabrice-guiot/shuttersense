@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
+from backend.src.schemas.audit import AuditInfo
+
 
 # ============================================================================
 # Request Schemas
@@ -61,7 +63,9 @@ class UserResponse(BaseModel):
     is_active: bool = Field(..., description="Whether user is active")
     last_login_at: Optional[datetime] = Field(None, description="Last login timestamp")
     created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
     team: Optional[TeamInfo] = Field(None, description="User's team information")
+    audit: Optional[AuditInfo] = Field(None, description="Audit trail")
 
     class Config:
         """Pydantic config."""
@@ -172,5 +176,7 @@ def user_to_response(user, include_team: bool = True) -> UserResponse:
         is_active=user.is_active,
         last_login_at=user.last_login_at,
         created_at=user.created_at,
+        updated_at=user.updated_at,
         team=team_info,
+        audit=user.audit if hasattr(user, 'audit') else None,
     )

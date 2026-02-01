@@ -8,6 +8,7 @@
  */
 
 import api from './api'
+import type { AuditInfo } from '@/contracts/api/audit-api'
 
 // ============================================================================
 // Types
@@ -30,7 +31,9 @@ export interface User {
   is_active: boolean
   last_login_at: string | null
   created_at: string
+  updated_at?: string | null
   team: TeamInfo | null
+  audit?: AuditInfo | null
 }
 
 export interface UserListResponse {

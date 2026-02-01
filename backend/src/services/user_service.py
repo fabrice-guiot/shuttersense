@@ -63,6 +63,7 @@ class UserService:
         display_name: Optional[str] = None,
         is_active: bool = True,
         status: UserStatus = UserStatus.PENDING,
+        acting_user_id: Optional[int] = None,
     ) -> User:
         """
         Create a new user (pre-provision).
@@ -132,6 +133,8 @@ class UserService:
                 display_name=display_name,
                 is_active=is_active,
                 status=status,
+                created_by_user_id=acting_user_id,
+                updated_by_user_id=acting_user_id,
             )
             self.db.add(user)
             self.db.commit()
@@ -269,6 +272,7 @@ class UserService:
         display_name: Optional[str] = None,
         is_active: Optional[bool] = None,
         status: Optional[UserStatus] = None,
+        acting_user_id: Optional[int] = None,
     ) -> User:
         """
         Update an existing user.
@@ -318,6 +322,9 @@ class UserService:
         if status is not None:
             user.status = status
 
+        if acting_user_id is not None:
+            user.updated_by_user_id = acting_user_id
+
         self.db.commit()
         self.db.refresh(user)
         logger.info(f"Updated user: {user.email} ({user.guid})")
@@ -366,7 +373,7 @@ class UserService:
         logger.info(f"Updated OAuth profile for user: {user.email}")
         return user
 
-    def deactivate(self, guid: str) -> User:
+    def deactivate(self, guid: str, acting_user_id: Optional[int] = None) -> User:
         """
         Deactivate a user.
 
@@ -374,6 +381,7 @@ class UserService:
 
         Args:
             guid: User GUID
+            acting_user_id: ID of user performing this action
 
         Returns:
             Updated User instance
@@ -381,14 +389,15 @@ class UserService:
         Raises:
             NotFoundError: If user not found
         """
-        return self.update(guid, is_active=False, status=UserStatus.DEACTIVATED)
+        return self.update(guid, is_active=False, status=UserStatus.DEACTIVATED, acting_user_id=acting_user_id)
 
-    def activate(self, guid: str) -> User:
+    def activate(self, guid: str, acting_user_id: Optional[int] = None) -> User:
         """
         Activate a user.
 
         Args:
             guid: User GUID
+            acting_user_id: ID of user performing this action
 
         Returns:
             Updated User instance
@@ -399,7 +408,7 @@ class UserService:
         user = self.get_by_guid(guid)
         # Determine new status based on whether user has ever logged in
         new_status = UserStatus.ACTIVE if user.last_login_at else UserStatus.PENDING
-        return self.update(guid, is_active=True, status=new_status)
+        return self.update(guid, is_active=True, status=new_status, acting_user_id=acting_user_id)
 
     def count_by_team(self, team_id: int, include_system_users: bool = False) -> int:
         """
@@ -422,7 +431,7 @@ class UserService:
 
         return query.scalar()
 
-    def invite(self, team_id: int, email: str) -> User:
+    def invite(self, team_id: int, email: str, acting_user_id: Optional[int] = None) -> User:
         """
         Invite a user by email (pre-provisioning).
 
@@ -449,6 +458,7 @@ class UserService:
             email=email,
             status=UserStatus.PENDING,
             is_active=True,
+            acting_user_id=acting_user_id,
         )
 
     def delete_pending(self, guid: str) -> None:

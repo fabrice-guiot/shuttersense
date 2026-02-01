@@ -5,11 +5,15 @@
  * Part of Issue #73 - Teams/Tenants and User Management.
  */
 
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Building2, Mail, Shield, User } from 'lucide-react'
 import { NotificationPreferences } from '@/components/profile/NotificationPreferences'
+import { AuditTrailSection } from '@/components/audit'
+import { getUser } from '@/services/users-api'
+import type { User as UserRecord } from '@/services/users-api'
 
 // ============================================================================
 // Helpers
@@ -38,6 +42,13 @@ function getUserInitials(displayName: string | null | undefined, email: string |
 
 export default function ProfilePage() {
   const { user } = useAuth()
+  const [userRecord, setUserRecord] = useState<UserRecord | null>(null)
+
+  useEffect(() => {
+    if (user?.user_guid) {
+      getUser(user.user_guid).then(setUserRecord).catch(() => {})
+    }
+  }, [user?.user_guid])
 
   if (!user) {
     return null
@@ -117,6 +128,9 @@ export default function ProfilePage() {
               <p className="font-medium">{user.team_name}</p>
             </div>
           </div>
+
+          {/* Audit Trail */}
+          <AuditTrailSection audit={userRecord?.audit ?? null} />
         </CardContent>
       </Card>
 

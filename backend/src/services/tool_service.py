@@ -124,6 +124,7 @@ def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
         result_guid=result_guid,
         agent_guid=agent_guid,
         agent_name=agent_name,
+        audit=job.audit,
     )
 
 
@@ -182,6 +183,7 @@ def agent_upload_offline_result(
     analysis_data: Dict[str, Any],
     html_report: Optional[str] = None,
     input_state_hash: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> tuple:
     """
     Create both a Job record (status=COMPLETED) and an AnalysisResult
@@ -249,6 +251,8 @@ def agent_upload_offline_result(
         required_capabilities_json=json.dumps([tool]),
         pipeline_id=pipeline_id,
         pipeline_version=pipeline_version,
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
     )
     db.add(job)
     db.flush()  # Get job.id without committing
@@ -275,6 +279,8 @@ def agent_upload_offline_result(
         pipeline_id=pipeline_id,
         pipeline_version=pipeline_version,
         input_state_hash=input_state_hash,
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
     )
     db.add(result)
     db.flush()  # Get result.id
@@ -334,6 +340,7 @@ def agent_record_no_change_result(
     tool: str,
     input_state_hash: str,
     source_result_guid: str,
+    user_id: Optional[int] = None,
 ) -> tuple:
     """
     Create a Job (COMPLETED) + AnalysisResult (NO_CHANGE) from a CLI
@@ -424,6 +431,8 @@ def agent_record_no_change_result(
         required_capabilities_json=json.dumps([tool]),
         pipeline_id=pipeline_id,
         pipeline_version=pipeline_version,
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
     )
     db.add(job)
     db.flush()
@@ -448,6 +457,8 @@ def agent_record_no_change_result(
         input_state_hash=input_state_hash,
         no_change_copy=True,
         download_report_from=download_from_guid,
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
     )
     db.add(result)
     db.flush()
@@ -533,7 +544,8 @@ class ToolService:
         team_id: int,
         collection_id: Optional[int] = None,
         pipeline_id: Optional[int] = None,
-        mode: Optional[ToolMode] = None
+        mode: Optional[ToolMode] = None,
+        user_id: Optional[int] = None,
     ) -> JobResponse:
         """
         Queue a tool execution job.
@@ -548,6 +560,7 @@ class ToolService:
             collection_id: ID of the collection to analyze (required for collection mode)
             pipeline_id: Pipeline ID (required for display_graph mode)
             mode: Execution mode for pipeline_validation (defaults to collection)
+            user_id: ID of the user who initiated the action (audit trail)
 
         Returns:
             Created job response
@@ -560,7 +573,7 @@ class ToolService:
 
         # Handle display_graph mode (pipeline-only validation)
         if tool == ToolType.PIPELINE_VALIDATION and mode == ToolMode.DISPLAY_GRAPH:
-            return self._run_display_graph_tool(pipeline_id, team_id)
+            return self._run_display_graph_tool(pipeline_id, team_id, user_id=user_id)
 
         # All other cases require collection_id
         if collection_id is None:
@@ -617,6 +630,7 @@ class ToolService:
                 pipeline_id=resolved_pipeline_id,
                 pipeline_guid=pipeline_guid,
                 pipeline_version=pipeline_version,
+                user_id=user_id,
             )
 
         # IN-MEMORY MODE: Tool type is whitelisted for server-side execution
@@ -646,7 +660,12 @@ class ToolService:
         logger.info(f"Job {job.id} queued for {tool.value} on collection {collection_guid} (in-memory server execution)")
         return JobAdapter.to_response(job, position)
 
-    def _run_display_graph_tool(self, pipeline_id: Optional[int], team_id: int) -> JobResponse:
+    def _run_display_graph_tool(
+        self,
+        pipeline_id: Optional[int],
+        team_id: int,
+        user_id: Optional[int] = None,
+    ) -> JobResponse:
         """
         Queue a display-graph mode pipeline validation job for agent execution.
 
@@ -658,6 +677,7 @@ class ToolService:
         Args:
             pipeline_id: Pipeline ID to validate
             team_id: Team ID for tenant isolation
+            user_id: ID of the user who initiated the action (audit trail)
 
         Returns:
             Created job response
@@ -738,6 +758,8 @@ class ToolService:
             status=PersistentJobStatus.PENDING,
             bound_agent_id=None,  # Unbound - any agent can claim
             required_capabilities=[ToolType.PIPELINE_VALIDATION.value],
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(job)
@@ -767,6 +789,7 @@ class ToolService:
             result_guid=None,
             agent_guid=None,  # No agent assigned yet
             agent_name=None,
+            audit=job.audit,
         )
 
     def _create_persistent_job(
@@ -777,6 +800,7 @@ class ToolService:
         pipeline_id: Optional[int],
         pipeline_guid: Optional[str],
         pipeline_version: Optional[int],
+        user_id: Optional[int] = None,
     ) -> JobResponse:
         """
         Create a persistent job in the database for agent execution.
@@ -794,6 +818,7 @@ class ToolService:
             pipeline_id: Resolved pipeline ID
             pipeline_guid: Pipeline GUID for response
             pipeline_version: Pipeline version
+            user_id: ID of the user who initiated the action (audit trail)
 
         Returns:
             JobResponse with the created job details
@@ -877,6 +902,8 @@ class ToolService:
             status=PersistentJobStatus.PENDING,
             bound_agent_id=collection.bound_agent_id,
             required_capabilities=required_capabilities,
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
         )
 
         self.db.add(job)
@@ -908,6 +935,7 @@ class ToolService:
             result_guid=None,
             agent_guid=None,  # No agent assigned yet
             agent_name=None,
+            audit=job.audit,
         )
 
     def get_job(self, job_id: str) -> Optional[JobResponse]:

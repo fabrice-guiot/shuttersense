@@ -25,7 +25,7 @@ import { CategoryForm, ICON_MAP } from './CategoryForm'
 import { GuidBadge } from '@/components/GuidBadge'
 import type { Category } from '@/contracts/api/category-api'
 import { cn } from '@/lib/utils'
-import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 
 // ============================================================================
 // Category Icon Component
@@ -139,8 +139,10 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
       cardRole: 'badge',
     },
     {
-      header: 'Created',
-      cell: (category) => formatRelativeTime(category.created_at),
+      header: 'Modified',
+      cell: (category) => (
+        <AuditTrailPopover audit={category.audit} fallbackTimestamp={category.updated_at} />
+      ),
       cellClassName: 'text-muted-foreground',
       cardRole: 'hidden',
     },

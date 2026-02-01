@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label'
 import { useTokens, useTokenStats } from '@/hooks/useTokens'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { formatRelativeTime } from '@/utils/dateFormat'
+import { AuditTrailPopover } from '@/components/audit'
 import type { ApiToken, ApiTokenCreated, CreateTokenRequest } from '@/contracts/api/tokens-api'
 
 // ============================================================================
@@ -264,14 +265,9 @@ function TokenList({ tokens, loading, onRevoke }: TokenListProps) {
       cardRole: 'badge',
     },
     {
-      header: 'Created',
+      header: 'Modified',
       cell: (token) => (
-        <div>
-          <div>{formatRelativeTime(token.created_at)}</div>
-          {token.created_by_email && (
-            <div className="text-xs">by {token.created_by_email}</div>
-          )}
-        </div>
+        <AuditTrailPopover audit={token.audit} fallbackTimestamp={token.created_at} />
       ),
       cellClassName: 'text-muted-foreground',
       cardRole: 'detail',

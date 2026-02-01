@@ -1074,7 +1074,8 @@ class PipelineService:
             is_valid=pipeline.is_valid,
             validation_errors=pipeline.validation_errors,
             created_at=pipeline.created_at,
-            updated_at=pipeline.updated_at
+            updated_at=pipeline.updated_at,
+            audit=pipeline.audit,
         )
 
     def _to_summary(self, pipeline: Pipeline) -> PipelineSummary:
@@ -1097,5 +1098,6 @@ class PipelineService:
             is_valid=pipeline.is_valid,
             node_count=pipeline.node_count,
             created_at=pipeline.created_at,
-            updated_at=pipeline.updated_at
+            updated_at=pipeline.updated_at,
+            audit=pipeline.audit,
         )

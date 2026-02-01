@@ -23,9 +23,10 @@ from sqlalchemy.orm import validates
 
 from backend.src.models import Base
 from backend.src.models.mixins import GuidMixin
+from backend.src.models.mixins.audit import AuditMixin
 
 
-class ReleaseManifest(Base, GuidMixin):
+class ReleaseManifest(Base, GuidMixin, AuditMixin):
     """
     Release manifest entry for agent binary attestation.
 

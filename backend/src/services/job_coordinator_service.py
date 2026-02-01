@@ -2091,6 +2091,7 @@ class JobCoordinatorService:
         scheduled_for = datetime.utcnow() + timedelta(seconds=ttl_seconds)
 
         # Create the scheduled job, inheriting from completed job
+        # Inherit audit user from parent job to maintain attribution chain
         scheduled_job = Job(
             team_id=completed_job.team_id,
             collection_id=collection.id,
@@ -2103,6 +2104,8 @@ class JobCoordinatorService:
             parent_job_id=completed_job.id,
             bound_agent_id=collection.bound_agent_id,  # Inherit from collection
             required_capabilities=completed_job.required_capabilities,
+            created_by_user_id=completed_job.created_by_user_id,
+            updated_by_user_id=completed_job.created_by_user_id,
         )
 
         self.db.add(scheduled_job)
@@ -2157,7 +2160,8 @@ class JobCoordinatorService:
         try:
             scheduled_job = inventory_service.on_import_completed(
                 connector_id=connector_id,
-                team_id=completed_job.team_id
+                team_id=completed_job.team_id,
+                user_id=completed_job.created_by_user_id,
             )
 
             if scheduled_job:

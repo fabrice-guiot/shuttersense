@@ -445,6 +445,8 @@ class PerformerService:
             "additional_info": performer.additional_info,
             "created_at": performer.created_at,
             "updated_at": performer.updated_at,
+            # Audit trail (Issue #120)
+            "audit": performer.audit,
         }
 
     def _resolve_category(self, category_guid: str) -> Category:

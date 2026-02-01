@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { useTeams, useTeamStats, Team } from '@/hooks/useTeams'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { GuidBadge } from '@/components/GuidBadge'
+import { AuditTrailPopover } from '@/components/audit'
 
 export function TeamsTab() {
   const { teams, loading, error, createTeam, deactivate, reactivate } =
@@ -138,6 +139,14 @@ export function TeamsTab() {
         <Badge variant="muted">Inactive</Badge>
       ),
       cardRole: 'badge',
+    },
+    {
+      header: 'Modified',
+      cell: (team) => (
+        <AuditTrailPopover audit={team.audit} fallbackTimestamp={team.updated_at} />
+      ),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
     },
     {
       header: 'Actions',

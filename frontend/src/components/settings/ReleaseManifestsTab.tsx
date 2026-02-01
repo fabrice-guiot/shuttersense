@@ -50,6 +50,7 @@ import {
 } from '@/hooks/useReleaseManifests'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { GuidBadge } from '@/components/GuidBadge'
+import { AuditTrailPopover } from '@/components/audit'
 import type {
   ReleaseManifest,
   ReleaseManifestCreateRequest,
@@ -328,6 +329,14 @@ export function ReleaseManifestsTab() {
       ),
       cellClassName: 'max-w-[200px] truncate',
       cardRole: 'detail',
+    },
+    {
+      header: 'Modified',
+      cell: (manifest) => (
+        <AuditTrailPopover audit={manifest.audit} fallbackTimestamp={manifest.updated_at} />
+      ),
+      cellClassName: 'text-muted-foreground',
+      cardRole: 'hidden',
     },
     {
       header: 'Actions',

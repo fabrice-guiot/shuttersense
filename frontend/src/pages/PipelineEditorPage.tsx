@@ -51,6 +51,7 @@ import type {
 } from '@/contracts/api/pipelines-api'
 import { NODE_TYPE_DEFINITIONS } from '@/contracts/api/pipelines-api'
 import { GuidBadge } from '@/components/GuidBadge'
+import { AuditTrailSection } from '@/components/audit'
 import { cn } from '@/lib/utils'
 
 // ============================================================================
@@ -976,6 +977,9 @@ export const PipelineEditorPage: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* Audit Trail (Issue #120) */}
+              <AuditTrailSection audit={pipeline.audit} />
             </CardContent>
           </Card>
 
