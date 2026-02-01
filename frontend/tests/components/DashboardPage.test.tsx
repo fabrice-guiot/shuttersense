@@ -206,14 +206,14 @@ describe('DashboardPage', () => {
   // Header Stats
   // --------------------------------------------------------------------------
 
-  it('sets header stats with collection, result, and queue data', () => {
+  it('sets header stats with storage, images, scheduled, and running data', () => {
     render(<DashboardPage />)
 
     expect(mockSetStats).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ label: 'Collections', value: 12 }),
-        expect.objectContaining({ label: 'Files' }),
-        expect.objectContaining({ label: 'Results', value: 42 }),
+        expect.objectContaining({ label: 'Storage', value: '4.66 GB' }),
+        expect.objectContaining({ label: 'Images' }),
+        expect.objectContaining({ label: 'Scheduled', value: 2 }),
         expect.objectContaining({ label: 'Running', value: 3 }),
       ])
     )
@@ -250,16 +250,15 @@ describe('DashboardPage', () => {
   it('renders all four KPI cards with data', () => {
     render(<DashboardPage />)
 
-    // Collections KPI card (also exists in Quick Links)
-    expect(screen.getAllByText('Collections').length).toBeGreaterThanOrEqual(1)
-    // '12' also appears in trend data points (photo_pairing: 12)
-    expect(screen.getAllByText('12').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('4.66 GB storage')).toBeInTheDocument()
+    // Storage KPI card
+    expect(screen.getByText('Total Storage')).toBeInTheDocument()
+    expect(screen.getByText('4.66 GB')).toBeInTheDocument()
+    expect(screen.getByText('12 collections')).toBeInTheDocument()
 
-    // Files card
-    expect(screen.getByText('Total Files')).toBeInTheDocument()
-    expect(screen.getByText('15,000')).toBeInTheDocument()
-    expect(screen.getByText('12,500 images')).toBeInTheDocument()
+    // Images card
+    expect(screen.getByText('Images')).toBeInTheDocument()
+    expect(screen.getByText('12,500')).toBeInTheDocument()
+    expect(screen.getByText('15,000 files total')).toBeInTheDocument()
 
     // Results card
     expect(screen.getByText('Analysis Results')).toBeInTheDocument()
@@ -410,8 +409,8 @@ describe('DashboardPage', () => {
 
     render(<DashboardPage />)
 
-    // "Collections" appears in both KPI card and Quick Links
-    expect(screen.getAllByText('Collections').length).toBeGreaterThanOrEqual(1)
+    // "Total Storage" KPI card title renders even during loading
+    expect(screen.getByText('Total Storage')).toBeInTheDocument()
     // The loading state renders a pulse div instead of a value
   })
 
@@ -454,7 +453,7 @@ describe('DashboardPage', () => {
 
     render(<DashboardPage />)
 
-    expect(screen.getByText('0 B storage')).toBeInTheDocument()
+    expect(screen.getByText('0 collections')).toBeInTheDocument()
     expect(screen.getByText('0 completed, 0 failed')).toBeInTheDocument()
   })
 
@@ -465,7 +464,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
 
     // Should render with fallback values
-    expect(screen.getAllByText('Collections').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Total Files')).toBeInTheDocument()
+    expect(screen.getByText('Total Storage')).toBeInTheDocument()
+    expect(screen.getByText('Images')).toBeInTheDocument()
   })
 })

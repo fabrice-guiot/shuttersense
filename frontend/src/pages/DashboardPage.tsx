@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import {
   FolderOpen,
   FileImage,
+  HardDrive,
   BarChart3,
   Activity,
   Clock,
@@ -388,12 +389,12 @@ export default function DashboardPage() {
     const statsArray: Array<{ label: string; value: string | number }> = []
 
     if (collectionStats) {
-      statsArray.push({ label: 'Collections', value: collectionStats.total_collections })
-      statsArray.push({ label: 'Files', value: collectionStats.file_count.toLocaleString() })
+      statsArray.push({ label: 'Storage', value: collectionStats.storage_used_formatted })
+      statsArray.push({ label: 'Images', value: collectionStats.image_count.toLocaleString() })
     }
 
-    if (resultStats) {
-      statsArray.push({ label: 'Results', value: resultStats.total_results })
+    if (queueStatus) {
+      statsArray.push({ label: 'Scheduled', value: queueStatus.scheduled_count })
     }
 
     if (queueStatus && queueStatus.running_count > 0) {
@@ -402,23 +403,23 @@ export default function DashboardPage() {
 
     setStats(statsArray)
     return () => setStats([])
-  }, [collectionStats, resultStats, queueStatus, setStats])
+  }, [collectionStats, queueStatus, setStats])
 
   return (
     <div className="flex flex-col gap-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          title="Collections"
-          value={collectionStats?.total_collections ?? 0}
-          subtitle={collectionStats ? `${collectionStats.storage_used_formatted} storage` : undefined}
-          icon={FolderOpen}
+          title="Total Storage"
+          value={collectionStats?.storage_used_formatted ?? '0 B'}
+          subtitle={collectionStats ? `${collectionStats.total_collections} collection${collectionStats.total_collections !== 1 ? 's' : ''}` : undefined}
+          icon={HardDrive}
           loading={collectionsLoading}
         />
         <KpiCard
-          title="Total Files"
-          value={collectionStats?.file_count.toLocaleString() ?? '0'}
-          subtitle={collectionStats ? `${collectionStats.image_count.toLocaleString()} images` : undefined}
+          title="Images"
+          value={collectionStats?.image_count.toLocaleString() ?? '0'}
+          subtitle={collectionStats ? `${collectionStats.file_count.toLocaleString()} files total` : undefined}
           icon={FileImage}
           loading={collectionsLoading}
         />
