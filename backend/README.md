@@ -261,8 +261,8 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 The API will be available at:
 - **API**: [http://localhost:8000/api](http://localhost:8000/api)
-- **OpenAPI docs (Swagger UI)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **OpenAPI docs (Swagger UI)**: [http://localhost:8000/api-docs](http://localhost:8000/api-docs)
+- **ReDoc**: [http://localhost:8000/api-redoc](http://localhost:8000/api-redoc)
 - **OpenAPI JSON**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
 - **Health check**: [http://localhost:8000/health](http://localhost:8000/health)
 - **Version**: [http://localhost:8000/api/version](http://localhost:8000/api/version)
@@ -673,8 +673,8 @@ source backend/.env  # Or use python-dotenv (automatically loaded by pydantic-se
 
 ### Interactive Documentation
 
-- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs) (with Bearer token authorization)
-- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **Swagger UI**: [http://localhost:8000/api-docs](http://localhost:8000/api-docs) (with Bearer token authorization)
+- **ReDoc**: [http://localhost:8000/api-redoc](http://localhost:8000/api-redoc)
 - **OpenAPI JSON**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
 
 ### Authentication
@@ -925,7 +925,7 @@ mypy backend/src
 6. **Create API endpoints** in `src/api/`
 7. **Write tests** in `tests/unit/` and `tests/integration/`
 8. **Run tests with coverage**: `pytest tests/ --cov=backend.src`
-9. **Review OpenAPI docs**: http://localhost:8000/docs
+9. **Review OpenAPI docs**: http://localhost:8000/api-docs
 
 ### Adding a New Storage Adapter
 

@@ -336,4 +336,4 @@ For agent-side credential connectors, the agent reports results via:
 - `POST /api/agent/v1/jobs/{job_guid}/inventory/file-info` - Phase B results
 - `POST /api/agent/v1/jobs/{job_guid}/inventory/delta` - Phase C results
 
-See the OpenAPI documentation at `/docs` for full schema details.
+See the OpenAPI documentation at `/api-docs` for full schema details.

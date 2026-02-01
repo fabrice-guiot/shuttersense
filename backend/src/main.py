@@ -101,7 +101,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
 
         # Prevent clickjacking (allow for docs pages)
-        if request.url.path not in ["/docs", "/redoc", "/openapi.json"]:
+        if request.url.path not in ["/api-docs", "/api-redoc", "/openapi.json"]:
             response.headers["X-Frame-Options"] = "DENY"
 
         # Enable XSS filter (legacy, but still useful for older browsers)
@@ -113,7 +113,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content Security Policy
         # Different CSP for API vs SPA pages
         path = request.url.path
-        if path in ["/docs", "/redoc", "/openapi.json"]:
+        if path in ["/api-docs", "/api-redoc", "/openapi.json"]:
             # Skip restrictive CSP for documentation pages (Swagger UI needs external resources)
             pass
         elif path.startswith("/api/") or path == "/health":
@@ -812,7 +812,7 @@ def custom_openapi():
     Generate custom OpenAPI schema with Bearer token authentication.
 
     This adds the HTTPBearer security scheme to the OpenAPI spec, enabling
-    the "Authorize" button in Swagger UI (/docs) and ReDoc (/redoc).
+    the "Authorize" button in Swagger UI (/api-docs) and ReDoc (/api-redoc).
 
     Users can enter their API token to test authenticated endpoints.
 
@@ -874,7 +874,7 @@ app.openapi = custom_openapi
 # ============================================================================
 # Custom Documentation Endpoints with Favicon
 # ============================================================================
-@app.get("/docs", include_in_schema=False)
+@app.get("/api-docs", include_in_schema=False)
 async def custom_swagger_ui_html():
     """Serve Swagger UI with custom favicon."""
     return get_swagger_ui_html(
@@ -884,7 +884,7 @@ async def custom_swagger_ui_html():
     )
 
 
-@app.get("/redoc", include_in_schema=False)
+@app.get("/api-redoc", include_in_schema=False)
 async def custom_redoc_html():
     """Serve ReDoc with custom favicon."""
     return get_redoc_html(

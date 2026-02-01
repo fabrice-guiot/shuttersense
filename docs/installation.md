@@ -51,7 +51,7 @@ python3 web_server.py --reload
 
 The API will be available at:
 - API: http://localhost:8000/api
-- OpenAPI docs: http://localhost:8000/docs
+- OpenAPI docs: http://localhost:8000/api-docs
 - Health check: http://localhost:8000/health
 
 ### 3. Frontend Setup

@@ -221,7 +221,7 @@ In production, FastAPI serves both the API and the React SPA from the same serve
                     │                          │
   /api/*     ───►   │  API Routes (JSON)       │
   /health    ───►   │  Health Check            │
-  /docs      ───►   │  OpenAPI Documentation   │
+  /api-docs  ───►   │  OpenAPI Documentation   │
   /assets/*  ───►   │  Static Assets (dist/)   │
   /*         ───►   │  index.html (SPA)        │
                     └──────────────────────────┘

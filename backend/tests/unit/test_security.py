@@ -65,7 +65,7 @@ class TestRateLimiting:
         assert response.status_code == 200
 
         # The app should start successfully with rate limiter configured
-        response = test_client.get("/docs")
+        response = test_client.get("/api-docs")
         assert response.status_code == 200
 
     def test_request_size_limit_rejection(self, test_client):

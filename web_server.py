@@ -209,7 +209,7 @@ def main() -> None:
     print(f"Host: {args.host}")
     print(f"Port: {args.port}")
     print(f"Auto-reload: {'enabled' if args.reload else 'disabled'}")
-    print(f"\nAPI documentation: http://{args.host}:{args.port}/docs")
+    print(f"\nAPI documentation: http://{args.host}:{args.port}/api-docs")
     print(f"Health check: http://{args.host}:{args.port}/health")
     print("\nPress CTRL+C to stop the server\n")
 

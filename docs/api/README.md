@@ -6,8 +6,8 @@ The ShutterSense backend exposes a RESTful API with 140+ endpoints. This documen
 
 When the server is running, interactive API documentation is available at:
 
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
+- **Swagger UI**: `http://localhost:8000/api-docs`
+- **ReDoc**: `http://localhost:8000/api-redoc`
 - **OpenAPI JSON**: `http://localhost:8000/openapi.json`
 
 ## API Conventions

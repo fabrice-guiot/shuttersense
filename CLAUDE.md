@@ -123,7 +123,7 @@ All components use the same version from `version.py`:
    - `shuttersense-agent --version`
 
 2. **Backend API**:
-   - FastAPI app version (shown in `/docs`)
+   - FastAPI app version (shown in `/api-docs`)
    - `/api/version` endpoint
    - `/health` endpoint
 
