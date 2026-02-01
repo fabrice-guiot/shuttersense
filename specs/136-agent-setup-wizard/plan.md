@@ -42,7 +42,7 @@ Verify compliance with `.specify/memory/constitution.md`:
 - [x] **TopHeader KPI Pattern**: The Agents page already displays KPIs (Total Agents, Online). No new KPIs needed for the wizard — it's a modal overlay, not a page.
 - [x] **Single Title Pattern**: The wizard is a Dialog (modal), not a page. No `<h1>` in content. The dialog title serves as the wizard title.
 
-**Violations/Exceptions**: None. All constitution principles are satisfied.
+**Violations/Exceptions**: `ReleaseArtifact` is created without `GuidMixin` (Constitution IV exception); see Complexity Tracking section below for rationale.
 
 ## Project Structure
 
@@ -74,7 +74,7 @@ backend/
 │   │   └── agent/
 │   │       └── routes.py                # MODIFIED: add active release + download endpoints
 │   ├── config/
-│   │   └── settings.py                  # MODIFIED: add AGENT_DIST_DIR setting
+│   │   └── settings.py                  # MODIFIED: add SHUSAI_AGENT_DIST_DIR setting
 │   └── db/
 │       └── migrations/versions/
 │           └── 0XX_add_release_artifacts.py  # NEW: migration
@@ -118,7 +118,7 @@ frontend/
 
 ## Complexity Tracking
 
-> One documented exception: `ReleaseArtifact` without `GuidMixin` (see table below). All other choices follow existing patterns.
+> One documented exception: `ReleaseArtifact` without `GuidMixin` (Constitution IV — acknowledged in Constitution Check Violations/Exceptions above; see table below for full rationale). All other choices follow existing patterns.
 
 | Decision | Rationale | Alternative Considered |
 |----------|-----------|----------------------|
