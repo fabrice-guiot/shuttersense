@@ -9,6 +9,8 @@
 - [Design System](../../frontend/docs/design-system.md)
 - [Distributed Agent Architecture](./021-distributed-agent-architecture.md)
 
+> **Note — Architectural Revision**: The binary distribution approach described in this PRD (`AGENT_DIST_BASE_URL` pointing to a static CDN/file server) was revised during the specification phase. The implementation uses `SHUSAI_AGENT_DIST_DIR` (a local server directory) with authenticated binary downloads and HMAC-signed URLs for remote access. See `specs/136-agent-setup-wizard/spec.md` FR-037 through FR-041 and `specs/136-agent-setup-wizard/contracts/binary-download.md` for the current design. The PRD's `download_base_url` field in the API response has been replaced with per-artifact `download_url` and `signed_url` fields, and a top-level `dev_mode` flag was added.
+
 ---
 
 ## Executive Summary
