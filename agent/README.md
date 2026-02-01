@@ -646,7 +646,7 @@ ruff check agent/
 ruff format --check agent/
 ```
 
-Ruff is configured with line length 120, targeting Python 3.10, with pycodestyle, Pyflakes, isort, flake8-bugbear, flake8-comprehensions, and pyupgrade rules.
+Ruff is configured with line length 120, targeting Python 3.11, with pycodestyle, Pyflakes, isort, flake8-bugbear, flake8-comprehensions, and pyupgrade rules.
 
 ## Building
 
@@ -708,7 +708,7 @@ python -m build
 
 ## Requirements
 
-- Python 3.10+ (required for `match`/`case` syntax and modern type hints)
+- Python 3.11+ (required for ExceptionGroup, tomllib, and modern type hints)
 - Network access to a ShutterSense server (for online operations)
 - Optional: boto3 (for S3 connector testing), google-cloud-storage (for GCS), smbprotocol (for SMB)
 

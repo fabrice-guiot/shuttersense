@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Minimum Python version bumped from 3.10 to 3.11** - Python 3.10 is no longer supported; 3.11+ is now required for both backend and agent
+
 ### Dashboard
 
 - **Dashboard landing page with KPIs** - Aggregated statistics and quick-access widgets on the home page ([#127])
