@@ -20,6 +20,8 @@ interface CopyableCodeBlockProps {
   language?: string
   /** Additional CSS classes for the outer container */
   className?: string
+  /** When true, the copy button is always visible instead of hover-only */
+  alwaysShowCopy?: boolean
 }
 
 export function CopyableCodeBlock({
@@ -27,6 +29,7 @@ export function CopyableCodeBlock({
   label,
   language,
   className,
+  alwaysShowCopy = false,
 }: CopyableCodeBlockProps) {
   const { copy, copied } = useClipboard()
 
@@ -46,7 +49,10 @@ export function CopyableCodeBlock({
       <Button
         variant="ghost"
         size="icon"
-        className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+        className={cn(
+          'absolute right-2 top-2 h-8 w-8 transition-opacity focus:opacity-100',
+          alwaysShowCopy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        )}
         onClick={() => copy(children)}
         aria-label={ariaLabel}
       >

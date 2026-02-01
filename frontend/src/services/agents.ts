@@ -20,6 +20,7 @@ import type {
   RegistrationTokenCreateRequest,
   RegistrationTokenListItem,
   RegistrationTokenListResponse,
+  ActiveReleaseResponse,
 } from '@/contracts/api/agent-api'
 
 // API base path for agent endpoints (admin endpoints)
@@ -190,5 +191,18 @@ export const getAgentJobHistory = async (
   const response = await api.get<AgentJobHistoryResponse>(`${AGENT_API_PATH}/${safeGuid}/jobs`, {
     params: { offset, limit },
   })
+  return response.data
+}
+
+// ============================================================================
+// Release Management (Issue #136 - Agent Setup Wizard)
+// ============================================================================
+
+/**
+ * Get the currently active release manifest with per-platform artifacts.
+ * Used by the Agent Setup Wizard to determine which binaries are available.
+ */
+export const getActiveRelease = async (): Promise<ActiveReleaseResponse> => {
+  const response = await api.get<ActiveReleaseResponse>(`${AGENT_API_PATH}/releases/active`)
   return response.data
 }

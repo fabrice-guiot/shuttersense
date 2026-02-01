@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye, ExternalLink } from 'lucide-react'
+import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye, ExternalLink, Wand2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,6 +47,7 @@ import { useAgents, useAgentStats, useRegistrationTokens } from '@/hooks/useAgen
 import { AgentStatusBadge } from '@/components/agents/AgentStatusBadge'
 import { AgentDetailsDialog } from '@/components/agents/AgentDetailsDialog'
 import { RegistrationTokenDialog } from '@/components/agents/RegistrationTokenDialog'
+import { AgentSetupWizardDialog } from '@/components/agents/AgentSetupWizardDialog'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime } from '@/utils/dateFormat'
 import { AuditTrailPopover } from '@/components/audit'
@@ -59,6 +60,7 @@ export default function AgentsPage() {
   const { setStats } = useHeaderStats()
 
   // Dialog states
+  const [wizardOpen, setWizardOpen] = useState(false)
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
@@ -245,6 +247,10 @@ export default function AgentsPage() {
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
+        <Button variant="outline" onClick={() => setWizardOpen(true)}>
+          <Wand2 className="h-4 w-4 mr-2" />
+          Agent Setup
+        </Button>
         <Button onClick={() => setTokenDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           New Registration Token
@@ -288,6 +294,17 @@ export default function AgentsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Agent Setup Wizard Dialog */}
+      <AgentSetupWizardDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        createToken={createToken}
+        onComplete={() => {
+          fetchAgents()
+          refetchStats()
+        }}
+      />
 
       {/* Registration Token Dialog */}
       <RegistrationTokenDialog
