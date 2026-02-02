@@ -4,7 +4,7 @@
  * 6-step wizard: Download Agent, Create Token, Register Agent,
  * Launch Agent, Background Service, Summary.
  *
- * Issue #136 - Agent Setup Wizard (FR-002, FR-025, FR-026, FR-028)
+ * Issue #136 - Agent Setup Wizard (FR-002, FR-012, FR-013, FR-025, FR-026, FR-028, FR-029, FR-030)
  */
 
 import { useState, useCallback } from 'react'
@@ -62,6 +62,7 @@ export function AgentSetupWizardDialog({
   const [currentStep, setCurrentStep] = useState(1)
   const [createdToken, setCreatedToken] = useState<RegistrationToken | null>(null)
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
+  const [hasLeftTokenStep, setHasLeftTokenStep] = useState(false)
 
   // Platform detection (runs once on mount)
   const [detected] = useState(() => detectPlatform())
@@ -74,6 +75,9 @@ export function AgentSetupWizardDialog({
   const isLastStep = currentStep === TOTAL_STEPS
 
   const handleNext = () => {
+    if (currentStep === 2 && createdToken) {
+      setHasLeftTokenStep(true)
+    }
     if (currentStep < TOTAL_STEPS) {
       setCurrentStep((s) => s + 1)
     }
@@ -107,6 +111,7 @@ export function AgentSetupWizardDialog({
     setTimeout(() => {
       setCurrentStep(1)
       setCreatedToken(null)
+      setHasLeftTokenStep(false)
       setSelectedPlatform(detected.platform as ValidPlatform)
       setConfirmCloseOpen(false)
     }, 200)
@@ -144,6 +149,7 @@ export function AgentSetupWizardDialog({
             createdToken={createdToken}
             onTokenCreated={handleTokenCreated}
             createToken={createToken}
+            isRevisit={hasLeftTokenStep}
           />
         )
       case 3:
@@ -201,18 +207,18 @@ export function AgentSetupWizardDialog({
 
           <DialogFooter className="gap-2 sm:gap-0">
             {currentStep > 1 && (
-              <Button variant="outline" onClick={handleBack} className="mr-auto">
+              <Button variant="outline" onClick={handleBack} className="mr-auto" aria-label="Go to previous step">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back
               </Button>
             )}
             {isLastStep ? (
-              <Button onClick={handleDone}>
+              <Button onClick={handleDone} aria-label="Finish wizard">
                 <Check className="h-4 w-4 mr-2" />
                 Done
               </Button>
             ) : (
-              <Button onClick={handleNext} disabled={!canGoNext}>
+              <Button onClick={handleNext} disabled={!canGoNext} aria-label="Go to next step">
                 Next
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>

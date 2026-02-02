@@ -4,11 +4,11 @@
  * Reuses the existing createToken API. Shows creation form on first visit,
  * read-only token display on subsequent visits (prevents duplicate creation).
  *
- * Issue #136 - Agent Setup Wizard (FR-010 through FR-013)
+ * Issue #136 - Agent Setup Wizard (FR-010 through FR-013, FR-029)
  */
 
 import { useState } from 'react'
-import { AlertTriangle, Loader2, Key } from 'lucide-react'
+import { AlertTriangle, Info, Loader2, Key } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,9 +20,11 @@ interface TokenStepProps {
   createdToken: RegistrationToken | null
   onTokenCreated: (token: RegistrationToken) => void
   createToken: (data?: { name?: string; expires_in_hours?: number }) => Promise<RegistrationToken>
+  /** True when the user has navigated away from Step 2 and returned (FR-012) */
+  isRevisit?: boolean
 }
 
-export function TokenStep({ createdToken, onTokenCreated, createToken }: TokenStepProps) {
+export function TokenStep({ createdToken, onTokenCreated, createToken, isRevisit = false }: TokenStepProps) {
   const [tokenName, setTokenName] = useState('')
   const [expiresInHours, setExpiresInHours] = useState(24)
   const [creating, setCreating] = useState(false)
@@ -41,12 +43,21 @@ export function TokenStep({ createdToken, onTokenCreated, createToken }: TokenSt
           {createdToken.token}
         </CopyableCodeBlock>
 
-        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-800 dark:text-amber-200">
-            This token will only be shown once. Copy it now.
-          </AlertDescription>
-        </Alert>
+        {isRevisit ? (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              This token was previously created in this session. Make sure you have copied it.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 dark:text-amber-200">
+              This token will only be shown once. Copy it now.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <p className="text-xs text-muted-foreground">
           Expires: {new Date(createdToken.expires_at).toLocaleString()}

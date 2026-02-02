@@ -103,10 +103,10 @@
 
 ### Implementation for User Story 5
 
-- [ ] T035 [US5] Implement token preservation in AgentSetupWizardDialog — when navigating back to Step 2 after token creation, hide the creation form and show read-only token display with "Copy" button and notice "This token was previously created in this session" (FR-012)
-- [ ] T036 [US5] Implement Step 2 gate in AgentSetupWizardDialog — disable "Next" button on Step 2 until token has been created and is visible in wizard state (FR-013)
-- [ ] T037 [US5] Add keyboard navigation to AgentSetupWizardDialog — Tab through form fields, Enter to trigger Next/Create actions, Escape to close with confirmation logic; add `aria-label` to all Copy buttons (e.g., "Copy registration command"); ensure all form inputs (token name, expiration, binary path, service user, platform dropdown) have associated `<label>` elements or `aria-label` attributes; `aria-current="step"` already handled in StepIndicator (FR-030)
-- [ ] T038 [US5] Verify token is in-memory only — confirm `createdToken` state is local to the component (React useState), not written to localStorage/sessionStorage/cookies; cleared on component unmount (FR-029)
+- [x] T035 [US5] Implement token preservation in AgentSetupWizardDialog — when navigating back to Step 2 after token creation, hide the creation form and show read-only token display with "Copy" button and notice "This token was previously created in this session" (FR-012)
+- [x] T036 [US5] Implement Step 2 gate in AgentSetupWizardDialog — disable "Next" button on Step 2 until token has been created and is visible in wizard state (FR-013)
+- [x] T037 [US5] Add keyboard navigation to AgentSetupWizardDialog — Tab through form fields, Enter to trigger Next/Create actions, Escape to close with confirmation logic; add `aria-label` to all Copy buttons (e.g., "Copy registration command"); ensure all form inputs (token name, expiration, binary path, service user, platform dropdown) have associated `<label>` elements or `aria-label` attributes; `aria-current="step"` already handled in StepIndicator (FR-030)
+- [x] T038 [US5] Verify token is in-memory only — confirm `createdToken` state is local to the component (React useState), not written to localStorage/sessionStorage/cookies; cleared on component unmount (FR-029)
 
 **Checkpoint**: Navigation is robust — token preserved across back/forward, close confirmation protects token, keyboard-accessible, token never persisted to storage.
 

@@ -354,6 +354,7 @@ export function DownloadStep({
                     size="sm"
                     className="gap-1"
                     onClick={() => copy(fullSignedUrl)}
+                    aria-label="Copy signed download link"
                   >
                     {copied ? (
                       <Check className="h-3 w-3 text-green-600" />
