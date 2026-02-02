@@ -9,6 +9,21 @@
  */
 
 /**
+ * Escape XML special characters in a string.
+ *
+ * @param str - String to escape
+ * @returns Escaped string safe for XML interpolation
+ */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+/**
  * Generate a macOS launchd plist for the ShutterSense agent.
  *
  * The generated plist configures the agent to:
@@ -20,6 +35,7 @@
  * @returns XML plist string
  */
 export function generateLaunchdPlist(binaryPath: string): string {
+  const safePath = escapeXml(binaryPath)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -29,7 +45,7 @@ export function generateLaunchdPlist(binaryPath: string): string {
     <string>ai.shuttersense.agent</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${binaryPath}</string>
+        <string>${safePath}</string>
         <string>start</string>
     </array>
     <key>RunAtLoad</key>

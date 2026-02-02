@@ -3573,7 +3573,7 @@ async def get_active_release(
     # Find the active manifest with highest version
     manifest = (
         db.query(ReleaseManifest)
-        .filter(ReleaseManifest.is_active == True)
+        .filter(ReleaseManifest.is_active.is_(True))
         .order_by(ReleaseManifest.version.desc(), ReleaseManifest.created_at.desc())
         .first()
     )
@@ -3709,7 +3709,7 @@ async def download_agent_binary(
 
     manifest = (
         db.query(ReleaseManifest)
-        .filter(ReleaseManifest.uuid == uuid, ReleaseManifest.is_active == True)
+        .filter(ReleaseManifest.uuid == uuid, ReleaseManifest.is_active.is_(True))
         .first()
     )
     if not manifest:

@@ -38,7 +38,12 @@ class TestGenerateSignedDownloadUrl:
     """Tests for generate_signed_download_url()."""
 
     def test_generates_url_and_expires(self):
-        """Test that function returns (url, expires) tuple."""
+        """Test that function returns (url, expires) tuple.
+
+        Raises:
+            AssertionError: If url is not str, expires is not int, or
+                expires is not in the future.
+        """
         url, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -50,7 +55,11 @@ class TestGenerateSignedDownloadUrl:
         assert expires > int(time.time())
 
     def test_url_format(self):
-        """Test the URL contains expected path segments."""
+        """Test the URL contains expected path segments.
+
+        Raises:
+            AssertionError: If URL is missing path, expires, or signature params.
+        """
         url, _ = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -62,7 +71,12 @@ class TestGenerateSignedDownloadUrl:
         assert "signature=" in url
 
     def test_default_expiry(self):
-        """Test default expiry is approximately 1 hour in the future."""
+        """Test default expiry is approximately 1 hour in the future.
+
+        Raises:
+            AssertionError: If expires is not within 5 seconds of the
+                expected DEFAULT_SIGNED_URL_EXPIRY_SECONDS window.
+        """
         _, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -74,7 +88,11 @@ class TestGenerateSignedDownloadUrl:
         assert expected_min <= expires <= expected_max
 
     def test_custom_expiry(self):
-        """Test custom expiry duration."""
+        """Test custom expiry duration.
+
+        Raises:
+            AssertionError: If expires is not within 5 seconds of 300s window.
+        """
         _, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -87,7 +105,11 @@ class TestGenerateSignedDownloadUrl:
         assert expected_min <= expires <= expected_max
 
     def test_signature_is_hex(self):
-        """Test that signature is a valid hex string."""
+        """Test that signature is a valid hex string.
+
+        Raises:
+            AssertionError: If signature is not 64 chars or not valid hex.
+        """
         url, _ = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -100,7 +122,11 @@ class TestGenerateSignedDownloadUrl:
         int(sig_part, 16)  # Should not raise
 
     def test_different_keys_produce_different_signatures(self):
-        """Test that different secret keys produce different URLs."""
+        """Test that different secret keys produce different URLs.
+
+        Raises:
+            AssertionError: If both keys produce the same signature.
+        """
         url1, _ = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -121,7 +147,11 @@ class TestVerifySignedDownloadUrl:
     """Tests for verify_signed_download_url()."""
 
     def test_valid_signature(self):
-        """Test that a freshly generated URL verifies successfully."""
+        """Test that a freshly generated URL verifies successfully.
+
+        Raises:
+            AssertionError: If verification returns invalid or a non-None error.
+        """
         url, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -143,7 +173,12 @@ class TestVerifySignedDownloadUrl:
         assert error is None
 
     def test_expired_signature(self):
-        """Test that an expired URL is rejected."""
+        """Test that an expired URL is rejected.
+
+        Raises:
+            AssertionError: If verification succeeds or error does not
+                mention expiry.
+        """
         expired_time = int(time.time()) - 100  # 100 seconds ago
 
         is_valid, error = verify_signed_download_url(
@@ -158,7 +193,12 @@ class TestVerifySignedDownloadUrl:
         assert "expired" in error.lower()
 
     def test_tampered_signature(self):
-        """Test that a tampered signature is rejected."""
+        """Test that a tampered signature is rejected.
+
+        Raises:
+            AssertionError: If verification succeeds or error does not
+                mention invalidity.
+        """
         _url, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -177,7 +217,11 @@ class TestVerifySignedDownloadUrl:
         assert "invalid" in error.lower()
 
     def test_wrong_manifest_guid(self):
-        """Test that verifying with a different GUID fails."""
+        """Test that verifying with a different GUID fails.
+
+        Raises:
+            AssertionError: If verification succeeds with a mismatched GUID.
+        """
         url, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -196,7 +240,11 @@ class TestVerifySignedDownloadUrl:
         assert is_valid is False
 
     def test_wrong_platform(self):
-        """Test that verifying with a different platform fails."""
+        """Test that verifying with a different platform fails.
+
+        Raises:
+            AssertionError: If verification succeeds with a mismatched platform.
+        """
         url, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
@@ -215,7 +263,11 @@ class TestVerifySignedDownloadUrl:
         assert is_valid is False
 
     def test_wrong_secret_key(self):
-        """Test that verifying with a different secret key fails."""
+        """Test that verifying with a different secret key fails.
+
+        Raises:
+            AssertionError: If verification succeeds with a mismatched key.
+        """
         url, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,

@@ -163,6 +163,14 @@ class ReleaseArtifact(Base):
         return value
 
     def __repr__(self) -> str:
+        """Return a stable debug representation of the artifact.
+
+        Returns:
+            str: Debug string with manifest_id, platform, and filename.
+
+        Raises:
+            None.
+        """
         return (
             f"<ReleaseArtifact(manifest_id={self.manifest_id}, "
             f"platform='{self.platform}', filename='{self.filename}')>"

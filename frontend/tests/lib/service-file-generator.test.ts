@@ -65,6 +65,13 @@ describe('generateLaunchdPlist', () => {
     // Still valid XML structure
     expect(plist).toContain('</plist>')
   })
+
+  it('should escape XML special characters in path', () => {
+    const plist = generateLaunchdPlist('/path/with<special>&"chars')
+    expect(plist).toContain('<string>/path/with&lt;special&gt;&amp;&quot;chars</string>')
+    expect(plist).not.toContain('<special>')
+    expect(plist).toContain('</plist>')
+  })
 })
 
 describe('generateSystemdUnit', () => {
