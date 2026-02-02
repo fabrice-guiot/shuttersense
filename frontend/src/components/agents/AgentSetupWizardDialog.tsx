@@ -186,7 +186,7 @@ export function AgentSetupWizardDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose() }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Agent Setup Wizard</DialogTitle>
             <DialogDescription>

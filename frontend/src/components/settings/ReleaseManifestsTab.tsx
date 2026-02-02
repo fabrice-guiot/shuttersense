@@ -17,6 +17,7 @@ import {
   Check,
   Power,
   PowerOff,
+  FileDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,6 +55,7 @@ import { AuditTrailPopover } from '@/components/audit'
 import type {
   ReleaseManifest,
   ReleaseManifestCreateRequest,
+  ManifestArtifactCreateRequest,
   ValidPlatform,
 } from '@/contracts/api/release-manifests-api'
 import {
@@ -111,6 +113,7 @@ export function ReleaseManifestsTab() {
   const [newChecksum, setNewChecksum] = useState('')
   const [newNotes, setNewNotes] = useState('')
   const [newIsActive, setNewIsActive] = useState(true)
+  const [newArtifacts, setNewArtifacts] = useState<ManifestArtifactCreateRequest[]>([])
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false)
@@ -131,6 +134,7 @@ export function ReleaseManifestsTab() {
     setNewChecksum('')
     setNewNotes('')
     setNewIsActive(true)
+    setNewArtifacts([])
     setFormError(null)
     setCreateDialogOpen(true)
   }
@@ -176,6 +180,15 @@ export function ReleaseManifestsTab() {
       }
       if (newNotes.trim()) {
         data.notes = newNotes.trim()
+      }
+      // Include artifacts that have at least a filename
+      const validArtifacts = newArtifacts.filter(a => a.filename.trim())
+      if (validArtifacts.length > 0) {
+        data.artifacts = validArtifacts.map(a => ({
+          ...a,
+          filename: a.filename.trim(),
+          checksum: a.checksum.trim(),
+        }))
       }
 
       await createManifest(data)
@@ -273,17 +286,34 @@ export function ReleaseManifestsTab() {
       header: 'Platforms',
       cell: (manifest) => (
         <div className="flex flex-wrap gap-1">
-          {manifest.platforms.map(platform => (
-            <Badge
-              key={platform}
-              variant="outline"
-              className="text-xs"
-            >
-              {platform}
-            </Badge>
-          ))}
+          {manifest.platforms.map(platform => {
+            const artifact = manifest.artifacts?.find(a => a.platform === platform)
+            return (
+              <Badge
+                key={platform}
+                variant="outline"
+                className="text-xs"
+                title={artifact ? `${artifact.filename} (${artifact.checksum})` : undefined}
+              >
+                {platform}
+                {artifact && <FileDown className="h-3 w-3 ml-0.5" />}
+              </Badge>
+            )
+          })}
         </div>
       ),
+      cardRole: 'detail',
+    },
+    {
+      header: 'Artifacts',
+      cell: (manifest) => {
+        const count = manifest.artifacts?.length ?? 0
+        return count > 0 ? (
+          <span className="text-sm">{count} {count === 1 ? 'file' : 'files'}</span>
+        ) : (
+          <span className="text-muted-foreground text-sm">—</span>
+        )
+      },
       cardRole: 'detail',
     },
     {
@@ -422,7 +452,7 @@ export function ReleaseManifestsTab() {
 
       {/* Create Manifest Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Create Release Manifest</DialogTitle>
             <DialogDescription>
@@ -513,6 +543,49 @@ export function ReleaseManifestsTab() {
                   Active (allow agent registration)
                 </Label>
               </div>
+
+              {/* Optional per-platform artifacts */}
+              {newPlatforms.length > 0 && (
+                <div className="grid gap-2">
+                  <Label>Binary Artifacts (optional)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Specify per-platform binary filenames for agent download support.
+                  </p>
+                  <div className="space-y-2">
+                    {newPlatforms.map(platform => {
+                      const existing = newArtifacts.find(a => a.platform === platform)
+                      return (
+                        <div key={platform} className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                          <Input
+                            placeholder={`Filename for ${PLATFORM_LABELS[platform]}`}
+                            value={existing?.filename ?? ''}
+                            onChange={e => {
+                              const filename = e.target.value
+                              setNewArtifacts(prev => {
+                                const idx = prev.findIndex(a => a.platform === platform)
+                                if (idx >= 0) {
+                                  const updated = [...prev]
+                                  updated[idx] = { ...updated[idx], filename }
+                                  return updated
+                                }
+                                return [...prev, {
+                                  platform,
+                                  filename,
+                                  checksum: `sha256:${newChecksum.toLowerCase()}`,
+                                }]
+                              })
+                            }}
+                            className="font-mono text-xs"
+                          />
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                            {platform}
+                          </Badge>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter>
