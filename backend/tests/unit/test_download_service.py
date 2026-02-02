@@ -25,7 +25,11 @@ from backend.src.services.download_service import (
 )
 
 
-SECRET_KEY = "test-secret-key-at-least-32-chars-long"
+# Test constants — clearly non-secret values for unit tests only
+SECRET_KEY = "test-secret-key-at-least-32-chars-long"  # noqa: S105
+ALT_SECRET_KEY_1 = "key-one-that-is-long-enough-here"  # noqa: S105
+ALT_SECRET_KEY_2 = "key-two-that-is-long-enough-here"  # noqa: S105
+WRONG_SECRET_KEY = "wrong-secret-key-that-is-long-enough"  # noqa: S105
 MANIFEST_GUID = "rel_01hgw2bbg0000000000000001"
 PLATFORM = "darwin-arm64"
 
@@ -100,12 +104,12 @@ class TestGenerateSignedDownloadUrl:
         url1, _ = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
-            secret_key="key-one-that-is-long-enough-here",
+            secret_key=ALT_SECRET_KEY_1,
         )
         url2, _ = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
-            secret_key="key-two-that-is-long-enough-here",
+            secret_key=ALT_SECRET_KEY_2,
         )
 
         sig1 = url1.split("signature=")[1]
@@ -155,7 +159,7 @@ class TestVerifySignedDownloadUrl:
 
     def test_tampered_signature(self):
         """Test that a tampered signature is rejected."""
-        url, expires = generate_signed_download_url(
+        _url, expires = generate_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
             secret_key=SECRET_KEY,
@@ -181,7 +185,7 @@ class TestVerifySignedDownloadUrl:
         )
         signature = url.split("signature=")[1]
 
-        is_valid, error = verify_signed_download_url(
+        is_valid, _error = verify_signed_download_url(
             manifest_guid="rel_different_guid",
             platform=PLATFORM,
             expires=expires,
@@ -200,7 +204,7 @@ class TestVerifySignedDownloadUrl:
         )
         signature = url.split("signature=")[1]
 
-        is_valid, error = verify_signed_download_url(
+        is_valid, _error = verify_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform="linux-amd64",
             expires=expires,
@@ -219,12 +223,12 @@ class TestVerifySignedDownloadUrl:
         )
         signature = url.split("signature=")[1]
 
-        is_valid, error = verify_signed_download_url(
+        is_valid, _error = verify_signed_download_url(
             manifest_guid=MANIFEST_GUID,
             platform=PLATFORM,
             expires=expires,
             signature=signature,
-            secret_key="wrong-secret-key-that-is-long-enough",
+            secret_key=WRONG_SECRET_KEY,
         )
 
         assert is_valid is False

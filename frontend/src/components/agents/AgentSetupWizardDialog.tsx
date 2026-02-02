@@ -94,15 +94,6 @@ export function AgentSetupWizardDialog({
   }
 
   // Close behavior (FR-026, FR-800.7)
-  const handleClose = useCallback(() => {
-    // If token created and not on summary, show confirmation
-    if (createdToken && currentStep !== TOTAL_STEPS) {
-      setConfirmCloseOpen(true)
-      return
-    }
-    doClose()
-  }, [createdToken, currentStep])
-
   const doClose = useCallback(() => {
     const hadToken = createdToken !== null
     onOpenChange(false)
@@ -121,6 +112,15 @@ export function AgentSetupWizardDialog({
       onComplete()
     }
   }, [createdToken, detected.platform, onComplete, onOpenChange])
+
+  const handleClose = useCallback(() => {
+    // If token created and not on summary, show confirmation
+    if (createdToken && currentStep !== TOTAL_STEPS) {
+      setConfirmCloseOpen(true)
+      return
+    }
+    doClose()
+  }, [createdToken, currentStep, doClose])
 
   const handleDone = () => {
     doClose()

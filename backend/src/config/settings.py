@@ -155,7 +155,12 @@ class AppSettings(BaseSettings):
 
     @property
     def agent_dist_configured(self) -> bool:
-        """Check if agent binary distribution directory is configured."""
+        """Check if agent binary distribution directory is configured.
+
+        Returns:
+            bool: True if agent_dist_dir is configured and non-empty,
+                False otherwise.
+        """
         return bool(self.agent_dist_dir)
 
     @property

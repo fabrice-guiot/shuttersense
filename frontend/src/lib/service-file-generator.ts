@@ -57,6 +57,7 @@ export function generateLaunchdPlist(binaryPath: string): string {
  * @returns Systemd unit file string
  */
 export function generateSystemdUnit(binaryPath: string, user: string): string {
+  const trimmedUser = user.trim()
   return `[Unit]
 Description=ShutterSense Agent
 After=network-online.target
@@ -64,10 +65,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${binaryPath} start
+ExecStart="${binaryPath}" start
 Restart=always
 RestartSec=10
-User=${user}
+User=${trimmedUser}
 
 [Install]
 WantedBy=multi-user.target`

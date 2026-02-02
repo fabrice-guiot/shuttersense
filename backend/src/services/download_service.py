@@ -42,6 +42,10 @@ def generate_signed_download_url(
 
     Returns:
         Tuple of (relative_url, expires_timestamp)
+
+    Raises:
+        None. This function does not raise exceptions; callers are expected
+        to validate inputs.
     """
     expires = int(time.time()) + expires_in_seconds
     message = f"{manifest_guid}:{platform}:{expires}"
@@ -80,6 +84,10 @@ def verify_signed_download_url(
 
     Returns:
         Tuple of (is_valid, error_message). error_message is None when valid.
+
+    Raises:
+        None. Verification failures are returned as (False, error_message)
+        rather than raised as exceptions.
     """
     # Check expiry first
     if int(time.time()) > expires:
@@ -120,6 +128,10 @@ def resolve_binary_path(
 
     Returns:
         Tuple of (resolved_path, error_message). resolved_path is None on error.
+
+    Raises:
+        None. Validation failures are returned as (None, error_message)
+        rather than raised as exceptions.
     """
     # Validate version string
     if not version or not VERSION_PATTERN.match(version):

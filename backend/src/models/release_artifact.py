@@ -57,6 +57,12 @@ class ReleaseArtifact(Base):
         - platform must be one of VALID_PLATFORMS
         - checksum must match sha256: prefix pattern
         - filename must not contain path separators
+
+    Note:
+        ExternalIdMixin (GUID) is intentionally omitted per Constitution IV.
+        Artifacts are child entities always accessed through their parent
+        ReleaseManifest and identified by (manifest_id, platform) composite
+        key — no independent GUID-based reference is needed.
     """
 
     __tablename__ = "release_artifacts"
@@ -93,7 +99,18 @@ class ReleaseArtifact(Base):
 
     @validates('platform')
     def validate_platform(self, key: str, value: str) -> str:
-        """Validate platform is a known identifier."""
+        """Validate platform is a known identifier.
+
+        Args:
+            key: Field name being validated (always "platform").
+            value: Platform string to validate.
+
+        Returns:
+            Normalized lowercase platform string.
+
+        Raises:
+            ValueError: If value is empty or not in VALID_PLATFORMS.
+        """
         if not value:
             raise ValueError("Platform is required")
         value = value.lower().strip()
@@ -105,7 +122,18 @@ class ReleaseArtifact(Base):
 
     @validates('filename')
     def validate_filename(self, key: str, value: str) -> str:
-        """Validate filename contains no path separators."""
+        """Validate filename contains no path separators.
+
+        Args:
+            key: Field name being validated (always "filename").
+            value: Filename string to validate.
+
+        Returns:
+            Trimmed filename string.
+
+        Raises:
+            ValueError: If value is empty or contains path separators (/ or \\).
+        """
         if not value:
             raise ValueError("Filename is required")
         if '/' in value or '\\' in value:
@@ -114,7 +142,18 @@ class ReleaseArtifact(Base):
 
     @validates('checksum')
     def validate_checksum(self, key: str, value: str) -> str:
-        """Validate checksum matches expected format."""
+        """Validate checksum matches expected format.
+
+        Args:
+            key: Field name being validated (always "checksum").
+            value: Checksum string to validate.
+
+        Returns:
+            Validated checksum string (optionally sha256:-prefixed, 64 hex chars).
+
+        Raises:
+            ValueError: If value is empty or does not match CHECKSUM_PATTERN.
+        """
         if not value:
             raise ValueError("Checksum is required")
         if not CHECKSUM_PATTERN.match(value):

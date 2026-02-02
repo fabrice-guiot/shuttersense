@@ -3548,7 +3548,6 @@ async def get_previous_result_for_collection(
 
 @router.get("/releases/active", response_model=ActiveReleaseResponse)
 async def get_active_release(
-    ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -3559,6 +3558,15 @@ async def get_active_release(
 
     If multiple manifests are active, returns the one with the highest version
     (by string sort descending, then most recently created).
+
+    Args:
+        db: Database session dependency.
+
+    Returns:
+        ActiveReleaseResponse with guid, version, artifacts, and dev_mode flag.
+
+    Raises:
+        HTTPException(404): If no active release manifest exists.
     """
     settings = get_settings()
 
@@ -3632,6 +3640,23 @@ async def download_agent_binary(
     Supports two authentication methods:
     1. Session cookie (in-browser downloads)
     2. Signed URL with expires + signature query params (remote/headless)
+
+    Args:
+        manifest_guid: Release manifest GUID (rel_xxx format).
+        platform: Platform identifier (e.g., "darwin-arm64").
+        request: Incoming HTTP request (used for session cookie auth).
+        db: Database session dependency.
+        expires: Signed URL expiry timestamp (unix epoch).
+        signature: HMAC-SHA256 hex signature for signed URL auth.
+
+    Returns:
+        FileResponse streaming the agent binary with appropriate content type.
+
+    Raises:
+        HTTPException(401): If authentication fails (invalid/expired signature
+            or missing session).
+        HTTPException(404): If manifest, artifact, or binary file not found.
+        HTTPException(500): If download signing or distribution is not configured.
     """
     settings = get_settings()
 

@@ -182,7 +182,18 @@ class ReleaseManifestStatsResponse(BaseModel):
 
 
 def artifact_to_response(artifact: ReleaseArtifact) -> ArtifactResponse:
-    """Convert ReleaseArtifact model to response schema."""
+    """Convert ReleaseArtifact model to response schema.
+
+    Args:
+        artifact: ReleaseArtifact ORM instance with platform, filename,
+            checksum, file_size, and created_at fields populated.
+
+    Returns:
+        ArtifactResponse with created_at serialized to ISO 8601 string.
+
+    Raises:
+        AttributeError: If artifact is missing expected fields.
+    """
     return ArtifactResponse(
         platform=artifact.platform,
         filename=artifact.filename,
@@ -270,6 +281,28 @@ async def create_release_manifest(
 
         # Create per-platform artifacts if provided (Issue #136)
         if request.artifacts:
+            # Validate: no duplicate platforms in artifacts
+            artifact_platforms = [a.platform.lower().strip() for a in request.artifacts]
+            duplicate_platforms = [
+                p for p in artifact_platforms if artifact_platforms.count(p) > 1
+            ]
+            if duplicate_platforms:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Duplicate artifact platforms: {', '.join(set(duplicate_platforms))}",
+                )
+
+            # Validate: every artifact platform must be in manifest platforms
+            manifest_platforms = {p.lower().strip() for p in request.platforms}
+            invalid_platforms = [
+                p for p in artifact_platforms if p not in manifest_platforms
+            ]
+            if invalid_platforms:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Artifact platforms not in manifest platforms: {', '.join(invalid_platforms)}",
+                )
+
             for art_req in request.artifacts:
                 artifact = ReleaseArtifact(
                     manifest_id=manifest.id,

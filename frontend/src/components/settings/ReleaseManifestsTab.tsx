@@ -181,14 +181,21 @@ export function ReleaseManifestsTab() {
       if (newNotes.trim()) {
         data.notes = newNotes.trim()
       }
-      // Include artifacts that have at least a filename
-      const validArtifacts = newArtifacts.filter(a => a.filename.trim())
-      if (validArtifacts.length > 0) {
-        data.artifacts = validArtifacts.map(a => ({
-          ...a,
-          filename: a.filename.trim(),
-          checksum: a.checksum.trim(),
-        }))
+      // Derive artifacts from selected platforms only (not stale newArtifacts)
+      const derivedArtifacts = newPlatforms
+        .map(platform => {
+          const existing = newArtifacts.find(a => a.platform === platform)
+          const filename = existing?.filename?.trim()
+          if (!filename) return null
+          return {
+            platform,
+            filename,
+            checksum: `sha256:${newChecksum.toLowerCase()}`,
+          }
+        })
+        .filter((a): a is NonNullable<typeof a> => a !== null)
+      if (derivedArtifacts.length > 0) {
+        data.artifacts = derivedArtifacts
       }
 
       await createManifest(data)

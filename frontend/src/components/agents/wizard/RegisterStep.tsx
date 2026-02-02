@@ -66,9 +66,9 @@ export function RegisterStep({ token, serverUrl, selectedPlatform }: RegisterSte
       </div>
 
       {/* Expected output */}
-      <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
-        <CheckCircle2 className="h-4 w-4 text-green-600" />
-        <AlertDescription className="text-green-800 dark:text-green-200">
+      <Alert className="border-success/30 bg-success/10">
+        <CheckCircle2 className="h-4 w-4 text-success" />
+        <AlertDescription className="text-success-foreground">
           <p className="font-medium">Expected output:</p>
           <code className="text-xs">
             Agent registered successfully. Run &apos;shuttersense-agent start&apos; to begin.

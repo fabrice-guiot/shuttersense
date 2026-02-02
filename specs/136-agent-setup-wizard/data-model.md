@@ -30,16 +30,16 @@ Represents a single downloadable agent binary for a specific platform within a r
 
 ### Fields
 
-| Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
-| `id` | Integer | PK, auto-increment | Internal primary key |
-| `manifest_id` | Integer | FK → `release_manifests.id`, NOT NULL, ON DELETE CASCADE | Parent release manifest |
-| `platform` | String(50) | NOT NULL | Platform identifier (e.g., `darwin-arm64`) |
-| `filename` | String(255) | NOT NULL | Binary filename (e.g., `shuttersense-agent-darwin-arm64`) |
-| `checksum` | String(73) | NOT NULL | Prefixed checksum (e.g., `sha256:a1b2c3d4...`) |
-| `file_size` | BigInteger | Nullable | File size in bytes (for display; nullable because not always known at manifest creation) |
-| `created_at` | DateTime | NOT NULL, server default | Creation timestamp |
-| `updated_at` | DateTime | NOT NULL, server default, on update | Last update timestamp |
+| Field         | Type        | Constraints                                              | Description                                                                      |
+|---------------|-------------|----------------------------------------------------------|----------------------------------------------------------------------------------|
+| `id`          | Integer     | PK, auto-increment                                       | Internal primary key                                                             |
+| `manifest_id` | Integer     | FK → `release_manifests.id`, NOT NULL, ON DELETE CASCADE  | Parent release manifest                                                          |
+| `platform`    | String(50)  | NOT NULL                                                 | Platform identifier (e.g., `darwin-arm64`)                                       |
+| `filename`    | String(255) | NOT NULL                                                 | Binary filename (e.g., `shuttersense-agent-darwin-arm64`)                        |
+| `checksum`    | String(73)  | NOT NULL                                                 | Prefixed checksum (e.g., `sha256:a1b2c3d4...`)                                  |
+| `file_size`   | BigInteger  | Nullable                                                 | File size in bytes (for display; nullable because not always known at creation)   |
+| `created_at`  | DateTime    | NOT NULL, server default                                 | Creation timestamp                                                               |
+| `updated_at`  | DateTime    | NOT NULL, server default, on update                      | Last update timestamp                                                            |
 
 ### Constraints
 

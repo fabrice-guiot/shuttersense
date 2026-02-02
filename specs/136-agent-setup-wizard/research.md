@@ -39,12 +39,12 @@
 - Session-based download uses the standard `get_tenant_context` dependency — no changes needed.
 
 **Signed URL format**:
-```
+```text
 /api/agent/v1/releases/{manifest_guid}/download/{platform}?expires={unix_timestamp}&signature={hmac_hex}
 ```
 
 **Signature computation**:
-```
+```text
 message = f"{manifest_guid}:{platform}:{expires_timestamp}"
 signature = HMAC-SHA256(key=JWT_SECRET_KEY, message=message).hexdigest()
 ```
