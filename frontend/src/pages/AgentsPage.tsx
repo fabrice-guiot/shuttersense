@@ -247,7 +247,7 @@ export default function AgentsPage() {
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
-        <Button variant="outline" onClick={() => setWizardOpen(true)}>
+        <Button variant="success" onClick={() => setWizardOpen(true)}>
           <Wand2 className="h-4 w-4 mr-2" />
           Agent Setup
         </Button>
