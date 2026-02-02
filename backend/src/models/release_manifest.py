@@ -19,7 +19,7 @@ from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Index
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import validates
+from sqlalchemy.orm import validates, relationship
 
 from backend.src.models import Base
 from backend.src.models.mixins import GuidMixin
@@ -97,6 +97,14 @@ class ReleaseManifest(Base, GuidMixin, AuditMixin):
         Index('uq_release_version_checksum', 'version', 'checksum', unique=True),
     )
 
+    # Relationship to per-platform artifacts (Issue #136 - Agent Setup Wizard)
+    artifacts = relationship(
+        "ReleaseArtifact",
+        back_populates="manifest",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
     # Valid platforms
     VALID_PLATFORMS = [
         'darwin-arm64',   # macOS Apple Silicon
@@ -140,6 +148,11 @@ class ReleaseManifest(Base, GuidMixin, AuditMixin):
             self.platforms_json = json.dumps(normalized)  # type: ignore
         else:
             self.platforms_json = value  # type: ignore
+
+    @property
+    def artifact_platforms(self) -> List[str]:
+        """Get the set of platforms that have associated artifacts."""
+        return [a.platform for a in self.artifacts] if self.artifacts else []
 
     def supports_platform(self, platform: str) -> bool:
         """Check if this manifest supports the given platform."""

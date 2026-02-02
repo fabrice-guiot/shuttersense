@@ -10,6 +10,36 @@
 import type { AuditInfo } from './audit-api'
 
 /**
+ * Per-platform binary artifact within a release manifest (admin view).
+ */
+export interface ManifestArtifact {
+  /** Platform identifier (e.g., "darwin-arm64") */
+  platform: string
+  /** Binary filename (e.g., "shuttersense-agent-darwin-arm64") */
+  filename: string
+  /** sha256:-prefixed hex checksum */
+  checksum: string
+  /** File size in bytes, or null if unknown */
+  file_size: number | null
+  /** Creation timestamp (ISO 8601) */
+  created_at: string
+}
+
+/**
+ * Artifact data for creating artifacts alongside a manifest.
+ */
+export interface ManifestArtifactCreateRequest {
+  /** Platform identifier */
+  platform: string
+  /** Binary filename */
+  filename: string
+  /** sha256:-prefixed hex checksum */
+  checksum: string
+  /** File size in bytes (optional) */
+  file_size?: number | null
+}
+
+/**
  * Release manifest entity.
  */
 export interface ReleaseManifest {
@@ -25,6 +55,8 @@ export interface ReleaseManifest {
   is_active: boolean
   /** Optional notes about this release */
   notes: string | null
+  /** Per-platform binary artifacts (populated from admin detail endpoint) */
+  artifacts: ManifestArtifact[]
   /** Creation timestamp (ISO 8601) */
   created_at: string
   /** Last update timestamp (ISO 8601) */
@@ -46,6 +78,8 @@ export interface ReleaseManifestCreateRequest {
   notes?: string
   /** Whether to activate immediately (default: true) */
   is_active?: boolean
+  /** Optional per-platform binary artifacts */
+  artifacts?: ManifestArtifactCreateRequest[]
 }
 
 /**

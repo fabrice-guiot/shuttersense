@@ -113,6 +113,17 @@ from backend.src.api.agent.schemas import (
     TeamConfigResponse,
 )
 from backend.src.schemas.audit import build_audit_info
+# Issue #136 - Agent Setup Wizard: active release + binary download
+from backend.src.api.agent.schemas import ActiveReleaseResponse, ReleaseArtifactResponse
+from backend.src.models.release_manifest import ReleaseManifest
+from backend.src.models.release_artifact import ReleaseArtifact
+from backend.src.services.download_service import (
+    generate_signed_download_url,
+    verify_signed_download_url,
+    resolve_binary_path,
+)
+from backend.src.config.settings import get_settings
+from fastapi.responses import FileResponse
 from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
 
 
@@ -3527,6 +3538,232 @@ async def get_previous_result_for_collection(
         guid=previous.guid,
         input_state_hash=previous.input_state_hash,
         completed_at=previous.completed_at,
+    )
+
+
+# ============================================================================
+# Release Management Endpoints (Issue #136 - Agent Setup Wizard)
+# ============================================================================
+
+
+@router.get("/releases/active", response_model=ActiveReleaseResponse)
+async def get_active_release(
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(get_tenant_context),
+):
+    """
+    Get the currently active release manifest with per-platform artifacts.
+
+    Returns the active release manifest with download URLs for each platform.
+    Used by the Agent Setup Wizard to determine which binaries are available.
+
+    If multiple manifests are active, returns the one with the highest version
+    (by string sort descending, then most recently created).
+
+    Args:
+        db: Database session dependency.
+        ctx: Tenant context enforcing session-based authentication.
+
+    Returns:
+        ActiveReleaseResponse with guid, version, artifacts, and dev_mode flag.
+
+    Raises:
+        HTTPException(401): If the request is not authenticated.
+        HTTPException(404): If no active release manifest exists.
+    """
+    settings = get_settings()
+
+    # Find the active manifest with highest version
+    manifest = (
+        db.query(ReleaseManifest)
+        .filter(ReleaseManifest.is_active.is_(True))
+        .order_by(ReleaseManifest.version.desc(), ReleaseManifest.created_at.desc())
+        .first()
+    )
+
+    if not manifest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active release manifest found",
+        )
+
+    dev_mode = not settings.agent_dist_configured
+
+    # Build artifact responses with download URLs
+    artifact_responses = []
+    for artifact in manifest.artifacts:
+        download_url = None
+        signed_url = None
+
+        if settings.agent_dist_configured and settings.jwt_configured:
+            # Construct download URLs only when dist dir is configured
+            download_url = (
+                f"/api/agent/v1/releases/{manifest.guid}"
+                f"/download/{artifact.platform}"
+            )
+            signed_url_str, _ = generate_signed_download_url(
+                manifest_guid=manifest.guid,
+                platform=artifact.platform,
+                secret_key=settings.jwt_secret_key,
+            )
+            signed_url = signed_url_str
+
+        artifact_responses.append(
+            ReleaseArtifactResponse(
+                platform=artifact.platform,
+                filename=artifact.filename,
+                checksum=artifact.checksum,
+                file_size=artifact.file_size,
+                download_url=download_url,
+                signed_url=signed_url,
+            )
+        )
+
+    return ActiveReleaseResponse(
+        guid=manifest.guid,
+        version=manifest.version,
+        artifacts=artifact_responses,
+        notes=manifest.notes,
+        dev_mode=dev_mode,
+    )
+
+
+@router.get("/releases/{manifest_guid}/download/{platform}")
+async def download_agent_binary(
+    manifest_guid: str,
+    platform: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    expires: Optional[int] = Query(None, description="Signed URL expiry timestamp"),
+    signature: Optional[str] = Query(None, description="HMAC-SHA256 signature"),
+):
+    """
+    Download an agent binary for a specific platform.
+
+    Supports two authentication methods:
+    1. Session cookie (in-browser downloads)
+    2. Signed URL with expires + signature query params (remote/headless)
+
+    Args:
+        manifest_guid: Release manifest GUID (rel_xxx format).
+        platform: Platform identifier (e.g., "darwin-arm64").
+        request: Incoming HTTP request (used for session cookie auth).
+        db: Database session dependency.
+        expires: Signed URL expiry timestamp (unix epoch).
+        signature: HMAC-SHA256 hex signature for signed URL auth.
+
+    Returns:
+        FileResponse streaming the agent binary with appropriate content type.
+
+    Raises:
+        HTTPException(401): If authentication fails (invalid/expired signature
+            or missing session).
+        HTTPException(404): If manifest, artifact, or binary file not found.
+        HTTPException(500): If download signing or distribution is not configured.
+    """
+    settings = get_settings()
+
+    # --- Authentication ---
+    if expires is not None and signature is not None:
+        # Signed URL authentication
+        if not settings.jwt_configured:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Download signing is not configured on this server",
+            )
+
+        is_valid, error_msg = verify_signed_download_url(
+            manifest_guid=manifest_guid,
+            platform=platform,
+            expires=expires,
+            signature=signature,
+            secret_key=settings.jwt_secret_key,
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=error_msg,
+            )
+    else:
+        # Session cookie authentication — use get_tenant_context
+        try:
+            await get_tenant_context(request=request, db=db)
+        except HTTPException:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+            )
+
+    # --- Distribution directory check ---
+    if not settings.agent_dist_configured:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Agent binary distribution is not configured on this server",
+        )
+
+    # --- Find manifest and artifact ---
+    try:
+        uuid = ReleaseManifest.parse_guid(manifest_guid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Release not found",
+        )
+
+    manifest = (
+        db.query(ReleaseManifest)
+        .filter(ReleaseManifest.uuid == uuid, ReleaseManifest.is_active.is_(True))
+        .first()
+    )
+    if not manifest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Release not found",
+        )
+
+    artifact = (
+        db.query(ReleaseArtifact)
+        .filter(
+            ReleaseArtifact.manifest_id == manifest.id,
+            ReleaseArtifact.platform == platform.lower(),
+        )
+        .first()
+    )
+    if not artifact:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No artifact found for platform '{platform}' in this release",
+        )
+
+    # --- Resolve and serve binary file ---
+    file_path, error_msg = resolve_binary_path(
+        dist_dir=settings.agent_dist_dir,
+        version=manifest.version,
+        filename=artifact.filename,
+    )
+    if not file_path:
+        if "not found" in (error_msg or "").lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_msg or "Failed to resolve binary file",
+        )
+
+    # Extract checksum hash value (strip sha256: prefix if present)
+    checksum_value = artifact.checksum
+    if checksum_value.startswith("sha256:"):
+        checksum_value = checksum_value[7:]
+
+    return FileResponse(
+        path=str(file_path),
+        filename=artifact.filename,
+        media_type="application/octet-stream",
+        headers={
+            "X-Checksum-SHA256": checksum_value,
+        },
     )
 
 
