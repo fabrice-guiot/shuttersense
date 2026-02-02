@@ -309,7 +309,7 @@ export function DownloadStep({
 
               {/* Signed URL section (T032) */}
               {matchingArtifact.signed_url && fullSignedUrl && (
-                <div className="space-y-3 border-t pt-4">
+                <div className={`space-y-3 border-t pt-4 ${isOverridden ? 'rounded-md border border-blue-200 bg-blue-50/30 p-4 dark:border-blue-900 dark:bg-blue-950/30' : ''}`}>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <Label>Remote Download Link</Label>
@@ -320,7 +320,9 @@ export function DownloadStep({
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Use this link to download the agent on a remote or headless machine.
+                      {isOverridden
+                        ? 'Since you\u2019re setting up a remote machine, use this link to download the agent directly on the target machine.'
+                        : 'Use this link to download the agent on a remote or headless machine.'}
                     </p>
                   </div>
 

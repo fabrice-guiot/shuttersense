@@ -138,8 +138,8 @@
 
 ### Implementation for User Story 4
 
-- [ ] T044 [US4] Verify platform override propagates through all steps — ensure `selectedPlatform` from wizard state is used (not `detectedPlatform`) in RegisterStep (chmod conditional), ServiceStep (plist vs systemd vs Windows), SummaryStep (config paths); add platform override warning in DownloadStep when selected differs from detected (FR-006)
-- [ ] T045 [US4] Verify signed URL is prominent for overridden platforms — when platform differs from detected, emphasize the signed URL section in DownloadStep with a note: "Since you're setting up a remote machine, use this link to download the agent directly on the target machine" (US4 acceptance scenario 4)
+- [x] T044 [US4] Verify platform override propagates through all steps — ensure `selectedPlatform` from wizard state is used (not `detectedPlatform`) in RegisterStep (chmod conditional), ServiceStep (plist vs systemd vs Windows), SummaryStep (config paths); add platform override warning in DownloadStep when selected differs from detected (FR-006)
+- [x] T045 [US4] Verify signed URL is prominent for overridden platforms — when platform differs from detected, emphasize the signed URL section in DownloadStep with a note: "Since you're setting up a remote machine, use this link to download the agent directly on the target machine" (US4 acceptance scenario 4)
 
 **Checkpoint**: Remote setup fully works — all content adapts to overridden platform, signed URL prominent for remote use.
 
