@@ -89,7 +89,7 @@ describe('generateSystemdUnit', () => {
 
   it('should include binary path in ExecStart', () => {
     const unit = generateSystemdUnit('/usr/local/bin/shuttersense-agent', 'shuttersense')
-    expect(unit).toContain('ExecStart=/usr/local/bin/shuttersense-agent start')
+    expect(unit).toContain('ExecStart="/usr/local/bin/shuttersense-agent" start')
   })
 
   it('should configure restart policy', () => {
@@ -116,12 +116,12 @@ describe('generateSystemdUnit', () => {
 
   it('should handle path with spaces', () => {
     const unit = generateSystemdUnit('/opt/shutter sense/shuttersense-agent', 'shuttersense')
-    expect(unit).toContain('ExecStart=/opt/shutter sense/shuttersense-agent start')
+    expect(unit).toContain('ExecStart="/opt/shutter sense/shuttersense-agent" start')
   })
 
   it('should handle empty path', () => {
     const unit = generateSystemdUnit('', 'shuttersense')
-    expect(unit).toContain('ExecStart= start')
+    expect(unit).toContain('ExecStart="" start')
     // Still valid unit structure
     expect(unit).toContain('[Install]')
   })

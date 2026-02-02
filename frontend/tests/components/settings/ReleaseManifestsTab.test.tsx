@@ -35,6 +35,7 @@ describe('ReleaseManifestsTab', () => {
       checksum: 'a'.repeat(64),
       is_active: true,
       notes: 'Initial macOS universal binary',
+      artifacts: [],
       created_at: '2026-01-15T10:00:00Z',
       updated_at: '2026-01-15T10:00:00Z',
     },
@@ -45,6 +46,7 @@ describe('ReleaseManifestsTab', () => {
       checksum: 'b'.repeat(64),
       is_active: false,
       notes: null,
+      artifacts: [],
       created_at: '2026-01-16T10:00:00Z',
       updated_at: '2026-01-16T10:00:00Z',
     },
@@ -67,11 +69,14 @@ describe('ReleaseManifestsTab', () => {
     vi.clearAllMocks()
     vi.mocked(releaseManifestsApi.listManifests).mockResolvedValue(mockListResponse)
     vi.mocked(releaseManifestsApi.getManifestStats).mockResolvedValue(mockStats)
-    vi.mocked(releaseManifestsApi.createManifest).mockImplementation(async data => ({
+    vi.mocked(releaseManifestsApi.createManifest).mockImplementation(async (data): Promise<ReleaseManifest> => ({
       guid: 'rel_01hgw2bbg00000000000000003',
-      ...data,
+      version: data.version,
+      platforms: data.platforms,
+      checksum: data.checksum,
       notes: data.notes ?? null,
       is_active: data.is_active ?? true,
+      artifacts: [],
       created_at: '2026-01-17T10:00:00Z',
       updated_at: '2026-01-17T10:00:00Z',
     }))
