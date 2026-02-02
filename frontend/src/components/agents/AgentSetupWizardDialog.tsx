@@ -169,7 +169,7 @@ export function AgentSetupWizardDialog({
           />
         )
       case 5:
-        return <ServiceStep />
+        return <ServiceStep selectedPlatform={selectedPlatform} />
       case 6:
         return (
           <SummaryStep
