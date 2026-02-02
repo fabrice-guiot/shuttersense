@@ -3549,6 +3549,7 @@ async def get_previous_result_for_collection(
 @router.get("/releases/active", response_model=ActiveReleaseResponse)
 async def get_active_release(
     db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(get_tenant_context),
 ):
     """
     Get the currently active release manifest with per-platform artifacts.
@@ -3561,11 +3562,13 @@ async def get_active_release(
 
     Args:
         db: Database session dependency.
+        ctx: Tenant context enforcing session-based authentication.
 
     Returns:
         ActiveReleaseResponse with guid, version, artifacts, and dev_mode flag.
 
     Raises:
+        HTTPException(401): If the request is not authenticated.
         HTTPException(404): If no active release manifest exists.
     """
     settings = get_settings()
