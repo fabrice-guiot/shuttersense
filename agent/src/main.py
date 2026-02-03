@@ -280,10 +280,11 @@ class AgentRunner:
                     if not metrics_result.is_empty:
                         metrics = metrics_result.to_dict()
 
-                # Send heartbeat with authorized roots, capabilities (if refreshed), and metrics
+                # Send heartbeat with authorized roots, capabilities (if refreshed), version, and metrics
                 response = await self._api_client.heartbeat(
                     authorized_roots=self.config.authorized_roots,
                     capabilities=capabilities,
+                    version=__version__,
                     metrics=metrics,
                 )
                 self.logger.debug(f"Heartbeat acknowledged, server time: {response.get('server_time')}")

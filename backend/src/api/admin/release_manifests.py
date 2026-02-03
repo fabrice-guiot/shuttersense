@@ -22,6 +22,8 @@ from backend.src.middleware.auth import require_super_admin, TenantContext
 from backend.src.models.release_manifest import ReleaseManifest
 from backend.src.models.release_artifact import ReleaseArtifact
 from backend.src.services.exceptions import NotFoundError, ValidationError
+from backend.src.services.download_service import resolve_binary_path
+from backend.src.config.settings import get_settings
 from backend.src.utils.logging_config import get_logger
 
 
@@ -313,6 +315,29 @@ async def create_release_manifest(
                 )
                 db.add(artifact)
 
+            # Validate binary files exist in dist dir when configured (Issue #136)
+            settings = get_settings()
+            if settings.agent_dist_configured and request.is_active:
+                missing_files = []
+                for art_req in request.artifacts:
+                    file_path, error = resolve_binary_path(
+                        dist_dir=settings.agent_dist_dir,
+                        version=request.version,
+                        filename=art_req.filename,
+                    )
+                    if error:
+                        missing_files.append(f"{art_req.platform}: {art_req.filename} ({error})")
+
+                if missing_files:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=(
+                            f"Binary files not found in {settings.agent_dist_dir}/{request.version}/. "
+                            f"Missing: {'; '.join(missing_files)}. "
+                            f"Either deploy the files first, or set is_active=false to create an inactive manifest."
+                        ),
+                    )
+
         db.commit()
         db.refresh(manifest)
 
@@ -486,6 +511,29 @@ async def update_release_manifest(
 
     # Update fields if provided
     if request.is_active is not None:
+        # Validate binary files exist when activating a manifest with artifacts
+        settings = get_settings()
+        if request.is_active and settings.agent_dist_configured and manifest.artifacts:
+            missing_files = []
+            for artifact in manifest.artifacts:
+                file_path, error = resolve_binary_path(
+                    dist_dir=settings.agent_dist_dir,
+                    version=manifest.version,
+                    filename=artifact.filename,
+                )
+                if error:
+                    missing_files.append(f"{artifact.platform}: {artifact.filename} ({error})")
+
+            if missing_files:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Cannot activate: binary files not found in {settings.agent_dist_dir}/{manifest.version}/. "
+                        f"Missing: {'; '.join(missing_files)}. "
+                        f"Deploy the files before activating the manifest."
+                    ),
+                )
+
         old_active = manifest.is_active
         manifest.is_active = request.is_active
 

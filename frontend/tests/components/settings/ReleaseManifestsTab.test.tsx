@@ -193,7 +193,7 @@ describe('ReleaseManifestsTab', () => {
       expect(screen.getByText('Create Release Manifest')).toBeInTheDocument()
     })
 
-    it('shows platform checkboxes in create dialog', async () => {
+    it('shows platform select dropdown in create dialog', async () => {
       const user = userEvent.setup()
       render(<ReleaseManifestsTab />)
 
@@ -206,15 +206,12 @@ describe('ReleaseManifestsTab', () => {
 
       const dialog = screen.getByRole('dialog')
 
-      // Platform labels should be visible within dialog (with parentheses)
-      expect(within(dialog).getByLabelText(/macOS \(Apple Silicon\)/i)).toBeInTheDocument()
-      expect(within(dialog).getByLabelText(/macOS \(Intel\)/i)).toBeInTheDocument()
-      expect(within(dialog).getByLabelText(/Linux \(x86_64\)/i)).toBeInTheDocument()
-      expect(within(dialog).getByLabelText(/Linux \(ARM64\)/i)).toBeInTheDocument()
-      expect(within(dialog).getByLabelText(/Windows \(x86_64\)/i)).toBeInTheDocument()
+      // Should have a platform select dropdown
+      expect(within(dialog).getByLabelText(/Platform/i)).toBeInTheDocument()
+      expect(within(dialog).getByRole('combobox')).toBeInTheDocument()
     })
 
-    it('validates that at least one platform is selected', async () => {
+    it('validates that a platform is selected', async () => {
       const user = userEvent.setup()
       render(<ReleaseManifestsTab />)
 
@@ -227,7 +224,7 @@ describe('ReleaseManifestsTab', () => {
 
       const dialog = screen.getByRole('dialog')
 
-      // Fill version and checksum but no platforms
+      // Fill version and checksum but no platform selected
       await user.type(within(dialog).getByLabelText(/Version/i), '2.0.0')
       await user.type(within(dialog).getByLabelText(/SHA-256 Checksum/i), 'c'.repeat(64))
 
@@ -235,7 +232,7 @@ describe('ReleaseManifestsTab', () => {
       await user.click(within(dialog).getByRole('button', { name: /Create Manifest/i }))
 
       // Should show validation error
-      expect(within(dialog).getByText(/Please select at least one platform/i)).toBeInTheDocument()
+      expect(within(dialog).getByText(/Please select a platform/i)).toBeInTheDocument()
     })
 
     it('validates checksum is 64 hex characters', async () => {
@@ -253,8 +250,12 @@ describe('ReleaseManifestsTab', () => {
 
       // Fill form with short checksum
       await user.type(within(dialog).getByLabelText(/Version/i), '2.0.0')
-      await user.click(within(dialog).getByLabelText(/macOS \(Apple Silicon\)/i))
+      // Select platform from dropdown
+      await user.click(within(dialog).getByRole('combobox'))
+      await user.click(screen.getByRole('option', { name: /macOS \(Apple Silicon\)/i }))
       await user.type(within(dialog).getByLabelText(/SHA-256 Checksum/i), 'abc123')
+      // Fill required filename
+      await user.type(within(dialog).getByLabelText(/Binary Filename/i), 'shuttersense-agent-darwin-arm64')
 
       // Submit form
       await user.click(within(dialog).getByRole('button', { name: /Create Manifest/i }))
@@ -278,10 +279,13 @@ describe('ReleaseManifestsTab', () => {
 
       // Fill form
       await user.type(within(dialog).getByLabelText(/Version/i), '2.0.0')
-      await user.click(within(dialog).getByLabelText(/macOS \(Apple Silicon\)/i))
-      await user.click(within(dialog).getByLabelText(/macOS \(Intel\)/i))
+      // Select platform from dropdown (single selection)
+      await user.click(within(dialog).getByRole('combobox'))
+      await user.click(screen.getByRole('option', { name: /macOS \(Apple Silicon\)/i }))
       await user.type(within(dialog).getByLabelText(/SHA-256 Checksum/i), 'c'.repeat(64))
-      await user.type(within(dialog).getByLabelText(/Notes \(optional\)/i), 'Universal binary')
+      await user.type(within(dialog).getByLabelText(/Notes \(optional\)/i), 'ARM64 binary')
+      // Fill required filename
+      await user.type(within(dialog).getByLabelText(/Binary Filename/i), 'shuttersense-agent-darwin-arm64')
 
       // Submit form
       await user.click(within(dialog).getByRole('button', { name: /Create Manifest/i }))
@@ -289,10 +293,15 @@ describe('ReleaseManifestsTab', () => {
       await waitFor(() => {
         expect(releaseManifestsApi.createManifest).toHaveBeenCalledWith({
           version: '2.0.0',
-          platforms: ['darwin-arm64', 'darwin-amd64'],
+          platforms: ['darwin-arm64'],
           checksum: 'c'.repeat(64),
           is_active: true,
-          notes: 'Universal binary',
+          notes: 'ARM64 binary',
+          artifacts: [{
+            platform: 'darwin-arm64',
+            filename: 'shuttersense-agent-darwin-arm64',
+            checksum: 'sha256:' + 'c'.repeat(64),
+          }],
         })
       })
     })

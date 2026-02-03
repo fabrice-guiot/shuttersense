@@ -1,6 +1,9 @@
 #!/bin/bash
 # Build ShutterSense Agent for all available platforms
 # This script builds for the current platform and outputs checksums for Release Manifests
+#
+# Output structure: dist/{version}/shuttersense-agent-{platform}
+# Example: dist/v1.0.0/shuttersense-agent-darwin-arm64
 
 set -e
 
@@ -37,17 +40,34 @@ detect_platform() {
     esac
 }
 
-# Get version from git
+# Get version from environment or Git (same logic as individual build scripts)
 get_version() {
-    cd "$AGENT_DIR/.."
-    if git describe --tags --exact-match 2>/dev/null; then
+    if [ -n "$SHUSAI_VERSION" ]; then
+        echo "$SHUSAI_VERSION"
         return
     fi
-    # Development version with commit hash
-    local tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-    local commits=$(git rev-list --count "${tag}..HEAD" 2>/dev/null || echo "0")
-    local hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    echo "${tag}+${commits}.${hash}"
+
+    cd "$AGENT_DIR/.."
+    local version=$(git describe --tags --long --always 2>/dev/null || echo "")
+    if [ -n "$version" ]; then
+        # Parse: v1.2.3-0-ga1b2c3d (on tag) or v1.2.3-5-ga1b2c3d (5 commits after)
+        if [[ "$version" =~ ^(.+)-([0-9]+)-g([a-f0-9]+)$ ]]; then
+            local tag="${BASH_REMATCH[1]}"
+            local commits="${BASH_REMATCH[2]}"
+            local hash="${BASH_REMATCH[3]}"
+            if [ "$commits" = "0" ]; then
+                echo "$tag"
+            else
+                echo "${tag}-dev.${commits}+${hash}"
+            fi
+        else
+            # Just a commit hash (no tags)
+            local hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            echo "v0.0.0-dev+$hash"
+        fi
+    else
+        echo "v0.0.0-dev+unknown"
+    fi
 }
 
 # Build for current platform
@@ -82,7 +102,7 @@ build_current_platform() {
 print_summary() {
     local version=$(get_version)
     local platform=$(detect_platform)
-    local os_part=${platform%%-*}
+    local version_dir="$BUILD_DIR/$version"
 
     echo ""
     echo "=========================================="
@@ -97,20 +117,29 @@ print_summary() {
     echo "Use these values when creating a Release Manifest:"
     echo ""
 
-    # Find all checksums
-    for checksum_file in "$BUILD_DIR"/*/*.sha256; do
-        if [ -f "$checksum_file" ]; then
-            local binary_dir=$(dirname "$checksum_file")
-            local dir_name=$(basename "$binary_dir")
-            local checksum=$(cat "$checksum_file")
-            local binary_name=$(basename "$checksum_file" .sha256)
+    # Find all checksums in the version directory
+    if [ -d "$version_dir" ]; then
+        for checksum_file in "$version_dir"/*.sha256; do
+            if [ -f "$checksum_file" ]; then
+                local checksum=$(cat "$checksum_file")
+                local binary_name=$(basename "$checksum_file" .sha256)
+                local binary_path="$version_dir/$binary_name"
 
-            echo "Platform: $dir_name"
-            echo "Binary: $binary_dir/$binary_name"
-            echo "SHA-256: $checksum"
-            echo ""
-        fi
-    done
+                # Extract platform from filename (shuttersense-agent-{platform})
+                local artifact_platform=$(echo "$binary_name" | sed 's/shuttersense-agent-//')
+
+                echo "Artifact:"
+                echo "  Platform: $artifact_platform"
+                echo "  Filename: $binary_name"
+                echo "  Path: $binary_path"
+                echo "  SHA-256: $checksum"
+                echo ""
+            fi
+        done
+    else
+        echo "Warning: No build artifacts found in $version_dir"
+        echo ""
+    fi
 
     echo "=========================================="
     echo "Next Steps"
@@ -121,7 +150,11 @@ print_summary() {
     echo ""
     echo "2. Enter the version and checksum(s) above"
     echo ""
-    echo "3. Distribute the binary to users"
+    echo "3. Copy binaries to SHUSAI_AGENT_DIST_DIR:"
+    echo "   cp -r $version_dir /path/to/agent-dist/"
+    echo ""
+    echo "4. The agent wizard will serve binaries from:"
+    echo "   {SHUSAI_AGENT_DIST_DIR}/$version/{filename}"
     echo ""
 }
 

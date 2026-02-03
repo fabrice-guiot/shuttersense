@@ -71,22 +71,33 @@ def _get_version_from_git() -> Optional[str]:
 
 def _get_version() -> str:
     """
-    Get version from _version.py (built package), Git, or fallback.
+    Get version with priority: SHUSAI_VERSION env var > _version.py > Git tags > fallback.
+
+    Priority:
+    1. SHUSAI_VERSION env var - explicit runtime override
+    2. src._version - written by build scripts with correct version
+    3. Git tags - development mode (running from source)
+    4. Fallback - unknown version
     """
-    # First, try to get version from hatch-vcs generated file (installed package)
+    # First, check explicit version override (runtime)
+    env_version = os.environ.get('SHUSAI_VERSION')
+    if env_version:
+        return env_version
+
+    # Try _version.py (written by build scripts or hatch-vcs)
     try:
-        from src._version import __version__ as vcs_version
-        return vcs_version
+        from src._version import __version__ as built_version
+        return built_version
     except ImportError:
         pass
 
-    # Development mode: try Git
+    # Try Git tags (development mode - running from source)
     git_version = _get_version_from_git()
     if git_version:
         return git_version
 
-    # Fallback: environment variable or default
-    return os.environ.get('SHUSAI_VERSION', 'v0.0.0-dev+unknown')
+    # Fallback
+    return 'v0.0.0-dev+unknown'
 
 
 __version__ = _get_version()
