@@ -133,11 +133,30 @@ class TestVersionCaching:
             assert ver1 == ver2 == "v1.0.0"
 
 
-class TestEnvironmentVariableFallback:
-    """Tests for environment variable fallback"""
+class TestEnvironmentVariableOverride:
+    """Tests for environment variable override behavior"""
 
-    def test_version_from_environment_variable(self, monkeypatch):
-        """Test using SHUSAI_VERSION environment variable as fallback"""
+    def test_env_var_overrides_git(self, monkeypatch):
+        """Test that SHUSAI_VERSION takes precedence over Git tags"""
+        # Reset cache
+        monkeypatch.setattr(version, '_VERSION_CACHE', None)
+        monkeypatch.setenv('SHUSAI_VERSION', 'v2.0.0-prerelease')
+
+        def mock_run(args, **kwargs):
+            # Git is available and would return a different version
+            result = MagicMock()
+            if 'describe' in args:
+                result.stdout = "v1.5.0-0-ga1b2c3d\n"
+            result.returncode = 0
+            return result
+
+        with patch('subprocess.run', side_effect=mock_run):
+            ver = version.get_version()
+            # Should use env var, NOT Git
+            assert ver == "v2.0.0-prerelease"
+
+    def test_env_var_fallback_when_git_unavailable(self, monkeypatch):
+        """Test using SHUSAI_VERSION when Git is not available"""
         # Reset cache
         monkeypatch.setattr(version, '_VERSION_CACHE', None)
         monkeypatch.setenv('SHUSAI_VERSION', 'v2.0.0-ci')
@@ -149,8 +168,26 @@ class TestEnvironmentVariableFallback:
             ver = version.get_version()
             assert ver == "v2.0.0-ci"
 
-    def test_version_fallback_without_env_var(self, monkeypatch):
-        """Test fallback to default when no environment variable set"""
+    def test_git_used_when_env_var_not_set(self, monkeypatch):
+        """Test that Git is used when SHUSAI_VERSION is not set"""
+        # Reset cache
+        monkeypatch.setattr(version, '_VERSION_CACHE', None)
+        monkeypatch.delenv('SHUSAI_VERSION', raising=False)
+
+        def mock_run(args, **kwargs):
+            result = MagicMock()
+            if 'describe' in args:
+                result.stdout = "v1.5.0-0-ga1b2c3d\n"
+            result.returncode = 0
+            return result
+
+        with patch('subprocess.run', side_effect=mock_run):
+            ver = version.get_version()
+            # Should use Git version
+            assert ver == "v1.5.0"
+
+    def test_fallback_without_env_var_and_git(self, monkeypatch):
+        """Test fallback to default when no environment variable and no Git"""
         # Reset cache
         monkeypatch.setattr(version, '_VERSION_CACHE', None)
         monkeypatch.delenv('SHUSAI_VERSION', raising=False)

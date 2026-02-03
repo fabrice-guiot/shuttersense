@@ -109,12 +109,17 @@ Photo-admin uses a centralized version management system that automatically sync
 
 ### Version Module (`version.py`)
 
-The `version.py` module provides a single source of truth for version information:
+The `version.py` module provides a single source of truth for version information.
 
+**Version Priority (highest to lowest):**
+1. `SHUSAI_VERSION` environment variable (explicit override for builds)
+2. Git tags (automatic detection)
+3. Default fallback: `v0.0.0-dev+unknown`
+
+**Version Formats:**
 - **Tagged releases**: Returns clean tag (e.g., `v1.2.3`)
 - **Development builds**: Returns tag with suffix (e.g., `v1.2.3-dev.5+a1b2c3d`)
 - **No tags**: Returns development version (e.g., `v0.0.0-dev+a1b2c3d`)
-- **No Git**: Falls back to `SHUSAI_VERSION` environment variable or `v0.0.0-dev+unknown`
 
 ### Version Display Locations
 
@@ -163,11 +168,22 @@ Example: `v1.2.3-dev.5+a1b2c3d` means:
 - 5 commits ahead of tag
 - Current commit: `a1b2c3d`
 
-### CI/CD Integration
+### Build-time Version Override
 
-For CI/CD environments without Git:
-- Set `SHUSAI_VERSION` environment variable
-- Example: `export SHUSAI_VERSION=v1.5.0-build.42`
+To set the version at build time (e.g., for pre-release agent builds before tagging):
+
+```bash
+# Build agent with specific version before creating Git tag
+export SHUSAI_VERSION=v1.3.0
+./agent/packaging/build_linux.sh
+
+# The binary will report v1.3.0 regardless of Git state
+```
+
+This is useful for:
+- Building pre-release binaries before tagging
+- CI/CD environments without Git access
+- Testing version-specific behavior
 
 ### Creating Releases
 
