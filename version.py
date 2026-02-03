@@ -5,6 +5,11 @@ This module provides a single source of truth for version information across
 all CLI tools, backend API, and frontend. It automatically determines the version
 from Git tags with intelligent fallback behavior for development builds.
 
+Version Priority (highest to lowest):
+1. SHUSAI_VERSION environment variable (explicit override for builds)
+2. Git tags (automatic detection from repository)
+3. Default fallback: "v0.0.0-dev+unknown"
+
 Version Format:
 - Tagged releases: "v1.2.3"
 - Development builds: "v1.2.3-dev.5+a1b2c3d" (latest tag + commits since + hash)
@@ -14,10 +19,16 @@ Usage:
     from version import __version__
 
     print(f"ShutterSense version {__version__}")
+
+Build-time Override:
+    # Set version before building agent binary
+    export SHUSAI_VERSION=v1.3.0
+    ./agent/packaging/build_linux.sh
 """
 
-import subprocess
+import os
 import re
+import subprocess
 from typing import Optional, Tuple
 
 
@@ -94,34 +105,19 @@ def _get_version_from_git() -> Optional[str]:
     return None
 
 
-def _get_fallback_version() -> str:
-    """
-    Get fallback version when Git is not available.
-
-    Returns:
-        Default development version string
-    """
-    # Try to get version from environment variable (useful for CI/CD)
-    import os
-    env_version = os.environ.get('SHUSAI_VERSION')
-    if env_version:
-        return env_version
-
-    # Final fallback
-    return "v0.0.0-dev+unknown"
-
-
 def get_version() -> str:
     """
     Get the current version of ShutterSense.
 
     This function caches the result to avoid repeated subprocess calls.
-    The version is determined from Git tags with the following logic:
+    The version is determined with the following priority:
 
-    - On a tagged commit: Returns the tag (e.g., "v1.2.3")
-    - Ahead of a tag: Returns tag with dev suffix (e.g., "v1.2.3-dev.5+a1b2c3d")
-    - No tags: Returns development version (e.g., "v0.0.0-dev+a1b2c3d")
-    - No Git: Returns fallback version from environment or "v0.0.0-dev+unknown"
+    1. SHUSAI_VERSION environment variable (explicit override)
+    2. Git tags:
+       - On a tagged commit: Returns the tag (e.g., "v1.2.3")
+       - Ahead of a tag: Returns tag with dev suffix (e.g., "v1.2.3-dev.5+a1b2c3d")
+       - No tags: Returns development version (e.g., "v0.0.0-dev+a1b2c3d")
+    3. Default fallback: "v0.0.0-dev+unknown"
 
     Returns:
         Version string
@@ -131,12 +127,18 @@ def get_version() -> str:
     if _VERSION_CACHE is not None:
         return _VERSION_CACHE
 
+    # Check for explicit version override first (useful for pre-release builds)
+    env_version = os.environ.get('SHUSAI_VERSION')
+    if env_version:
+        _VERSION_CACHE = env_version
+        return env_version
+
     # Try to get version from Git
     version = _get_version_from_git()
 
     if version is None:
-        # Git not available or other error - use fallback
-        version = _get_fallback_version()
+        # Git not available or other error - use default fallback
+        version = "v0.0.0-dev+unknown"
 
     _VERSION_CACHE = version
     return version
