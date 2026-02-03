@@ -43,11 +43,19 @@ Internet
     │
     ▼
 ┌─────────────────────────────────────────────────┐
+│  Hostinger Cloud Firewall (hPanel)              │
+│  - Filters traffic BEFORE reaching VPS          │
+│  - Allow: 22 (SSH), 80 (HTTP), 443 (HTTPS)      │
+│  - Optional: Restrict SSH to specific IPs       │
+└─────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────┐
 │  Hostinger KVM2 (app.shuttersense.ai)           │
 │  ┌─────────────────────────────────────────┐    │
-│  │  UFW Firewall                           │    │
-│  │  Allow: 22 (SSH), 80 (HTTP→redirect),   │    │
-│  │         443 (HTTPS)                     │    │
+│  │  UFW Firewall + Fail2ban                │    │
+│  │  - OS-level filtering (defense-in-depth)│    │
+│  │  - Dynamic IP blocking on abuse         │    │
 │  └─────────────────────────────────────────┘    │
 │                     │                           │
 │                     ▼                           │
@@ -63,6 +71,7 @@ Internet
 │  │  Gunicorn + Uvicorn (4 workers)         │    │
 │  │  - FastAPI application                  │    │
 │  │  - Serves API + SPA                     │    │
+│  │  - Rate limiting (slowapi)              │    │
 │  └─────────────────────────────────────────┘    │
 │                     │                           │
 │                     ▼ localhost:5432            │
@@ -250,7 +259,82 @@ systemctl restart sshd
 
 **WARNING:** Test SSH access in a NEW terminal before closing your current session!
 
-### 5.2 UFW Firewall
+### 5.2 Hostinger Managed Firewall (hPanel)
+
+Hostinger provides a cloud-level firewall that filters traffic **before** it reaches your VPS. This reduces server resource usage and provides defense-in-depth alongside UFW.
+
+#### Why Use Both Firewalls?
+
+| Layer | Firewall | Purpose |
+|-------|----------|---------|
+| **Cloud** | Hostinger Managed | Blocks traffic at infrastructure level, before it hits your VPS |
+| **OS** | UFW | Blocks traffic at the kernel level, defense-in-depth |
+| **Application** | Fail2ban | Dynamic blocking based on application behavior |
+
+#### 5.2.1 Create Firewall Configuration
+
+1. Log into [Hostinger hPanel](https://hpanel.hostinger.com)
+2. Select your KVM2 VPS
+3. Navigate to **Security → Firewall**
+4. Click **Create firewall configuration**
+5. Name it: `shuttersense-production`
+
+#### 5.2.2 Configure Inbound Rules
+
+Add the following rules in order (Hostinger applies a default "drop all" rule at the end):
+
+| Rule | Protocol | Port | Source | Action | Description |
+|------|----------|------|--------|--------|-------------|
+| 1 | TCP | 22 | Your IP / Office IP | Accept | SSH (restricted) |
+| 2 | TCP | 22 | Backup IP (optional) | Accept | SSH failsafe |
+| 3 | TCP | 80 | Anywhere (0.0.0.0/0) | Accept | HTTP (Let's Encrypt + redirect) |
+| 4 | TCP | 443 | Anywhere (0.0.0.0/0) | Accept | HTTPS |
+| 5 | ICMP | - | Anywhere | Accept | Ping (optional, for monitoring) |
+
+**Important Notes:**
+- Rule 1 restricts SSH to specific IPs for maximum security
+- If you don't have a static IP, use `0.0.0.0/0` for SSH but rely on fail2ban
+- The default "drop" rule blocks everything not explicitly allowed
+
+#### 5.2.3 Recommended: Restrict SSH to Known IPs
+
+For production servers, restrict SSH access to specific IPs:
+
+```
+Your home/office IP:     203.0.113.50/32
+VPN exit IP:             198.51.100.0/24
+Cloud IDE IP (if used):  192.0.2.100/32
+```
+
+To find your current IP:
+```bash
+curl -4 ifconfig.me
+```
+
+#### 5.2.4 Apply Configuration
+
+1. After adding rules, click **Activate** or **Apply to server**
+2. The firewall applies immediately to new connections
+3. Existing SSH sessions are preserved during changes
+
+#### 5.2.5 Verify Firewall is Active
+
+In hPanel, the firewall status should show:
+- Configuration: `shuttersense-production`
+- Status: **Active**
+- Rules: 4-5 inbound rules
+
+#### 5.2.6 Emergency Access
+
+If you lock yourself out via the Hostinger firewall:
+1. Log into hPanel
+2. Navigate to **Security → Firewall**
+3. Either disable the firewall temporarily or add your new IP
+4. Use hPanel's **Console** for emergency SSH access (browser-based)
+
+### 5.3 UFW Firewall (OS-Level)
+
+UFW provides OS-level filtering as a second layer of defense. Even if the Hostinger firewall is misconfigured, UFW protects your server.
 
 ```bash
 # Install UFW
@@ -287,17 +371,17 @@ To                         Action      From
 443/tcp                    ALLOW IN    Anywhere       # HTTPS
 ```
 
-### 5.3 Fail2ban
+### 5.4 Fail2ban
 
 Fail2ban protects against brute-force attacks on both SSH and web application authentication.
 
-#### 5.3.1 Install Fail2ban
+#### 5.4.1 Install Fail2ban
 
 ```bash
 apt install -y fail2ban
 ```
 
-#### 5.3.2 Create ShutterSense Auth Filter
+#### 5.4.2 Create ShutterSense Auth Filter
 
 The backend logs authentication failures in JSON format. Create a filter to detect OAuth login failures and API token brute-force attempts.
 
@@ -323,7 +407,7 @@ ignoreregex = ^.*"event":\s*"auth\.login\.success".*$
 EOF
 ```
 
-#### 5.3.3 Create API Token Validation Filter
+#### 5.4.3 Create API Token Validation Filter
 
 Create `/etc/fail2ban/filter.d/shuttersense-token.conf`:
 
@@ -343,7 +427,7 @@ ignoreregex =
 EOF
 ```
 
-#### 5.3.4 Create Nginx Rate Limit Filter
+#### 5.4.4 Create Nginx Rate Limit Filter
 
 Create `/etc/fail2ban/filter.d/nginx-limit-req.conf`:
 
@@ -365,7 +449,7 @@ ignoreregex = ^<HOST> .* "(GET|POST) /health.*" 200 .*$
 EOF
 ```
 
-#### 5.3.5 Configure Jail Rules
+#### 5.4.5 Configure Jail Rules
 
 Create `/etc/fail2ban/jail.local`:
 
@@ -453,7 +537,7 @@ maxretry = 3
 EOF
 ```
 
-#### 5.3.6 Configure Nginx to Log Client IPs
+#### 5.4.6 Configure Nginx to Log Client IPs
 
 For fail2ban to work correctly, nginx must log the real client IP. Update the nginx log format if using a CDN or proxy.
 
@@ -471,7 +555,7 @@ http {
 }
 ```
 
-#### 5.3.7 Start and Enable Fail2ban
+#### 5.4.7 Start and Enable Fail2ban
 
 ```bash
 # Start and enable
@@ -494,7 +578,7 @@ Status
 `- Jail list:   nginx-botsearch, nginx-http-auth, nginx-limit-req, recidive, shuttersense-auth, shuttersense-token, sshd
 ```
 
-#### 5.3.8 Fail2ban Management Commands
+#### 5.4.8 Fail2ban Management Commands
 
 ```bash
 # View banned IPs for a jail
@@ -513,7 +597,7 @@ fail2ban-client get shuttersense-auth banned 1.2.3.4
 tail -f /var/log/fail2ban.log
 ```
 
-#### 5.3.9 Protection Summary
+#### 5.4.9 Protection Summary
 
 | Jail | Protects Against | Max Retries | Ban Duration |
 |------|------------------|-------------|--------------|
@@ -525,7 +609,7 @@ tail -f /var/log/fail2ban.log
 | `shuttersense-token` | API token brute-force | 10 in 5m | 2 hours |
 | `recidive` | Repeat offenders | 3 bans/day | 1 week |
 
-### 5.4 Automatic Security Updates
+### 5.5 Automatic Security Updates
 
 ```bash
 apt install -y unattended-upgrades
@@ -538,7 +622,7 @@ dpkg-reconfigure -plow unattended-upgrades
 cat /etc/apt/apt.conf.d/20auto-upgrades
 ```
 
-### 5.5 Disable Unnecessary Services
+### 5.6 Disable Unnecessary Services
 
 ```bash
 # Check running services
@@ -1492,6 +1576,8 @@ tail -f /var/log/nginx/shuttersense_error.log
 
 ## Security Checklist
 
+- [ ] Hostinger managed firewall configured (hPanel)
+- [ ] SSH restricted to known IPs in Hostinger firewall (recommended)
 - [ ] SSH key-only authentication enabled
 - [ ] Root login disabled
 - [ ] UFW firewall active (only 22, 80, 443 open)
