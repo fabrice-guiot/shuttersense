@@ -289,33 +289,241 @@ To                         Action      From
 
 ### 5.3 Fail2ban
 
-```bash
-# Install
-apt install -y fail2ban
+Fail2ban protects against brute-force attacks on both SSH and web application authentication.
 
-# Create local configuration
+#### 5.3.1 Install Fail2ban
+
+```bash
+apt install -y fail2ban
+```
+
+#### 5.3.2 Create ShutterSense Auth Filter
+
+The backend logs authentication failures in JSON format. Create a filter to detect OAuth login failures and API token brute-force attempts.
+
+Create `/etc/fail2ban/filter.d/shuttersense-auth.conf`:
+
+```bash
+cat > /etc/fail2ban/filter.d/shuttersense-auth.conf << 'EOF'
+# Fail2ban filter for ShutterSense authentication failures
+# Matches JSON-formatted log entries from the auth logger
+
+[Definition]
+
+# JSON log format: {"timestamp": "...", "message": "...", "extra": {"event": "auth.login.failed", ...}}
+# These patterns match authentication failures logged by the backend
+
+# OAuth login failures (user not found, inactive, deactivated, etc.)
+failregex = ^.*"event":\s*"auth\.login\.failed".*"reason":\s*"(?:user_not_found|user_inactive|user_deactivated|team_inactive|system_user_login_blocked)".*$
+            ^.*Login attempt for (?:unknown email|inactive user|deactivated user).*$
+            ^.*OAuth login attempt by system user blocked.*$
+
+# Ignore successful logins and internal errors
+ignoreregex = ^.*"event":\s*"auth\.login\.success".*$
+EOF
+```
+
+#### 5.3.3 Create API Token Validation Filter
+
+Create `/etc/fail2ban/filter.d/shuttersense-token.conf`:
+
+```bash
+cat > /etc/fail2ban/filter.d/shuttersense-token.conf << 'EOF'
+# Fail2ban filter for ShutterSense API token brute-force attempts
+# The backend already rate-limits internally (SEC-13), but fail2ban adds IP blocking
+
+[Definition]
+
+# SEC-13 warnings about failed token validations
+failregex = ^.*SEC-13: IP <HOST> has \d+ failed token validations.*$
+            ^.*SEC-13: Blocking IP <HOST> for.*failed token validations.*$
+            ^.*Token validation failed:.*$
+
+ignoreregex =
+EOF
+```
+
+#### 5.3.4 Create Nginx Rate Limit Filter
+
+Create `/etc/fail2ban/filter.d/nginx-limit-req.conf`:
+
+```bash
+cat > /etc/fail2ban/filter.d/nginx-limit-req.conf << 'EOF'
+# Fail2ban filter for nginx rate limiting and bad requests
+# Catches clients hitting rate limits or sending malformed requests
+
+[Definition]
+
+# Rate limit exceeded (429 responses)
+failregex = ^<HOST> .* "(GET|POST|PUT|DELETE|PATCH) [^"]*" 429 .*$
+            ^<HOST> .* "(GET|POST|PUT|DELETE|PATCH) [^"]*" 401 .*$
+            limiting requests, excess:.* by zone.*client: <HOST>
+
+# Ignore normal traffic
+ignoreregex = ^<HOST> .* "(GET|POST) /health.*" 200 .*$
+              ^<HOST> .* "(GET|POST) /api/version.*" 200 .*$
+EOF
+```
+
+#### 5.3.5 Configure Jail Rules
+
+Create `/etc/fail2ban/jail.local`:
+
+```bash
 cat > /etc/fail2ban/jail.local << 'EOF'
 [DEFAULT]
+# Default ban settings
 bantime = 1h
 findtime = 10m
 maxretry = 5
-backend = systemd
+backend = auto
+banaction = ufw
 
+# =============================================================================
+# SSH Protection
+# =============================================================================
 [sshd]
 enabled = true
 port = ssh
 filter = sshd
 maxretry = 3
 bantime = 24h
-EOF
+findtime = 10m
 
+# =============================================================================
+# Nginx Protection
+# =============================================================================
+[nginx-http-auth]
+enabled = true
+port = http,https
+filter = nginx-http-auth
+logpath = /var/log/nginx/shuttersense_error.log
+maxretry = 5
+bantime = 1h
+
+[nginx-limit-req]
+enabled = true
+port = http,https
+filter = nginx-limit-req
+logpath = /var/log/nginx/shuttersense_access.log
+maxretry = 10
+findtime = 1m
+bantime = 30m
+
+[nginx-botsearch]
+enabled = true
+port = http,https
+filter = nginx-botsearch
+logpath = /var/log/nginx/shuttersense_access.log
+maxretry = 2
+bantime = 1d
+
+# =============================================================================
+# ShutterSense Application Protection
+# =============================================================================
+[shuttersense-auth]
+enabled = true
+port = http,https
+filter = shuttersense-auth
+logpath = /var/log/shuttersense/auth.log
+maxretry = 5
+findtime = 5m
+bantime = 1h
+
+[shuttersense-token]
+enabled = true
+port = http,https
+filter = shuttersense-token
+logpath = /var/log/shuttersense/api.log
+          /var/log/shuttersense/services.log
+maxretry = 10
+findtime = 5m
+bantime = 2h
+
+# =============================================================================
+# Recidive (repeat offenders)
+# =============================================================================
+[recidive]
+enabled = true
+filter = recidive
+logpath = /var/log/fail2ban.log
+bantime = 1w
+findtime = 1d
+maxretry = 3
+EOF
+```
+
+#### 5.3.6 Configure Nginx to Log Client IPs
+
+For fail2ban to work correctly, nginx must log the real client IP. Update the nginx log format if using a CDN or proxy.
+
+Edit `/etc/nginx/nginx.conf` and ensure this log format exists:
+
+```nginx
+http {
+    # Log format with real client IP
+    log_format main '$remote_addr - $remote_user [$time_local] '
+                    '"$request" $status $body_bytes_sent '
+                    '"$http_referer" "$http_user_agent"';
+
+    # Use main format for access logs
+    access_log /var/log/nginx/access.log main;
+}
+```
+
+#### 5.3.7 Start and Enable Fail2ban
+
+```bash
 # Start and enable
 systemctl enable fail2ban
 systemctl start fail2ban
 
-# Verify
+# Verify all jails are running
+fail2ban-client status
+
+# Check specific jail status
 fail2ban-client status sshd
+fail2ban-client status shuttersense-auth
+fail2ban-client status nginx-limit-req
 ```
+
+Expected output:
+```
+Status
+|- Number of jail:      6
+`- Jail list:   nginx-botsearch, nginx-http-auth, nginx-limit-req, recidive, shuttersense-auth, shuttersense-token, sshd
+```
+
+#### 5.3.8 Fail2ban Management Commands
+
+```bash
+# View banned IPs for a jail
+fail2ban-client status shuttersense-auth
+
+# Manually ban an IP
+fail2ban-client set shuttersense-auth banip 1.2.3.4
+
+# Manually unban an IP
+fail2ban-client set shuttersense-auth unbanip 1.2.3.4
+
+# Check if an IP is banned
+fail2ban-client get shuttersense-auth banned 1.2.3.4
+
+# View fail2ban log
+tail -f /var/log/fail2ban.log
+```
+
+#### 5.3.9 Protection Summary
+
+| Jail | Protects Against | Max Retries | Ban Duration |
+|------|------------------|-------------|--------------|
+| `sshd` | SSH brute-force | 3 in 10m | 24 hours |
+| `nginx-http-auth` | Basic auth attacks | 5 in 10m | 1 hour |
+| `nginx-limit-req` | Rate limit abuse | 10 in 1m | 30 minutes |
+| `nginx-botsearch` | Vulnerability scanners | 2 in 10m | 1 day |
+| `shuttersense-auth` | OAuth login abuse | 5 in 5m | 1 hour |
+| `shuttersense-token` | API token brute-force | 10 in 5m | 2 hours |
+| `recidive` | Repeat offenders | 3 bans/day | 1 week |
 
 ### 5.4 Automatic Security Updates
 
@@ -1267,8 +1475,16 @@ certbot renew --dry-run
 # Firewall
 ufw status verbose
 
+# Fail2ban
+fail2ban-client status                          # List all jails
+fail2ban-client status shuttersense-auth        # Check auth jail
+fail2ban-client status shuttersense-token       # Check token jail
+fail2ban-client set shuttersense-auth unbanip <IP>  # Unban IP
+tail -f /var/log/fail2ban.log                   # Watch bans
+
 # Logs
 tail -f /var/log/shuttersense/error.log
+tail -f /var/log/shuttersense/auth.log
 tail -f /var/log/nginx/shuttersense_error.log
 ```
 
@@ -1279,7 +1495,11 @@ tail -f /var/log/nginx/shuttersense_error.log
 - [ ] SSH key-only authentication enabled
 - [ ] Root login disabled
 - [ ] UFW firewall active (only 22, 80, 443 open)
-- [ ] Fail2ban protecting SSH
+- [ ] Fail2ban protecting SSH (sshd jail)
+- [ ] Fail2ban protecting web auth (shuttersense-auth jail)
+- [ ] Fail2ban protecting API tokens (shuttersense-token jail)
+- [ ] Fail2ban protecting nginx (nginx-limit-req, nginx-botsearch jails)
+- [ ] Recidive jail enabled for repeat offenders
 - [ ] PostgreSQL listening only on localhost
 - [ ] Gunicorn listening only on localhost
 - [ ] HTTPS-only access enforced
