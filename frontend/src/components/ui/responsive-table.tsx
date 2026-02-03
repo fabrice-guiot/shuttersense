@@ -76,7 +76,10 @@ export function ResponsiveTable<T>({
                     onRowClick
                       ? (e: React.MouseEvent) => {
                           const target = e.target as HTMLElement
-                          if (target.closest('button, a, input, select, textarea, [role="button"]')) return
+                          const row = e.currentTarget as HTMLElement
+                          // Skip if clicked on an interactive element inside the row (but not the row itself)
+                          const interactiveParent = target.closest('button, a, input, select, textarea, [role="button"]')
+                          if (interactiveParent && interactiveParent !== row) return
                           onRowClick(item)
                         }
                       : undefined
@@ -119,7 +122,10 @@ export function ResponsiveTable<T>({
               onRowClick
                 ? (e: React.MouseEvent) => {
                     const target = e.target as HTMLElement
-                    if (target.closest('button, a, input, select, textarea, [role="button"]')) return
+                    const card = e.currentTarget as HTMLElement
+                    // Skip if clicked on an interactive element inside the card (but not the card itself)
+                    const interactiveParent = target.closest('button, a, input, select, textarea, [role="button"]')
+                    if (interactiveParent && interactiveParent !== card) return
                     onRowClick(item)
                   }
                 : undefined

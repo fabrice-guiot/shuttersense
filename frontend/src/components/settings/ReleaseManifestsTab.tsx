@@ -25,6 +25,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -55,7 +62,6 @@ import { AuditTrailPopover } from '@/components/audit'
 import type {
   ReleaseManifest,
   ReleaseManifestCreateRequest,
-  ManifestArtifactCreateRequest,
   ValidPlatform,
 } from '@/contracts/api/release-manifests-api'
 import {
@@ -74,14 +80,11 @@ function truncateChecksum(checksum: string): string {
 export function ReleaseManifestsTab() {
   const {
     manifests,
-    totalCount,
-    activeCount,
     loading,
     error,
     createManifest,
     updateManifest,
     deleteManifest,
-    refresh,
   } = useReleaseManifests()
 
   // KPI Stats for header
@@ -109,11 +112,11 @@ export function ReleaseManifestsTab() {
 
   // Create form state
   const [newVersion, setNewVersion] = useState('')
-  const [newPlatforms, setNewPlatforms] = useState<ValidPlatform[]>([])
+  const [newPlatform, setNewPlatform] = useState<ValidPlatform | ''>('')
   const [newChecksum, setNewChecksum] = useState('')
   const [newNotes, setNewNotes] = useState('')
   const [newIsActive, setNewIsActive] = useState(true)
-  const [newArtifacts, setNewArtifacts] = useState<ManifestArtifactCreateRequest[]>([])
+  const [newFilename, setNewFilename] = useState('')
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false)
@@ -130,11 +133,11 @@ export function ReleaseManifestsTab() {
   // Create dialog handlers
   const handleOpenCreateDialog = () => {
     setNewVersion('')
-    setNewPlatforms([])
+    setNewPlatform('')
     setNewChecksum('')
     setNewNotes('')
     setNewIsActive(true)
-    setNewArtifacts([])
+    setNewFilename('')
     setFormError(null)
     setCreateDialogOpen(true)
   }
@@ -143,21 +146,13 @@ export function ReleaseManifestsTab() {
     setCreateDialogOpen(false)
   }
 
-  const handlePlatformToggle = (platform: ValidPlatform) => {
-    setNewPlatforms(prev =>
-      prev.includes(platform)
-        ? prev.filter(p => p !== platform)
-        : [...prev, platform]
-    )
-  }
-
   const handleCreateManifest = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
 
     // Validate
-    if (newPlatforms.length === 0) {
-      setFormError('Please select at least one platform')
+    if (!newPlatform) {
+      setFormError('Please select a platform')
       return
     }
     if (newChecksum.length !== 64) {
@@ -168,34 +163,27 @@ export function ReleaseManifestsTab() {
       setFormError('Checksum must contain only hexadecimal characters')
       return
     }
+    if (!newFilename.trim()) {
+      setFormError('Please enter the binary filename')
+      return
+    }
 
     setIsSubmitting(true)
 
     try {
       const data: ReleaseManifestCreateRequest = {
         version: newVersion.trim(),
-        platforms: newPlatforms,
+        platforms: [newPlatform],
         checksum: newChecksum.toLowerCase(),
         is_active: newIsActive,
+        artifacts: [{
+          platform: newPlatform,
+          filename: newFilename.trim(),
+          checksum: `sha256:${newChecksum.toLowerCase()}`,
+        }],
       }
       if (newNotes.trim()) {
         data.notes = newNotes.trim()
-      }
-      // Derive artifacts from selected platforms only (not stale newArtifacts)
-      const derivedArtifacts = newPlatforms
-        .map(platform => {
-          const existing = newArtifacts.find(a => a.platform === platform)
-          const filename = existing?.filename?.trim()
-          if (!filename) return null
-          return {
-            platform,
-            filename,
-            checksum: `sha256:${newChecksum.toLowerCase()}`,
-          }
-        })
-        .filter((a): a is NonNullable<typeof a> => a !== null)
-      if (derivedArtifacts.length > 0) {
-        data.artifacts = derivedArtifacts
       }
 
       await createManifest(data)
@@ -487,30 +475,22 @@ export function ReleaseManifestsTab() {
               </div>
 
               <div className="grid gap-2">
-                <Label>Platforms</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {VALID_PLATFORMS.map(platform => (
-                    <div
-                      key={platform}
-                      className="flex items-center space-x-2"
-                    >
-                      <Checkbox
-                        id={platform}
-                        checked={newPlatforms.includes(platform)}
-                        onCheckedChange={() => handlePlatformToggle(platform)}
-                      />
-                      <Label
-                        htmlFor={platform}
-                        className="text-sm font-normal cursor-pointer"
-                      >
+                <Label htmlFor="platform">Platform</Label>
+                <Select
+                  value={newPlatform}
+                  onValueChange={(value) => setNewPlatform(value as ValidPlatform)}
+                >
+                  <SelectTrigger id="platform">
+                    <SelectValue placeholder="Select platform" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VALID_PLATFORMS.map(platform => (
+                      <SelectItem key={platform} value={platform}>
                         {PLATFORM_LABELS[platform]}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  For universal binaries, select multiple platforms.
-                </p>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid gap-2">
@@ -551,46 +531,21 @@ export function ReleaseManifestsTab() {
                 </Label>
               </div>
 
-              {/* Optional per-platform artifacts */}
-              {newPlatforms.length > 0 && (
+              {/* Binary filename */}
+              {newPlatform && (
                 <div className="grid gap-2">
-                  <Label>Binary Artifacts (optional)</Label>
+                  <Label htmlFor="filename">Binary Filename</Label>
+                  <Input
+                    id="filename"
+                    placeholder={`e.g., shuttersense-agent-${newPlatform}`}
+                    value={newFilename}
+                    onChange={e => setNewFilename(e.target.value)}
+                    className="font-mono text-sm"
+                    required
+                  />
                   <p className="text-xs text-muted-foreground">
-                    Specify per-platform binary filenames for agent download support.
+                    The filename in <code>{`{SHUSAI_AGENT_DIST_DIR}/${newVersion || 'version'}/`}</code>
                   </p>
-                  <div className="space-y-2">
-                    {newPlatforms.map(platform => {
-                      const existing = newArtifacts.find(a => a.platform === platform)
-                      return (
-                        <div key={platform} className="grid grid-cols-[1fr_auto] gap-2 items-center">
-                          <Input
-                            placeholder={`Filename for ${PLATFORM_LABELS[platform]}`}
-                            value={existing?.filename ?? ''}
-                            onChange={e => {
-                              const filename = e.target.value
-                              setNewArtifacts(prev => {
-                                const idx = prev.findIndex(a => a.platform === platform)
-                                if (idx >= 0) {
-                                  const updated = [...prev]
-                                  updated[idx] = { ...updated[idx], filename }
-                                  return updated
-                                }
-                                return [...prev, {
-                                  platform,
-                                  filename,
-                                  checksum: `sha256:${newChecksum.toLowerCase()}`,
-                                }]
-                              })
-                            }}
-                            className="font-mono text-xs"
-                          />
-                          <Badge variant="outline" className="text-xs whitespace-nowrap">
-                            {platform}
-                          </Badge>
-                        </div>
-                      )
-                    })}
-                  </div>
                 </div>
               )}
             </div>

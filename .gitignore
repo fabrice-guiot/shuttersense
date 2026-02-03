@@ -228,6 +228,12 @@ backend/alembic.ini
 agent/src/_version.py
 debug-dump_*.md
 
+# Agent binary distribution - allow version directories to be committed
+# Override the generic dist/ rule from line 13
+!agent/dist/
+agent/dist/build/
+agent/dist/spec/
+
 # Frontend-specific
 frontend/node_modules/
 frontend/dist/
