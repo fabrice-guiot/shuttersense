@@ -118,10 +118,20 @@ remove "agent/setup.py"
 # 6. Python Cache Files
 # =============================================================================
 log "Removing Python cache files..."
-find "$APP_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-find "$APP_DIR" -type f -name "*.pyc" -delete 2>/dev/null || true
-find "$APP_DIR" -type f -name "*.pyo" -delete 2>/dev/null || true
-find "$APP_DIR" -type f -name "*.pyd" -delete 2>/dev/null || true
+if [[ "$DRY_RUN" == "--dry-run" ]]; then
+    # Show what would be removed
+    find "$APP_DIR" -type d -name "__pycache__" 2>/dev/null | while read -r dir; do
+        log "Would remove: $dir"
+    done
+    find "$APP_DIR" -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.pyd" \) 2>/dev/null | while read -r file; do
+        log "Would remove: $file"
+    done
+else
+    find "$APP_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find "$APP_DIR" -type f -name "*.pyc" -delete 2>/dev/null || true
+    find "$APP_DIR" -type f -name "*.pyo" -delete 2>/dev/null || true
+    find "$APP_DIR" -type f -name "*.pyd" -delete 2>/dev/null || true
+fi
 
 # =============================================================================
 # 7. Git History (optional - saves ~50MB+ but prevents git pull updates)
@@ -148,10 +158,22 @@ remove "Dockerfile"
 remove ".github"
 
 # Remove markdown files except those in docs/
-find "$APP_DIR" -type f -name "*.md" ! -path "*/docs/*" -delete 2>/dev/null || true
+if [[ "$DRY_RUN" == "--dry-run" ]]; then
+    find "$APP_DIR" -type f -name "*.md" ! -path "*/docs/*" 2>/dev/null | while read -r file; do
+        log "Would remove: $file"
+    done
+else
+    find "$APP_DIR" -type f -name "*.md" ! -path "*/docs/*" -delete 2>/dev/null || true
+fi
 
 # Remove macOS metadata files
-find "$APP_DIR" -type f -name ".DS_Store" -delete 2>/dev/null || true
+if [[ "$DRY_RUN" == "--dry-run" ]]; then
+    find "$APP_DIR" -type f -name ".DS_Store" 2>/dev/null | while read -r file; do
+        log "Would remove: $file"
+    done
+else
+    find "$APP_DIR" -type f -name ".DS_Store" -delete 2>/dev/null || true
+fi
 
 # =============================================================================
 # 9. Scripts Directory (keep only production scripts)

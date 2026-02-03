@@ -575,7 +575,7 @@ fail2ban-client status nginx-limit-req
 Expected output:
 ```
 Status
-|- Number of jail:      6
+|- Number of jail:      7
 `- Jail list:   nginx-botsearch, nginx-http-auth, nginx-limit-req, recidive, shuttersense-auth, shuttersense-token, sshd
 ```
 
@@ -1511,7 +1511,7 @@ Full list: [ISO 3166-1 alpha-2 codes](https://en.wikipedia.org/wiki/ISO_3166-1_a
 
 ## 14. Final Verification
 
-### 13.1 Service Health Checks
+### 14.1 Service Health Checks
 
 ```bash
 # Check all services are running
@@ -1531,7 +1531,7 @@ LISTEN  0  511    0.0.0.0:80     0.0.0.0:*    users:(("nginx",...))
 LISTEN  0  511    0.0.0.0:443    0.0.0.0:*    users:(("nginx",...))
 ```
 
-### 13.2 External Access Tests
+### 14.2 External Access Tests
 
 From your local machine:
 
@@ -1549,7 +1549,7 @@ curl https://app.shuttersense.ai/health
 curl https://app.shuttersense.ai/api/version
 ```
 
-### 13.3 SSL Certificate Verification
+### 14.3 SSL Certificate Verification
 
 ```bash
 # Check certificate
@@ -1559,7 +1559,7 @@ openssl s_client -connect app.shuttersense.ai:443 -servername app.shuttersense.a
 # https://www.ssllabs.com/ssltest/analyze.html?d=app.shuttersense.ai
 ```
 
-### 13.4 Login Test
+### 14.4 Login Test
 
 1. Open `https://app.shuttersense.ai` in browser
 2. Click "Sign in with Google" (or Microsoft)
