@@ -16,9 +16,10 @@ Complete deployment guide for ShutterSense on Hostinger KVM2 VPS with HTTPS-only
 10. [Systemd Services](#10-systemd-services)
 11. [Database Seeding](#11-database-seeding)
 12. [OAuth Configuration](#12-oauth-configuration)
-13. [Final Verification](#13-final-verification)
-14. [Maintenance & Backups](#14-maintenance--backups)
-15. [Troubleshooting](#15-troubleshooting)
+13. [Geofencing (Optional)](#13-geofencing-optional)
+14. [Final Verification](#14-final-verification)
+15. [Maintenance & Backups](#15-maintenance--backups)
+16. [Troubleshooting](#16-troubleshooting)
 
 ---
 
@@ -1291,7 +1292,166 @@ systemctl restart shuttersense
 
 ---
 
-## 13. Final Verification
+## 13. Geofencing (Optional)
+
+ShutterSense supports geographic access restrictions using MaxMind's GeoLite2 database. When enabled, only requests from allowed countries can access the application.
+
+### 13.1 When to Use Geofencing
+
+Consider enabling geofencing if:
+- Your users are located in specific countries only
+- You want to block traffic from high-risk regions
+- Compliance requires geographic access controls
+
+**Note:** Geofencing is disabled by default and has zero runtime overhead when not configured.
+
+### 13.2 Obtain MaxMind GeoLite2 Database
+
+The GeoLite2 database is free but requires registration:
+
+1. Create account at [MaxMind GeoLite2](https://www.maxmind.com/en/geolite2/signup)
+2. Generate a license key under **Account → Manage License Keys**
+3. Note your **Account ID** and **License Key**
+
+### 13.3 Install geoipupdate
+
+```bash
+# Add MaxMind PPA
+add-apt-repository ppa:maxmind/ppa
+apt update
+
+# Install geoipupdate
+apt install -y geoipupdate
+```
+
+### 13.4 Configure geoipupdate
+
+Create `/etc/GeoIP.conf`:
+
+```bash
+cat > /etc/GeoIP.conf << 'EOF'
+# MaxMind account credentials
+AccountID YOUR_ACCOUNT_ID
+LicenseKey YOUR_LICENSE_KEY
+
+# Download GeoLite2-Country only (smallest, sufficient for geofencing)
+EditionIDs GeoLite2-Country
+
+# Database directory
+DatabaseDirectory /opt/maxmind
+EOF
+```
+
+Set permissions:
+
+```bash
+chmod 600 /etc/GeoIP.conf
+mkdir -p /opt/maxmind
+chown shuttersense:shuttersense /opt/maxmind
+```
+
+### 13.5 Download Initial Database
+
+```bash
+# Run geoipupdate manually first time
+geoipupdate -v
+
+# Verify database exists
+ls -la /opt/maxmind/GeoLite2-Country.mmdb
+```
+
+### 13.6 Configure Automatic Updates
+
+MaxMind updates the database weekly. Create a cron job:
+
+```bash
+cat > /etc/cron.d/geoipupdate << 'EOF'
+# Update GeoLite2 database weekly (Wednesdays at 3:30 AM)
+# MaxMind typically releases updates on Tuesdays
+30 3 * * 3 root /usr/bin/geoipupdate && systemctl restart shuttersense
+EOF
+
+chmod 644 /etc/cron.d/geoipupdate
+```
+
+### 13.7 Configure Environment Variables
+
+Add to `/opt/shuttersense/app/.env`:
+
+```bash
+# =============================================================================
+# Geofencing (Optional)
+# =============================================================================
+# Path to MaxMind GeoLite2-Country database
+SHUSAI_GEOIP_DB_PATH=/opt/maxmind/GeoLite2-Country.mmdb
+
+# Allowed countries (ISO 3166-1 alpha-2 codes, comma-separated)
+# Common codes: US, CA, GB, DE, FR, AU, NZ, JP, etc.
+SHUSAI_GEOIP_ALLOWED_COUNTRIES=US,CA,GB,DE,FR,NL,BE,AU,NZ
+
+# Fail-open mode: allow requests when country cannot be determined
+# false (default) = block unknown, true = allow unknown
+SHUSAI_GEOIP_FAIL_OPEN=false
+```
+
+### 13.8 Restart Application
+
+```bash
+systemctl restart shuttersense
+```
+
+### 13.9 Verify Geofencing is Active
+
+Check the application logs at startup:
+
+```bash
+journalctl -u shuttersense | grep -i geoip
+```
+
+Expected output:
+```
+GeoIP geofencing enabled: allowing countries ['AU', 'BE', 'CA', 'DE', 'FR', 'GB', 'NL', 'NZ', 'US']
+GeoIP fail-open mode: False (unknown countries will be blocked)
+```
+
+### 13.10 Test Geofencing
+
+From an allowed country:
+```bash
+curl -I https://app.shuttersense.ai/health
+# Should return: HTTP/2 200
+```
+
+Blocked requests receive:
+```json
+{
+  "detail": "Access denied based on geographic restrictions"
+}
+```
+
+### 13.11 Country Code Reference
+
+Common ISO 3166-1 alpha-2 country codes:
+
+| Region | Countries |
+|--------|-----------|
+| North America | `US`, `CA`, `MX` |
+| Europe | `GB`, `DE`, `FR`, `NL`, `BE`, `IT`, `ES`, `PT`, `IE`, `CH`, `AT`, `SE`, `NO`, `DK`, `FI`, `PL` |
+| Asia Pacific | `AU`, `NZ`, `JP`, `SG`, `HK`, `KR` |
+
+Full list: [ISO 3166-1 alpha-2 codes](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)
+
+### 13.12 Important Notes
+
+1. **Private IPs always pass** - Localhost and private network IPs (10.x, 172.16-31.x, 192.168.x) bypass geofencing
+2. **Health endpoint exempt** - `/health` is never blocked (for load balancer probes)
+3. **WebSockets exempt** - WebSocket connections skip geofencing checks
+4. **Restart required** - Database updates require application restart to take effect
+5. **Fail-closed default** - Unknown countries are blocked unless `SHUSAI_GEOIP_FAIL_OPEN=true`
+
+---
+
+## 14. Final Verification
 
 ### 13.1 Service Health Checks
 
@@ -1350,9 +1510,9 @@ openssl s_client -connect app.shuttersense.ai:443 -servername app.shuttersense.a
 
 ---
 
-## 14. Maintenance & Backups
+## 15. Maintenance & Backups
 
-### 14.1 Database Backup Script
+### 15.1 Database Backup Script
 
 Create `/opt/shuttersense/scripts/backup-db.sh`:
 
@@ -1389,7 +1549,7 @@ echo "Backup created: $BACKUP_FILE"
 chmod +x /opt/shuttersense/scripts/backup-db.sh
 ```
 
-### 14.2 Automated Backup Cron
+### 15.2 Automated Backup Cron
 
 ```bash
 crontab -e
@@ -1401,7 +1561,7 @@ Add:
 0 3 * * * /opt/shuttersense/scripts/backup-db.sh >> /var/log/shuttersense/backup.log 2>&1
 ```
 
-### 14.3 Application Updates
+### 15.3 Application Updates
 
 ```bash
 # Switch to shuttersense user
@@ -1430,7 +1590,7 @@ exit
 systemctl restart shuttersense
 ```
 
-### 14.4 Log Rotation
+### 15.4 Log Rotation
 
 Create `/etc/logrotate.d/shuttersense`:
 
@@ -1454,7 +1614,7 @@ nano /etc/logrotate.d/shuttersense
 }
 ```
 
-### 14.5 Critical Keys Backup
+### 15.5 Critical Keys Backup
 
 **IMPORTANT:** Store these keys securely (password manager, encrypted vault):
 
@@ -1465,9 +1625,9 @@ nano /etc/logrotate.d/shuttersense
 
 ---
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
-### 15.1 Service Won't Start
+### 16.1 Service Won't Start
 
 ```bash
 # Check detailed logs
@@ -1479,7 +1639,7 @@ journalctl -u shuttersense -n 100 --no-pager
 # - Port already in use
 ```
 
-### 15.2 502 Bad Gateway
+### 16.2 502 Bad Gateway
 
 ```bash
 # Check if backend is running
@@ -1490,7 +1650,7 @@ curl http://127.0.0.1:8000/health
 tail -f /var/log/nginx/shuttersense_error.log
 ```
 
-### 15.3 Database Connection Issues
+### 16.3 Database Connection Issues
 
 ```bash
 # Test PostgreSQL is running
@@ -1503,7 +1663,7 @@ psql -h localhost -U shuttersense_app -d shuttersense -c "SELECT 1;"
 cat /etc/postgresql/16/main/pg_hba.conf
 ```
 
-### 15.4 SSL Certificate Issues
+### 16.4 SSL Certificate Issues
 
 ```bash
 # Check certificate status
@@ -1516,13 +1676,13 @@ certbot renew --force-renewal
 nginx -t
 ```
 
-### 15.5 OAuth Redirect Issues
+### 16.5 OAuth Redirect Issues
 
 - Verify `OAUTH_REDIRECT_BASE_URL` matches exactly: `https://app.shuttersense.ai`
 - Check Google/Microsoft console has correct redirect URI
 - Ensure no trailing slashes in URLs
 
-### 15.6 Performance Issues
+### 16.6 Performance Issues
 
 ```bash
 # Check resource usage
