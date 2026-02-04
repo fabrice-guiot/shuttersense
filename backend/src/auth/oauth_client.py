@@ -128,7 +128,7 @@ def _get_oauth_registry() -> OAuth:
             client_secret=settings.google_client_secret,
             server_metadata_url=settings.google_discovery_url,
             client_kwargs={
-                "scope": " ".join(settings.oauth_scopes),
+                "scope": " ".join(settings.google_scopes),
                 "code_challenge_method": settings.code_challenge_method,
             },
         )
@@ -148,7 +148,7 @@ def _get_oauth_registry() -> OAuth:
             server_metadata_url=settings.microsoft_discovery_url,
             client_cls=MicrosoftOAuth2App,
             client_kwargs={
-                "scope": " ".join(settings.oauth_scopes),
+                "scope": " ".join(settings.microsoft_scopes),
                 "code_challenge_method": settings.code_challenge_method,
             },
         )

@@ -32,15 +32,16 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     # Check if the old index exists before trying to drop it
+    # Note: Original index name from migration 005 is 'ix_configurations_category_key'
     if bind.dialect.name == 'postgresql':
         result = bind.execute(sa.text(
-            "SELECT 1 FROM pg_indexes WHERE indexname = 'idx_config_category_key'"
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'ix_configurations_category_key'"
         ))
         if result.fetchone():
-            op.drop_index('idx_config_category_key', table_name='configurations')
+            op.drop_index('ix_configurations_category_key', table_name='configurations')
     else:
         # SQLite: use if_exists pattern via execute
-        op.drop_index('idx_config_category_key', table_name='configurations', if_exists=True)
+        op.drop_index('ix_configurations_category_key', table_name='configurations', if_exists=True)
 
     # Create composite unique index on (team_id, category, key)
     op.create_index(
@@ -63,7 +64,7 @@ def downgrade() -> None:
 
     # Restore global unique index on (category, key)
     op.create_index(
-        'idx_config_category_key',
+        'ix_configurations_category_key',
         'configurations',
         ['category', 'key'],
         unique=True
