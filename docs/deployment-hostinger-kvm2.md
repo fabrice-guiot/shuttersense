@@ -720,15 +720,27 @@ Edit `/etc/postgresql/16/main/pg_hba.conf`:
 nano /etc/postgresql/16/main/pg_hba.conf
 ```
 
-Ensure only local connections are allowed:
+Ensure only local connections are allowed (replace the entire file contents):
 
 ```
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# Local socket connections (administrative access)
 local   all             postgres                                peer
 local   all             all                                     peer
+
+# IPv4 localhost - application connection
 host    shuttersense    shuttersense_app 127.0.0.1/32          scram-sha-256
+
+# IPv6 localhost - application connection
+host    shuttersense    shuttersense_app ::1/128               scram-sha-256
+
+# Reject all other connections (IPv4 and IPv6)
 host    all             all             0.0.0.0/0               reject
+host    all             all             ::/0                    reject
 ```
+
+**Note:** This configuration explicitly removes the default replication rules since this is a single-server deployment. If you need streaming replication later, add appropriate rules at that time.
 
 Restart PostgreSQL:
 
