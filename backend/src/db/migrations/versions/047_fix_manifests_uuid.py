@@ -9,6 +9,7 @@ native UUID for PostgreSQL to match the SQLAlchemy UUIDType which uses
 PostgreSQL's native UUID type.
 """
 from alembic import op
+import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
@@ -24,6 +25,18 @@ def upgrade() -> None:
     dialect = bind.dialect.name
 
     if dialect == 'postgresql':
+        # Check the current column type - it might already be UUID on fresh deployments
+        result = bind.execute(sa.text("""
+            SELECT data_type FROM information_schema.columns
+            WHERE table_name = 'release_manifests' AND column_name = 'uuid'
+        """))
+        row = result.fetchone()
+        current_type = row[0] if row else None
+
+        if current_type == 'uuid':
+            # Column is already UUID type, nothing to do
+            return
+
         # Drop the existing index on uuid
         op.drop_index('ix_release_manifests_uuid', table_name='release_manifests')
 

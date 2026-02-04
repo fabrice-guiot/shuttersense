@@ -222,7 +222,6 @@ __marimo__/
 
 # Backend-specific
 backend/.env
-backend/alembic.ini
 
 # Agent-specific
 agent/src/_version.py

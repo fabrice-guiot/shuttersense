@@ -382,53 +382,7 @@ Fail2ban protects against brute-force attacks on both SSH and web application au
 apt install -y fail2ban
 ```
 
-#### 5.4.2 Create ShutterSense Auth Filter
-
-The backend logs authentication failures in JSON format. Create a filter to detect OAuth login failures and API token brute-force attempts.
-
-Create `/etc/fail2ban/filter.d/shuttersense-auth.conf`:
-
-```bash
-cat > /etc/fail2ban/filter.d/shuttersense-auth.conf << 'EOF'
-# Fail2ban filter for ShutterSense authentication failures
-# Matches JSON-formatted log entries from the auth logger
-
-[Definition]
-
-# JSON log format: {"timestamp": "...", "message": "...", "extra": {"event": "auth.login.failed", ...}}
-# These patterns match authentication failures logged by the backend
-
-# OAuth login failures (user not found, inactive, deactivated, etc.)
-failregex = ^.*"event":\s*"auth\.login\.failed".*"reason":\s*"(?:user_not_found|user_inactive|user_deactivated|team_inactive|system_user_login_blocked)".*$
-            ^.*Login attempt for (?:unknown email|inactive user|deactivated user).*$
-            ^.*OAuth login attempt by system user blocked.*$
-
-# Ignore successful logins and internal errors
-ignoreregex = ^.*"event":\s*"auth\.login\.success".*$
-EOF
-```
-
-#### 5.4.3 Create API Token Validation Filter
-
-Create `/etc/fail2ban/filter.d/shuttersense-token.conf`:
-
-```bash
-cat > /etc/fail2ban/filter.d/shuttersense-token.conf << 'EOF'
-# Fail2ban filter for ShutterSense API token brute-force attempts
-# The backend already rate-limits internally (SEC-13), but fail2ban adds IP blocking
-
-[Definition]
-
-# SEC-13 warnings about failed token validations
-failregex = ^.*SEC-13: IP <HOST> has \d+ failed token validations.*$
-            ^.*SEC-13: Blocking IP <HOST> for.*failed token validations.*$
-            ^.*Token validation failed:.*$
-
-ignoreregex =
-EOF
-```
-
-#### 5.4.4 Create Nginx Rate Limit Filter
+#### 5.4.2 Create Nginx Rate Limit Filter
 
 Create `/etc/fail2ban/filter.d/nginx-limit-req.conf`:
 
@@ -450,7 +404,7 @@ ignoreregex = ^<HOST> .* "(GET|POST) /health.*" 200 .*$
 EOF
 ```
 
-#### 5.4.5 Configure Jail Rules
+#### 5.4.3 Configure Jail Rules
 
 Create `/etc/fail2ban/jail.local`:
 
@@ -504,28 +458,6 @@ maxretry = 2
 bantime = 1d
 
 # =============================================================================
-# ShutterSense Application Protection (enabled after backend is deployed in section 10)
-# =============================================================================
-[shuttersense-auth]
-enabled = false
-port = http,https
-filter = shuttersense-auth
-logpath = /var/log/shuttersense/auth.log
-maxretry = 5
-findtime = 5m
-bantime = 1h
-
-[shuttersense-token]
-enabled = false
-port = http,https
-filter = shuttersense-token
-logpath = /var/log/shuttersense/api.log
-          /var/log/shuttersense/services.log
-maxretry = 10
-findtime = 5m
-bantime = 2h
-
-# =============================================================================
 # Recidive (repeat offenders)
 # =============================================================================
 [recidive]
@@ -538,7 +470,7 @@ maxretry = 3
 EOF
 ```
 
-#### 5.4.6 Configure Nginx to Log Client IPs
+#### 5.4.4 Configure Nginx to Log Client IPs
 
 For fail2ban to work correctly, nginx must log the real client IP. Update the nginx log format if using a CDN or proxy.
 
@@ -556,7 +488,7 @@ http {
 }
 ```
 
-#### 5.4.7 Start and Enable Fail2ban
+#### 5.4.5 Start and Enable Fail2ban
 
 ```bash
 # Start and enable
@@ -570,37 +502,36 @@ fail2ban-client status
 fail2ban-client status sshd
 ```
 
-> **Note:** The nginx and shuttersense jails are disabled at this stage because those
-> services are not yet installed. They will be enabled in section 9.4 (after nginx)
-> and section 10.4 (after the backend service).
+> **Note:** The nginx jails are disabled at this stage because nginx is not yet installed.
+> They will be enabled in section 9.4 (after nginx is configured).
 
 Expected output:
 ```
 Status
-|- Number of jail:      7
-`- Jail list:   nginx-botsearch, nginx-http-auth, nginx-limit-req, recidive, shuttersense-auth, shuttersense-token, sshd
+|- Number of jail:      5
+`- Jail list:   nginx-botsearch, nginx-http-auth, nginx-limit-req, recidive, sshd
 ```
 
-#### 5.4.8 Fail2ban Management Commands
+#### 5.4.6 Fail2ban Management Commands
 
 ```bash
 # View banned IPs for a jail
-fail2ban-client status shuttersense-auth
+fail2ban-client status sshd
 
 # Manually ban an IP
-fail2ban-client set shuttersense-auth banip 1.2.3.4
+fail2ban-client set sshd banip 1.2.3.4
 
 # Manually unban an IP
-fail2ban-client set shuttersense-auth unbanip 1.2.3.4
+fail2ban-client set sshd unbanip 1.2.3.4
 
 # Check if an IP is banned
-fail2ban-client get shuttersense-auth banned 1.2.3.4
+fail2ban-client get sshd banned 1.2.3.4
 
 # View fail2ban log
 tail -f /var/log/fail2ban.log
 ```
 
-#### 5.4.9 Protection Summary
+#### 5.4.7 Protection Summary
 
 | Jail | Protects Against | Max Retries | Ban Duration |
 |------|------------------|-------------|--------------|
@@ -608,8 +539,6 @@ tail -f /var/log/fail2ban.log
 | `nginx-http-auth` | Basic auth attacks | 5 in 10m | 1 hour |
 | `nginx-limit-req` | Rate limit abuse | 10 in 1m | 30 minutes |
 | `nginx-botsearch` | Vulnerability scanners | 2 in 10m | 1 day |
-| `shuttersense-auth` | OAuth login abuse | 5 in 5m | 1 hour |
-| `shuttersense-token` | API token brute-force | 10 in 5m | 2 hours |
 | `recidive` | Repeat offenders | 3 bans/day | 1 week |
 
 ### 5.5 Automatic Security Updates
@@ -1019,6 +948,18 @@ apt install -y certbot python3-certbot-nginx
 
 **Prerequisites:** DNS must be propagated (verify with `dig app.shuttersense.ai`).
 
+**Important:** Certbot's standalone mode needs to bind to port 80. If another process (typically nginx) is already using this port, you must stop it first:
+
+```bash
+# Check if anything is using port 80
+sudo lsof -i :80
+
+# If nginx is running, stop it temporarily
+sudo systemctl stop nginx
+```
+
+Obtain the certificate:
+
 ```bash
 # Obtain certificate (standalone mode, before nginx is configured)
 certbot certonly --standalone -d app.shuttersense.ai \
@@ -1027,6 +968,8 @@ certbot certonly --standalone -d app.shuttersense.ai \
   --email admin@shuttersense.ai \
   --no-eff-email
 ```
+
+> **Note:** If you stopped nginx above, it will be started again in section 9. Do not restart it now as it needs the certificate files that were just created.
 
 ### 8.3 Verify Certificate
 
@@ -1178,8 +1121,8 @@ ln -s /etc/nginx/sites-available/shuttersense /etc/nginx/sites-enabled/
 # Test configuration
 nginx -t
 
-# Reload nginx
-systemctl reload nginx
+# Start nginx (it was stopped in section 8.2 for certbot)
+systemctl start nginx
 systemctl enable nginx
 ```
 
@@ -1203,6 +1146,27 @@ fail2ban-client status nginx-limit-req
 fail2ban-client status nginx-botsearch
 ```
 
+### 9.5 Checkpoint: Verify HTTPS is Working
+
+At this point, nginx is serving HTTPS with a valid Let's Encrypt certificate. Verify before proceeding:
+
+```bash
+# From your local machine or browser
+curl -I https://app.shuttersense.ai
+```
+
+**Expected result:**
+- Browser shows a valid certificate (no security warnings)
+- Response is `502 Bad Gateway`
+
+The 502 error is expected because the backend service is not running yet. This confirms:
+- ✅ DNS is resolving correctly
+- ✅ Nginx is running and listening on port 443
+- ✅ SSL certificate is valid and trusted
+- ✅ Nginx is attempting to proxy to the backend (which doesn't exist yet)
+
+If you see certificate errors or connection refused, review sections 8 and 9 before continuing.
+
 ---
 
 ## 10. Systemd Services
@@ -1225,10 +1189,10 @@ Requires=postgresql.service
 Type=exec
 User=shuttersense
 Group=shuttersense
-WorkingDirectory=/opt/shuttersense/app/backend
+WorkingDirectory=/opt/shuttersense/app
 Environment="PATH=/opt/shuttersense/app/venv/bin"
 EnvironmentFile=/opt/shuttersense/app/.env
-ExecStart=/opt/shuttersense/app/venv/bin/gunicorn src.main:app \
+ExecStart=/opt/shuttersense/app/venv/bin/gunicorn backend.src.main:app \
     --workers 4 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 127.0.0.1:8000 \
@@ -1283,29 +1247,35 @@ tail -f /var/log/shuttersense/access.log
 tail -f /var/log/nginx/shuttersense_error.log
 ```
 
-### 10.4 Enable ShutterSense Fail2ban Jails
+### 10.4 Checkpoint: Backend is Running
 
-Now that the backend service is running, enable the ShutterSense-related fail2ban jails:
+At this point, the backend service is running and serving the application. Verify before proceeding:
 
 ```bash
-# Enable shuttersense jails in jail.local
-sed -i '/\[shuttersense-auth\]/,/^\[/{s/enabled = false/enabled = true/}' /etc/fail2ban/jail.local
-sed -i '/\[shuttersense-token\]/,/^\[/{s/enabled = false/enabled = true/}' /etc/fail2ban/jail.local
-
-# Reload fail2ban to apply changes
-fail2ban-client reload
-
-# Verify shuttersense jails are now active
-fail2ban-client status
-fail2ban-client status shuttersense-auth
-fail2ban-client status shuttersense-token
+# From your local machine or browser
+curl -I https://app.shuttersense.ai
 ```
+
+**Expected result:**
+- The `502 Bad Gateway` error from section 9.5 is now resolved
+- Response is `200 OK` or `302 Found` (redirect to login)
+- Opening `https://app.shuttersense.ai` in a browser shows the login page
+- The login page displays a message indicating no authentication providers are configured
+
+This confirms:
+- ✅ Gunicorn is running and serving the FastAPI application
+- ✅ Nginx is successfully proxying requests to the backend
+- ✅ The application is loading correctly
+
+The "no authentication providers" message is expected because OAuth is configured in section 12.
 
 ---
 
 ## 11. Database Seeding
 
-### 11.1 Run Database Migrations
+Database setup requires a specific order because migration 031 enforces team ownership on all entities, which requires a team to exist first.
+
+### 11.1 Run Initial Migrations (up to 030)
 
 ```bash
 su - shuttersense
@@ -1315,10 +1285,20 @@ source venv/bin/activate
 # Set environment
 export $(grep -v '^#' .env | xargs)
 
-# Run migrations
+# Run migrations (must be from backend directory where alembic.ini is located)
 cd backend
-alembic upgrade head
+
+# Verify alembic.ini exists (if missing, re-clone the repository)
+ls -la alembic.ini
+
+# Run migrations up to 030 (before team_id enforcement)
+alembic upgrade 030_user_type_api_tokens
 ```
+
+> **Troubleshooting:** If you see "No 'script_location' key found in configuration", verify:
+> 1. You are in the `/opt/shuttersense/app/backend` directory (not the app root)
+> 2. The `alembic.ini` file exists in the current directory
+> 3. If missing, the file may have been accidentally deleted - re-clone or restore from git
 
 ### 11.2 Seed First Team and Admin
 
@@ -1338,7 +1318,7 @@ ShutterSense: First Team Seed Script
 ==================================================
 
 [CREATED] Team: Your Team Name
-  GUID: tea_01hgw2bbg...
+  GUID: ten_01hgw2bbg...
   Slug: your-team-name
 
 [SEEDED] Default data for team
@@ -1353,13 +1333,39 @@ ShutterSense: First Team Seed Script
 ==================================================
 SEED COMPLETE
 
-Team GUID:  tea_01hgw2bbg...
+Team GUID:  ten_01hgw2bbg...
 Admin GUID: usr_01hgw2bbg...
 
 Next steps:
-  1. Configure OAuth providers in .env
-  2. Start the server
-  3. Login with admin@yourdomain.com via OAuth
+  1. Complete remaining migrations (section 11.3)
+  2. Configure OAuth providers in .env
+  3. Restart the server
+  4. Login with admin@yourdomain.com via OAuth
+```
+
+### 11.3 Complete Remaining Migrations
+
+Now that a team exists, run the remaining migrations to enforce team ownership:
+
+```bash
+# Still as shuttersense user with venv activated
+cd /opt/shuttersense/app/backend
+
+# Run remaining migrations
+alembic upgrade head
+```
+
+### 11.4 Restart Backend Service
+
+After database changes, restart the backend to pick up the new schema:
+
+```bash
+# Exit to root user
+exit
+
+# Restart the service
+sudo systemctl restart shuttersense
+sudo systemctl status shuttersense
 ```
 
 ---
@@ -1841,9 +1847,9 @@ ufw status verbose
 
 # Fail2ban
 fail2ban-client status                          # List all jails
-fail2ban-client status shuttersense-auth        # Check auth jail
-fail2ban-client status shuttersense-token       # Check token jail
-fail2ban-client set shuttersense-auth unbanip <IP>  # Unban IP
+fail2ban-client status sshd                     # Check SSH jail
+fail2ban-client status nginx-limit-req          # Check rate limit jail
+fail2ban-client set sshd unbanip <IP>           # Unban IP
 tail -f /var/log/fail2ban.log                   # Watch bans
 
 # Logs
@@ -1862,8 +1868,6 @@ tail -f /var/log/nginx/shuttersense_error.log
 - [ ] Root login disabled
 - [ ] UFW firewall active (only 22, 80, 443 open)
 - [ ] Fail2ban protecting SSH (sshd jail)
-- [ ] Fail2ban protecting web auth (shuttersense-auth jail)
-- [ ] Fail2ban protecting API tokens (shuttersense-token jail)
 - [ ] Fail2ban protecting nginx (nginx-limit-req, nginx-botsearch jails)
 - [ ] Recidive jail enabled for repeat offenders
 - [ ] PostgreSQL listening only on localhost

@@ -87,6 +87,123 @@ def validate_email(email: str) -> bool:
     return bool(local and domain and "." in domain)
 
 
+def _has_audit_columns(db) -> bool:
+    """Check if the teams table has audit columns (added in migration 058)."""
+    from sqlalchemy import text
+    try:
+        result = db.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'teams' AND column_name = 'created_by_user_id'"
+        ))
+        return result.fetchone() is not None
+    except Exception:
+        return False
+
+
+def _create_team_raw_sql(db, team_name: str) -> tuple[int, str, str, bool]:
+    """
+    Create or find a team using raw SQL (for pre-audit-column migrations).
+
+    Returns:
+        Tuple of (team_id, team_guid, team_slug, was_created)
+    """
+    from sqlalchemy import text
+    from backend.src.services.guid import GuidService
+
+    # Check if team already exists
+    result = db.execute(
+        text("SELECT id, uuid, slug FROM teams WHERE lower(name) = lower(:name) LIMIT 1"),
+        {"name": team_name}
+    )
+    row = result.fetchone()
+
+    if row:
+        # Return existing team with GUID format
+        team_guid = GuidService.encode_uuid(row[1], "ten")
+        return row[0], team_guid, row[2], False
+
+    # Create new team - generate raw UUID (not prefixed GUID)
+    team_uuid = GuidService.generate_uuid()
+    slug = team_name.lower().replace(" ", "-").replace("'", "")[:50]
+
+    # Check for slug collision
+    slug_result = db.execute(
+        text("SELECT COUNT(*) FROM teams WHERE slug = :slug"),
+        {"slug": slug}
+    )
+    if slug_result.scalar() > 0:
+        # Add random suffix
+        import secrets
+        slug = f"{slug[:42]}-{secrets.token_hex(3)}"
+
+    db.execute(
+        text(
+            "INSERT INTO teams (name, slug, uuid, is_active, created_at, updated_at) "
+            "VALUES (:name, :slug, :uuid, true, now(), now())"
+        ),
+        {"name": team_name, "slug": slug, "uuid": str(team_uuid)}
+    )
+    db.commit()
+
+    # Fetch the created team
+    result = db.execute(
+        text("SELECT id FROM teams WHERE uuid = :uuid"),
+        {"uuid": str(team_uuid)}
+    )
+    row = result.fetchone()
+    team_guid = GuidService.encode_uuid(team_uuid, "ten")
+    return row[0], team_guid, slug, True
+
+
+def _create_user_raw_sql(db, team_id: int, email: str) -> tuple[str, str, int, bool]:
+    """
+    Create or find a user using raw SQL (for pre-audit-column migrations).
+
+    Returns:
+        Tuple of (user_guid, status, user_team_id, was_created)
+    """
+    from sqlalchemy import text
+    from backend.src.services.guid import GuidService
+
+    # Check if user already exists
+    result = db.execute(
+        text("SELECT uuid, status, team_id FROM users WHERE lower(email) = lower(:email) LIMIT 1"),
+        {"email": email}
+    )
+    row = result.fetchone()
+
+    if row:
+        # Return existing user with GUID format
+        user_guid = GuidService.encode_uuid(row[0], "usr")
+        return user_guid, row[1], row[2], False
+
+    # Create new user - generate raw UUID (not prefixed GUID)
+    user_uuid = GuidService.generate_uuid()
+
+    db.execute(
+        text(
+            "INSERT INTO users (email, uuid, team_id, status, created_at, updated_at) "
+            "VALUES (:email, :uuid, :team_id, 'PENDING', now(), now())"
+        ),
+        {"email": email, "uuid": str(user_uuid), "team_id": team_id}
+    )
+    db.commit()
+
+    user_guid = GuidService.encode_uuid(user_uuid, "usr")
+    return user_guid, "PENDING", team_id, True
+
+
+def _get_user_team_name_raw_sql(db, team_id: int) -> str:
+    """Get team name by ID using raw SQL."""
+    from sqlalchemy import text
+    result = db.execute(
+        text("SELECT name FROM teams WHERE id = :team_id"),
+        {"team_id": team_id}
+    )
+    row = result.fetchone()
+    return row[0] if row else "N/A"
+
+
 def seed_first_team(
     team_name: str,
     admin_email: str,
@@ -121,7 +238,11 @@ def seed_first_team(
 
     db = SessionLocal()
     try:
-        team_service = TeamService(db)
+        # Check if we can use ORM (audit columns exist) or need raw SQL
+        use_orm = _has_audit_columns(db)
+
+        if use_orm:
+            team_service = TeamService(db)
         user_service = UserService(db)
         seed_service = SeedDataService(db)
 
@@ -135,32 +256,47 @@ def seed_first_team(
             return None, None
 
         # Create or find team
-        existing_team = team_service.get_by_name(team_name)
-        if existing_team:
-            print(f"\n[EXISTS] Team '{team_name}' already exists")
-            print(f"  GUID: {existing_team.guid}")
-            team_guid = existing_team.guid
-            team_id = existing_team.id
+        if use_orm:
+            # Normal ORM path (audit columns exist)
+            existing_team = team_service.get_by_name(team_name)
+            if existing_team:
+                print(f"\n[EXISTS] Team '{team_name}' already exists")
+                print(f"  GUID: {existing_team.guid}")
+                team_guid = existing_team.guid
+                team_id = existing_team.id
+            else:
+                try:
+                    team = team_service.create(name=team_name)
+                    print(f"\n[CREATED] Team: {team.name}")
+                    print(f"  GUID: {team.guid}")
+                    print(f"  Slug: {team.slug}")
+                    team_guid = team.guid
+                    team_id = team.id
+                    team_created = True
+                except (ConflictError, ValidationError) as e:
+                    print(f"\n[ERROR] Failed to create team: {e}")
+                    return None, None
         else:
-            try:
-                team = team_service.create(name=team_name)
-                print(f"\n[CREATED] Team: {team.name}")
-                print(f"  GUID: {team.guid}")
-                print(f"  Slug: {team.slug}")
-                team_guid = team.guid
-                team_id = team.id
-                team_created = True
-            except (ConflictError, ValidationError) as e:
-                print(f"\n[ERROR] Failed to create team: {e}")
-                return None, None
+            # Raw SQL path (pre-audit migration, e.g., migration 030)
+            print("\n[INFO] Using raw SQL (audit columns not yet migrated)")
+            team_id, team_guid, team_slug, team_created = _create_team_raw_sql(db, team_name)
+            if team_created:
+                print(f"\n[CREATED] Team: {team_name}")
+                print(f"  GUID: {team_guid}")
+                print(f"  Slug: {team_slug}")
+            else:
+                print(f"\n[EXISTS] Team '{team_name}' already exists")
+                print(f"  GUID: {team_guid}")
 
         if _shutdown_requested:
             return team_guid, None
 
         # Migrate any orphaned data from pre-tenancy migrations
+        # Cast team_id to int to satisfy type checker (may be Column[int] from ORM)
+        team_id_int = int(team_id)
         orphaned_summary = seed_service.get_orphaned_data_summary()
         if orphaned_summary['orphaned_categories'] > 0 or orphaned_summary['orphaned_configurations'] > 0:
-            cats_migrated, configs_migrated = seed_service.migrate_orphaned_data(team_id)
+            cats_migrated, configs_migrated = seed_service.migrate_orphaned_data(team_id_int)
             if cats_migrated > 0 or configs_migrated > 0:
                 print(f"\n[MIGRATED] Orphaned data assigned to team")
                 print(f"  Categories: {cats_migrated}")
@@ -170,7 +306,7 @@ def seed_first_team(
             return team_guid, None
 
         # Seed default data for the team (categories, event statuses, TTL configs)
-        categories_created, statuses_created, ttl_configs_created = seed_service.seed_team_defaults(team_id)
+        categories_created, statuses_created, ttl_configs_created = seed_service.seed_team_defaults(team_id_int)
         total_configs = statuses_created + ttl_configs_created
         if categories_created > 0 or total_configs > 0:
             print(f"\n[SEEDED] Default data for team")
@@ -179,7 +315,7 @@ def seed_first_team(
             print(f"  TTL configs: {ttl_configs_created}")
         else:
             # Check if already seeded
-            summary = seed_service.get_seed_summary(team_id)
+            summary = seed_service.get_seed_summary(team_id_int)
             if summary['categories'] > 0 or summary['event_statuses'] > 0:
                 print(f"\n[EXISTS] Default data already seeded")
                 print(f"  Categories: {summary['categories']}")
@@ -189,32 +325,53 @@ def seed_first_team(
             return team_guid, None
 
         # Create or find user
-        existing_user = user_service.get_by_email(admin_email)
-        if existing_user:
-            print(f"\n[EXISTS] User '{admin_email}' already exists")
-            print(f"  GUID: {existing_user.guid}")
-            print(f"  Team: {existing_user.team.name if existing_user.team else 'N/A'}")
-            user_guid = existing_user.guid
+        if use_orm:
+            # Normal ORM path (audit columns exist)
+            existing_user = user_service.get_by_email(admin_email)
+            if existing_user:
+                print(f"\n[EXISTS] User '{admin_email}' already exists")
+                print(f"  GUID: {existing_user.guid}")
+                print(f"  Team: {existing_user.team.name if existing_user.team else 'N/A'}")
+                user_guid = existing_user.guid
 
-            # Warn if user is in a different team
-            if existing_user.team_id != team_id:
-                print(f"\n[WARNING] User is in a different team!")
-                print(f"  Expected team: {team_name}")
-                print(f"  Actual team: {existing_user.team.name if existing_user.team else 'N/A'}")
+                # Warn if user is in a different team
+                if existing_user.team_id != team_id:
+                    print(f"\n[WARNING] User is in a different team!")
+                    print(f"  Expected team: {team_name}")
+                    print(f"  Actual team: {existing_user.team.name if existing_user.team else 'N/A'}")
+            else:
+                try:
+                    user = user_service.create(
+                        team_id=int(team_id),
+                        email=admin_email,
+                    )
+                    print(f"\n[CREATED] User: {user.email}")
+                    print(f"  GUID: {user.guid}")
+                    print(f"  Status: {user.status.value}")
+                    user_guid = user.guid
+                    user_created = True
+                except (ConflictError, ValidationError) as e:
+                    print(f"\n[ERROR] Failed to create user: {e}")
+                    return team_guid, None
         else:
-            try:
-                user = user_service.create(
-                    team_id=team_id,
-                    email=admin_email,
-                )
-                print(f"\n[CREATED] User: {user.email}")
-                print(f"  GUID: {user.guid}")
-                print(f"  Status: {user.status.value}")
-                user_guid = user.guid
-                user_created = True
-            except (ConflictError, ValidationError) as e:
-                print(f"\n[ERROR] Failed to create user: {e}")
-                return team_guid, None
+            # Raw SQL path (pre-audit migration)
+            user_guid, user_status, user_team_id, user_created = _create_user_raw_sql(
+                db, int(team_id), admin_email
+            )
+            if user_created:
+                print(f"\n[CREATED] User: {admin_email}")
+                print(f"  GUID: {user_guid}")
+                print(f"  Status: {user_status}")
+            else:
+                print(f"\n[EXISTS] User '{admin_email}' already exists")
+                print(f"  GUID: {user_guid}")
+
+                # Warn if user is in a different team
+                if user_team_id != team_id:
+                    user_team_name = _get_user_team_name_raw_sql(db, user_team_id)
+                    print(f"\n[WARNING] User is in a different team!")
+                    print(f"  Expected team: {team_name}")
+                    print(f"  Actual team: {user_team_name}")
 
         # Summary
         print("\n" + "=" * 50)

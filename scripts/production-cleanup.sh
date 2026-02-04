@@ -59,6 +59,8 @@ remove ".ruff_cache"
 # =============================================================================
 log "Removing design specifications..."
 remove "specs"
+remove "docs/prd"
+remove "docs/issues"
 remove "CLAUDE.md"
 remove "CONTRIBUTING.md"
 remove "CHANGELOG.md"
@@ -79,6 +81,8 @@ remove "backend/htmlcov"
 remove ".coverage"
 remove "backend/.coverage"
 remove "coverage.xml"
+remove ".coveragerc"
+remove "backend/.coveragerc"
 
 # =============================================================================
 # 4. Frontend Source (keep only dist/)

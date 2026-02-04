@@ -42,8 +42,11 @@ class OAuthSettings(BaseSettings):
     google_discovery_url: str = "https://accounts.google.com/.well-known/openid-configuration"
     microsoft_discovery_url: str = "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration"
 
-    # OAuth scopes (User.Read needed for Microsoft Graph API photo access)
-    oauth_scopes: list[str] = ["openid", "email", "profile", "User.Read"]
+    # OAuth scopes - provider-specific
+    # Google: Standard OIDC scopes only
+    google_scopes: list[str] = ["openid", "email", "profile"]
+    # Microsoft: OIDC + User.Read for Graph API photo access
+    microsoft_scopes: list[str] = ["openid", "email", "profile", "User.Read"]
 
     # PKCE configuration
     code_challenge_method: str = "S256"
