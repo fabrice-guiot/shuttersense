@@ -156,6 +156,9 @@ remove "docker-compose.yml"
 remove "docker-compose.yaml"
 remove "Dockerfile"
 remove ".github"
+# Remove development-only Python scripts (not needed in production)
+remove "web_server.py"
+remove "setup_master_key.py"
 
 # Remove markdown files except those in docs/
 if [[ "$DRY_RUN" == "--dry-run" ]]; then
@@ -181,7 +184,7 @@ fi
 # Note: This script removes itself from the deployed app since it's only
 # needed during deployment. The canonical version lives in the git repo.
 # Uncomment if you want to remove scripts after cleanup:
-# remove "scripts"
+remove "scripts"
 
 # =============================================================================
 # 10. Calculate Space Savings

@@ -476,10 +476,10 @@ bantime = 24h
 findtime = 10m
 
 # =============================================================================
-# Nginx Protection
+# Nginx Protection (enabled after nginx is installed in section 9)
 # =============================================================================
 [nginx-http-auth]
-enabled = true
+enabled = false
 port = http,https
 filter = nginx-http-auth
 logpath = /var/log/nginx/shuttersense_error.log
@@ -487,7 +487,7 @@ maxretry = 5
 bantime = 1h
 
 [nginx-limit-req]
-enabled = true
+enabled = false
 port = http,https
 filter = nginx-limit-req
 logpath = /var/log/nginx/shuttersense_access.log
@@ -496,7 +496,7 @@ findtime = 1m
 bantime = 30m
 
 [nginx-botsearch]
-enabled = true
+enabled = false
 port = http,https
 filter = nginx-botsearch
 logpath = /var/log/nginx/shuttersense_access.log
@@ -504,10 +504,10 @@ maxretry = 2
 bantime = 1d
 
 # =============================================================================
-# ShutterSense Application Protection
+# ShutterSense Application Protection (enabled after backend is deployed in section 10)
 # =============================================================================
 [shuttersense-auth]
-enabled = true
+enabled = false
 port = http,https
 filter = shuttersense-auth
 logpath = /var/log/shuttersense/auth.log
@@ -516,7 +516,7 @@ findtime = 5m
 bantime = 1h
 
 [shuttersense-token]
-enabled = true
+enabled = false
 port = http,https
 filter = shuttersense-token
 logpath = /var/log/shuttersense/api.log
@@ -563,14 +563,16 @@ http {
 systemctl enable fail2ban
 systemctl start fail2ban
 
-# Verify all jails are running
+# Verify jails are running (only sshd and recidive at this point)
 fail2ban-client status
 
-# Check specific jail status
+# Check SSH jail status
 fail2ban-client status sshd
-fail2ban-client status shuttersense-auth
-fail2ban-client status nginx-limit-req
 ```
+
+> **Note:** The nginx and shuttersense jails are disabled at this stage because those
+> services are not yet installed. They will be enabled in section 9.4 (after nginx)
+> and section 10.4 (after the backend service).
 
 Expected output:
 ```
@@ -720,15 +722,27 @@ Edit `/etc/postgresql/16/main/pg_hba.conf`:
 nano /etc/postgresql/16/main/pg_hba.conf
 ```
 
-Ensure only local connections are allowed:
+Ensure only local connections are allowed (replace the entire file contents):
 
 ```
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# Local socket connections (administrative access)
 local   all             postgres                                peer
 local   all             all                                     peer
+
+# IPv4 localhost - application connection
 host    shuttersense    shuttersense_app 127.0.0.1/32          scram-sha-256
+
+# IPv6 localhost - application connection
+host    shuttersense    shuttersense_app ::1/128               scram-sha-256
+
+# Reject all other connections (IPv4 and IPv6)
 host    all             all             0.0.0.0/0               reject
+host    all             all             ::/0                    reject
 ```
+
+**Note:** This configuration explicitly removes the default replication rules since this is a single-server deployment. If you need streaming replication later, add appropriate rules at that time.
 
 Restart PostgreSQL:
 
@@ -887,6 +901,11 @@ chmod +x /opt/shuttersense/scripts/production-cleanup.sh
 ### 7.7 Environment Configuration
 
 Create `/opt/shuttersense/app/.env`:
+
+> **Note:** During development, `.env` is located in `backend/` where Python's `load_dotenv()`
+> looks for it. In production, we place it at the application root instead. This works because
+> the systemd service (section 10.1) uses `EnvironmentFile=/opt/shuttersense/app/.env` to load
+> all variables into the environment before the Python process starts.
 
 ```bash
 nano /opt/shuttersense/app/.env
@@ -1164,6 +1183,26 @@ systemctl reload nginx
 systemctl enable nginx
 ```
 
+### 9.4 Enable Nginx Fail2ban Jails
+
+Now that nginx is installed and configured, enable the nginx-related fail2ban jails:
+
+```bash
+# Enable nginx jails in jail.local
+sed -i '/\[nginx-http-auth\]/,/^\[/{s/enabled = false/enabled = true/}' /etc/fail2ban/jail.local
+sed -i '/\[nginx-limit-req\]/,/^\[/{s/enabled = false/enabled = true/}' /etc/fail2ban/jail.local
+sed -i '/\[nginx-botsearch\]/,/^\[/{s/enabled = false/enabled = true/}' /etc/fail2ban/jail.local
+
+# Reload fail2ban to apply changes
+fail2ban-client reload
+
+# Verify nginx jails are now active
+fail2ban-client status
+fail2ban-client status nginx-http-auth
+fail2ban-client status nginx-limit-req
+fail2ban-client status nginx-botsearch
+```
+
 ---
 
 ## 10. Systemd Services
@@ -1242,6 +1281,24 @@ tail -f /var/log/shuttersense/access.log
 
 # Nginx logs
 tail -f /var/log/nginx/shuttersense_error.log
+```
+
+### 10.4 Enable ShutterSense Fail2ban Jails
+
+Now that the backend service is running, enable the ShutterSense-related fail2ban jails:
+
+```bash
+# Enable shuttersense jails in jail.local
+sed -i '/\[shuttersense-auth\]/,/^\[/{s/enabled = false/enabled = true/}' /etc/fail2ban/jail.local
+sed -i '/\[shuttersense-token\]/,/^\[/{s/enabled = false/enabled = true/}' /etc/fail2ban/jail.local
+
+# Reload fail2ban to apply changes
+fail2ban-client reload
+
+# Verify shuttersense jails are now active
+fail2ban-client status
+fail2ban-client status shuttersense-auth
+fail2ban-client status shuttersense-token
 ```
 
 ---
