@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import api from '@/services/api'
 
 interface VersionResponse {
   version: string
@@ -41,10 +41,9 @@ export const useVersion = (): UseVersionReturn => {
 
       try {
         // Fetch version from backend API
-        const response = await axios.get<VersionResponse>(
-          'http://localhost:8000/api/version',
-          { timeout: 5000 } // 5 second timeout for version check
-        )
+        const response = await api.get<VersionResponse>('/version', {
+          timeout: 5000, // 5 second timeout for version check
+        })
 
         setVersion(response.data.version)
       } catch (err: any) {

@@ -734,8 +734,8 @@ cd /opt/shuttersense
 git clone https://github.com/fabrice-guiot/shuttersense.git app
 cd app
 
-# Checkout the appropriate branch/tag
-git checkout main  # or specific release tag
+# Checkout the appropriate branch/tag (clone fetches all tags by default)
+git checkout main  # or specific release tag, e.g., git checkout v1.2.3
 ```
 
 ### 7.4 Backend Setup
@@ -1053,7 +1053,7 @@ server {
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
 
-    # HSTS (uncomment after confirming HTTPS works)
+    # HSTS - Enable after HTTPS is confirmed working (see section 9.6)
     # add_header Strict-Transport-Security "max-age=63072000" always;
 
     # Security headers
@@ -1167,6 +1167,54 @@ The 502 error is expected because the backend service is not running yet. This c
 
 If you see certificate errors or connection refused, review sections 8 and 9 before continuing.
 
+### 9.6 Enable HSTS (After Production is Stable)
+
+> **Important:** Only enable HSTS after HTTPS has been working reliably for several days. HSTS is "sticky" - once browsers receive it, they will refuse HTTP connections for the duration of `max-age`. If HTTPS breaks, users cannot access the site until they manually clear HSTS from their browser.
+
+**Staged rollout approach:**
+
+1. **Start with a short max-age (5 minutes)** to test:
+
+Edit `/etc/nginx/sites-available/shuttersense` and uncomment the HSTS line, changing the value:
+
+```nginx
+add_header Strict-Transport-Security "max-age=300" always;
+```
+
+2. **Apply the nginx configuration change:**
+
+```bash
+# Test the configuration for syntax errors
+nginx -t
+
+# If test passes, reload nginx (graceful - no downtime)
+sudo systemctl reload nginx
+```
+
+3. **Verify the header is present:**
+
+```bash
+curl -I https://app.shuttersense.ai 2>/dev/null | grep -i strict
+# Expected: Strict-Transport-Security: max-age=300
+```
+
+4. **Gradually increase max-age** after confirming each stage works:
+
+| Stage | max-age | Duration | Wait before next |
+|-------|---------|----------|------------------|
+| Test | 300 | 5 minutes | 1 hour |
+| Day | 86400 | 1 day | 1 day |
+| Week | 604800 | 1 week | 1 week |
+| Production | 63072000 | 2 years | Final |
+
+5. **Final production configuration:**
+
+```nginx
+add_header Strict-Transport-Security "max-age=63072000" always;
+```
+
+> **Tip:** After any nginx configuration change, always run `nginx -t` to test before reloading. Use `systemctl reload nginx` (not restart) for zero-downtime configuration updates.
+
 ---
 
 ## 10. Systemd Services
@@ -1190,7 +1238,8 @@ Type=exec
 User=shuttersense
 Group=shuttersense
 WorkingDirectory=/opt/shuttersense/app
-Environment="PATH=/opt/shuttersense/app/venv/bin"
+# Include system paths for git (needed for version detection)
+Environment="PATH=/opt/shuttersense/app/venv/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/shuttersense/app/.env
 ExecStart=/opt/shuttersense/app/venv/bin/gunicorn backend.src.main:app \
     --workers 4 \
@@ -1384,7 +1433,7 @@ sudo systemctl status shuttersense
 4. Create OAuth 2.0 Client ID:
    - Application type: Web application
    - Name: ShutterSense Production
-   - Authorized redirect URIs: `https://app.shuttersense.ai/auth/callback/google`
+   - Authorized redirect URIs: `https://app.shuttersense.ai/api/auth/callback/google`
 5. Copy Client ID and Client Secret to `.env`:
    ```
    GOOGLE_CLIENT_ID=xxxxx.apps.googleusercontent.com
@@ -1397,7 +1446,7 @@ sudo systemctl status shuttersense
 2. Register new application:
    - Name: ShutterSense
    - Supported account types: Accounts in any organizational directory and personal Microsoft accounts
-   - Redirect URI: `https://app.shuttersense.ai/auth/callback/microsoft`
+   - Redirect URI: `https://app.shuttersense.ai/api/auth/callback/microsoft`
 3. Create client secret under "Certificates & secrets"
 4. Copy values to `.env`:
    ```
@@ -1689,13 +1738,16 @@ Add:
 su - shuttersense
 cd /opt/shuttersense/app
 
-# Pull latest changes
-git fetch origin
+# Pull latest changes (--tags ensures version detection works)
+git fetch origin --tags
 git pull origin main
 
 # Update backend dependencies
 source venv/bin/activate
 pip install -r backend/requirements.txt
+
+# Set environment
+export $(grep -v '^#' .env | xargs)
 
 # Rebuild frontend
 cd frontend

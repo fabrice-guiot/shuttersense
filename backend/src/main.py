@@ -129,7 +129,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "default-src 'self'; "
                 "script-src 'self'; "
                 "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: blob:; "
+                "img-src 'self' data: blob: https://*.googleusercontent.com; "
                 "font-src 'self'; "
                 "connect-src 'self' ws: wss:; "
                 "manifest-src 'self'; "
@@ -1138,6 +1138,15 @@ if _spa_dist_path.exists():
         StaticFiles(directory=str(_spa_dist_path / "assets")),
         name="spa-assets"
     )
+
+    # Mount PWA icons directory (required for install prompt and app icons)
+    icons_path = _spa_dist_path / "icons"
+    if icons_path.exists():
+        app.mount(
+            "/icons",
+            StaticFiles(directory=str(icons_path)),
+            name="pwa-icons"
+        )
 
 
 # Root endpoint - serve SPA
