@@ -363,7 +363,7 @@ Example: `col_01hgw2bbg0000000000000001`
 | Location | `loc_` | `loc_01hgw2bbg...` |
 | Organizer | `org_` | `org_01hgw2bbg...` |
 | Performer | `prf_` | `prf_01hgw2bbg...` |
-| Team | `tea_` | `tea_01hgw2bbg...` |
+| Team | `ten_` | `ten_01hgw2bbg...` |
 | User | `usr_` | `usr_01hgw2bbg...` |
 | ApiToken | `tok_` | `tok_01hgw2bbg...` |
 | Agent | `agt_` | `agt_01hgw2bbg...` |
@@ -457,7 +457,7 @@ const { user, isAuthenticated } = useAuth()
 **Entity Prefixes:**
 | Entity | Prefix |
 |--------|--------|
-| Team | `tea_` |
+| Team | `ten_` |
 | User | `usr_` |
 | ApiToken | `tok_` |
 

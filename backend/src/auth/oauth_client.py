@@ -47,15 +47,26 @@ class MicrosoftOAuth2App(StarletteOAuth2App):
             claims_options = {}
 
         tid = self._extract_tid(token.get("id_token", ""))
+        expected_issuer: str | None = None
         if tid:
             expected_issuer = f"https://login.microsoftonline.com/{tid}/v2.0"
             claims_options["iss"] = {"essential": True, "value": expected_issuer}
+            logger.info(f"Microsoft OAuth: tid={tid}, expected_issuer={expected_issuer}")
         else:
             # Cannot determine expected issuer — reject tokens without tid
             logger.warning("Microsoft ID token missing tid claim; issuer cannot be validated")
             claims_options["iss"] = {"essential": True}
 
-        return await super().parse_id_token(token, nonce, claims_options, claims_cls, leeway)
+        try:
+            return await super().parse_id_token(token, nonce, claims_options, claims_cls, leeway)
+        except Exception as e:
+            # Log detailed error for debugging token validation failures
+            logger.error(f"Microsoft ID token validation failed: {e}", exc_info=True)
+            # Also log the actual issuer from the token for comparison
+            actual_issuer = self._extract_claim(token.get("id_token", ""), "iss")
+            if actual_issuer:
+                logger.error(f"Token issuer mismatch: expected={expected_issuer or 'unknown'}, actual={actual_issuer}")
+            raise
 
     @staticmethod
     def _extract_tid(id_token: str) -> str | None:
@@ -64,6 +75,15 @@ class MicrosoftOAuth2App(StarletteOAuth2App):
         The signature is verified by the parent class; this only peeks at the
         payload to learn which tenant issued the token so the correct issuer
         value can be constructed for validation.
+        """
+        return MicrosoftOAuth2App._extract_claim(id_token, "tid")
+
+    @staticmethod
+    def _extract_claim(id_token: str, claim: str) -> str | None:
+        """Extract a claim from a JWT without full verification.
+
+        Used for debugging and constructing validation parameters.
+        The signature is verified separately by the parent class.
         """
         import base64
         import json
@@ -76,7 +96,7 @@ class MicrosoftOAuth2App(StarletteOAuth2App):
             # Restore padding stripped by JWT encoding
             payload_b64 += "=" * (4 - len(payload_b64) % 4)
             payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-            return payload.get("tid")
+            return payload.get(claim)
         except Exception:
             return None
 
