@@ -156,9 +156,12 @@ remove "docker-compose.yml"
 remove "docker-compose.yaml"
 remove "Dockerfile"
 remove ".github"
-# Remove the scripts directory since we are manually copying needed scripts to 
+# Remove the scripts directory since we are manually copying needed scripts to
 # /opt/shuttersense/scripts/
 remove "scripts"
+# Remove development-only Python scripts (not needed in production)
+remove "web_server.py"
+remove "setup_master_key.py"
 
 # Remove markdown files except those in docs/
 if [[ "$DRY_RUN" == "--dry-run" ]]; then

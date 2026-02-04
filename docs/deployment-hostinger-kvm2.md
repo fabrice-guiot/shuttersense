@@ -900,6 +900,11 @@ chmod +x /opt/shuttersense/scripts/production-cleanup.sh
 
 Create `/opt/shuttersense/app/.env`:
 
+> **Note:** During development, `.env` is located in `backend/` where Python's `load_dotenv()`
+> looks for it. In production, we place it at the application root instead. This works because
+> the systemd service (section 10.1) uses `EnvironmentFile=/opt/shuttersense/app/.env` to load
+> all variables into the environment before the Python process starts.
+
 ```bash
 nano /opt/shuttersense/app/.env
 ```
