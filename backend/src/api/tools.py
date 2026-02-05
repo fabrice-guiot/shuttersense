@@ -16,12 +16,18 @@ Design:
 """
 
 import asyncio
+import time
 from typing import List, Optional
 from fastapi import (
     APIRouter, Depends, HTTPException, Query, Request, WebSocket,
     WebSocketDisconnect, status
 )
 from sqlalchemy.orm import Session
+
+# WebSocket connection lifecycle settings
+# Max lifetime in seconds before server requests client to reconnect
+# This prevents stale connections and ensures periodic re-authentication
+WEBSOCKET_MAX_LIFETIME_SECONDS = 30 * 60  # 30 minutes
 
 from backend.src.db.database import get_db
 from backend.src.main import limiter
@@ -601,6 +607,11 @@ async def global_jobs_websocket(
     Connect to receive updates for all jobs. This eliminates the need
     for polling the jobs list endpoint.
 
+    Connection lifecycle:
+    - Server closes connection after WEBSOCKET_MAX_LIFETIME_SECONDS
+    - Client receives {"type": "reconnect"} message before close
+    - Client should reconnect automatically
+
     Messages are JSON objects with job updates:
     {
         "type": "job_update",
@@ -611,10 +622,24 @@ async def global_jobs_websocket(
     channel_id = manager.GLOBAL_JOBS_CHANNEL
 
     await manager.connect(channel_id, websocket)
+    connection_start = time.monotonic()
     logger.info("WebSocket connected for global jobs channel")
 
     try:
         while True:
+            # Check if connection has exceeded max lifetime
+            elapsed = time.monotonic() - connection_start
+            if elapsed >= WEBSOCKET_MAX_LIFETIME_SECONDS:
+                logger.info(
+                    f"WebSocket for global jobs exceeded max lifetime "
+                    f"({WEBSOCKET_MAX_LIFETIME_SECONDS}s), requesting reconnect"
+                )
+                try:
+                    await websocket.send_text('{"type": "reconnect"}')
+                except Exception:
+                    pass
+                break
+
             try:
                 data = await asyncio.wait_for(
                     websocket.receive_text(),
@@ -637,13 +662,17 @@ async def global_jobs_websocket(
 async def job_progress_websocket(
     websocket: WebSocket,
     job_id: str,
-    db: Session = Depends(get_db)
 ):
     """
     WebSocket endpoint for real-time job progress updates.
 
     Connect to receive progress updates for a specific job.
     Messages are JSON objects with job status and progress data.
+
+    Connection lifecycle:
+    - Server closes connection after WEBSOCKET_MAX_LIFETIME_SECONDS
+    - Client receives {"type": "reconnect"} message before close
+    - Client should reconnect automatically
 
     Message format:
     {
@@ -660,11 +689,25 @@ async def job_progress_websocket(
     manager = get_connection_manager()
 
     await manager.connect(job_id, websocket)
+    connection_start = time.monotonic()
     logger.info(f"WebSocket connected for job {job_id}")
 
     try:
         # Keep connection alive and receive any client messages
         while True:
+            # Check if connection has exceeded max lifetime
+            elapsed = time.monotonic() - connection_start
+            if elapsed >= WEBSOCKET_MAX_LIFETIME_SECONDS:
+                logger.info(
+                    f"WebSocket for job {job_id} exceeded max lifetime "
+                    f"({WEBSOCKET_MAX_LIFETIME_SECONDS}s), requesting reconnect"
+                )
+                try:
+                    await websocket.send_text('{"type": "reconnect"}')
+                except Exception:
+                    pass
+                break
+
             try:
                 # Wait for client messages (heartbeat, close, etc.)
                 data = await asyncio.wait_for(

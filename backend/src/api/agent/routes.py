@@ -13,10 +13,16 @@ Base path: /api/agent/v1
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
+# WebSocket connection lifecycle settings
+# Max lifetime in seconds before server requests client to reconnect
+# This prevents stale connections and ensures periodic re-authentication
+WEBSOCKET_MAX_LIFETIME_SECONDS = 30 * 60  # 30 minutes
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
@@ -1981,7 +1987,6 @@ async def report_connector_capability(
 @router.websocket("/ws/pool-status")
 async def pool_status_websocket(
     websocket: WebSocket,
-    db: Session = Depends(get_db),
 ):
     """
     WebSocket endpoint for real-time agent pool status updates.
@@ -1992,17 +1997,23 @@ async def pool_status_websocket(
     Authentication: Session-based (same as HTTP endpoints).
     The team is derived from the authenticated user's session.
 
+    Connection lifecycle:
+    - Server closes connection after WEBSOCKET_MAX_LIFETIME_SECONDS
+    - Client receives {"type": "reconnect"} message before close
+    - Client should reconnect automatically
+
     Issue #90 - Distributed Agent Architecture (Phase 4)
     Task: T057
     """
-    from backend.src.middleware.tenant import get_websocket_tenant_context
+    from backend.src.middleware.tenant import get_websocket_tenant_context_standalone
+    from backend.src.db.database import SessionLocal
 
     # Must accept the WebSocket connection BEFORE any validation
     # Otherwise close() fails with 403 since connection isn't established
     await websocket.accept()
 
-    # Authenticate using session (same as HTTP endpoints)
-    ctx = await get_websocket_tenant_context(websocket, db)
+    # Authenticate using session (uses short-lived DB session internally)
+    ctx = await get_websocket_tenant_context_standalone(websocket)
     if not ctx:
         await websocket.close(code=4001, reason="Authentication required")
         return
@@ -2013,18 +2024,36 @@ async def pool_status_websocket(
 
     # Register this already-accepted connection to the channel
     await manager.register_accepted(channel, websocket)
+    connection_start = time.monotonic()
 
     try:
-        # Send initial pool status
-        service = AgentService(db)
-        initial_status = service.get_pool_status(team_id)
-        await websocket.send_json({
-            "type": "agent_pool_status",
-            "pool_status": initial_status
-        })
+        # Send initial pool status using short-lived DB session
+        db = SessionLocal()
+        try:
+            service = AgentService(db)
+            initial_status = service.get_pool_status(team_id)
+            await websocket.send_json({
+                "type": "agent_pool_status",
+                "pool_status": initial_status
+            })
+        finally:
+            db.close()
 
         # Keep connection alive and handle pings
         while True:
+            # Check if connection has exceeded max lifetime
+            elapsed = time.monotonic() - connection_start
+            if elapsed >= WEBSOCKET_MAX_LIFETIME_SECONDS:
+                logger.info(
+                    f"WebSocket for pool-status exceeded max lifetime "
+                    f"({WEBSOCKET_MAX_LIFETIME_SECONDS}s), requesting reconnect"
+                )
+                try:
+                    await websocket.send_json({"type": "reconnect"})
+                except Exception:
+                    pass
+                break
+
             try:
                 data = await asyncio.wait_for(
                     websocket.receive_text(),

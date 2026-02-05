@@ -71,6 +71,7 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttempts = useRef(0)
   const maxReconnectAttempts = 5
+  const serverRequestedReconnectRef = useRef(false)
 
   /**
    * Fetch jobs with optional filters and pagination
@@ -306,6 +307,12 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
               return [updatedJob, ...prev]
             }
           })
+        } else if (message.type === 'reconnect') {
+          // Server requests reconnection (connection lifecycle management)
+          console.log('[useTools] Server requested reconnect for global jobs')
+          serverRequestedReconnectRef.current = true
+          reconnectAttempts.current = 0 // Reset attempts for clean reconnect
+          ws.close()
         }
         // Ignore heartbeat messages
       } catch (err) {
@@ -320,6 +327,17 @@ export const useTools = (options: UseToolsOptions = {}): UseToolsReturn => {
     ws.onclose = () => {
       setWsConnected(false)
       wsRef.current = null
+
+      // Check if server requested reconnection (connection lifecycle)
+      const shouldReconnectImmediately = serverRequestedReconnectRef.current
+      serverRequestedReconnectRef.current = false
+
+      if (shouldReconnectImmediately) {
+        // Server requested reconnect - do it immediately
+        console.log('[useTools] Reconnecting immediately (server requested)')
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 100)
+        return
+      }
 
       // Attempt reconnection with exponential backoff
       if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -417,6 +435,7 @@ export const useJobProgress = (
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttempts = useRef(0)
   const maxReconnectAttempts = 3
+  const serverRequestedReconnectRef = useRef(false)
 
   const connect = useCallback(() => {
     if (!jobId || wsRef.current?.readyState === WebSocket.OPEN) {
@@ -444,6 +463,12 @@ export const useJobProgress = (
           onStatusChange?.(message.status, message.result_guid, message.error_message)
         } else if (message.type === 'closed') {
           ws.close()
+        } else if (message.type === 'reconnect') {
+          // Server requests reconnection (connection lifecycle management)
+          console.log(`[useJobProgress] Server requested reconnect for job ${jobId}`)
+          serverRequestedReconnectRef.current = true
+          reconnectAttempts.current = 0
+          ws.close()
         }
       } catch (err) {
         console.error('Failed to parse WebSocket message:', err)
@@ -458,6 +483,16 @@ export const useJobProgress = (
     ws.onclose = () => {
       setConnected(false)
       wsRef.current = null
+
+      // Check if server requested reconnection (connection lifecycle)
+      const shouldReconnectImmediately = serverRequestedReconnectRef.current
+      serverRequestedReconnectRef.current = false
+
+      if (shouldReconnectImmediately) {
+        // Server requested reconnect - do it immediately
+        setTimeout(connect, 100)
+        return
+      }
 
       // Attempt reconnection for non-terminal statuses
       if (

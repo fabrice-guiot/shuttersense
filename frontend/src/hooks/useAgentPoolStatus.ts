@@ -57,6 +57,7 @@ export const useAgentPoolStatus = (
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const hasConnectedRef = useRef(false)
+  const serverRequestedReconnectRef = useRef(false)
 
   // Manual refetch via REST API (fallback)
   const refetch = useCallback(async () => {
@@ -120,6 +121,12 @@ export const useAgentPoolStatus = (
               setLoading(false)
             } else if (data.type === 'notification_created') {
               window.dispatchEvent(new Event('notification-created'))
+            } else if (data.type === 'reconnect') {
+              // Server requests reconnection (connection lifecycle management)
+              console.log('[useAgentPoolStatus] Server requested reconnect')
+              serverRequestedReconnectRef.current = true
+              reconnectAttemptsRef.current = 0 // Reset attempts for clean reconnect
+              ws.close()
             }
             // Ignore heartbeat messages
           } catch {
@@ -139,6 +146,18 @@ export const useAgentPoolStatus = (
           }
 
           wsRef.current = null
+
+          // Check if server requested reconnection (connection lifecycle)
+          const shouldReconnectImmediately = serverRequestedReconnectRef.current
+          serverRequestedReconnectRef.current = false
+
+          if (shouldReconnectImmediately) {
+            // Server requested reconnect - do it immediately
+            reconnectTimeoutRef.current = setTimeout(() => {
+              connect()
+            }, 100) // Small delay to allow socket cleanup
+            return
+          }
 
           // Don't reconnect if closed normally or max attempts reached
           if (event.code === 1000 || reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
