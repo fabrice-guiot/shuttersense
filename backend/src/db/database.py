@@ -50,6 +50,7 @@ else:
         max_overflow=10,       # Additional connections beyond pool_size
         pool_pre_ping=True,    # Verify connections before checkout
         pool_recycle=3600,     # Recycle connections after 1 hour
+        pool_timeout=5,        # Timeout waiting for connection (keeps CTRL+C responsive)
         echo=False,            # Set to True for SQL debugging
         future=True            # Use SQLAlchemy 2.0 style
     )

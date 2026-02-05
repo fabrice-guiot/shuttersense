@@ -182,10 +182,15 @@ export interface WebSocketCloseMessage {
   reason: string
 }
 
+export interface WebSocketReconnectMessage {
+  type: 'reconnect'
+}
+
 export type WebSocketMessage =
   | WebSocketProgressMessage
   | WebSocketStatusMessage
   | WebSocketCloseMessage
+  | WebSocketReconnectMessage
 
 // ============================================================================
 // API Endpoint Definitions (OpenAPI-style documentation)
