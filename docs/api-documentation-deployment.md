@@ -70,10 +70,12 @@ dig docs.shuttersense.ai +short
 
 ## 2. SSL Certificate Update
 
-### Option A: Add Hostnames to Existing Certificate
+### Option A: Multi-Domain Certificate (Recommended)
+
+This is the simplest approach for a small number of hostnames. Uses HTTP-01 challenge which auto-renews without manual intervention.
 
 ```bash
-# Stop nginx temporarily
+# Stop nginx temporarily (certbot needs port 80)
 sudo systemctl stop nginx
 
 # Expand certificate to include new hostnames
@@ -89,11 +91,36 @@ sudo certbot certonly --standalone \
 
 # Verify certificate includes all domains
 sudo certbot certificates
+
+# Start nginx
+sudo systemctl start nginx
 ```
 
-### Option B: Wildcard Certificate (Recommended for Future Expansion)
+**Why this is recommended:**
+- Simple one-time setup
+- Auto-renews every 90 days without intervention
+- No DNS provider API integration needed
+- Sufficient for most deployments (up to 100 hostnames per certificate)
 
-Requires DNS-01 challenge (manual or with DNS provider API):
+### Option B: Wildcard Certificate (Advanced)
+
+Covers all subdomains (`*.shuttersense.ai`) but requires DNS-01 challenge, which means proving domain ownership by creating DNS TXT records.
+
+**How DNS-01 challenge works:**
+
+1. Run certbot with `--manual` flag
+2. Certbot displays a TXT record to add:
+   ```
+   Please deploy a DNS TXT record under the name:
+   _acme-challenge.shuttersense.ai
+   with the following value:
+   abc123xyz789...
+   ```
+3. You manually add this TXT record in GoDaddy DNS management
+4. Wait for DNS propagation (1-5 minutes)
+5. Press Enter in certbot to continue verification
+6. Certificate is issued
+7. You can delete the TXT record
 
 ```bash
 sudo certbot certonly --manual \
@@ -103,6 +130,18 @@ sudo certbot certonly --manual \
   --agree-tos \
   --email admin@shuttersense.ai
 ```
+
+**Important limitations:**
+- **Manual renewal required** - You must repeat the DNS TXT record process every 90 days
+- **No auto-renewal** - Unless you set up DNS provider API integration (complex)
+- **Only consider if** you expect many more subdomains in the future
+
+**For automated wildcard renewal**, you would need to:
+1. Use a DNS provider with API support (GoDaddy has limited API)
+2. Install a certbot DNS plugin (e.g., `certbot-dns-cloudflare`)
+3. Configure API credentials
+
+This is significantly more complex than Option A and not recommended unless you have a specific need for wildcards.
 
 ---
 
