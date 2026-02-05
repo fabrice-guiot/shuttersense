@@ -23,6 +23,7 @@ from fastapi import Request, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 
 from backend.src.db.database import get_db
+from backend.src.utils.client_ip import get_client_ip
 
 
 logger = logging.getLogger(__name__)
@@ -55,13 +56,23 @@ def _record_token_failure(ip: str) -> None:
     if count >= _TOKEN_FAILURE_BLOCK:
         _token_blocked[ip] = now
         logger.warning(
-            "SEC-13: Blocking IP %s for %ds after %d failed token validations",
-            ip, _TOKEN_FAILURE_BLOCK_DURATION, count,
+            "SEC-13: IP %s has %d failed token validations in the last %d minutes — blocking for %ds",
+            ip, count, _TOKEN_FAILURE_WINDOW // 60, _TOKEN_FAILURE_BLOCK_DURATION,
+            extra={
+                "event": "token.validation.blocked",
+                "client_ip": ip,
+                "failure_count": count,
+            },
         )
     elif count >= _TOKEN_FAILURE_WARN:
         logger.warning(
-            "SEC-13: IP %s has %d failed token validations in %ds window",
-            ip, count, _TOKEN_FAILURE_WINDOW,
+            "SEC-13: IP %s has %d failed token validations in the last %d minutes",
+            ip, count, _TOKEN_FAILURE_WINDOW // 60,
+            extra={
+                "event": "token.validation.warning",
+                "client_ip": ip,
+                "failure_count": count,
+            },
         )
 
 
@@ -171,7 +182,7 @@ async def get_tenant_context(
     # Try API token authentication first
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
         return await _authenticate_api_token(
             auth_header[7:], db, check_super_admin, client_ip
         )
@@ -248,7 +259,11 @@ async def _authenticate_api_token(
     # SEC-13: Check if IP is blocked from too many failures
     if _is_token_blocked(client_ip):
         logger.warning(
-            "SEC-13: Rejecting token validation from blocked IP %s", client_ip
+            "SEC-13: Rejecting token validation from blocked IP %s", client_ip,
+            extra={
+                "event": "token.validation.rejected",
+                "client_ip": client_ip,
+            },
         )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

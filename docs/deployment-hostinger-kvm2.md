@@ -404,7 +404,39 @@ ignoreregex = ^<HOST> .* "(GET|POST) /health.*" 200 .*$
 EOF
 ```
 
-#### 5.4.3 Configure Jail Rules
+#### 5.4.3 Create ShutterSense Auth Filter
+
+Create `/etc/fail2ban/filter.d/shuttersense-auth.conf`:
+
+```bash
+cat > /etc/fail2ban/filter.d/shuttersense-auth.conf << 'EOF'
+# Fail2ban filter for ShutterSense OAuth login failures
+# Matches JSON log entries with client_ip field and auth.login.failed event
+
+[Definition]
+failregex = ^.*"client_ip":\s*"<HOST>".*"event":\s*"auth\.login\.failed".*$
+
+ignoreregex = ^.*"event":\s*"auth\.login\.success".*$
+EOF
+```
+
+#### 5.4.4 Create ShutterSense Token Filter
+
+Create `/etc/fail2ban/filter.d/shuttersense-token.conf`:
+
+```bash
+cat > /etc/fail2ban/filter.d/shuttersense-token.conf << 'EOF'
+# Fail2ban filter for ShutterSense API token brute-force
+# Matches SEC-13 warning messages with IP addresses
+
+[Definition]
+failregex = ^.*SEC-13: IP <HOST> has \d+ failed token validations.*$
+
+ignoreregex =
+EOF
+```
+
+#### 5.4.5 Configure Jail Rules
 
 Create `/etc/fail2ban/jail.local`:
 
@@ -458,6 +490,27 @@ maxretry = 2
 bantime = 1d
 
 # =============================================================================
+# ShutterSense Application Protection
+# =============================================================================
+[shuttersense-auth]
+enabled = true
+port = http,https
+filter = shuttersense-auth
+logpath = /var/log/shuttersense/auth.log
+maxretry = 5
+findtime = 5m
+bantime = 1h
+
+[shuttersense-token]
+enabled = true
+port = http,https
+filter = shuttersense-token
+logpath = /var/log/shuttersense/api.log
+maxretry = 10
+findtime = 5m
+bantime = 2h
+
+# =============================================================================
 # Recidive (repeat offenders)
 # =============================================================================
 [recidive]
@@ -470,7 +523,7 @@ maxretry = 3
 EOF
 ```
 
-#### 5.4.4 Configure Nginx to Log Client IPs
+#### 5.4.6 Configure Nginx to Log Client IPs
 
 For fail2ban to work correctly, nginx must log the real client IP. Update the nginx log format if using a CDN or proxy.
 
@@ -488,7 +541,7 @@ http {
 }
 ```
 
-#### 5.4.5 Start and Enable Fail2ban
+#### 5.4.7 Start and Enable Fail2ban
 
 ```bash
 # Start and enable
@@ -504,15 +557,17 @@ fail2ban-client status sshd
 
 > **Note:** The nginx jails are disabled at this stage because nginx is not yet installed.
 > They will be enabled in section 9.4 (after nginx is configured).
+> The ShutterSense application jails (`shuttersense-auth`, `shuttersense-token`) are enabled
+> but will only activate once the application is deployed and logging to the configured paths.
 
 Expected output:
 ```
 Status
-|- Number of jail:      5
-`- Jail list:   nginx-botsearch, nginx-http-auth, nginx-limit-req, recidive, sshd
+|- Number of jail:      7
+`- Jail list:   nginx-botsearch, nginx-http-auth, nginx-limit-req, recidive, shuttersense-auth, shuttersense-token, sshd
 ```
 
-#### 5.4.6 Fail2ban Management Commands
+#### 5.4.8 Fail2ban Management Commands
 
 ```bash
 # View banned IPs for a jail
@@ -531,7 +586,7 @@ fail2ban-client get sshd banned 1.2.3.4
 tail -f /var/log/fail2ban.log
 ```
 
-#### 5.4.7 Protection Summary
+#### 5.4.9 Protection Summary
 
 | Jail | Protects Against | Max Retries | Ban Duration |
 |------|------------------|-------------|--------------|
@@ -539,6 +594,8 @@ tail -f /var/log/fail2ban.log
 | `nginx-http-auth` | Basic auth attacks | 5 in 10m | 1 hour |
 | `nginx-limit-req` | Rate limit abuse | 10 in 1m | 30 minutes |
 | `nginx-botsearch` | Vulnerability scanners | 2 in 10m | 1 day |
+| `shuttersense-auth` | OAuth login abuse | 5 in 5m | 1 hour |
+| `shuttersense-token` | API token brute-force | 10 in 5m | 2 hours |
 | `recidive` | Repeat offenders | 3 bans/day | 1 week |
 
 ### 5.5 Automatic Security Updates

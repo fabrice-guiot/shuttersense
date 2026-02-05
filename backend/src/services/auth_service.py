@@ -172,6 +172,7 @@ class AuthService:
         self,
         request: Request,
         provider: str,
+        client_ip: str = "unknown",
     ) -> AuthResult:
         """
         Handle OAuth callback after user authorization.
@@ -205,6 +206,7 @@ class AuthService:
                     "No user info returned from provider",
                     extra={
                         "event": "auth.login.failed",
+                        "client_ip": client_ip,
                         "provider": provider,
                         "reason": "no_user_info",
                     }
@@ -224,6 +226,7 @@ class AuthService:
                     "No email in user info from provider",
                     extra={
                         "event": "auth.login.failed",
+                        "client_ip": client_ip,
                         "provider": provider,
                         "reason": "no_email",
                     }
@@ -240,6 +243,7 @@ class AuthService:
                 provider=provider,
                 oauth_subject=oauth_subject,
                 user_info=user_info,
+                client_ip=client_ip,
             )
 
             return result
@@ -258,6 +262,7 @@ class AuthService:
         provider: str,
         oauth_subject: str,
         user_info: dict,
+        client_ip: str = "unknown",
     ) -> AuthResult:
         """
         Validate user and complete authentication.
@@ -267,6 +272,7 @@ class AuthService:
             provider: OAuth provider name
             oauth_subject: OAuth sub claim
             user_info: Full user info from provider
+            client_ip: Client IP address for security logging
 
         Returns:
             AuthResult with success status
@@ -279,6 +285,7 @@ class AuthService:
                 "Login attempt for unknown email",
                 extra={
                     "event": "auth.login.failed",
+                    "client_ip": client_ip,
                     "provider": provider,
                     "email": email,
                     "reason": "user_not_found",
@@ -296,6 +303,7 @@ class AuthService:
                 "OAuth login attempt by system user blocked",
                 extra={
                     "event": "auth.login.failed",
+                    "client_ip": client_ip,
                     "provider": provider,
                     "email": email,
                     "user_guid": user.guid,
@@ -314,6 +322,7 @@ class AuthService:
                 "Login attempt for inactive user",
                 extra={
                     "event": "auth.login.failed",
+                    "client_ip": client_ip,
                     "provider": provider,
                     "email": email,
                     "user_guid": user.guid,
@@ -331,6 +340,7 @@ class AuthService:
                 "Login attempt for deactivated user",
                 extra={
                     "event": "auth.login.failed",
+                    "client_ip": client_ip,
                     "provider": provider,
                     "email": email,
                     "user_guid": user.guid,
@@ -350,6 +360,7 @@ class AuthService:
                 "Login attempt for user in inactive team",
                 extra={
                     "event": "auth.login.failed",
+                    "client_ip": client_ip,
                     "provider": provider,
                     "email": email,
                     "user_guid": user.guid,
@@ -384,6 +395,7 @@ class AuthService:
             "User authenticated successfully",
             extra={
                 "event": "auth.login.success",
+                "client_ip": client_ip,
                 "provider": provider,
                 "email": email,
                 "user_guid": user.guid,
