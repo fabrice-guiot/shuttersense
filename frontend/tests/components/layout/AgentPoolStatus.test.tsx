@@ -54,7 +54,7 @@ describe('AgentPoolStatus', () => {
       render(<AgentPoolStatus />)
 
       expect(screen.getByText('Running')).toBeInTheDocument()
-      expect(screen.getByText('(5)')).toBeInTheDocument()
+      expect(screen.getByText('5')).toBeInTheDocument()
     })
 
     it('uses success (green) color for running status', () => {
@@ -87,7 +87,7 @@ describe('AgentPoolStatus', () => {
       render(<AgentPoolStatus />)
 
       expect(screen.getByText('Idle')).toBeInTheDocument()
-      expect(screen.getByText('(3)')).toBeInTheDocument()
+      expect(screen.getByText('3')).toBeInTheDocument()
     })
 
     it('uses info (blue) color for idle status', () => {
@@ -120,7 +120,7 @@ describe('AgentPoolStatus', () => {
       render(<AgentPoolStatus />)
 
       expect(screen.getByText('Offline')).toBeInTheDocument()
-      expect(screen.getByText('(2)')).toBeInTheDocument()
+      expect(screen.getByText('2')).toBeInTheDocument()
     })
 
     it('uses destructive (red) color for offline status', () => {
@@ -149,11 +149,11 @@ describe('AgentPoolStatus', () => {
       })
     })
 
-    it('renders "Offline (0)" when no agents registered', () => {
+    it('renders "Offline 0" when no agents registered', () => {
       render(<AgentPoolStatus />)
 
       expect(screen.getByText('Offline')).toBeInTheDocument()
-      expect(screen.getByText('(0)')).toBeInTheDocument()
+      expect(screen.getByText('0')).toBeInTheDocument()
     })
   })
 
@@ -227,7 +227,7 @@ describe('AgentPoolStatus', () => {
       render(<AgentPoolStatus />)
 
       expect(screen.getByText('Idle')).toBeInTheDocument()
-      expect(screen.getByText('(3)')).toBeInTheDocument()
+      expect(screen.getByText('3')).toBeInTheDocument()
     })
 
     it('renders with cached data despite error', () => {
@@ -247,7 +247,7 @@ describe('AgentPoolStatus', () => {
       render(<AgentPoolStatus />)
 
       expect(screen.getByText('Running')).toBeInTheDocument()
-      expect(screen.getByText('(2)')).toBeInTheDocument()
+      expect(screen.getByText('2')).toBeInTheDocument()
     })
   })
 
