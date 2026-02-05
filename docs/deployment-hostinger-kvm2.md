@@ -773,13 +773,13 @@ ls -la dist/
 
 After building, remove development artifacts that aren't needed at runtime. This reduces disk usage, improves security by removing source code, and eliminates potential information leakage.
 
-The cleanup script is maintained in the repository at `scripts/production-cleanup.sh`.
+Maintenance scripts are maintained in the repository under `scripts/`. Copy them to the server scripts directory:
 
 ```bash
-# Copy cleanup script to server scripts directory
+# Copy all maintenance scripts to server scripts directory
 mkdir -p /opt/shuttersense/scripts
-cp /opt/shuttersense/app/scripts/production-cleanup.sh /opt/shuttersense/scripts/
-chmod +x /opt/shuttersense/scripts/production-cleanup.sh
+cp /opt/shuttersense/app/scripts/*.sh /opt/shuttersense/scripts/
+chmod +x /opt/shuttersense/scripts/*.sh
 
 # Preview what will be removed (dry run)
 /opt/shuttersense/scripts/production-cleanup.sh --dry-run
@@ -1768,42 +1768,34 @@ openssl s_client -connect app.shuttersense.ai:443 -servername app.shuttersense.a
 
 ### 15.1 Database Backup Script
 
-Create `/opt/shuttersense/scripts/backup-db.sh`:
+The backup script is maintained in the repository at `scripts/backup-db.sh`. Copy it to the server scripts directory:
 
 ```bash
-mkdir -p /opt/shuttersense/scripts
-nano /opt/shuttersense/scripts/backup-db.sh
-```
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-BACKUP_DIR="/opt/shuttersense/backups"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/shuttersense_${TIMESTAMP}.sql.gz"
-RETENTION_DAYS=30
-
-mkdir -p "$BACKUP_DIR"
-
-# Create backup
-sudo -u postgres pg_dump shuttersense | gzip > "$BACKUP_FILE"
-
-# Set permissions
-chmod 600 "$BACKUP_FILE"
-chown shuttersense:shuttersense "$BACKUP_FILE"
-
-# Delete old backups
-find "$BACKUP_DIR" -name "shuttersense_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
-
-echo "Backup created: $BACKUP_FILE"
-```
-
-```bash
+# Copy backup script to server scripts directory
+cp /opt/shuttersense/app/scripts/backup-db.sh /opt/shuttersense/scripts/
 chmod +x /opt/shuttersense/scripts/backup-db.sh
 ```
 
-### 15.2 Automated Backup Cron
+#### Tiered Retention Policy
+
+The script implements a tiered retention policy to balance storage usage with recovery options:
+
+| Tier | Backups Kept | Retention Period |
+|------|--------------|------------------|
+| Daily | All backups | 7 days |
+| Weekly | Saturday backups | ~30 days |
+| Monthly | First Saturday of each month | 1 year |
+
+This means you can restore to:
+- Any point in the last week (daily granularity)
+- Any Saturday in the last month (weekly granularity)
+- The first week of any month in the last year (monthly granularity)
+
+> **Note:** The script uses `BACKUP_DIR` environment variable to customize the backup location (default: `/opt/shuttersense/backups`).
+
+### 15.2 Scheduled Tasks (Cron)
+
+Configure scheduled tasks for backups and automatic updates:
 
 ```bash
 crontab -e
@@ -1811,15 +1803,94 @@ crontab -e
 
 Add:
 ```
-# Daily database backup at 3 AM
+# Daily database backup at 3 AM UTC
 0 3 * * * /opt/shuttersense/scripts/backup-db.sh >> /var/log/shuttersense/backup.log 2>&1
+
+# Daily auto-update check at 5 AM UTC (optional but recommended)
+0 5 * * * /opt/shuttersense/scripts/auto-update.sh
 ```
+
+> **Note:** The auto-update script manages its own logging to `/var/log/shuttersense/auto-update.log`.
 
 ### 15.3 Application Updates
 
-There are two update strategies:
-- **Latest main branch**: Deploy the most recent code from main
-- **Specific release tag**: Deploy a specific version (recommended for production)
+There are three update strategies:
+- **Automatic updates**: Daily check for new version tags (recommended for most deployments)
+- **Manual tag deployment**: Deploy a specific version tag
+- **Latest main branch**: Deploy the most recent code from main (development only)
+
+#### Automatic Updates (Recommended)
+
+The auto-update script checks daily for new version tags and performs the full update process automatically. It is maintained in the repository at `scripts/auto-update.sh`.
+
+**Setup:**
+
+```bash
+# Add to crontab (runs daily at 5 AM UTC)
+crontab -e
+```
+
+Add:
+```
+# Daily auto-update check at 5 AM UTC
+0 5 * * * /opt/shuttersense/scripts/auto-update.sh
+```
+
+**What automatic updates handle:**
+- Fetching new version tags from the repository
+- Comparing versions and updating only when a newer tag exists
+- Backend dependency updates (`pip install`)
+- Frontend rebuilds (`npm ci && npm run build`)
+- Database migrations (`alembic upgrade head`)
+- Maintenance script updates
+- Production cleanup
+- Service restart
+
+**What automatic updates do NOT handle:**
+- **Major version updates** (e.g., v1.x → v2.x) - skipped by default, see below
+- Nginx configuration changes (check release notes)
+- Breaking changes that require manual migration steps
+- Rollbacks (must be done manually)
+
+**Major Version Updates:**
+
+By default, major version updates are skipped because they may contain breaking changes. When a major update is available, the script logs:
+
+```
+SKIPPED: Major version update detected (v1.19.0 → v2.0.0)
+Major updates may contain breaking changes and require manual intervention.
+```
+
+To enable automatic major updates, set the environment variable in crontab:
+
+```
+0 5 * * * AUTO_UPDATE_MAJOR=true /opt/shuttersense/scripts/auto-update.sh
+```
+
+Or update manually when ready:
+
+```bash
+cd /opt/shuttersense/app
+git fetch --tags
+git reset --hard v2.0.0
+# Then follow the manual update steps below
+```
+
+**Monitoring:**
+
+All auto-update activity is logged to `/var/log/shuttersense/auto-update.log`:
+
+```bash
+# View recent update activity
+tail -100 /var/log/shuttersense/auto-update.log
+
+# Watch updates in real-time
+tail -f /var/log/shuttersense/auto-update.log
+```
+
+#### Manual Updates
+
+For manual control or to deploy a specific version:
 
 ```bash
 # SSH as shuttersense user (root login is disabled)
@@ -1828,12 +1899,12 @@ cd /opt/shuttersense/app
 # Fetch latest changes and tags
 git fetch origin --tags
 
-# Option A: Update to latest main branch
-git pull origin main
-
-# Option B: Deploy a specific release tag (recommended)
+# Option A: Deploy a specific release tag (recommended)
 # Use git reset --hard to restore all files removed by production-cleanup.sh
 git reset --hard v1.2.3
+
+# Option B: Update to latest main branch (development only)
+git pull origin main
 
 # Update backend dependencies
 source venv/bin/activate
@@ -1864,10 +1935,12 @@ chmod +x /opt/shuttersense/scripts/*.sh
 sudo systemctl restart shuttersense
 ```
 
-**If nginx configuration has changed** (check release notes), update and reload nginx:
+#### Nginx Configuration Changes
+
+Nginx configuration changes are NOT handled automatically. When release notes indicate nginx changes:
 
 ```bash
-# Compare and update nginx config if needed
+# Compare and update nginx config
 sudo cp /etc/nginx/sites-available/shuttersense /etc/nginx/sites-available/shuttersense.backup
 sudo nano /etc/nginx/sites-available/shuttersense  # Apply changes from docs
 
@@ -1875,7 +1948,9 @@ sudo nano /etc/nginx/sites-available/shuttersense  # Apply changes from docs
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-**Service Worker Note:** Even after deployment, users may continue seeing cached content until their browser's service worker updates. The service worker checks for updates on navigation, but the new version won't activate until all tabs are closed. Users experiencing stale content should:
+#### Service Worker Note
+
+Even after deployment, users may continue seeing cached content until their browser's service worker updates. The service worker checks for updates on navigation, but the new version won't activate until all tabs are closed. Users experiencing stale content should:
 1. Close all tabs for the application
 2. Reopen the application
 3. If issues persist, clear site data in browser settings
@@ -2019,7 +2094,11 @@ tail -f /var/log/fail2ban.log                   # Watch bans
 # Logs
 tail -f /var/log/shuttersense/error.log
 tail -f /var/log/shuttersense/auth.log
+tail -f /var/log/shuttersense/auto-update.log
 tail -f /var/log/nginx/shuttersense_error.log
+
+# Manual update trigger
+/opt/shuttersense/scripts/auto-update.sh
 ```
 
 ---
@@ -2042,4 +2121,5 @@ tail -f /var/log/nginx/shuttersense_error.log
 - [ ] Automatic security updates enabled
 - [ ] Log rotation configured
 - [ ] Database backups scheduled
+- [ ] Auto-updates scheduled (optional)
 - [ ] Critical keys backed up securely
