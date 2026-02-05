@@ -5,16 +5,22 @@
 #
 # Usage: ./auto-update.sh
 #
-# This script is deployed to /opt/shuttersense/scripts/ and scheduled via cron.
+# IMPORTANT: This script should be invoked by auto-update-cron.sh, not directly
+# from cron. The cron wrapper runs as root and calls this script as the
+# shuttersense user, then handles the service restart as root.
+#
+# This script is deployed to /opt/shuttersense/scripts/.
 # See docs/deployment-hostinger-kvm2.md section 15.3 for cron configuration.
 #
 # What it does:
 #   1. Fetches new tags from the remote repository
 #   2. Compares the latest tag with the currently deployed version
 #   3. If a newer version exists, performs the full update process
-#   4. Logs all output for troubleshooting
+#   4. Outputs "SERVICE_RESTART_REQUIRED" if an update was performed
+#   5. Logs all output for troubleshooting
 #
 # What it does NOT do:
+#   - Restart the service (handled by auto-update-cron.sh as root)
 #   - Update nginx configuration (requires manual intervention)
 #   - Handle breaking changes that need manual migration steps
 #
@@ -165,11 +171,8 @@ perform_update() {
     chmod +x "$SCRIPTS_DIR"/*.sh
     "$SCRIPTS_DIR/production-cleanup.sh"
 
-    # Restart the service
-    log "Restarting shuttersense service..."
-    sudo systemctl restart shuttersense
-
     log "Update to $target_version completed successfully!"
+    log "SERVICE_RESTART_REQUIRED"
 }
 
 # =============================================================================

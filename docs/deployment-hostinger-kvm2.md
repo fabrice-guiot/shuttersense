@@ -1795,7 +1795,9 @@ This means you can restore to:
 
 ### 15.2 Scheduled Tasks (Cron)
 
-Configure scheduled tasks for backups and automatic updates:
+Configure scheduled tasks for backups and automatic updates.
+
+**Backups (as shuttersense user):**
 
 ```bash
 crontab -e
@@ -1805,12 +1807,23 @@ Add:
 ```
 # Daily database backup at 3 AM UTC
 0 3 * * * /opt/shuttersense/scripts/backup-db.sh >> /var/log/shuttersense/backup.log 2>&1
-
-# Daily auto-update check at 5 AM UTC (optional but recommended)
-0 5 * * * /opt/shuttersense/scripts/auto-update.sh
 ```
 
-> **Note:** The auto-update script manages its own logging to `/var/log/shuttersense/auto-update.log`.
+**Auto-updates (as root):**
+
+The auto-update requires root privileges to restart the service. Configure in root's crontab:
+
+```bash
+sudo crontab -e
+```
+
+Add:
+```
+# Daily auto-update check at 5 AM UTC (optional but recommended)
+0 5 * * * /opt/shuttersense/scripts/auto-update-cron.sh
+```
+
+> **Note:** The auto-update scripts manage their own logging to `/var/log/shuttersense/auto-update.log`.
 
 ### 15.3 Application Updates
 
@@ -1821,19 +1834,26 @@ There are three update strategies:
 
 #### Automatic Updates (Recommended)
 
-The auto-update script checks daily for new version tags and performs the full update process automatically. It is maintained in the repository at `scripts/auto-update.sh`.
+The auto-update system consists of two scripts that work together:
+
+1. **`auto-update-cron.sh`** - Root wrapper that orchestrates the update process
+2. **`auto-update.sh`** - Performs the actual update (runs as shuttersense user)
+
+This separation is necessary because:
+- The update process (git, npm, pip) should run as the application user for proper file ownership
+- The service restart requires root privileges
 
 **Setup:**
 
 ```bash
-# Add to crontab (runs daily at 5 AM UTC)
-crontab -e
+# Add to root's crontab (runs daily at 5 AM UTC)
+sudo crontab -e
 ```
 
 Add:
 ```
 # Daily auto-update check at 5 AM UTC
-0 5 * * * /opt/shuttersense/scripts/auto-update.sh
+0 5 * * * /opt/shuttersense/scripts/auto-update-cron.sh
 ```
 
 **What automatic updates handle:**
@@ -1861,10 +1881,10 @@ SKIPPED: Major version update detected (v1.19.0 → v2.0.0)
 Major updates may contain breaking changes and require manual intervention.
 ```
 
-To enable automatic major updates, set the environment variable in crontab:
+To enable automatic major updates, set the environment variable in root's crontab:
 
 ```
-0 5 * * * AUTO_UPDATE_MAJOR=true /opt/shuttersense/scripts/auto-update.sh
+0 5 * * * AUTO_UPDATE_MAJOR=true /opt/shuttersense/scripts/auto-update-cron.sh
 ```
 
 Or update manually when ready:
@@ -2097,8 +2117,8 @@ tail -f /var/log/shuttersense/auth.log
 tail -f /var/log/shuttersense/auto-update.log
 tail -f /var/log/nginx/shuttersense_error.log
 
-# Manual update trigger
-/opt/shuttersense/scripts/auto-update.sh
+# Manual update trigger (run as root)
+sudo /opt/shuttersense/scripts/auto-update-cron.sh
 ```
 
 ---
