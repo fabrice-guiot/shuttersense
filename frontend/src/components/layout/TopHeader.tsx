@@ -112,12 +112,12 @@ export function TopHeader({
       )}
     >
       {/* Left: Mobile Menu Button + Page Title & Icon */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-1 min-w-[80px]">
         {/* Menu button - shown on mobile OR when sidebar is collapsed on tablet+ (Issue #41) */}
         <button
           onClick={onOpenMobileMenu}
           className={cn(
-            'rounded-md p-2 hover:bg-accent transition-colors',
+            'rounded-md p-2 hover:bg-accent transition-colors shrink-0',
             // Show on mobile, or when sidebar is collapsed on tablet+
             isSidebarCollapsed ? 'flex' : 'md:hidden'
           )}
@@ -125,14 +125,14 @@ export function TopHeader({
         >
           <Menu className="h-5 w-5 text-foreground" />
         </button>
-        {PageIcon && <PageIcon className="h-6 w-6 text-primary" />}
-        <h1 className="text-xl font-semibold text-foreground">{pageTitle}</h1>
+        {PageIcon && <PageIcon className="h-6 w-6 text-primary shrink-0" />}
+        <h1 className="text-xl font-semibold text-foreground truncate">{pageTitle}</h1>
         {pageHelp && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="rounded-md p-1 hover:bg-accent transition-colors"
+                  className="hidden sm:inline-flex rounded-md p-1 hover:bg-accent transition-colors shrink-0"
                   aria-label="Page help"
                 >
                   <HelpCircle className="h-4 w-4 text-muted-foreground" />
@@ -147,7 +147,7 @@ export function TopHeader({
       </div>
 
       {/* Right: Stats, Notifications, User Profile */}
-      <div className="flex items-center gap-3 md:gap-6">
+      <div className="flex items-center gap-2 sm:gap-3 md:gap-6 shrink-0">
         {/* Stats - hidden on mobile */}
         {stats.length > 0 && (
           <div className="hidden md:flex items-center gap-4">
@@ -175,8 +175,8 @@ export function TopHeader({
               className="flex items-center gap-3 rounded-md p-2 hover:bg-accent transition-colors"
               aria-label="User profile menu"
             >
-              {/* User info - hidden on mobile */}
-              <div className="hidden md:block text-right">
+              {/* User info - only shown on large screens (1280px+) */}
+              <div className="hidden xl:block text-right">
                 <div className="text-sm font-medium text-foreground">
                   {displayName}
                 </div>

@@ -155,13 +155,13 @@ export function AgentPoolStatus({ className }: AgentPoolStatusProps) {
           >
             <Badge
               className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium cursor-pointer',
+                'flex items-center gap-1 xl:gap-1.5 px-1.5 xl:px-2.5 py-1 text-xs font-medium cursor-pointer',
                 getBadgeStyles(status)
               )}
             >
               <Bot className="h-3.5 w-3.5" />
-              <span>{label}</span>
-              <span className="opacity-80">({count})</span>
+              <span className="hidden xl:inline">{label}</span>
+              <span className="opacity-80">{count}</span>
             </Badge>
           </button>
         </TooltipTrigger>
