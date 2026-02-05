@@ -28,6 +28,7 @@ from backend.src.main import limiter
 from backend.src.middleware.auth import require_super_admin, TenantContext
 from backend.src.services.auth_service import AuthService
 from backend.src.services.exceptions import ValidationError
+from backend.src.utils.client_ip import get_client_ip
 from backend.src.utils.logging_config import get_logger
 
 
@@ -193,8 +194,9 @@ async def callback(
         Redirect to dashboard or login page with error
     """
     auth_service = AuthService(db)
+    client_ip = get_client_ip(request)
 
-    result = await auth_service.handle_callback(request, provider)
+    result = await auth_service.handle_callback(request, provider, client_ip=client_ip)
 
     if result.success and result.user:
         # Create session and redirect to dashboard
