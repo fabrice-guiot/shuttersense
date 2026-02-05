@@ -18,6 +18,7 @@
 #
 set -euo pipefail
 
+APP_DIR="${APP_DIR:-/opt/shuttersense/app}"
 SCRIPTS_DIR="${SCRIPTS_DIR:-/opt/shuttersense/scripts}"
 LOG_FILE="${LOG_FILE:-/var/log/shuttersense/auto-update.log}"
 SERVICE_USER="${SERVICE_USER:-shuttersense}"
@@ -44,9 +45,13 @@ log_error() {
 # =============================================================================
 
 main() {
-    # Ensure log directory exists with proper permissions
+    # Ensure log directory and file exist with proper permissions
+    # This must happen before any log() calls to avoid root-owned log files
     mkdir -p "$(dirname "$LOG_FILE")"
     chown "$SERVICE_USER":"$SERVICE_USER" "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    touch "$LOG_FILE"
+    chown "$SERVICE_USER":"$SERVICE_USER" "$LOG_FILE" 2>/dev/null || true
+    chmod 644 "$LOG_FILE" 2>/dev/null || true
 
     # Verify we're running as root
     if [[ $EUID -ne 0 ]]; then
@@ -67,7 +72,7 @@ main() {
     local update_exit_code=0
 
     # Pass through environment variables to the child script
-    update_output=$(su - "$SERVICE_USER" -c "AUTO_UPDATE_MAJOR=$AUTO_UPDATE_MAJOR $SCRIPTS_DIR/auto-update.sh" 2>&1) || update_exit_code=$?
+    update_output=$(su - "$SERVICE_USER" -c "APP_DIR='$APP_DIR' SCRIPTS_DIR='$SCRIPTS_DIR' LOG_FILE='$LOG_FILE' AUTO_UPDATE_MAJOR='$AUTO_UPDATE_MAJOR' '$SCRIPTS_DIR/auto-update.sh'" 2>&1) || update_exit_code=$?
 
     # Write captured output to log file
     echo "$update_output" >> "$LOG_FILE"
