@@ -1056,7 +1056,7 @@ server {
     # HSTS - Enable after HTTPS is confirmed working (see section 9.6)
     # add_header Strict-Transport-Security "max-age=63072000" always;
 
-    # Security headers
+    # Security headers (applied to dynamic content; static assets override below)
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
@@ -1068,6 +1068,84 @@ server {
 
     # Request size limit (match FastAPI)
     client_max_body_size 10M;
+
+    # =========================================================================
+    # Static Assets with Browser Caching
+    # =========================================================================
+    # PWA icons, images, fonts, and hashed build assets get long cache times.
+    # This reduces repeated requests (especially PWA manifest icon fetches)
+    # and improves performance. Vite adds hashes to JS/CSS filenames, so
+    # they can be cached indefinitely (immutable).
+
+    # PWA icons and images (30-day cache)
+    location /icons/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # Hashed build assets (JS, CSS, fonts) - 1 year cache
+    # Vite includes content hashes in filenames, so these are safe to cache long-term
+    location /assets/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # Service worker - MUST NOT be cached (browsers check for updates on navigation)
+    location = /sw.js {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # HTML files - short cache to ensure users get updated asset references
+    location ~* ^/[^/]*\.html$ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header Cache-Control "no-cache, must-revalidate";
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # Other static files at root (favicon, apple-touch-icon, etc.) - 7 day cache
+    location ~* ^/[^/]+\.(png|ico|svg|webp|webmanifest)$ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800";
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # =========================================================================
+    # WebSocket Endpoints
+    # =========================================================================
 
     # WebSocket support for job progress
     location /api/tools/ws/ {
@@ -1095,7 +1173,11 @@ server {
         proxy_read_timeout 86400;
     }
 
-    # All other requests
+    # =========================================================================
+    # Default Handler (API and SPA)
+    # =========================================================================
+
+    # All other requests (API calls, SPA HTML)
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -1108,6 +1190,8 @@ server {
     }
 }
 ```
+
+> **Note:** The static asset caching configuration above significantly reduces repeated requests for PWA icons and build assets. Without these cache headers, browsers may re-request manifest icons on every page load or PWA validation check.
 
 ### 9.3 Enable Site
 
@@ -1733,14 +1817,23 @@ Add:
 
 ### 15.3 Application Updates
 
+There are two update strategies:
+- **Latest main branch**: Deploy the most recent code from main
+- **Specific release tag**: Deploy a specific version (recommended for production)
+
 ```bash
-# Switch to shuttersense user
-su - shuttersense
+# SSH as shuttersense user (root login is disabled)
 cd /opt/shuttersense/app
 
-# Pull latest changes (--tags ensures version detection works)
+# Fetch latest changes and tags
 git fetch origin --tags
+
+# Option A: Update to latest main branch
 git pull origin main
+
+# Option B: Deploy a specific release tag (recommended)
+# Use git reset --hard to restore all files removed by production-cleanup.sh
+git reset --hard v1.2.3
 
 # Update backend dependencies
 source venv/bin/activate
@@ -1760,13 +1853,32 @@ cd backend
 alembic upgrade head
 cd ..
 
+# Update maintenance scripts (may have changed between releases)
+cp scripts/*.sh /opt/shuttersense/scripts/
+chmod +x /opt/shuttersense/scripts/*.sh
+
 # Run production cleanup (remove dev artifacts)
 /opt/shuttersense/scripts/production-cleanup.sh
 
-# Exit to root and restart service
-exit
-systemctl restart shuttersense
+# Restart service
+sudo systemctl restart shuttersense
 ```
+
+**If nginx configuration has changed** (check release notes), update and reload nginx:
+
+```bash
+# Compare and update nginx config if needed
+sudo cp /etc/nginx/sites-available/shuttersense /etc/nginx/sites-available/shuttersense.backup
+sudo nano /etc/nginx/sites-available/shuttersense  # Apply changes from docs
+
+# Test and reload
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Service Worker Note:** Even after deployment, users may continue seeing cached content until their browser's service worker updates. The service worker checks for updates on navigation, but the new version won't activate until all tabs are closed. Users experiencing stale content should:
+1. Close all tabs for the application
+2. Reopen the application
+3. If issues persist, clear site data in browser settings
 
 ### 15.4 Log Rotation
 
