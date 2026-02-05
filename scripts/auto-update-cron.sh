@@ -69,6 +69,9 @@ main() {
     # Pass through environment variables to the child script
     update_output=$(su - "$SERVICE_USER" -c "AUTO_UPDATE_MAJOR=$AUTO_UPDATE_MAJOR $SCRIPTS_DIR/auto-update.sh" 2>&1) || update_exit_code=$?
 
+    # Write captured output to log file
+    echo "$update_output" >> "$LOG_FILE"
+
     # Check if the update script failed
     if [[ $update_exit_code -ne 0 ]]; then
         log_error "Auto-update script failed with exit code $update_exit_code"
