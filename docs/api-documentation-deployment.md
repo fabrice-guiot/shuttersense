@@ -214,7 +214,7 @@ server {
     # Rewrite all requests to add /api/ prefix
     # Example: /collections -> /api/collections
     location / {
-        rewrite ^/(.*)$ /api/$1 break;
+        rewrite ^/(?!api/)(.*)$ /api/$1 break;
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
