@@ -100,7 +100,7 @@ After evaluating six libraries (React Flow, Rete.js, Flume, React Diagrams, Butt
 | Criterion | React Flow | Nearest Alternative (Rete.js) |
 |-----------|-----------|-------------------------------|
 | **Stack alignment** | Official Tailwind CSS 4 + shadcn/ui support | Possible but no official guide |
-| **Maintenance** | Pushed today (2026-02-06), 35K+ GitHub stars, ~2.7M weekly npm downloads | Last pushed Nov 2025, 12K stars, ~15K weekly downloads |
+| **Maintenance** | Actively maintained (frequent commits as of Feb 2026), 35K+ GitHub stars, ~2.7M weekly npm downloads | Last pushed Nov 2025, 12K stars, ~15K weekly downloads |
 | **Accessibility** | Tab navigation, ARIA attributes, configurable labels, keyboard movement | Minimal (no built-in a11y) |
 | **Custom nodes/edges** | Plain React components | Framework plugin components |
 | **Edge routing** | 4 built-in types (bezier, straight, step, smoothstep) | 2 types (default, linear) |
@@ -115,7 +115,7 @@ After evaluating six libraries (React Flow, Rete.js, Flume, React Diagrams, Butt
 
 ### Dependencies to Add
 
-```
+```text
 @xyflow/react          # Core library (MIT)
 @dagrejs/dagre         # Automatic layout (MIT)
 ```
@@ -133,6 +133,7 @@ No paid tier or Pro subscription is required.
 **Requirements**:
 - FR-001.1: The pipeline is rendered as a directed graph using React Flow, with nodes positioned according to saved layout data or auto-layout.
 - FR-001.2: Each node type has a distinct visual treatment:
+
   | Node Type | Icon | Color | Shape |
   |-----------|------|-------|-------|
   | Capture | Camera | Primary (blue) | Rounded rectangle, larger |
@@ -141,6 +142,7 @@ No paid tier or Pro subscription is required.
   | Pairing | Merge | Info (teal) | Diamond or hexagon |
   | Branching | GitBranch | Warning (amber) | Diamond or hexagon |
   | Termination | Archive | Success (green) | Rounded rectangle, double-border |
+
 - FR-001.3: Nodes display their `id`, `type` label, and key properties (e.g., extension for File nodes, method_ids for Process nodes).
 - FR-001.4: Edges are rendered as directed arrows (smoothstep routing for orthogonal clarity) flowing generally top-to-bottom.
 - FR-001.5: The graph canvas supports pan (drag), zoom (scroll/pinch), and fit-to-view (button).
@@ -225,9 +227,9 @@ No paid tier or Pro subscription is required.
 **Description**: The "Beta Feature" indicators are removed from pipeline pages.
 
 **Requirements**:
-- FR-005.1: Remove the beta indicator from `PipelinesPage.tsx` (lines 252-259).
-- FR-005.2: Remove the beta indicator from `PipelineEditorPage.tsx` (lines 1064-1071).
-- FR-005.3: Remove the `Beaker` icon import if it is no longer used on these pages.
+- FR-005.1: ~~Remove the beta indicator from `PipelinesPage.tsx`.~~ **Done** -- removed in initial commit; `Beaker` import also removed from this file.
+- FR-005.2: ~~Remove the beta indicator and "Coming Soon" graph placeholder from `PipelineEditorPage.tsx`.~~ **Done** -- both blocks removed in initial commit; `Beaker` import also removed (no remaining usages in this file).
+- FR-005.3: ~~Remove the `Beaker` icon import if no longer used on these pages.~~ **Done** -- `Beaker` was removed from the lucide-react imports in both `PipelinesPage.tsx` and `PipelineEditorPage.tsx`.
 
 ---
 
