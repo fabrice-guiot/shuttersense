@@ -198,6 +198,12 @@ class NotificationStatsResponse(BaseModel):
     this_week_count: int = Field(..., ge=0, description="Notifications in the last 7 days")
 
 
+class MarkAllReadResponse(BaseModel):
+    """Response schema for marking all notifications as read."""
+
+    updated_count: int = Field(..., ge=0, description="Number of notifications marked as read")
+
+
 class VapidKeyResponse(BaseModel):
     """Response schema for VAPID public key."""
 

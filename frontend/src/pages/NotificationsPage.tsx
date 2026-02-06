@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { BellOff, RefreshCw, Search } from 'lucide-react'
+import { BellOff, CheckCheck, RefreshCw, Search } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -121,6 +121,9 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
 
+  // State: mark all read
+  const [markingAllRead, setMarkingAllRead] = useState(false)
+
   // State: detail dialog
   const [selected, setSelected] = useState<NotificationResponse | null>(null)
 
@@ -135,6 +138,7 @@ export default function NotificationsPage() {
     error,
     fetchNotifications,
     markAsRead,
+    markAllAsRead,
   } = useNotifications(false)
 
   // TopHeader KPI stats
@@ -217,6 +221,18 @@ export default function NotificationsPage() {
     }
     setSelected(notification)
   }
+
+  // Mark all read handler
+  const handleMarkAllRead = async () => {
+    setMarkingAllRead(true)
+    try {
+      await markAllAsRead()
+    } finally {
+      setMarkingAllRead(false)
+    }
+  }
+
+  const hasUnread = notifications.some((n) => n.read_at === null)
 
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
@@ -396,6 +412,21 @@ export default function NotificationsPage() {
           </div>
         </div>
       </div>
+
+      {/* Actions */}
+      {hasUnread && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMarkAllRead}
+            disabled={markingAllRead}
+          >
+            <CheckCheck className="mr-1.5 h-4 w-4" />
+            {markingAllRead ? 'Marking...' : 'Mark all read'}
+          </Button>
+        </div>
+      )}
 
       {/* Table */}
       <ResponsiveTable

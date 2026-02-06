@@ -543,6 +543,60 @@ class TestMarkAsRead:
 
 
 # ============================================================================
+# Test: mark_all_as_read
+# ============================================================================
+
+
+class TestMarkAllAsRead:
+    """Tests for marking all notifications as read."""
+
+    def test_marks_all_unread_as_read(
+        self, notification_service, test_user, test_team, create_notification,
+    ):
+        """Should mark all unread notifications as read and return count."""
+        create_notification(title="N1")
+        create_notification(title="N2")
+        create_notification(title="N3")
+
+        updated = notification_service.mark_all_as_read(
+            user_id=test_user.id, team_id=test_team.id
+        )
+        assert updated == 3
+
+    def test_skips_already_read(
+        self, notification_service, test_user, test_team, create_notification,
+    ):
+        """Should only mark unread notifications; already-read ones are skipped."""
+        create_notification(title="Unread")
+        create_notification(title="Read", read_at=datetime.utcnow())
+
+        updated = notification_service.mark_all_as_read(
+            user_id=test_user.id, team_id=test_team.id
+        )
+        assert updated == 1
+
+    def test_returns_zero_when_all_read(
+        self, notification_service, test_user, test_team, create_notification,
+    ):
+        """Should return 0 when no unread notifications exist."""
+        create_notification(title="Read", read_at=datetime.utcnow())
+
+        updated = notification_service.mark_all_as_read(
+            user_id=test_user.id, team_id=test_team.id
+        )
+        assert updated == 0
+
+    def test_returns_zero_when_no_notifications(
+        self, notification_service, test_user, test_team,
+    ):
+        """Should return 0 when user has no notifications at all."""
+        updated = notification_service.mark_all_as_read(
+            user_id=test_user.id, team_id=test_team.id
+        )
+        assert updated == 0
+
+
+# ============================================================================
 # Test: cleanup_read_notifications
 # ============================================================================
 

@@ -61,6 +61,8 @@ interface UseNotificationsReturn {
   refreshUnreadCount: () => Promise<void>
   /** Mark a notification as read and update local state */
   markAsRead: (guid: string) => Promise<void>
+  /** Mark all notifications as read and update local state */
+  markAllAsRead: () => Promise<number>
 }
 
 // ============================================================================
@@ -158,6 +160,31 @@ export const useNotifications = (
     []
   )
 
+  /**
+   * Mark all notifications as read and update local state
+   */
+  const markAllAsRead = useCallback(async (): Promise<number> => {
+    try {
+      const result = await notificationService.markAllAsRead()
+      if (mountedRef.current) {
+        const now = new Date().toISOString()
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n.read_at === null ? { ...n, read_at: now } : n
+          )
+        )
+        setUnreadCount(0)
+        syncAppBadge(0)
+      }
+      return result.updated_count
+    } catch (err: unknown) {
+      if (mountedRef.current) {
+        setError(formatError(err, 'Failed to mark all notifications as read'))
+      }
+      return 0
+    }
+  }, [])
+
   // Auto-fetch on mount
   useEffect(() => {
     if (autoFetch) {
@@ -191,6 +218,7 @@ export const useNotifications = (
     fetchNotifications,
     refreshUnreadCount,
     markAsRead,
+    markAllAsRead,
   }
 }
 

@@ -21,6 +21,7 @@ import type {
   NotificationListParams,
   NotificationStatsResponse,
   UnreadCountResponse,
+  MarkAllReadResponse,
   VapidKeyResponse,
 } from '@/contracts/api/notification-api'
 
@@ -145,6 +146,16 @@ export const markAsRead = async (
   const safeGuid = encodeURIComponent(validateGuid(guid, 'ntf'))
   const response = await api.post<NotificationResponse>(
     `/notifications/${safeGuid}/read`
+  )
+  return response.data
+}
+
+/**
+ * Mark all unread notifications as read
+ */
+export const markAllAsRead = async (): Promise<MarkAllReadResponse> => {
+  const response = await api.post<MarkAllReadResponse>(
+    '/notifications/mark-all-read'
   )
   return response.data
 }

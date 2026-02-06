@@ -344,10 +344,39 @@ class NotificationService:
 
         if notification.read_at is None:
             notification.read_at = datetime.utcnow()
+            if self.tenant_context is not None:
+                notification.updated_by_user_id = self.tenant_context.user_id
             self.db.commit()
             self.db.refresh(notification)
 
         return notification
+
+    def mark_all_as_read(self, user_id: int, team_id: int) -> int:
+        """
+        Mark all unread notifications as read for a user.
+
+        Args:
+            user_id: User's internal ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Number of notifications that were marked as read
+        """
+        now = datetime.utcnow()
+        update_values: Dict[str, Any] = {"read_at": now}
+        if self.tenant_context is not None:
+            update_values["updated_by_user_id"] = self.tenant_context.user_id
+        updated = (
+            self.db.query(Notification)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.team_id == team_id,
+                Notification.read_at.is_(None),
+            )
+            .update(update_values, synchronize_session="fetch")
+        )
+        self.db.commit()
+        return updated
 
     def delete_old_notifications(self, days: int = 30, team_id: Optional[int] = None) -> int:
         """

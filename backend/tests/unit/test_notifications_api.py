@@ -289,6 +289,40 @@ class TestMarkAsReadEndpoint:
 
 
 # ============================================================================
+# Test: POST /mark-all-read
+# ============================================================================
+
+
+class TestMarkAllReadEndpoint:
+    """Tests for POST /api/notifications/mark-all-read."""
+
+    def test_marks_all_unread(self, test_client, create_notification):
+        """Should mark all unread notifications and return updated_count."""
+        create_notification(title="N1")
+        create_notification(title="N2")
+        create_notification(title="N3", read_at=datetime.utcnow())
+
+        response = test_client.post("/api/notifications/mark-all-read")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["updated_count"] == 2
+
+    def test_returns_zero_when_all_read(self, test_client, create_notification):
+        """Should return 0 when no unread notifications exist."""
+        create_notification(title="Read", read_at=datetime.utcnow())
+
+        response = test_client.post("/api/notifications/mark-all-read")
+        assert response.status_code == 200
+        assert response.json()["updated_count"] == 0
+
+    def test_returns_zero_when_no_notifications(self, test_client):
+        """Should return 0 when user has no notifications."""
+        response = test_client.post("/api/notifications/mark-all-read")
+        assert response.status_code == 200
+        assert response.json()["updated_count"] == 0
+
+
+# ============================================================================
 # Test: POST /deadline-check
 # ============================================================================
 
