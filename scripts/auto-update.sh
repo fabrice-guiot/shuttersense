@@ -32,14 +32,12 @@
 # Environment Variables (optional):
 #   APP_DIR           - Application directory (default: /opt/shuttersense/app)
 #   SCRIPTS_DIR       - Server scripts directory (default: /opt/shuttersense/scripts)
-#   LOG_FILE          - Log file path (default: /var/log/shuttersense/auto-update.log)
 #   AUTO_UPDATE_MAJOR - Set to "true" to allow automatic major version updates (default: false)
 #
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/shuttersense/app}"
 SCRIPTS_DIR="${SCRIPTS_DIR:-/opt/shuttersense/scripts}"
-LOG_FILE="${LOG_FILE:-/var/log/shuttersense/auto-update.log}"
 AUTO_UPDATE_MAJOR="${AUTO_UPDATE_MAJOR:-false}"
 
 # =============================================================================
@@ -49,13 +47,15 @@ AUTO_UPDATE_MAJOR="${AUTO_UPDATE_MAJOR:-false}"
 log() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] $1" | tee -a "$LOG_FILE"
+    # Output to stdout only - cron wrapper handles file logging
+    echo "[$timestamp] $1"
 }
 
 log_error() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] ERROR: $1" | tee -a "$LOG_FILE" >&2
+    # Output to stderr only - cron wrapper handles file logging
+    echo "[$timestamp] ERROR: $1" >&2
 }
 
 # =============================================================================
@@ -126,7 +126,8 @@ get_current_version() {
 get_latest_remote_tag() {
     cd "$APP_DIR"
     # Get tags sorted by version (descending), take the first one
-    git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1
+    # Accepts both v1.2 and v1.2.3 formats
+    git tag --sort=-v:refname | grep -E '^v[0-9]+(\.[0-9]+){1,2}$' | head -1
 }
 
 perform_update() {
@@ -167,7 +168,16 @@ perform_update() {
 
     # Step 6: Update maintenance scripts and run cleanup
     log "Step 6/6: Updating maintenance scripts and cleaning up..."
-    cp scripts/*.sh "$SCRIPTS_DIR/"
+    # Copy all scripts EXCEPT auto-update scripts (can't overwrite running scripts)
+    # - auto-update.sh: copied by cron wrapper after this script finishes
+    # - auto-update-cron.sh: never auto-updated (rarely changes, requires manual update)
+    for script in scripts/*.sh; do
+        local basename
+        basename=$(basename "$script")
+        if [[ "$basename" != "auto-update.sh" && "$basename" != "auto-update-cron.sh" ]]; then
+            cp "$script" "$SCRIPTS_DIR/"
+        fi
+    done
     chmod +x "$SCRIPTS_DIR"/*.sh
     "$SCRIPTS_DIR/production-cleanup.sh"
 
@@ -250,8 +260,5 @@ main() {
     log ""
 }
 
-# Ensure log directory exists
-mkdir -p "$(dirname "$LOG_FILE")"
-
-# Run main function, capturing all output to log
+# Run main function (cron wrapper handles logging to file)
 main 2>&1

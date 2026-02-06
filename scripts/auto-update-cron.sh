@@ -10,7 +10,11 @@
 #
 # What it does:
 #   1. Runs the auto-update.sh script as the shuttersense user
-#   2. If an update was performed, restarts the shuttersense service as root
+#   2. If an update was performed, copies updated auto-update.sh and restarts service
+#
+# NOTE: This script is NOT auto-updated (it's running during the update process).
+# If changes are made to this file, manually copy it to the server:
+#   scp scripts/auto-update-cron.sh root@server:/opt/shuttersense/scripts/
 #
 # This separation is necessary because:
 #   - The update process (git, npm, pip) should run as the application user
@@ -72,7 +76,7 @@ main() {
     local update_exit_code=0
 
     # Pass through environment variables to the child script
-    update_output=$(su - "$SERVICE_USER" -c "APP_DIR='$APP_DIR' SCRIPTS_DIR='$SCRIPTS_DIR' LOG_FILE='$LOG_FILE' AUTO_UPDATE_MAJOR='$AUTO_UPDATE_MAJOR' '$SCRIPTS_DIR/auto-update.sh'" 2>&1) || update_exit_code=$?
+    update_output=$(su - "$SERVICE_USER" -c "APP_DIR='$APP_DIR' SCRIPTS_DIR='$SCRIPTS_DIR' AUTO_UPDATE_MAJOR='$AUTO_UPDATE_MAJOR' '$SCRIPTS_DIR/auto-update.sh'" 2>&1) || update_exit_code=$?
 
     # Write captured output to log file
     echo "$update_output" >> "$LOG_FILE"
@@ -85,6 +89,14 @@ main() {
 
     # Check if a service restart is required (indicated by SERVICE_RESTART_REQUIRED in output)
     if echo "$update_output" | grep -q "SERVICE_RESTART_REQUIRED"; then
+        # Copy auto-update.sh now (couldn't be done mid-execution)
+        # Note: auto-update-cron.sh is NOT auto-updated (rarely changes, and it's currently running)
+        if [[ -f "$APP_DIR/scripts/auto-update.sh" ]]; then
+            cp "$APP_DIR/scripts/auto-update.sh" "$SCRIPTS_DIR/"
+            chmod +x "$SCRIPTS_DIR/auto-update.sh"
+            log "Updated auto-update.sh"
+        fi
+
         log "Update completed, restarting shuttersense service..."
         systemctl restart shuttersense
 

@@ -183,12 +183,17 @@ else
 fi
 
 # =============================================================================
-# 9. Scripts Directory (keep only production scripts)
+# 9. Scripts Directory
 # =============================================================================
-# Note: This script removes itself from the deployed app since it's only
-# needed during deployment. The canonical version lives in the git repo.
-# Uncomment if you want to remove scripts after cleanup:
-remove "scripts"
+# WARNING: Do NOT remove scripts/ during auto-update!
+# The auto-update-cron.sh wrapper needs to copy auto-update.sh from
+# $APP_DIR/scripts/ AFTER this cleanup runs. If we remove scripts/ here,
+# the cron wrapper will fail to update auto-update.sh on the next release.
+#
+# If you need to manually clean up scripts/ (e.g., during a fresh deployment),
+# run this after the auto-update process completes:
+#   rm -rf /opt/shuttersense/app/scripts
+# remove "scripts"
 
 # =============================================================================
 # 10. Calculate Space Savings
