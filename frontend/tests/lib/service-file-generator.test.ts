@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   generateLaunchdPlist,
+  generateNewsyslogConfig,
   generateSystemdUnit,
 } from '@/lib/service-file-generator'
 
@@ -136,5 +137,32 @@ describe('generateSystemdUnit', () => {
   it('should handle empty user', () => {
     const unit = generateSystemdUnit('/usr/local/bin/shuttersense-agent', '')
     expect(unit).toContain('User=')
+  })
+})
+
+describe('generateNewsyslogConfig', () => {
+  it('should generate config with header comment', () => {
+    const config = generateNewsyslogConfig()
+    expect(config).toContain('# ShutterSense Agent log rotation')
+    expect(config).toContain('# logfile')
+  })
+
+  it('should include stdout log path', () => {
+    const config = generateNewsyslogConfig()
+    expect(config).toContain('/var/log/shuttersense/shuttersense-agent.stdout.log')
+  })
+
+  it('should include stderr log path', () => {
+    const config = generateNewsyslogConfig()
+    expect(config).toContain('/var/log/shuttersense/shuttersense-agent.stderr.log')
+  })
+
+  it('should configure rotation settings', () => {
+    const config = generateNewsyslogConfig()
+    // mode=644, count=7, size=1024KB, when=*, flags=J
+    expect(config).toContain('644')
+    expect(config).toContain('7')
+    expect(config).toContain('1024')
+    expect(config).toContain('J')
   })
 })

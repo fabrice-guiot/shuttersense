@@ -72,6 +72,23 @@ export function generateLaunchdPlist(binaryPath: string): string {
  * @param user - Linux user to run the service as
  * @returns Systemd unit file string
  */
+/**
+ * Generate a macOS newsyslog configuration for log rotation.
+ *
+ * The generated configuration:
+ * - Rotates logs when they reach 1 MB
+ * - Keeps 7 rotated files
+ * - Compresses rotated files with bzip2
+ *
+ * @returns newsyslog configuration string
+ */
+export function generateNewsyslogConfig(): string {
+  return `# ShutterSense Agent log rotation configuration
+# logfile                                          mode  count  size   when  flags
+/var/log/shuttersense/shuttersense-agent.stdout.log 644   7      1024   *     J
+/var/log/shuttersense/shuttersense-agent.stderr.log 644   7      1024   *     J`
+}
+
 export function generateSystemdUnit(binaryPath: string, user: string): string {
   const trimmedUser = user.trim()
   return `[Unit]
