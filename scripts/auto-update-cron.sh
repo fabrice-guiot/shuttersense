@@ -75,8 +75,8 @@ main() {
     local update_output
     local update_exit_code=0
 
-    # Pass through environment variables to the child script
-    update_output=$(su - "$SERVICE_USER" -c "APP_DIR='$APP_DIR' SCRIPTS_DIR='$SCRIPTS_DIR' AUTO_UPDATE_MAJOR='$AUTO_UPDATE_MAJOR' '$SCRIPTS_DIR/auto-update.sh'" 2>&1) || update_exit_code=$?
+    # Pass through environment variables to the child script using env for safe escaping
+    update_output=$(su - "$SERVICE_USER" -s /bin/bash -c "$(printf 'exec env APP_DIR=%q SCRIPTS_DIR=%q AUTO_UPDATE_MAJOR=%q %q' "$APP_DIR" "$SCRIPTS_DIR" "$AUTO_UPDATE_MAJOR" "$SCRIPTS_DIR/auto-update.sh")" 2>&1) || update_exit_code=$?
 
     # Write captured output to log file
     echo "$update_output" >> "$LOG_FILE"
@@ -94,6 +94,7 @@ main() {
         if [[ -f "$APP_DIR/scripts/auto-update.sh" ]]; then
             cp "$APP_DIR/scripts/auto-update.sh" "$SCRIPTS_DIR/"
             chmod +x "$SCRIPTS_DIR/auto-update.sh"
+            chown "$SERVICE_USER":"$SERVICE_USER" "$SCRIPTS_DIR/auto-update.sh"
             log "Updated auto-update.sh"
         fi
 

@@ -171,10 +171,10 @@ perform_update() {
     # Copy all scripts EXCEPT auto-update scripts (can't overwrite running scripts)
     # - auto-update.sh: copied by cron wrapper after this script finishes
     # - auto-update-cron.sh: never auto-updated (rarely changes, requires manual update)
+    local script_basename
     for script in scripts/*.sh; do
-        local basename
-        basename=$(basename "$script")
-        if [[ "$basename" != "auto-update.sh" && "$basename" != "auto-update-cron.sh" ]]; then
+        script_basename=$(basename "$script")
+        if [[ "$script_basename" != "auto-update.sh" && "$script_basename" != "auto-update-cron.sh" ]]; then
             cp "$script" "$SCRIPTS_DIR/"
         fi
     done
