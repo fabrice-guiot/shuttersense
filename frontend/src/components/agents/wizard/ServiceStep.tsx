@@ -15,7 +15,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CopyableCodeBlock } from '@/components/agents/wizard/CopyableCodeBlock'
-import { generateLaunchdPlist, generateSystemdUnit } from '@/lib/service-file-generator'
+import {
+  generateLaunchdPlist,
+  generateNewsyslogConfig,
+  generateSystemdUnit,
+} from '@/lib/service-file-generator'
 import type { ValidPlatform } from '@/contracts/api/release-manifests-api'
 
 interface ServiceStepProps {
@@ -174,10 +178,17 @@ function downloadTextFile(content: string, filename: string) {
 function MacOSServiceConfig({ binaryPath }: { binaryPath: string }) {
   const plist = generateLaunchdPlist(binaryPath)
   const plistFilename = 'ai.shuttersense.agent.plist'
+  const newsyslogConfig = generateNewsyslogConfig()
+  const newsyslogFilename = 'shuttersense.conf'
 
-  const handleDownload = useCallback(
+  const handleDownloadPlist = useCallback(
     () => downloadTextFile(plist, plistFilename),
     [plist]
+  )
+
+  const handleDownloadNewsyslog = useCallback(
+    () => downloadTextFile(newsyslogConfig, newsyslogFilename),
+    [newsyslogConfig]
   )
 
   return (
@@ -187,7 +198,7 @@ function MacOSServiceConfig({ binaryPath }: { binaryPath: string }) {
         <p className="text-xs text-muted-foreground">
           This file must be placed in <code className="font-mono bg-muted px-1 py-0.5 rounded">/Library/LaunchDaemons/</code> (see step 2).
         </p>
-        <Button variant="outline" className="gap-2" onClick={handleDownload}>
+        <Button variant="outline" className="gap-2" onClick={handleDownloadPlist}>
           <Download className="h-4 w-4" />
           Download {plistFilename}
         </Button>
@@ -214,6 +225,30 @@ function MacOSServiceConfig({ binaryPath }: { binaryPath: string }) {
         <p className="text-sm font-medium">3. Manage the service</p>
         <CopyableCodeBlock label="macOS manage commands" language="bash" alwaysShowCopy>
           {`# Check status\nsudo launchctl list | grep shuttersense\n\n# Stop the service\nsudo launchctl unload /Library/LaunchDaemons/${plistFilename}\n\n# View logs\ntail -f /var/log/shuttersense/shuttersense-agent.stdout.log`}
+        </CopyableCodeBlock>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">4. Configure log rotation (recommended)</p>
+        <p className="text-xs text-muted-foreground">
+          Without log rotation, log files will grow indefinitely. This configuration rotates logs at 1 MB and keeps 7 compressed backups.
+        </p>
+        <Button variant="outline" className="gap-2" onClick={handleDownloadNewsyslog}>
+          <Download className="h-4 w-4" />
+          Download {newsyslogFilename}
+        </Button>
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            View file contents
+          </summary>
+          <div className="mt-2">
+            <CopyableCodeBlock label="newsyslog config" language="text" alwaysShowCopy>
+              {newsyslogConfig}
+            </CopyableCodeBlock>
+          </div>
+        </details>
+        <CopyableCodeBlock label="install log rotation" language="bash" alwaysShowCopy>
+          {`sudo cp ~/Downloads/${newsyslogFilename} /etc/newsyslog.d/\n\n# Verify configuration is valid\nsudo newsyslog -vn`}
         </CopyableCodeBlock>
       </div>
     </div>

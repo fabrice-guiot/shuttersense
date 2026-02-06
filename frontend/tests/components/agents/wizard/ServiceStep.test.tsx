@@ -50,15 +50,35 @@ describe('ServiceStep', () => {
       expect(codeEl).toBeInTheDocument()
     })
 
-    it('has expandable file contents', async () => {
+    it('has a download button for the newsyslog config', () => {
+      render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      const downloadBtn = screen.getByRole('button', { name: /Download shuttersense\.conf/i })
+      expect(downloadBtn).toBeInTheDocument()
+    })
+
+    it('shows log rotation section with explanation', () => {
+      render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      expect(screen.getByText(/Configure log rotation/i)).toBeInTheDocument()
+      expect(screen.getByText(/Without log rotation/i)).toBeInTheDocument()
+    })
+
+    it('has expandable file contents for plist and newsyslog', async () => {
       const user = userEvent.setup()
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
 
-      const summary = screen.getByText(/View file contents/i)
-      await user.click(summary)
+      // Should have two expandable sections: plist and newsyslog
+      const summaries = screen.getAllByText(/View file contents/i)
+      expect(summaries).toHaveLength(2)
 
-      // After expanding, the label "launchd plist" should appear via CopyableCodeBlock
+      // Expand the plist section
+      await user.click(summaries[0])
       expect(screen.getByLabelText(/Copy launchd plist/i)).toBeInTheDocument()
+
+      // Expand the newsyslog section
+      await user.click(summaries[1])
+      expect(screen.getByLabelText(/Copy newsyslog config/i)).toBeInTheDocument()
     })
   })
 
