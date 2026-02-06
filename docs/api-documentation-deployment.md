@@ -45,9 +45,9 @@ The public API documentation excludes routes that cannot be used with API tokens
 ## Prerequisites
 
 Before starting, ensure:
-1. DNS records for all hostnames point to the server IP
+1. DNS records for all hostnames point to the server IP (Section 1)
 2. The main deployment ([deployment-hostinger-kvm2.md](deployment-hostinger-kvm2.md)) is complete
-3. SSL certificate covers all hostnames (see Section 1)
+3. `python3-certbot-nginx` is installed (included in main deployment)
 
 ---
 
@@ -68,86 +68,9 @@ dig docs.shuttersense.ai +short
 
 ---
 
-## 2. SSL Certificate Update
+## 2. Nginx Configuration
 
-### Option A: Multi-Domain Certificate (Recommended)
-
-This is the simplest approach for a small number of hostnames. Uses HTTP-01 challenge which auto-renews without manual intervention.
-
-```bash
-# Stop nginx temporarily (certbot needs port 80)
-sudo systemctl stop nginx
-
-# Expand certificate to include new hostnames
-sudo certbot certonly --standalone \
-  -d app.shuttersense.ai \
-  -d api.shuttersense.ai \
-  -d docs.shuttersense.ai \
-  --non-interactive \
-  --agree-tos \
-  --email admin@shuttersense.ai \
-  --no-eff-email \
-  --expand
-
-# Verify certificate includes all domains
-sudo certbot certificates
-
-# Start nginx
-sudo systemctl start nginx
-```
-
-**Why this is recommended:**
-- Simple one-time setup
-- Auto-renews every 90 days without intervention
-- No DNS provider API integration needed
-- Sufficient for most deployments (up to 100 hostnames per certificate)
-
-### Option B: Wildcard Certificate (Advanced)
-
-Covers all subdomains (`*.shuttersense.ai`) but requires DNS-01 challenge, which means proving domain ownership by creating DNS TXT records.
-
-**How DNS-01 challenge works:**
-
-1. Run certbot with `--manual` flag
-2. Certbot displays a TXT record to add:
-   ```
-   Please deploy a DNS TXT record under the name:
-   _acme-challenge.shuttersense.ai
-   with the following value:
-   abc123xyz789...
-   ```
-3. You manually add this TXT record in GoDaddy DNS management
-4. Wait for DNS propagation (1-5 minutes)
-5. Press Enter in certbot to continue verification
-6. Certificate is issued
-7. You can delete the TXT record
-
-```bash
-sudo certbot certonly --manual \
-  -d "*.shuttersense.ai" \
-  -d shuttersense.ai \
-  --preferred-challenges dns-01 \
-  --agree-tos \
-  --email admin@shuttersense.ai
-```
-
-**Important limitations:**
-- **Manual renewal required** - You must repeat the DNS TXT record process every 90 days
-- **No auto-renewal** - Unless you set up DNS provider API integration (complex)
-- **Only consider if** you expect many more subdomains in the future
-
-**For automated wildcard renewal**, you would need to:
-1. Use a DNS provider with API support (GoDaddy has limited API)
-2. Install a certbot DNS plugin (e.g., `certbot-dns-cloudflare`)
-3. Configure API credentials
-
-This is significantly more complex than Option A and not recommended unless you have a specific need for wildcards.
-
----
-
-## 3. Nginx Configuration
-
-### 3.1 Create API Hostname Configuration
+### 2.1 Create API Hostname Configuration
 
 Create `/etc/nginx/sites-available/shuttersense-api`:
 
@@ -227,7 +150,7 @@ server {
 }
 ```
 
-### 3.2 Create Documentation Hostname Configuration
+### 2.2 Create Documentation Hostname Configuration
 
 Create `/etc/nginx/sites-available/shuttersense-docs`:
 
@@ -304,27 +227,104 @@ server {
         add_header Cache-Control "public, max-age=3600";
     }
 
+    # Swagger UI fetches the spec from this path (internal redirect from /api/docs)
+    location = /public/api/openapi.json {
+        proxy_pass http://127.0.0.1:8000/public/api/openapi.json;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Cache the OpenAPI spec for 1 hour
+        expires 1h;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
     # Root - placeholder for future user documentation
     location = / {
         default_type text/html;
         return 200 '<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ShutterSense Documentation</title>
+    <meta name="description" content="ShutterSense.ai API and user documentation portal">
+    <link rel="icon" type="image/svg+xml" href="https://app.shuttersense.ai/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="https://app.shuttersense.ai/favicon.ico">
     <style>
-        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        h1 { color: #333; }
-        a { color: #0066cc; }
-        .links { margin-top: 30px; }
-        .links a { display: block; margin: 10px 0; font-size: 18px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #09090b;
+            color: #fafafa;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .container { max-width: 600px; text-align: center; }
+        .logo { width: 80px; height: 80px; margin-bottom: 1.5rem; }
+        h1 { font-size: 2rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .tagline { color: #a1a1aa; margin-bottom: 2rem; }
+        .links { display: flex; flex-direction: column; gap: 1rem; }
+        .link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 0.5rem;
+            color: #fafafa;
+            text-decoration: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .link:hover { background: #27272a; border-color: #3f3f46; }
+        .link-icon { width: 24px; height: 24px; flex-shrink: 0; }
+        .link-text { text-align: left; }
+        .link-title { font-weight: 500; }
+        .link-desc { font-size: 0.875rem; color: #a1a1aa; }
+        footer { margin-top: 3rem; color: #52525b; font-size: 0.875rem; }
+        footer a { color: #74c6ef; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <h1>ShutterSense Documentation</h1>
-    <p>Welcome to the ShutterSense documentation portal.</p>
-    <div class="links">
-        <a href="/api/docs">API Documentation (Swagger UI)</a>
-        <a href="/api/redoc">API Documentation (ReDoc)</a>
+    <div class="container">
+        <img src="https://app.shuttersense.ai/logo.svg" alt="ShutterSense" class="logo">
+        <h1>ShutterSense Documentation</h1>
+        <p class="tagline">Capture. Process. Analyze.</p>
+        <div class="links">
+            <a href="/api/docs" class="link">
+                <svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <div class="link-text">
+                    <div class="link-title">Swagger UI</div>
+                    <div class="link-desc">Interactive API documentation with try-it-out</div>
+                </div>
+            </a>
+            <a href="/api/redoc" class="link">
+                <svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                <div class="link-text">
+                    <div class="link-title">ReDoc</div>
+                    <div class="link-desc">Clean three-panel API reference</div>
+                </div>
+            </a>
+        </div>
+        <footer>
+            <a href="https://app.shuttersense.ai">Back to ShutterSense.ai</a>
+        </footer>
     </div>
 </body>
 </html>';
@@ -337,7 +337,7 @@ server {
 }
 ```
 
-### 3.3 Enable Sites
+### 2.3 Enable Sites
 
 ```bash
 # Enable new sites
@@ -350,6 +350,61 @@ sudo nginx -t
 # Reload nginx
 sudo systemctl reload nginx
 ```
+
+---
+
+## 3. SSL Certificate Update
+
+The SSL certificate must be updated **after** the nginx sites are enabled (Section 2.3) because certbot's nginx plugin needs to find the server blocks for the new hostnames.
+
+### 3.1 Expand Certificate with Nginx Plugin
+
+Use the nginx plugin to expand the certificate. This works with nginx running and ensures auto-renewal works correctly.
+
+```bash
+# Expand certificate to include new hostnames (nginx must be running)
+sudo certbot --nginx \
+  -d app.shuttersense.ai \
+  -d api.shuttersense.ai \
+  -d docs.shuttersense.ai \
+  --force-renewal
+
+# Verify certificate includes all domains
+sudo certbot certificates
+```
+
+**Why `--force-renewal`:** When expanding an existing certificate, certbot may not update the renewal configuration to use the nginx authenticator. The `--force-renewal` flag ensures the renewal config is regenerated with `authenticator = nginx`.
+
+### 3.2 Verify Auto-Renewal
+
+Confirm that the renewal configuration uses the nginx authenticator:
+
+```bash
+# Check authenticator in renewal config
+cat /etc/letsencrypt/renewal/app.shuttersense.ai.conf | grep authenticator
+# Should show: authenticator = nginx
+
+# Test renewal (should succeed with nginx running)
+sudo certbot renew --dry-run
+```
+
+### 3.3 Alternative: Wildcard Certificate (Advanced)
+
+If you need a wildcard certificate (`*.shuttersense.ai`), you must use DNS-01 challenge:
+
+```bash
+sudo certbot certonly --manual \
+  -d "*.shuttersense.ai" \
+  -d shuttersense.ai \
+  --preferred-challenges dns-01 \
+  --agree-tos \
+  --email admin@shuttersense.ai
+```
+
+**Important limitations:**
+- **Manual renewal required** - You must repeat the DNS TXT record process every 90 days
+- **No auto-renewal** - Unless you set up DNS provider API integration
+- **Only consider if** you expect many more subdomains in the future
 
 ---
 

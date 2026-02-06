@@ -234,7 +234,7 @@ async def public_swagger_ui():
     return get_swagger_ui_html(
         openapi_url="/public/api/openapi.json",
         title="ShutterSense.ai Public API - Swagger UI",
-        swagger_favicon_url="/favicon.svg",
+        swagger_favicon_url="https://app.shuttersense.ai/favicon.svg",
     )
 
 
@@ -244,5 +244,5 @@ async def public_redoc():
     return get_redoc_html(
         openapi_url="/public/api/openapi.json",
         title="ShutterSense.ai Public API - ReDoc",
-        redoc_favicon_url="/favicon.svg",
+        redoc_favicon_url="https://app.shuttersense.ai/favicon.svg",
     )
