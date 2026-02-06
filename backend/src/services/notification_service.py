@@ -344,6 +344,8 @@ class NotificationService:
 
         if notification.read_at is None:
             notification.read_at = datetime.utcnow()
+            if self.tenant_context is not None:
+                notification.updated_by_user_id = self.tenant_context.user_id
             self.db.commit()
             self.db.refresh(notification)
 
@@ -361,6 +363,9 @@ class NotificationService:
             Number of notifications that were marked as read
         """
         now = datetime.utcnow()
+        update_values: Dict[str, Any] = {"read_at": now}
+        if self.tenant_context is not None:
+            update_values["updated_by_user_id"] = self.tenant_context.user_id
         updated = (
             self.db.query(Notification)
             .filter(
@@ -368,7 +373,7 @@ class NotificationService:
                 Notification.team_id == team_id,
                 Notification.read_at.is_(None),
             )
-            .update({"read_at": now}, synchronize_session="fetch")
+            .update(update_values, synchronize_session="fetch")
         )
         self.db.commit()
         return updated

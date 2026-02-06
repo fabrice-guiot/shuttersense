@@ -225,8 +225,11 @@ export default function NotificationsPage() {
   // Mark all read handler
   const handleMarkAllRead = async () => {
     setMarkingAllRead(true)
-    await markAllAsRead()
-    setMarkingAllRead(false)
+    try {
+      await markAllAsRead()
+    } finally {
+      setMarkingAllRead(false)
+    }
   }
 
   const hasUnread = notifications.some((n) => n.read_at === null)
