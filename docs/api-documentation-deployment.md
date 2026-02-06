@@ -366,10 +366,10 @@ Add to `/opt/shuttersense/app/.env`:
 # Public API Configuration
 # =============================================================================
 # Base URL for the public API (used in OpenAPI spec "servers" field)
-PUBLIC_API_BASE_URL=https://api.shuttersense.ai
+SHUSAI_PUBLIC_API_BASE_URL=https://api.shuttersense.ai
 
 # Documentation site URL (for CORS)
-DOCS_SITE_URL=https://docs.shuttersense.ai
+SHUSAI_DOCS_SITE_URL=https://docs.shuttersense.ai
 ```
 
 ### 4.2 CORS Configuration Update
