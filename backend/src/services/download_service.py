@@ -147,7 +147,9 @@ def resolve_binary_path(
 
     # Verify the resolved path is within the distribution directory
     # This prevents path traversal attacks (e.g., version="../../etc")
-    if not str(file_path).startswith(str(dist_path)):
+    # Use os.sep suffix to prevent prefix-matching sibling directories
+    # (e.g., dist_path="/srv/dist" must not match "/srv/dist_evil/file")
+    if not str(file_path).startswith(str(dist_path) + "/"):
         return None, "Invalid file path"
 
     # Check file exists
