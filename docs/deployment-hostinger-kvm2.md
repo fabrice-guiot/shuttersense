@@ -1677,9 +1677,10 @@ MaxMind updates the database weekly. Create a cron job:
 
 ```bash
 cat > /etc/cron.d/geoipupdate << 'EOF'
-# Update GeoLite2 database weekly (Wednesdays at 3:30 AM)
+# Update GeoLite2 database weekly (Wednesdays at 2:30 AM)
 # MaxMind typically releases updates on Tuesdays
-30 3 * * 3 root /usr/bin/geoipupdate && systemctl restart shuttersense
+# Scheduled before DB backup (3 AM) and auto-update (5 AM)
+30 2 * * 3 root /usr/bin/geoipupdate && systemctl restart shuttersense
 EOF
 
 chmod 644 /etc/cron.d/geoipupdate
