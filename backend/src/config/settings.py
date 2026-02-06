@@ -109,6 +109,24 @@ class AppSettings(BaseSettings):
         description="Absolute path to agent binary distribution directory. Empty = dev/QA mode (downloads disabled)."
     )
 
+    # Public API documentation settings
+    # When set, the public API docs endpoints (/public/api/docs, /public/api/redoc,
+    # /public/api/openapi.json) use this as the server URL in the OpenAPI spec.
+    public_api_base_url: str = Field(
+        default="",
+        validation_alias="SHUSAI_PUBLIC_API_BASE_URL",
+        description="Base URL for the public API (e.g., https://api.shuttersense.ai). Used in OpenAPI spec servers field."
+    )
+
+    # Documentation site URL for CORS configuration.
+    # When set, this origin is added to CORS allowed origins so that
+    # Swagger UI "Try it out" can make cross-origin API calls.
+    docs_site_url: str = Field(
+        default="",
+        validation_alias="SHUSAI_DOCS_SITE_URL",
+        description="Documentation site URL (e.g., https://docs.shuttersense.ai). Added to CORS allowed origins."
+    )
+
     # Job execution settings
     # By default, all jobs are persisted to DB for agent execution.
     # Only tool types listed here will use in-memory queue for server-side execution.

@@ -100,8 +100,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Prevent MIME type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
 
-        # Prevent clickjacking (allow for docs pages)
-        if request.url.path not in ["/docs", "/redoc", "/openapi.json"]:
+        # Prevent clickjacking (allow for docs pages, including public API docs)
+        if request.url.path not in ["/docs", "/redoc", "/openapi.json"] and not request.url.path.startswith("/public/api/"):
             response.headers["X-Frame-Options"] = "DENY"
 
         # Enable XSS filter (legacy, but still useful for older browsers)
@@ -113,7 +113,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content Security Policy
         # Different CSP for API vs SPA pages
         path = request.url.path
-        if path in ["/docs", "/redoc", "/openapi.json"]:
+        if path in ["/docs", "/redoc", "/openapi.json"] or path.startswith("/public/api/"):
             # Skip restrictive CSP for documentation pages (Swagger UI needs external resources)
             pass
         elif path.startswith("/api/") or path == "/health":
@@ -745,6 +745,12 @@ else:
         "http://127.0.0.1:8000",  # Backend serving SPA (alternative)
     ]
 
+# Add DOCS_SITE_URL to CORS origins when configured (Issue #159)
+# Enables Swagger UI "Try it out" on docs.shuttersense.ai to call api.shuttersense.ai
+_docs_site_url = _get_rate_limit_settings().docs_site_url
+if _docs_site_url and _docs_site_url not in cors_origins:
+    cors_origins.append(_docs_site_url)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -1087,6 +1093,10 @@ app.include_router(tokens_router.router)
 # === Administration (internal APIs - not accessible via API tokens) ===
 app.include_router(admin_teams_router, prefix="/api/admin")
 app.include_router(admin_release_manifests_router, prefix="/api/admin")
+
+# === Public API Documentation (Issue #159) ===
+from backend.src.api.public_docs import router as public_docs_router
+app.include_router(public_docs_router)
 
 
 # ============================================================================

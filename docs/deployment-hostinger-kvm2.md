@@ -1426,16 +1426,20 @@ systemctl status shuttersense
 ### 10.3 View Logs
 
 ```bash
-# Backend logs
-journalctl -u shuttersense -f
+# Application logs (where ShutterSense logs go)
+tail -f /var/log/shuttersense/error.log    # Application errors and info
+tail -f /var/log/shuttersense/access.log   # HTTP request logs (gunicorn)
+tail -f /var/log/shuttersense/api.log      # API-specific logs
+tail -f /var/log/shuttersense/auth.log     # Authentication events
 
-# Or file-based logs
-tail -f /var/log/shuttersense/error.log
-tail -f /var/log/shuttersense/access.log
+# Service status logs (systemd lifecycle only - start/stop/restart)
+journalctl -u shuttersense -f
 
 # Nginx logs
 tail -f /var/log/nginx/shuttersense_error.log
 ```
+
+> **Note:** Application logs (startup messages, errors, warnings) go to files in `/var/log/shuttersense/`, not to the systemd journal. The `journalctl` command only shows service lifecycle events (started, stopped, restarted).
 
 ### 10.4 Checkpoint: Backend is Running
 
@@ -1677,9 +1681,10 @@ MaxMind updates the database weekly. Create a cron job:
 
 ```bash
 cat > /etc/cron.d/geoipupdate << 'EOF'
-# Update GeoLite2 database weekly (Wednesdays at 3:30 AM)
+# Update GeoLite2 database weekly (Wednesdays at 2:30 AM)
 # MaxMind typically releases updates on Tuesdays
-30 3 * * 3 root /usr/bin/geoipupdate && systemctl restart shuttersense
+# Scheduled before DB backup (3 AM) and auto-update (5 AM)
+30 2 * * 3 root /usr/bin/geoipupdate && systemctl restart shuttersense
 EOF
 
 chmod 644 /etc/cron.d/geoipupdate
@@ -1716,14 +1721,17 @@ systemctl restart shuttersense
 Check the application logs at startup:
 
 ```bash
-journalctl -u shuttersense | grep -i geoip
+grep -i geoip /var/log/shuttersense/api.log
 ```
 
-Expected output:
+Expected output (with `SHUSAI_LOG_LEVEL=INFO` or lower):
 ```
-GeoIP geofencing enabled: allowing countries ['AU', 'BE', 'CA', 'DE', 'FR', 'GB', 'NL', 'NZ', 'US']
-GeoIP fail-open mode: False (unknown countries will be blocked)
+GeoIP geofencing enabled — allowed countries: AU, BE, CA, DE, FR, GB, NL, NZ, US (fail-closed, db: /opt/maxmind/GeoLite2-Country.mmdb)
 ```
+
+> **Note:** This message is logged at INFO level. If `SHUSAI_LOG_LEVEL=WARNING` (the production default), the message won't appear. You can either:
+> - Temporarily set `SHUSAI_LOG_LEVEL=INFO` in `.env`, restart, verify, then revert
+> - Use the functional test in section 13.10 to confirm geofencing is working
 
 ### 13.10 Test Geofencing
 
@@ -2072,13 +2080,18 @@ nano /etc/logrotate.d/shuttersense
 ### 16.1 Service Won't Start
 
 ```bash
-# Check detailed logs
-journalctl -u shuttersense -n 100 --no-pager
+# Check service status and recent lifecycle events
+systemctl status shuttersense
+journalctl -u shuttersense -n 50 --no-pager
+
+# Check application error logs (startup errors, exceptions)
+tail -100 /var/log/shuttersense/error.log
 
 # Common issues:
 # - Missing .env file or permissions
 # - Database connection failed
 # - Port already in use
+# - Python import errors (check error.log)
 ```
 
 ### 16.2 502 Bad Gateway
@@ -2148,7 +2161,7 @@ ps aux | grep gunicorn
 systemctl status shuttersense
 systemctl restart shuttersense
 systemctl stop shuttersense
-journalctl -u shuttersense -f
+journalctl -u shuttersense -f              # Service lifecycle only (start/stop)
 
 # Database
 sudo -u postgres psql -d shuttersense
@@ -2168,11 +2181,12 @@ fail2ban-client status nginx-limit-req          # Check rate limit jail
 fail2ban-client set sshd unbanip <IP>           # Unban IP
 tail -f /var/log/fail2ban.log                   # Watch bans
 
-# Logs
-tail -f /var/log/shuttersense/error.log
-tail -f /var/log/shuttersense/auth.log
-tail -f /var/log/shuttersense/auto-update.log
-tail -f /var/log/nginx/shuttersense_error.log
+# Application logs (where ShutterSense logs go)
+tail -f /var/log/shuttersense/error.log         # Gunicorn errors, startup issues
+tail -f /var/log/shuttersense/api.log           # API logs (GeoIP, requests, etc.)
+tail -f /var/log/shuttersense/auth.log          # Authentication events
+tail -f /var/log/shuttersense/auto-update.log   # Auto-update activity
+tail -f /var/log/nginx/shuttersense_error.log   # Nginx proxy errors
 
 # Manual update trigger (run as root)
 sudo /opt/shuttersense/scripts/auto-update-cron.sh
