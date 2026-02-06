@@ -227,9 +227,9 @@ No paid tier or Pro subscription is required.
 **Description**: The "Beta Feature" indicators are removed from pipeline pages.
 
 **Requirements**:
-- FR-005.1: ~~Remove the beta indicator from `PipelinesPage.tsx`.~~ **Done** -- removed in initial commit; `Beaker` import also removed from this file.
-- FR-005.2: ~~Remove the beta indicator and "Coming Soon" graph placeholder from `PipelineEditorPage.tsx`.~~ **Done** -- both blocks removed in initial commit; `Beaker` import also removed (no remaining usages in this file).
-- FR-005.3: ~~Remove the `Beaker` icon import if no longer used on these pages.~~ **Done** -- `Beaker` was removed from the lucide-react imports in both `PipelinesPage.tsx` and `PipelineEditorPage.tsx`.
+- FR-005.1: Remove the beta indicator from `PipelinesPage.tsx` (the warning banner containing "Beta Feature: Pipeline management is currently in beta").
+- FR-005.2: Remove the beta indicator from `PipelineEditorPage.tsx` (the amber alert containing "Beta Feature: Pipeline editor is currently in beta") and the "Coming Soon" graph placeholder (the blue alert containing "Visual pipeline graph will be displayed here in a future release").
+- FR-005.3: Remove the `Beaker` icon import from both files if no longer used after the above removals.
 
 ---
 

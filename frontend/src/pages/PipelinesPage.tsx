@@ -6,7 +6,7 @@
 
 import React, { useEffect, useCallback, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Beaker } from 'lucide-react'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { PipelineList } from '@/components/pipelines/PipelineList'
 import { usePipelines, usePipelineStats, usePipelineExport, usePipelineImport } from '@/hooks/usePipelines'
@@ -248,6 +248,15 @@ export const PipelinesPage: React.FC = () => {
         onChange={handleFileChange}
         className="hidden"
       />
+
+      {/* Beta indicator */}
+      <div className="mb-4 flex items-center gap-2 text-sm text-warning-foreground bg-warning/10 border border-warning/30 rounded-lg px-4 py-2">
+        <Beaker className="h-4 w-4 flex-shrink-0" />
+        <span>
+          <strong>Beta Feature:</strong> Pipeline management is currently in beta.
+          The visual graph editor will be available in a future release.
+        </span>
+      </div>
 
       {/* Error Alert */}
       {actionError && (

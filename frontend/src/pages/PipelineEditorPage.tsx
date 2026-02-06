@@ -15,6 +15,7 @@ import {
   Save,
   ArrowLeft,
   AlertTriangle,
+  Beaker,
   Pencil,
   CheckCircle,
   XCircle,
@@ -884,6 +885,14 @@ export const PipelineEditorPage: React.FC = () => {
           </Alert>
         )}
 
+        {/* Future graph visualization placeholder */}
+        <Alert className="mb-4 border-blue-500/50 bg-blue-500/10">
+          <Beaker className="h-4 w-4 text-blue-500" />
+          <AlertDescription className="text-blue-600 dark:text-blue-400">
+            <strong>Coming Soon:</strong> Visual pipeline graph will be displayed here in a future release.
+          </AlertDescription>
+        </Alert>
+
         <div className="space-y-6">
           {/* Pipeline Header */}
           <Card>
@@ -1052,6 +1061,15 @@ export const PipelineEditorPage: React.FC = () => {
   // ============================================================================
   return (
     <MainLayout pageTitle={pageTitle} pageIcon={GitBranch}>
+      {/* Beta indicator */}
+      <Alert className="mb-4 border-amber-500/50 bg-amber-500/10">
+        <Beaker className="h-4 w-4 text-amber-500" />
+        <AlertDescription className="text-amber-600 dark:text-amber-400">
+          <strong>Beta Feature:</strong> Pipeline editor is currently in beta.
+          The visual graph editor will be available in a future release.
+        </AlertDescription>
+      </Alert>
+
       {/* Error Alert */}
       {error && (
         <Alert variant="destructive" className="mb-4">
