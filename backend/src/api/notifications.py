@@ -28,6 +28,7 @@ from backend.src.schemas.notifications import (
     NotificationListResponse,
     NotificationStatsResponse,
     UnreadCountResponse,
+    MarkAllReadResponse,
     VapidKeyResponse,
 )
 from backend.src.models.user import User
@@ -383,6 +384,29 @@ async def get_unread_count(
         user_id=ctx.user_id, team_id=ctx.team_id
     )
     return UnreadCountResponse(unread_count=count)
+
+
+@router.post(
+    "/mark-all-read",
+    response_model=MarkAllReadResponse,
+    summary="Mark all notifications as read",
+)
+@limiter.limit("10/minute")
+async def mark_all_notifications_read(
+    request: Request,
+    ctx: TenantContext = Depends(require_auth),
+    service: NotificationService = Depends(get_notification_service),
+):
+    """
+    Mark all unread notifications as read for the authenticated user.
+
+    Returns the number of notifications that were marked as read.
+    Idempotent — calling when all notifications are already read returns 0.
+    """
+    updated_count = service.mark_all_as_read(
+        user_id=ctx.user_id, team_id=ctx.team_id
+    )
+    return MarkAllReadResponse(updated_count=updated_count)
 
 
 @router.post(

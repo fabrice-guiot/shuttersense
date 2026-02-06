@@ -349,6 +349,30 @@ class NotificationService:
 
         return notification
 
+    def mark_all_as_read(self, user_id: int, team_id: int) -> int:
+        """
+        Mark all unread notifications as read for a user.
+
+        Args:
+            user_id: User's internal ID
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Number of notifications that were marked as read
+        """
+        now = datetime.utcnow()
+        updated = (
+            self.db.query(Notification)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.team_id == team_id,
+                Notification.read_at.is_(None),
+            )
+            .update({"read_at": now}, synchronize_session="fetch")
+        )
+        self.db.commit()
+        return updated
+
     def delete_old_notifications(self, days: int = 30, team_id: Optional[int] = None) -> int:
         """
         Delete notifications older than the specified number of days.

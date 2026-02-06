@@ -154,6 +154,13 @@ export interface UnreadCountResponse {
 }
 
 /**
+ * Mark all read response
+ */
+export interface MarkAllReadResponse {
+  updated_count: number
+}
+
+/**
  * VAPID public key response
  */
 export interface VapidKeyResponse {
