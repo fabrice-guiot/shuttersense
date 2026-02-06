@@ -20,7 +20,7 @@ Issue #159
 import copy
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.responses import JSONResponse
 
@@ -222,10 +222,9 @@ def get_public_openapi(app_openapi_func) -> Dict[str, Any]:
 
 
 @router.get("/public/api/openapi.json", include_in_schema=False)
-async def public_openapi_json():
+async def public_openapi_json(request: Request):
     """Serve the filtered OpenAPI schema for the public API."""
-    from backend.src.main import app
-    schema = get_public_openapi(app.openapi)
+    schema = get_public_openapi(request.app.openapi)
     return JSONResponse(content=schema)
 
 
