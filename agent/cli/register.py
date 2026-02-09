@@ -8,10 +8,8 @@ Task: T042
 """
 
 import asyncio
-import hashlib
 import platform
 import socket
-import sys
 from typing import Optional
 
 import click
@@ -19,6 +17,7 @@ import click
 from src import __version__
 from src.config import AgentConfig
 from src.capabilities import detect_capabilities
+from src.attestation import get_attestation_info
 from src.api_client import (
     AgentApiClient,
     ConnectionError as AgentConnectionError,
@@ -29,61 +28,6 @@ from src.api_client import (
 # ============================================================================
 # Helper Functions
 # ============================================================================
-
-
-def get_binary_checksum() -> Optional[str]:
-    """
-    Compute SHA-256 checksum of the running binary for attestation.
-
-    Only works for packaged (frozen) binaries built with PyInstaller.
-    Returns None when running from source.
-
-    Returns:
-        SHA-256 hex digest, or None if not a packaged binary
-    """
-    if not getattr(sys, 'frozen', False):
-        return None
-
-    binary_path = sys.executable
-    try:
-        sha256 = hashlib.sha256()
-        with open(binary_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
-                sha256.update(chunk)
-        return sha256.hexdigest()
-    except OSError:
-        return None
-
-
-def get_platform_identifier() -> Optional[str]:
-    """
-    Get the platform identifier matching release manifest conventions.
-
-    Returns:
-        Platform string (e.g., 'darwin-arm64', 'linux-amd64'), or None
-    """
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-
-    # Map system names
-    if system == "darwin":
-        os_name = "darwin"
-    elif system == "linux":
-        os_name = "linux"
-    elif system == "windows":
-        os_name = "windows"
-    else:
-        return None
-
-    # Map architecture names
-    if machine in ("arm64", "aarch64"):
-        arch = "arm64"
-    elif machine in ("x86_64", "amd64"):
-        arch = "amd64"
-    else:
-        return None
-
-    return f"{os_name}-{arch}"
 
 
 def get_system_info() -> tuple[str, str]:
@@ -196,9 +140,10 @@ def register(
     # Get authorized roots from config (if any)
     authorized_roots = config.authorized_roots
 
-    # Compute binary checksum for attestation (packaged binaries only)
-    binary_checksum = get_binary_checksum()
-    agent_platform = get_platform_identifier()
+    # Get attestation info (checksum and platform) from the attestation module
+    attestation = get_attestation_info()
+    binary_checksum = attestation.get('checksum')
+    agent_platform = attestation.get('platform')
 
     click.echo(f"Registering agent '{name}' with server {server}...")
     click.echo(f"  Hostname: {hostname}")

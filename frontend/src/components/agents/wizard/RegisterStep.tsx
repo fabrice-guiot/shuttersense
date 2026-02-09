@@ -60,7 +60,9 @@ export function RegisterStep({ token, serverUrl, selectedPlatform }: RegisterSte
   const downloadedFilename = getDownloadedFilename(selectedPlatform)
   const installPath = getInstallPath(selectedPlatform)
 
-  const registerCommand = `${installPath} register --server ${serverUrl} --token ${token}`
+  // Quote the install path for Windows (contains spaces in "Program Files")
+  const quotedInstallPath = isWindows ? `"${installPath}"` : installPath
+  const registerCommand = `${quotedInstallPath} register --server ${serverUrl} --token ${token}`
 
   let stepNumber = 1
 
@@ -89,10 +91,10 @@ export function RegisterStep({ token, serverUrl, selectedPlatform }: RegisterSte
           <p className="text-sm font-medium">{stepNumber++}. Move the binary to the recommended location</p>
           <p className="text-xs text-muted-foreground">
             The downloaded binary includes a platform suffix and needs to be renamed.
-            Move it to a permanent location using an <strong>Administrator</strong> command prompt.
+            Move it to a permanent location using an <strong>Administrator</strong> PowerShell prompt.
           </p>
           <CopyableCodeBlock label="move and rename" language="powershell" alwaysShowCopy>
-            {`mkdir "C:\\Program Files\\ShutterSense"\nmove "%USERPROFILE%\\Downloads\\${downloadedFilename}" "${installPath}"`}
+            {`New-Item -ItemType Directory -Path "C:\\Program Files\\ShutterSense" -Force\nMove-Item -Path "$env:USERPROFILE\\Downloads\\${downloadedFilename}" -Destination "${installPath}"`}
           </CopyableCodeBlock>
         </div>
       )}
