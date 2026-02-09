@@ -1113,6 +1113,13 @@ from backend.src.utils.security_settings import (
 _spa_dist_path = get_spa_dist_path()
 _spa_index_path = _spa_dist_path / "index.html"
 
+# Unhashed PWA entry-point files that MUST be revalidated on every request.
+# Without this, browsers use heuristic caching and may serve stale sw.js /
+# index.html for hours, preventing service worker updates from propagating.
+# Hashed files under /assets/ are fine — their URLs change on every build.
+_NO_CACHE_FILENAMES = {"sw.js", "registerSW.js", "manifest.webmanifest"}
+_NO_CACHE_HEADERS = {"Cache-Control": "no-cache"}
+
 
 async def serve_spa(request: Request) -> FileResponse:
     """
@@ -1137,7 +1144,9 @@ async def serve_spa(request: Request) -> FileResponse:
                 "hint": f"Expected path: {_spa_index_path}"
             }
         )
-    return FileResponse(_spa_index_path, media_type="text/html")
+    return FileResponse(
+        _spa_index_path, media_type="text/html", headers=_NO_CACHE_HEADERS
+    )
 
 
 # Mount static assets if the dist directory exists
@@ -1188,16 +1197,16 @@ async def spa_catch_all(request: Request, full_path: str):
             }
         )
 
-    # Check if the requested path is a static file that exists in dist root
-    # This handles files like favicon.ico, robots.txt, etc.
-    # Security: Use is_safe_static_file_path to validate the path is within
-    # the SPA dist directory and doesn't contain path traversal sequences
-    if full_path and "." in full_path.split("/")[-1]:
-        # Only serve files from the root of dist (not subdirectories)
-        # to limit exposure - assets are served via /assets mount
-        filename = full_path.split("/")[-1] if "/" in full_path else full_path
+    # Check if the requested path is a top-level static file in dist root
+    # (e.g. favicon.ico, robots.txt). Assets in subdirectories are served
+    # via the /assets and /icons mounts — reject any path with "/" so only
+    # bare filenames reach is_safe_static_file_path and FileResponse.
+    if full_path and "/" not in full_path and "." in full_path:
+        filename = full_path
         is_safe, safe_path = is_safe_static_file_path(filename, _spa_dist_path)
         if is_safe and safe_path:
-            return FileResponse(safe_path)
+            # Prevent HTTP caching of unhashed PWA entry-point files
+            headers = _NO_CACHE_HEADERS if filename in _NO_CACHE_FILENAMES else None
+            return FileResponse(safe_path, headers=headers)
 
     return await serve_spa(request)

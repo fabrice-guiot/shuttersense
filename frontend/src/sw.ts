@@ -19,6 +19,29 @@ import { ExpirationPlugin } from 'workbox-expiration'
 declare let self: ServiceWorkerGlobalScope
 
 // ============================================================================
+// Immediate Activation (Silent Auto-Update)
+// ============================================================================
+
+// Skip the "waiting" phase — activate new SW immediately on install.
+// Without this, a new SW version stays dormant until ALL tabs are closed.
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+
+// Claim all open clients immediately on activation.
+// Without this, existing tabs keep using the old SW until next navigation.
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
+
+// Handle explicit SKIP_WAITING message from the app (belt-and-suspenders)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+})
+
+// ============================================================================
 // Workbox Precaching
 // ============================================================================
 
