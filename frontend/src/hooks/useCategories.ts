@@ -24,6 +24,7 @@ interface UseCategoriesReturn {
   updateCategory: (guid: string, updates: CategoryUpdateRequest) => Promise<Category>
   deleteCategory: (guid: string) => Promise<void>
   reorderCategories: (orderedGuids: string[]) => Promise<Category[]>
+  seedDefaults: (options?: { skipLoading?: boolean }) => Promise<number>
 }
 
 export const useCategories = (autoFetch = true): UseCategoriesReturn => {
@@ -143,6 +144,40 @@ export const useCategories = (autoFetch = true): UseCategoriesReturn => {
     }
   }, [])
 
+  /**
+   * Seed default categories (restore missing defaults)
+   * Returns the number of categories created
+   * @param options.skipLoading - If true, don't set the shared loading state (caller manages own loading state)
+   */
+  const seedDefaults = useCallback(async (options?: { skipLoading?: boolean }) => {
+    const skipLoading = options?.skipLoading ?? false
+    if (!skipLoading) {
+      setLoading(true)
+    }
+    setError(null)
+    try {
+      const result = await categoryService.seedDefaultCategories()
+      setCategories(result.categories)
+      if (result.categories_created > 0) {
+        toast.success(`Restored ${result.categories_created} default categor${result.categories_created === 1 ? 'y' : 'ies'}`)
+      } else {
+        toast.info('All default categories already exist')
+      }
+      return result.categories_created
+    } catch (err: any) {
+      const errorMessage = err.userMessage || 'Failed to restore default categories'
+      setError(errorMessage)
+      toast.error('Failed to restore default categories', {
+        description: errorMessage
+      })
+      throw err
+    } finally {
+      if (!skipLoading) {
+        setLoading(false)
+      }
+    }
+  }, [])
+
   // Auto-fetch on mount if enabled
   useEffect(() => {
     if (autoFetch) {
@@ -158,7 +193,8 @@ export const useCategories = (autoFetch = true): UseCategoriesReturn => {
     createCategory,
     updateCategory,
     deleteCategory,
-    reorderCategories
+    reorderCategories,
+    seedDefaults
   }
 }
 

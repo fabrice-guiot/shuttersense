@@ -302,6 +302,35 @@ class CategoryListResponse(BaseModel):
     }
 
 
+class CategorySeedResponse(BaseModel):
+    """
+    Schema for seed-defaults response.
+
+    Fields:
+        categories_created: Number of new categories created
+        categories: Full list of categories after seeding
+
+    Example:
+        >>> resp = CategorySeedResponse(categories_created=3, categories=[...])
+    """
+
+    categories_created: int = Field(
+        ..., ge=0, description="Number of new categories created"
+    )
+    categories: List[CategoryResponse] = Field(
+        ..., description="Full list of categories after seeding"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "categories_created": 3,
+                "categories": [],
+            }
+        }
+    }
+
+
 class CategoryStatsResponse(BaseModel):
     """
     Schema for category statistics response.

@@ -415,6 +415,57 @@ class TestCategoryServiceStats:
         assert stats["inactive_count"] == 0
 
 
+class TestSeedCategories:
+    """Tests for seeding default categories via SeedDataService."""
+
+    def test_seed_creates_defaults(self, test_db_session, test_team):
+        """Test seeding creates all default categories for a new team."""
+        from backend.src.services.seed_data_service import SeedDataService, DEFAULT_CATEGORIES
+
+        seed_service = SeedDataService(test_db_session)
+        created = seed_service.seed_categories(team_id=test_team.id)
+        test_db_session.commit()
+
+        assert created == len(DEFAULT_CATEGORIES)
+
+        # Verify all defaults exist
+        categories = test_db_session.query(Category).filter(
+            Category.team_id == test_team.id
+        ).all()
+        assert len(categories) == len(DEFAULT_CATEGORIES)
+
+        names = {c.name for c in categories}
+        expected_names = {c['name'] for c in DEFAULT_CATEGORIES}
+        assert names == expected_names
+
+    def test_seed_skips_existing(self, test_db_session, test_team, sample_category):
+        """Test seeding skips categories that already exist."""
+        from backend.src.services.seed_data_service import SeedDataService, DEFAULT_CATEGORIES
+
+        # Pre-create one of the default categories
+        sample_category(name="Airshow")
+
+        seed_service = SeedDataService(test_db_session)
+        created = seed_service.seed_categories(team_id=test_team.id)
+        test_db_session.commit()
+
+        # Should skip "Airshow" and create the rest
+        assert created == len(DEFAULT_CATEGORIES) - 1
+
+    def test_seed_idempotent(self, test_db_session, test_team):
+        """Test calling seed twice creates nothing on second call."""
+        from backend.src.services.seed_data_service import SeedDataService, DEFAULT_CATEGORIES
+
+        seed_service = SeedDataService(test_db_session)
+
+        first_created = seed_service.seed_categories(team_id=test_team.id)
+        test_db_session.commit()
+        assert first_created == len(DEFAULT_CATEGORIES)
+
+        second_created = seed_service.seed_categories(team_id=test_team.id)
+        assert second_created == 0
+
+
 class TestColorValidation:
     """Tests for color validation."""
 

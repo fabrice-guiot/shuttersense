@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -70,11 +70,12 @@ function CategoryIcon({ icon, color, size = 'md' }: CategoryIconProps) {
 interface CategoryListProps {
   categories: Category[]
   loading: boolean
+  seeding?: boolean
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
 }
 
-function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListProps) {
+function CategoryList({ categories, loading, seeding = false, onEdit, onDelete }: CategoryListProps) {
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     category: Category | null
@@ -91,7 +92,8 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
     }
   }
 
-  if (loading && categories.length === 0) {
+  // Show loading only during initial fetch, not during seeding (seeding has its own UI state)
+  if (loading && categories.length === 0 && !seeding) {
     return (
       <div className="flex items-center justify-center py-8">
         <div className="text-muted-foreground">Loading categories...</div>
@@ -99,7 +101,8 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
     )
   }
 
-  if (categories.length === 0) {
+  // When seeding, don't show empty state - wait for seeding to complete
+  if (categories.length === 0 && !seeding) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="text-muted-foreground mb-2">No categories found</div>
@@ -227,7 +230,8 @@ export function CategoriesTab() {
     error,
     createCategory,
     updateCategory,
-    deleteCategory
+    deleteCategory,
+    seedDefaults
   } = useCategories()
 
   // KPI Stats for header
@@ -248,6 +252,8 @@ export function CategoriesTab() {
   const [open, setOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [seedDialogOpen, setSeedDialogOpen] = useState(false)
+  const [seeding, setSeeding] = useState(false)
 
   const handleOpen = (category: Category | null = null) => {
     setEditingCategory(category)
@@ -286,10 +292,31 @@ export function CategoriesTab() {
       })
   }
 
+  const handleSeedDefaults = async () => {
+    setSeeding(true)
+    try {
+      await seedDefaults({ skipLoading: true })
+      refetchStats()
+    } catch {
+      // Error handled by hook
+    } finally {
+      setSeeding(false)
+      setSeedDialogOpen(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Action Row (Issue #67 - Single Title Pattern) */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setSeedDialogOpen(true)}
+          className="gap-2"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Restore Defaults
+        </Button>
         <Button onClick={() => handleOpen()} className="gap-2">
           <Plus className="h-4 w-4" />
           New Category
@@ -307,6 +334,7 @@ export function CategoriesTab() {
       <CategoryList
         categories={categories}
         loading={loading}
+        seeding={seeding}
         onEdit={handleOpen}
         onDelete={handleDelete}
       />
@@ -338,6 +366,30 @@ export function CategoriesTab() {
               onCancel={handleClose}
             />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore Defaults Confirmation Dialog */}
+      <Dialog open={seedDialogOpen} onOpenChange={setSeedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore Default Categories</DialogTitle>
+            <DialogDescription>
+              This will restore any missing default categories. Existing categories will not be affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSeedDialogOpen(false)}
+              disabled={seeding}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSeedDefaults} disabled={seeding}>
+              {seeding ? 'Restoring...' : 'Restore Defaults'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

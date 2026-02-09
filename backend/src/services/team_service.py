@@ -15,7 +15,7 @@ Design:
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import func
 
 from backend.src.models import Team, User, UserStatus
@@ -23,6 +23,7 @@ from backend.src.utils.logging_config import get_logger
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
 from backend.src.services.guid import GuidService
 from backend.src.services.retention_service import RetentionService
+from backend.src.services.seed_data_service import SeedDataService
 
 
 logger = get_logger("services")
@@ -126,8 +127,20 @@ class TeamService:
             self.db.refresh(team)
 
             # Seed default retention settings for new team (Issue #92)
-            retention_service = RetentionService(self.db)
-            retention_service.seed_defaults(team.id)
+            try:
+                retention_service = RetentionService(self.db)
+                retention_service.seed_defaults(team.id)
+            except (IntegrityError, SQLAlchemyError) as e:
+                self.db.rollback()
+                logger.warning(f"Failed to seed retention defaults for team '{name}': {e}")
+
+            # Seed default categories, event statuses, and TTL configs
+            try:
+                seed_service = SeedDataService(self.db)
+                seed_service.seed_team_defaults(team.id, user_id=acting_user_id)
+            except (IntegrityError, SQLAlchemyError) as e:
+                self.db.rollback()
+                logger.warning(f"Failed to seed defaults for team '{name}': {e}")
 
             logger.info(f"Created team: {team.name} ({team.guid})")
             return team
