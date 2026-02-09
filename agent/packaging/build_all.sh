@@ -163,6 +163,17 @@ main() {
     echo "ShutterSense Agent Build Script"
     echo ""
 
+    # Verify Python version early (3.11+ required — bundled into the binary by PyInstaller)
+    local python_version
+    python_version=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')")
+    if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"; then
+        echo "Error: Python 3.11+ required for build, found $python_version"
+        echo "The build Python is bundled into the binary and must match project requirements."
+        exit 1
+    fi
+    echo "Python: $python_version"
+    echo ""
+
     # Create dist directory
     mkdir -p "$BUILD_DIR"
 

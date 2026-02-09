@@ -17,14 +17,35 @@ def _get_base_version() -> str:
     Get the base version (tag only, no commit hash) for capability reporting.
 
     Version sources (in priority order):
-    1. Git tag (e.g., "v1.2.3" from "v1.2.3-dev.5+abc123")
+    1. _version.py (written by build scripts, available in packaged binaries)
     2. SHUSAI_VERSION environment variable
-    3. Fallback to "v0.0.0"
+    3. Git tag (development mode, running from source)
+    4. Fallback to "v0.0.0"
 
     Returns:
         Version string without commit hash suffix
     """
-    # Try Git first
+    # Try _version.py first (written by build scripts, available in packaged binaries)
+    try:
+        from src._version import __version__ as built_version
+        if built_version:
+            match = re.match(r'^(v?\d+\.\d+\.\d+)', built_version)
+            if match:
+                return match.group(1)
+            return built_version
+    except ImportError:
+        pass
+
+    # Try environment variable (strip any dev/commit suffix)
+    env_version = os.environ.get('SHUSAI_VERSION', '')
+    if env_version:
+        # Extract base version from formats like "v1.2.3-dev.5+abc123"
+        match = re.match(r'^(v?\d+\.\d+\.\d+)', env_version)
+        if match:
+            return match.group(1)
+        return env_version
+
+    # Try Git (development mode - running from source)
     try:
         result = subprocess.run(
             ['git', 'describe', '--tags', '--abbrev=0'],
@@ -38,15 +59,6 @@ def _get_base_version() -> str:
             return tag
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         pass
-
-    # Try environment variable (strip any dev/commit suffix)
-    env_version = os.environ.get('SHUSAI_VERSION', '')
-    if env_version:
-        # Extract base version from formats like "v1.2.3-dev.5+abc123"
-        match = re.match(r'^(v?\d+\.\d+\.\d+)', env_version)
-        if match:
-            return match.group(1)
-        return env_version
 
     # Fallback
     return "v0.0.0"
