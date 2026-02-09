@@ -8,9 +8,13 @@ Changes unique constraint on collections.name from global to team-scoped (team_i
 In a multi-tenant application, different teams should be able to have collections
 with the same name (e.g., each team can have their own "Wedding Photos" collection).
 """
+import logging
+
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
+logger = logging.getLogger('alembic.runtime.migration')
 
 revision = '063_collection_name_team'
 down_revision = '062_category_name_team'
@@ -55,16 +59,16 @@ def upgrade() -> None:
                 ['team_id', 'name']
             )
     else:
-        # SQLite: use try/except pattern
+        # SQLite: use try/except pattern with specific exceptions
         try:
             op.drop_constraint('collections_name_key', 'collections', type_='unique')
-        except Exception:
-            pass  # Constraint may not exist
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not drop constraint 'collections_name_key' (may not exist): {e}")
 
         try:
             op.drop_index('ix_collections_name', table_name='collections')
-        except Exception:
-            pass  # Index may not exist
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not drop index 'ix_collections_name' (may not exist): {e}")
 
         try:
             op.create_unique_constraint(
@@ -72,8 +76,8 @@ def upgrade() -> None:
                 'collections',
                 ['team_id', 'name']
             )
-        except Exception:
-            pass  # Constraint may already exist
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not create constraint 'uq_collections_team_name' (may already exist): {e}")
 
 
 def downgrade() -> None:
@@ -82,5 +86,30 @@ def downgrade() -> None:
 
     WARNING: This will fail if duplicate collection names exist across different teams.
     """
-    op.drop_constraint('uq_collections_team_name', 'collections', type_='unique')
-    op.create_index('ix_collections_name', 'collections', ['name'], unique=True)
+    bind = op.get_bind()
+
+    if bind.dialect.name == 'postgresql':
+        # Check and drop team-scoped constraint
+        result = bind.execute(sa.text(
+            "SELECT 1 FROM pg_constraint WHERE conname = 'uq_collections_team_name'"
+        ))
+        if result.fetchone():
+            op.drop_constraint('uq_collections_team_name', 'collections', type_='unique')
+
+        # Check if global index already exists
+        result = bind.execute(sa.text(
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'ix_collections_name'"
+        ))
+        if not result.fetchone():
+            op.create_index('ix_collections_name', 'collections', ['name'], unique=True)
+    else:
+        # SQLite: use try/except pattern with specific exceptions
+        try:
+            op.drop_constraint('uq_collections_team_name', 'collections', type_='unique')
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not drop constraint 'uq_collections_team_name' (may not exist): {e}")
+
+        try:
+            op.create_index('ix_collections_name', 'collections', ['name'], unique=True)
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not create index 'ix_collections_name' (may already exist): {e}")

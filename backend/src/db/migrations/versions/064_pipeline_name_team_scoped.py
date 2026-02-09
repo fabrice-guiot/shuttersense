@@ -8,9 +8,13 @@ Changes unique constraint on pipelines.name from global to team-scoped (team_id,
 In a multi-tenant application, different teams should be able to have pipelines
 with the same name (e.g., each team can have their own "Default Workflow" pipeline).
 """
+import logging
+
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
+logger = logging.getLogger('alembic.runtime.migration')
 
 revision = '064_pipeline_name_team'
 down_revision = '063_collection_name_team'
@@ -62,21 +66,21 @@ def upgrade() -> None:
                 ['team_id', 'name']
             )
     else:
-        # SQLite: use try/except pattern
+        # SQLite: use try/except pattern with specific exceptions
         try:
             op.drop_constraint('pipelines_name_key', 'pipelines', type_='unique')
-        except Exception:
-            pass  # Constraint may not exist
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not drop constraint 'pipelines_name_key' (may not exist): {e}")
 
         try:
             op.drop_index('idx_pipelines_name', table_name='pipelines')
-        except Exception:
-            pass  # Index may not exist
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not drop index 'idx_pipelines_name' (may not exist): {e}")
 
         try:
             op.drop_index('ix_pipelines_name', table_name='pipelines')
-        except Exception:
-            pass  # Index may not exist
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not drop index 'ix_pipelines_name' (may not exist): {e}")
 
         try:
             op.create_unique_constraint(
@@ -84,8 +88,8 @@ def upgrade() -> None:
                 'pipelines',
                 ['team_id', 'name']
             )
-        except Exception:
-            pass  # Constraint may already exist
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not create constraint 'uq_pipelines_team_name' (may already exist): {e}")
 
 
 def downgrade() -> None:
@@ -94,6 +98,30 @@ def downgrade() -> None:
 
     WARNING: This will fail if duplicate pipeline names exist across different teams.
     """
-    op.drop_constraint('uq_pipelines_team_name', 'pipelines', type_='unique')
-    op.create_index('idx_pipelines_name', 'pipelines', ['name'], unique=False)
-    # Note: Not restoring unique=True to avoid potential conflicts
+    bind = op.get_bind()
+
+    if bind.dialect.name == 'postgresql':
+        # Check and drop team-scoped constraint
+        result = bind.execute(sa.text(
+            "SELECT 1 FROM pg_constraint WHERE conname = 'uq_pipelines_team_name'"
+        ))
+        if result.fetchone():
+            op.drop_constraint('uq_pipelines_team_name', 'pipelines', type_='unique')
+
+        # Check if global index already exists
+        result = bind.execute(sa.text(
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'idx_pipelines_name'"
+        ))
+        if not result.fetchone():
+            op.create_index('idx_pipelines_name', 'pipelines', ['name'], unique=False)
+    else:
+        # SQLite: use try/except pattern with specific exceptions
+        try:
+            op.drop_constraint('uq_pipelines_team_name', 'pipelines', type_='unique')
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not drop constraint 'uq_pipelines_team_name' (may not exist): {e}")
+
+        try:
+            op.create_index('idx_pipelines_name', 'pipelines', ['name'], unique=False)
+        except (OperationalError, ProgrammingError) as e:
+            logger.warning(f"Could not create index 'idx_pipelines_name' (may already exist): {e}")
