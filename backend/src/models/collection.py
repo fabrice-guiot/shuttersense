@@ -16,7 +16,7 @@ import enum
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Enum, Text, Boolean, ForeignKey, Index
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Enum, Text, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from backend.src.models.types import JSONBType
@@ -70,7 +70,7 @@ class Collection(Base, GuidMixin, AuditMixin):
         connector_id: Foreign key to Connector (NULL for local, required for remote)
         pipeline_id: Foreign key to Pipeline (NULL = use default, SET NULL on delete)
         pipeline_version: Pinned pipeline version (NULL if using current/default)
-        name: User-friendly collection name (unique)
+        name: User-friendly collection name (unique per team)
         type: Collection type (LOCAL, S3, GCS, SMB)
         location: Storage location path/URI
         state: Collection lifecycle state (LIVE, CLOSED, ARCHIVED)
@@ -95,7 +95,7 @@ class Collection(Base, GuidMixin, AuditMixin):
         SMB: /share-path/optional/prefix
 
     Constraints:
-        - name must be unique
+        - (team_id, name) must be unique (each team can have their own collections)
         - type must be valid CollectionType
         - state must be valid CollectionState
         - connector_id required for remote types, NULL for LOCAL
@@ -105,7 +105,7 @@ class Collection(Base, GuidMixin, AuditMixin):
         - cache_ttl if provided must be positive integer
 
     Indexes:
-        - name (unique)
+        - name (for lookups)
         - uuid (unique, for GUID lookups)
         - state (for filtering by state)
         - type (for filtering by type)
@@ -146,7 +146,7 @@ class Collection(Base, GuidMixin, AuditMixin):
     pipeline_version = Column(Integer, nullable=True)
 
     # Core fields
-    name = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=False, index=True)  # Unique per team, not globally
     type = Column(Enum(CollectionType, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
     location = Column(String(1024), nullable=False)
     state = Column(
@@ -222,8 +222,10 @@ class Collection(Base, GuidMixin, AuditMixin):
         lazy="dynamic"
     )
 
-    # Table-level constraints
+    # Table-level constraints and indexes
     __table_args__ = (
+        # Collection names are unique per team, not globally
+        UniqueConstraint("team_id", "name", name="uq_collections_team_name"),
         Index("idx_collection_state", "state"),
         Index("idx_collection_type", "type"),
         Index("idx_collection_accessible", "is_accessible"),

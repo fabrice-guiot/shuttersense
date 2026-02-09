@@ -15,7 +15,7 @@ Design Rationale:
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Index, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Index, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
@@ -34,7 +34,7 @@ class Pipeline(Base, GuidMixin, AuditMixin):
         id: Primary key
         uuid: UUIDv7 for external identification (inherited from GuidMixin)
         guid: GUID string property (pip_xxx, inherited from GuidMixin)
-        name: Unique display name
+        name: Display name (unique per team)
         description: Purpose/usage description
         nodes_json: Node definitions array (JSONB)
         edges_json: Edge connections array (JSONB)
@@ -50,7 +50,7 @@ class Pipeline(Base, GuidMixin, AuditMixin):
         collections: Related collections with explicit pipeline assignment (one-to-many)
 
     Constraints:
-        - name must be unique, 1-255 characters
+        - (team_id, name) must be unique (each team can have their own pipelines)
         - nodes_json must contain at least one node
         - edges_json can be empty (single-node pipeline)
         - version must be >= 1
@@ -59,7 +59,6 @@ class Pipeline(Base, GuidMixin, AuditMixin):
         - Default pipeline must be active (is_default implies is_active)
 
     Indexes:
-        - idx_pipelines_name: name
         - uuid (unique, for GUID lookups)
         - idx_pipelines_active: is_active WHERE is_active = true
         - idx_pipelines_default: is_default WHERE is_default = true
@@ -91,7 +90,7 @@ class Pipeline(Base, GuidMixin, AuditMixin):
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
 
     # Core fields
-    name = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=False, index=True)  # Unique per team, not globally
     description = Column(Text, nullable=True)
 
     # Graph structure - JSONB for PostgreSQL, JSON fallback for SQLite testing
@@ -132,9 +131,10 @@ class Pipeline(Base, GuidMixin, AuditMixin):
         back_populates="pipeline"
     )
 
-    # Indexes
+    # Table-level constraints and indexes
     __table_args__ = (
-        Index("idx_pipelines_name", "name"),
+        # Pipeline names are unique per team, not globally
+        UniqueConstraint("team_id", "name", name="uq_pipelines_team_name"),
         Index("idx_pipelines_active", "is_active", postgresql_where=(is_active == True)),
         Index("idx_pipelines_default", "is_default", postgresql_where=(is_default == True)),
     )

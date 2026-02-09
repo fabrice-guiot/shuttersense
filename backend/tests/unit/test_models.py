@@ -302,9 +302,17 @@ class TestCollectionModel:
         assert collection.connector.name == "S3 Connector"
 
     def test_collection_name_uniqueness(self, test_db_session):
-        """Test collection names must be unique."""
+        """Test collection names must be unique within the same team."""
+        from backend.src.models.team import Team
+
+        # Create a team for the test
+        team = Team(name="Collection Test Team", slug="collection-test")
+        test_db_session.add(team)
+        test_db_session.commit()
+
         collection1 = Collection(
             name="Duplicate Collection",
+            team_id=team.id,
             type=CollectionType.LOCAL,
             location="/photos/dup1",
             state=CollectionState.LIVE
@@ -313,7 +321,8 @@ class TestCollectionModel:
         test_db_session.commit()
 
         collection2 = Collection(
-            name="Duplicate Collection",
+            name="Duplicate Collection",  # Same name, same team
+            team_id=team.id,
             type=CollectionType.LOCAL,
             location="/photos/dup2",
             state=CollectionState.LIVE
@@ -322,6 +331,41 @@ class TestCollectionModel:
 
         with pytest.raises(IntegrityError):
             test_db_session.commit()
+
+        test_db_session.rollback()
+
+    def test_collection_same_name_different_teams_allowed(self, test_db_session):
+        """Test that different teams can have collections with the same name."""
+        from backend.src.models.team import Team
+
+        # Create two teams
+        team1 = Team(name="Team One", slug="team-one")
+        team2 = Team(name="Team Two", slug="team-two")
+        test_db_session.add_all([team1, team2])
+        test_db_session.commit()
+
+        # Create collections with the same name in different teams
+        collection1 = Collection(
+            name="Wedding Photos",
+            team_id=team1.id,
+            type=CollectionType.LOCAL,
+            location="/photos/team1/wedding",
+            state=CollectionState.LIVE
+        )
+        collection2 = Collection(
+            name="Wedding Photos",  # Same name, different team
+            team_id=team2.id,
+            type=CollectionType.LOCAL,
+            location="/photos/team2/wedding",
+            state=CollectionState.LIVE
+        )
+        test_db_session.add_all([collection1, collection2])
+        test_db_session.commit()  # Should not raise
+
+        assert collection1.id is not None
+        assert collection2.id is not None
+        assert collection1.name == collection2.name
+        assert collection1.team_id != collection2.team_id
 
     def test_collection_states(self, test_db_session):
         """Test creating collections with different states."""
