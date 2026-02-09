@@ -25,27 +25,36 @@ export function initServiceWorkerLifecycle(): void {
   // When a new SW activates and claims this client, reload to load fresh assets.
   // The `controllerchange` event fires after skipWaiting() + clients.claim()
   // in the new SW, meaning the old cached JS bundles in memory are stale.
+  // Track whether a controller existed at load time to distinguish initial
+  // claim (first visit) from actual updates (SW replacement).
+  const hadController = !!navigator.serviceWorker.controller
   let refreshing = false
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // On first visit, there's no previous controller — skip reload for initial claim
+    if (!hadController) return
     if (refreshing) return
     refreshing = true
     window.location.reload()
   })
 
   // Once the SW is ready, set up periodic update checks
-  navigator.serviceWorker.ready.then((registration) => {
-    // Periodic check — catches updates even if the user never navigates
-    setInterval(() => {
-      registration.update().catch(() => {
-        // Silently ignore (offline, network error, etc.)
-      })
-    }, SW_UPDATE_INTERVAL_MS)
+  navigator.serviceWorker.ready
+    .then((registration) => {
+      // Periodic check — catches updates even if the user never navigates
+      setInterval(() => {
+        registration.update().catch(() => {
+          // Silently ignore (offline, network error, etc.)
+        })
+      }, SW_UPDATE_INTERVAL_MS)
 
-    // Check on tab re-focus — catches updates when user returns after a deploy
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        registration.update().catch(() => {})
-      }
+      // Check on tab re-focus — catches updates when user returns after a deploy
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          registration.update().catch(() => {})
+        }
+      })
     })
-  })
+    .catch(() => {
+      // Silently ignore — SW registration may fail in some environments
+    })
 }
