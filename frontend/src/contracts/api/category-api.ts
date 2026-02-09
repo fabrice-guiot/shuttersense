@@ -55,6 +55,14 @@ export interface CategoryListResponse {
   total: number
 }
 
+export interface CategorySeedResponse {
+  /** Number of new default categories created */
+  categories_created: number
+
+  /** Full list of categories after seeding */
+  categories: Category[]
+}
+
 export interface CategoryStatsResponse {
   /** Total number of categories */
   total_count: number
@@ -165,6 +173,16 @@ export interface CategoryErrorResponse {
  * Get category statistics (KPIs)
  *
  * Response: 200 CategoryStatsResponse
+ * Errors:
+ *   - 500: Internal server error
+ */
+
+/**
+ * POST /api/categories/seed-defaults
+ *
+ * Restore missing default categories (idempotent)
+ *
+ * Response: 200 CategorySeedResponse
  * Errors:
  *   - 500: Internal server error
  */

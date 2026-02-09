@@ -305,6 +305,71 @@ class TestCategoriesAPI:
         assert guid not in guids_in_active
 
 
+class TestCategorySeedDefaults:
+    """Integration tests for POST /api/categories/seed-defaults endpoint"""
+
+    def test_seed_defaults_creates_categories(self, test_client):
+        """Test seeding creates default categories on empty team."""
+        response = test_client.post("/api/categories/seed-defaults")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "categories_created" in data
+        assert "categories" in data
+        assert data["categories_created"] > 0
+        assert isinstance(data["categories"], list)
+        assert len(data["categories"]) == data["categories_created"]
+
+        # Verify each category has expected fields
+        for cat in data["categories"]:
+            assert "guid" in cat
+            assert cat["guid"].startswith("cat_")
+            assert "name" in cat
+
+    def test_seed_defaults_idempotent(self, test_client):
+        """Test seeding twice creates nothing on second call."""
+        # First seed
+        response1 = test_client.post("/api/categories/seed-defaults")
+        assert response1.status_code == 200
+        first_count = response1.json()["categories_created"]
+        assert first_count > 0
+
+        # Second seed - should create 0
+        response2 = test_client.post("/api/categories/seed-defaults")
+        assert response2.status_code == 200
+        assert response2.json()["categories_created"] == 0
+        # Categories list should be the same size
+        assert len(response2.json()["categories"]) == len(response1.json()["categories"])
+
+    def test_seed_defaults_skips_existing(self, test_client):
+        """Test seeding skips categories that already exist."""
+        # Create one category that matches a default name
+        test_client.post("/api/categories", json={"name": "Airshow", "icon": "plane"})
+
+        # Seed should skip the existing "Airshow"
+        response = test_client.post("/api/categories/seed-defaults")
+        assert response.status_code == 200
+
+        data = response.json()
+        # Should have created all defaults minus the one that already existed
+        from backend.src.services.seed_data_service import DEFAULT_CATEGORIES
+        assert data["categories_created"] == len(DEFAULT_CATEGORIES) - 1
+
+    def test_seed_defaults_returns_full_list(self, test_client):
+        """Test seed response includes all categories (seeded + pre-existing)."""
+        # Create a custom category
+        test_client.post("/api/categories", json={"name": "Custom Category"})
+
+        # Seed defaults
+        response = test_client.post("/api/categories/seed-defaults")
+        assert response.status_code == 200
+
+        data = response.json()
+        names = [c["name"] for c in data["categories"]]
+        # Custom category should be in the list too
+        assert "Custom Category" in names
+
+
 class TestCategoryValidation:
     """Tests for category input validation"""
 

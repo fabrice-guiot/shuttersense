@@ -12,6 +12,7 @@ import type {
   CategoryCreateRequest,
   CategoryUpdateRequest,
   CategoryReorderRequest,
+  CategorySeedResponse,
   CategoryStatsResponse
 } from '@/contracts/api/category-api'
 
@@ -71,6 +72,15 @@ export const deleteCategory = async (guid: string): Promise<void> => {
 export const reorderCategories = async (orderedGuids: string[]): Promise<Category[]> => {
   const data: CategoryReorderRequest = { ordered_guids: orderedGuids }
   const response = await api.post<Category[]>('/categories/reorder', data)
+  return response.data
+}
+
+/**
+ * Seed default categories (idempotent)
+ * Restores any missing default categories without affecting existing ones
+ */
+export const seedDefaultCategories = async (): Promise<CategorySeedResponse> => {
+  const response = await api.post<CategorySeedResponse>('/categories/seed-defaults')
   return response.data
 }
 

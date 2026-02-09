@@ -511,6 +511,42 @@ class TestTeamServiceCreateWithAdmin:
 # ============================================================================
 
 
+class TestTeamServiceSeedDefaults:
+    """Tests for seed data during team creation."""
+
+    def test_create_seeds_default_categories(self, team_service, test_db_session):
+        """Test that creating a team seeds default categories."""
+        from backend.src.models import Category
+        from backend.src.services.seed_data_service import DEFAULT_CATEGORIES
+
+        team = team_service.create(name="Seeded Team")
+
+        # Verify default categories were created
+        categories = test_db_session.query(Category).filter(
+            Category.team_id == team.id
+        ).all()
+        assert len(categories) == len(DEFAULT_CATEGORIES)
+
+        names = {c.name for c in categories}
+        expected_names = {c['name'] for c in DEFAULT_CATEGORIES}
+        assert names == expected_names
+
+    def test_create_with_admin_seeds_defaults(self, team_service, test_db_session):
+        """Test that create_with_admin also seeds default categories."""
+        from backend.src.models import Category
+        from backend.src.services.seed_data_service import DEFAULT_CATEGORIES
+
+        team, admin = team_service.create_with_admin(
+            name="Admin Seeded Team",
+            admin_email="admin@seeded.com",
+        )
+
+        categories = test_db_session.query(Category).filter(
+            Category.team_id == team.id
+        ).all()
+        assert len(categories) == len(DEFAULT_CATEGORIES)
+
+
 class TestTeamServiceStats:
     """Tests for get_stats() method."""
 

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -227,7 +227,8 @@ export function CategoriesTab() {
     error,
     createCategory,
     updateCategory,
-    deleteCategory
+    deleteCategory,
+    seedDefaults
   } = useCategories()
 
   // KPI Stats for header
@@ -248,6 +249,8 @@ export function CategoriesTab() {
   const [open, setOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [seedDialogOpen, setSeedDialogOpen] = useState(false)
+  const [seeding, setSeeding] = useState(false)
 
   const handleOpen = (category: Category | null = null) => {
     setEditingCategory(category)
@@ -286,10 +289,31 @@ export function CategoriesTab() {
       })
   }
 
+  const handleSeedDefaults = async () => {
+    setSeeding(true)
+    try {
+      await seedDefaults()
+      refetchStats()
+    } catch {
+      // Error handled by hook
+    } finally {
+      setSeeding(false)
+      setSeedDialogOpen(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Action Row (Issue #67 - Single Title Pattern) */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setSeedDialogOpen(true)}
+          className="gap-2"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Restore Defaults
+        </Button>
         <Button onClick={() => handleOpen()} className="gap-2">
           <Plus className="h-4 w-4" />
           New Category
@@ -338,6 +362,30 @@ export function CategoriesTab() {
               onCancel={handleClose}
             />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore Defaults Confirmation Dialog */}
+      <Dialog open={seedDialogOpen} onOpenChange={setSeedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore Default Categories</DialogTitle>
+            <DialogDescription>
+              This will restore any missing default categories. Existing categories will not be affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSeedDialogOpen(false)}
+              disabled={seeding}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSeedDefaults} disabled={seeding}>
+              {seeding ? 'Restoring...' : 'Restore Defaults'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

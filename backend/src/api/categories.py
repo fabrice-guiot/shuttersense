@@ -29,9 +29,11 @@ from backend.src.schemas.category import (
     CategoryUpdate,
     CategoryResponse,
     CategoryReorderRequest,
+    CategorySeedResponse,
     CategoryStatsResponse,
 )
 from backend.src.services.category_service import CategoryService
+from backend.src.services.seed_data_service import SeedDataService
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
 from backend.src.utils.logging_config import get_logger
 
@@ -52,6 +54,11 @@ router = APIRouter(
 def get_category_service(db: Session = Depends(get_db)) -> CategoryService:
     """Create CategoryService instance with database session."""
     return CategoryService(db=db)
+
+
+def get_seed_data_service(db: Session = Depends(get_db)) -> SeedDataService:
+    """Create SeedDataService instance with database session."""
+    return SeedDataService(db=db)
 
 
 # ============================================================================
@@ -103,6 +110,62 @@ async def get_category_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get category statistics: {str(e)}",
+        )
+
+
+@router.post(
+    "/seed-defaults",
+    response_model=CategorySeedResponse,
+    summary="Seed default categories",
+    description="Restore missing default categories. Existing categories are not affected.",
+)
+async def seed_default_categories(
+    ctx: TenantContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+    seed_service: SeedDataService = Depends(get_seed_data_service),
+    category_service: CategoryService = Depends(get_category_service),
+) -> CategorySeedResponse:
+    """
+    Seed default categories for the current team.
+
+    Idempotent: only creates categories whose names don't already exist.
+    Existing categories are never modified or deleted.
+
+    Returns:
+        CategorySeedResponse with count of created categories and full list
+
+    Example:
+        POST /api/categories/seed-defaults
+
+        Response:
+        {
+          "categories_created": 3,
+          "categories": [...]
+        }
+    """
+    try:
+        categories_created = seed_service.seed_categories(team_id=ctx.team_id)
+        if categories_created > 0:
+            db.commit()
+
+        # Return the full updated list
+        categories = category_service.list(team_id=ctx.team_id)
+
+        logger.info(
+            f"Seeded {categories_created} default categories",
+            extra={"categories_created": categories_created},
+        )
+
+        return CategorySeedResponse(
+            categories_created=categories_created,
+            categories=[CategoryResponse.model_validate(c) for c in categories],
+        )
+
+    except Exception as e:
+        logger.error(f"Error seeding default categories: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to seed default categories: {str(e)}",
         )
 
 
