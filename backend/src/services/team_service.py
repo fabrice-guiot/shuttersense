@@ -15,7 +15,7 @@ Design:
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import func
 
 from backend.src.models import Team, User, UserStatus
@@ -127,14 +127,19 @@ class TeamService:
             self.db.refresh(team)
 
             # Seed default retention settings for new team (Issue #92)
-            retention_service = RetentionService(self.db)
-            retention_service.seed_defaults(team.id)
+            try:
+                retention_service = RetentionService(self.db)
+                retention_service.seed_defaults(team.id)
+            except (IntegrityError, SQLAlchemyError) as e:
+                self.db.rollback()
+                logger.warning(f"Failed to seed retention defaults for team '{name}': {e}")
+                raise ConflictError(f"Failed to seed retention defaults for team '{name}'")
 
             # Seed default categories, event statuses, and TTL configs
             try:
                 seed_service = SeedDataService(self.db)
                 seed_service.seed_team_defaults(team.id)
-            except Exception as e:
+            except (IntegrityError, SQLAlchemyError) as e:
                 self.db.rollback()
                 logger.warning(f"Failed to seed defaults for team '{name}': {e}")
 

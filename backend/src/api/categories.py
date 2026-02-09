@@ -144,7 +144,7 @@ async def seed_default_categories(
         }
     """
     try:
-        categories_created = seed_service.seed_categories(team_id=ctx.team_id)
+        categories_created = seed_service.seed_categories(team_id=ctx.team_id, user_id=ctx.user_id)
         if categories_created > 0:
             db.commit()
 
@@ -162,6 +162,7 @@ async def seed_default_categories(
         )
 
     except Exception as e:
+        db.rollback()
         logger.error(f"Error seeding default categories: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

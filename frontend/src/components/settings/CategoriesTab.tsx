@@ -70,11 +70,12 @@ function CategoryIcon({ icon, color, size = 'md' }: CategoryIconProps) {
 interface CategoryListProps {
   categories: Category[]
   loading: boolean
+  seeding?: boolean
   onEdit: (category: Category) => void
   onDelete: (category: Category) => void
 }
 
-function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListProps) {
+function CategoryList({ categories, loading, seeding = false, onEdit, onDelete }: CategoryListProps) {
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
     category: Category | null
@@ -91,7 +92,8 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
     }
   }
 
-  if (loading && categories.length === 0) {
+  // Show loading only during initial fetch, not during seeding (seeding has its own UI state)
+  if (loading && categories.length === 0 && !seeding) {
     return (
       <div className="flex items-center justify-center py-8">
         <div className="text-muted-foreground">Loading categories...</div>
@@ -99,7 +101,8 @@ function CategoryList({ categories, loading, onEdit, onDelete }: CategoryListPro
     )
   }
 
-  if (categories.length === 0) {
+  // When seeding, don't show empty state - wait for seeding to complete
+  if (categories.length === 0 && !seeding) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="text-muted-foreground mb-2">No categories found</div>
@@ -292,7 +295,7 @@ export function CategoriesTab() {
   const handleSeedDefaults = async () => {
     setSeeding(true)
     try {
-      await seedDefaults()
+      await seedDefaults({ skipLoading: true })
       refetchStats()
     } catch {
       // Error handled by hook
@@ -331,6 +334,7 @@ export function CategoriesTab() {
       <CategoryList
         categories={categories}
         loading={loading}
+        seeding={seeding}
         onEdit={handleOpen}
         onDelete={handleDelete}
       />

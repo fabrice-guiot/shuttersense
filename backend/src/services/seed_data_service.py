@@ -13,7 +13,7 @@ Design:
 - Handles migration of orphaned data (team_id=NULL) from pre-tenancy migrations
 """
 
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Optional, Tuple
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -101,7 +101,7 @@ class SeedDataService:
 
         return categories_created, event_statuses_created, ttl_configs_created
 
-    def seed_categories(self, team_id: int) -> int:
+    def seed_categories(self, team_id: int, user_id: Optional[int] = None) -> int:
         """
         Seed default categories for a team.
 
@@ -110,6 +110,7 @@ class SeedDataService:
 
         Args:
             team_id: Team ID to seed categories for
+            user_id: Optional user ID for audit trail (created_by/updated_by)
 
         Returns:
             Number of categories created
@@ -134,6 +135,8 @@ class SeedDataService:
                 color=cat_data['color'],
                 is_active=True,
                 display_order=cat_data['display_order'],
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(category)
             created_count += 1

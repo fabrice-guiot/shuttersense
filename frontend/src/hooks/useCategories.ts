@@ -24,7 +24,7 @@ interface UseCategoriesReturn {
   updateCategory: (guid: string, updates: CategoryUpdateRequest) => Promise<Category>
   deleteCategory: (guid: string) => Promise<void>
   reorderCategories: (orderedGuids: string[]) => Promise<Category[]>
-  seedDefaults: () => Promise<number>
+  seedDefaults: (options?: { skipLoading?: boolean }) => Promise<number>
 }
 
 export const useCategories = (autoFetch = true): UseCategoriesReturn => {
@@ -147,9 +147,13 @@ export const useCategories = (autoFetch = true): UseCategoriesReturn => {
   /**
    * Seed default categories (restore missing defaults)
    * Returns the number of categories created
+   * @param options.skipLoading - If true, don't set the shared loading state (caller manages own loading state)
    */
-  const seedDefaults = useCallback(async () => {
-    setLoading(true)
+  const seedDefaults = useCallback(async (options?: { skipLoading?: boolean }) => {
+    const skipLoading = options?.skipLoading ?? false
+    if (!skipLoading) {
+      setLoading(true)
+    }
     setError(null)
     try {
       const result = await categoryService.seedDefaultCategories()
@@ -168,7 +172,9 @@ export const useCategories = (autoFetch = true): UseCategoriesReturn => {
       })
       throw err
     } finally {
-      setLoading(false)
+      if (!skipLoading) {
+        setLoading(false)
+      }
     }
   }, [])
 
