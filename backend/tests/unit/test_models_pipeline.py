@@ -77,11 +77,18 @@ class TestPipelineModel:
         assert pipeline.is_valid is True
 
     def test_unique_name_constraint(self, test_db_session):
-        """Test that pipeline names must be unique."""
+        """Test that pipeline names must be unique within the same team."""
         from sqlalchemy.exc import IntegrityError
+        from backend.src.models.team import Team
+
+        # Create a team for the test
+        team = Team(name="Pipeline Test Team", slug="pipeline-test")
+        test_db_session.add(team)
+        test_db_session.commit()
 
         pipeline1 = Pipeline(
             name="Unique Name",
+            team_id=team.id,
             nodes_json=[],
             edges_json=[]
         )
@@ -89,7 +96,8 @@ class TestPipelineModel:
         test_db_session.commit()
 
         pipeline2 = Pipeline(
-            name="Unique Name",  # Same name
+            name="Unique Name",  # Same name, same team
+            team_id=team.id,
             nodes_json=[],
             edges_json=[]
         )
@@ -99,6 +107,37 @@ class TestPipelineModel:
             test_db_session.commit()
 
         test_db_session.rollback()
+
+    def test_same_name_different_teams_allowed(self, test_db_session):
+        """Test that different teams can have pipelines with the same name."""
+        from backend.src.models.team import Team
+
+        # Create two teams
+        team1 = Team(name="Team Alpha", slug="team-alpha")
+        team2 = Team(name="Team Beta", slug="team-beta")
+        test_db_session.add_all([team1, team2])
+        test_db_session.commit()
+
+        # Create pipelines with the same name in different teams
+        pipeline1 = Pipeline(
+            name="Default Workflow",
+            team_id=team1.id,
+            nodes_json=[],
+            edges_json=[]
+        )
+        pipeline2 = Pipeline(
+            name="Default Workflow",  # Same name, different team
+            team_id=team2.id,
+            nodes_json=[],
+            edges_json=[]
+        )
+        test_db_session.add_all([pipeline1, pipeline2])
+        test_db_session.commit()  # Should not raise
+
+        assert pipeline1.id is not None
+        assert pipeline2.id is not None
+        assert pipeline1.name == pipeline2.name
+        assert pipeline1.team_id != pipeline2.team_id
 
     def test_node_count_property(self, test_db_session):
         """Test node_count property."""

@@ -14,7 +14,7 @@ Design Rationale:
 
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Index, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Index, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from backend.src.models import Base
@@ -33,7 +33,7 @@ class Category(Base, GuidMixin, AuditMixin):
         id: Primary key (internal, never exposed)
         uuid: UUIDv7 for external identification (inherited from GuidMixin)
         guid: GUID string property (cat_xxx, inherited from GuidMixin)
-        name: Category name (unique, case-insensitive)
+        name: Category name (unique per team)
         color: Hex color code (e.g., "#FF5733") for UI display
         icon: Lucide icon name (e.g., "plane", "camera") for UI display
         is_active: Whether category is available for selection
@@ -49,13 +49,13 @@ class Category(Base, GuidMixin, AuditMixin):
         event_series: Event series in this category (one-to-many)
 
     Constraints:
-        - name must be unique
+        - (team_id, name) must be unique (each team can have their own categories)
         - color must be valid hex format if provided (#RRGGBB)
         - Cannot delete category with associated entities (RESTRICT)
 
     Indexes:
         - uuid (unique, for GUID lookups)
-        - name (unique)
+        - name (for lookups)
         - is_active, display_order (for filtered sorted lists)
     """
 
@@ -71,7 +71,7 @@ class Category(Base, GuidMixin, AuditMixin):
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
 
     # Core fields
-    name = Column(String(100), unique=True, nullable=False, index=True)
+    name = Column(String(100), nullable=False, index=True)  # Unique per team, not globally
     color = Column(String(7), nullable=True)  # Hex color: #RRGGBB
     icon = Column(String(50), nullable=True)  # Lucide icon name
 
@@ -115,8 +115,10 @@ class Category(Base, GuidMixin, AuditMixin):
         lazy="dynamic"
     )
 
-    # Table-level indexes
+    # Table-level constraints and indexes
     __table_args__ = (
+        # Category names are unique per team, not globally
+        UniqueConstraint("team_id", "name", name="uq_categories_team_name"),
         Index(
             "idx_categories_active_order",
             "is_active",
