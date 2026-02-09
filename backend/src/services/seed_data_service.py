@@ -74,7 +74,9 @@ class SeedDataService:
         """
         self.db = db
 
-    def seed_team_defaults(self, team_id: int) -> Tuple[int, int, int]:
+    def seed_team_defaults(
+        self, team_id: int, user_id: Optional[int] = None
+    ) -> Tuple[int, int, int]:
         """
         Seed all default data for a team.
 
@@ -83,13 +85,14 @@ class SeedDataService:
 
         Args:
             team_id: Team ID to seed data for
+            user_id: Optional user ID for audit trail (created_by/updated_by)
 
         Returns:
             Tuple of (categories_created, event_statuses_created, ttl_configs_created)
         """
-        categories_created = self.seed_categories(team_id)
-        event_statuses_created = self.seed_event_statuses(team_id)
-        ttl_configs_created = self.seed_collection_ttl(team_id)
+        categories_created = self.seed_categories(team_id, user_id=user_id)
+        event_statuses_created = self.seed_event_statuses(team_id, user_id=user_id)
+        ttl_configs_created = self.seed_collection_ttl(team_id, user_id=user_id)
 
         total_configs = event_statuses_created + ttl_configs_created
         if categories_created > 0 or total_configs > 0:
@@ -144,7 +147,7 @@ class SeedDataService:
 
         return created_count
 
-    def seed_event_statuses(self, team_id: int) -> int:
+    def seed_event_statuses(self, team_id: int, user_id: Optional[int] = None) -> int:
         """
         Seed default event statuses for a team.
 
@@ -153,6 +156,7 @@ class SeedDataService:
 
         Args:
             team_id: Team ID to seed event statuses for
+            user_id: Optional user ID for audit trail (created_by/updated_by)
 
         Returns:
             Number of event statuses created
@@ -183,6 +187,8 @@ class SeedDataService:
                 },
                 description=f"Event status: {status_data['label']}",
                 source=ConfigSource.DATABASE,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(config)
             created_count += 1
@@ -190,7 +196,7 @@ class SeedDataService:
 
         return created_count
 
-    def seed_collection_ttl(self, team_id: int) -> int:
+    def seed_collection_ttl(self, team_id: int, user_id: Optional[int] = None) -> int:
         """
         Seed default collection TTL configurations for a team.
 
@@ -199,6 +205,7 @@ class SeedDataService:
 
         Args:
             team_id: Team ID to seed collection TTL for
+            user_id: Optional user ID for audit trail (created_by/updated_by)
 
         Returns:
             Number of TTL configurations created
@@ -226,6 +233,8 @@ class SeedDataService:
                 value_json=ttl_data,
                 description=f"Collection cache TTL for {state_key} state",
                 source=ConfigSource.DATABASE,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
             )
             self.db.add(config)
             created_count += 1

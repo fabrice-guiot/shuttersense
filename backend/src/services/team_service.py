@@ -133,12 +133,11 @@ class TeamService:
             except (IntegrityError, SQLAlchemyError) as e:
                 self.db.rollback()
                 logger.warning(f"Failed to seed retention defaults for team '{name}': {e}")
-                raise ConflictError(f"Failed to seed retention defaults for team '{name}'")
 
             # Seed default categories, event statuses, and TTL configs
             try:
                 seed_service = SeedDataService(self.db)
-                seed_service.seed_team_defaults(team.id)
+                seed_service.seed_team_defaults(team.id, user_id=acting_user_id)
             except (IntegrityError, SQLAlchemyError) as e:
                 self.db.rollback()
                 logger.warning(f"Failed to seed defaults for team '{name}': {e}")
