@@ -14,6 +14,15 @@ BUILD_DIR="$AGENT_DIR/dist"
 
 echo "Building ShutterSense Agent for Linux..."
 
+# Verify Python version (3.11+ required — bundled into the binary by PyInstaller)
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')")
+if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"; then
+    echo "Error: Python 3.11+ required for build, found $PYTHON_VERSION"
+    echo "The build Python is bundled into the binary and must match project requirements."
+    exit 1
+fi
+echo "Python: $PYTHON_VERSION"
+
 # Ensure we're in the agent directory
 cd "$AGENT_DIR"
 

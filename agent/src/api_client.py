@@ -141,6 +141,7 @@ class AgentApiClient:
         version: str,
         authorized_roots: Optional[list[str]] = None,
         binary_checksum: Optional[str] = None,
+        platform: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Register a new agent with the server.
@@ -154,6 +155,7 @@ class AgentApiClient:
             version: Agent software version
             authorized_roots: Optional list of authorized local filesystem roots
             binary_checksum: Optional SHA-256 checksum of agent binary
+            platform: Optional platform identifier (e.g., 'darwin-arm64')
 
         Returns:
             Registration response containing agent GUID and API key
@@ -174,6 +176,8 @@ class AgentApiClient:
             payload["authorized_roots"] = authorized_roots
         if binary_checksum:
             payload["binary_checksum"] = binary_checksum
+        if platform:
+            payload["platform"] = platform
 
         try:
             response = await self._client.post(

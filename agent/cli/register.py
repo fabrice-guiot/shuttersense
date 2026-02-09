@@ -17,6 +17,7 @@ import click
 from src import __version__
 from src.config import AgentConfig
 from src.capabilities import detect_capabilities
+from src.attestation import get_attestation_info
 from src.api_client import (
     AgentApiClient,
     ConnectionError as AgentConnectionError,
@@ -139,16 +140,28 @@ def register(
     # Get authorized roots from config (if any)
     authorized_roots = config.authorized_roots
 
+    # Get attestation info (checksum and platform) from the attestation module
+    attestation = get_attestation_info()
+    binary_checksum = attestation.get('checksum')
+    agent_platform = attestation.get('platform')
+
     click.echo(f"Registering agent '{name}' with server {server}...")
     click.echo(f"  Hostname: {hostname}")
     click.echo(f"  OS: {os_info}")
     click.echo(f"  Capabilities: {', '.join(capabilities)}")
+    if binary_checksum:
+        click.echo(f"  Binary checksum: {binary_checksum[:16]}...")
+    if agent_platform:
+        click.echo(f"  Platform: {agent_platform}")
     if authorized_roots:
         click.echo(f"  Authorized roots: {', '.join(authorized_roots)}")
 
     # Perform registration
     try:
-        result = asyncio.run(_register_async(server, token, name, hostname, os_info, capabilities, authorized_roots))
+        result = asyncio.run(_register_async(
+            server, token, name, hostname, os_info,
+            capabilities, authorized_roots, binary_checksum, agent_platform,
+        ))
     except AgentConnectionError as e:
         click.echo(click.style("Error: ", fg="red", bold=True) + f"Connection failed: {e}")
         ctx.exit(1)
@@ -186,6 +199,8 @@ async def _register_async(
     os_info: str,
     capabilities: list[str],
     authorized_roots: list[str],
+    binary_checksum: Optional[str] = None,
+    agent_platform: Optional[str] = None,
 ) -> dict:
     """
     Async registration helper.
@@ -198,6 +213,8 @@ async def _register_async(
         os_info: OS information
         capabilities: Agent capabilities
         authorized_roots: Authorized local filesystem roots
+        binary_checksum: SHA-256 of agent binary (packaged builds only)
+        agent_platform: Platform identifier (e.g., 'darwin-arm64')
 
     Returns:
         Registration response
@@ -211,4 +228,6 @@ async def _register_async(
             capabilities=capabilities,
             authorized_roots=authorized_roots,
             version=__version__,
+            binary_checksum=binary_checksum,
+            platform=agent_platform,
         )
