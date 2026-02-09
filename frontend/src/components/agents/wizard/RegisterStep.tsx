@@ -128,7 +128,7 @@ export function RegisterStep({ token, serverUrl, selectedPlatform }: RegisterSte
         <p className="text-sm font-medium">
           {stepNumber++}. Register the agent
         </p>
-        <CopyableCodeBlock label="registration command" language="bash" alwaysShowCopy>
+        <CopyableCodeBlock label="registration command" language={isWindows ? 'powershell' : 'bash'} alwaysShowCopy>
           {registerCommand}
         </CopyableCodeBlock>
       </div>
