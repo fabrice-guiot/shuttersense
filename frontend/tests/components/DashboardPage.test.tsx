@@ -156,6 +156,11 @@ let pipelineStatsState = { stats: mockPipelineStats, loading: false, error: null
 let trendSummaryState = { summary: mockTrendSummary, loading: false, error: null }
 let poolStatusState = { poolStatus: mockPoolStatus, loading: false, error: null }
 let recentResultsState = { results: mockRecentResults, loading: false, error: null }
+let eventDashboardStatsState = {
+  stats: { upcoming_30d_count: 5, needs_tickets_count: 2, needs_pto_count: 1, needs_travel_count: 0 },
+  loading: false,
+  error: null,
+}
 
 vi.mock('@/hooks/useCollections', () => ({
   useCollectionStats: () => ({ ...collectionStatsState, refetch: vi.fn() }),
@@ -183,6 +188,7 @@ vi.mock('@/hooks/useAgentPoolStatus', () => ({
 
 vi.mock('@/hooks/useDashboard', () => ({
   useRecentResults: () => ({ ...recentResultsState, refetch: vi.fn() }),
+  useEventDashboardStats: () => ({ ...eventDashboardStatsState, refetch: vi.fn() }),
 }))
 
 // ============================================================================
@@ -200,6 +206,11 @@ describe('DashboardPage', () => {
     trendSummaryState = { summary: mockTrendSummary, loading: false, error: null }
     poolStatusState = { poolStatus: mockPoolStatus, loading: false, error: null }
     recentResultsState = { results: mockRecentResults, loading: false, error: null }
+    eventDashboardStatsState = {
+      stats: { upcoming_30d_count: 5, needs_tickets_count: 2, needs_pto_count: 1, needs_travel_count: 0 },
+      loading: false,
+      error: null,
+    }
   })
 
   // --------------------------------------------------------------------------

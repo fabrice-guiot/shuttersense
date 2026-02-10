@@ -633,9 +633,41 @@ class EventStatsResponse(BaseModel):
     }
 
 
+class EventDashboardStatsResponse(BaseModel):
+    """
+    Schema for event dashboard statistics response.
+
+    Provides counts for upcoming events and action-required logistics.
+    """
+
+    upcoming_30d_count: int = Field(..., ge=0, description="Events in the next 30 days")
+    needs_tickets_count: int = Field(..., ge=0, description="Events needing ticket purchase")
+    needs_pto_count: int = Field(..., ge=0, description="Events needing PTO booking")
+    needs_travel_count: int = Field(..., ge=0, description="Events needing travel booking")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "upcoming_30d_count": 5,
+                "needs_tickets_count": 2,
+                "needs_pto_count": 1,
+                "needs_travel_count": 3,
+            }
+        }
+    }
+
+
 # ============================================================================
 # Query Parameters
 # ============================================================================
+
+
+class EventPreset(str, enum.Enum):
+    """Preset filters for dashboard-driven event views."""
+    UPCOMING_30D = "upcoming_30d"
+    NEEDS_TICKETS = "needs_tickets"
+    NEEDS_PTO = "needs_pto"
+    NEEDS_TRAVEL = "needs_travel"
 
 
 class EventListParams(BaseModel):
@@ -647,6 +679,7 @@ class EventListParams(BaseModel):
     status: Optional[EventStatus] = Field(default=None, description="Filter by status")
     attendance: Optional[AttendanceStatus] = Field(default=None, description="Filter by attendance")
     include_deleted: bool = Field(default=False, description="Include soft-deleted events")
+    preset: Optional[EventPreset] = Field(default=None, description="Dashboard preset filter")
 
     model_config = {
         "json_schema_extra": {

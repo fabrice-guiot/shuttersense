@@ -12,10 +12,10 @@ Design:
 """
 
 from typing import List, Optional, Dict, Any
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, case
 
 from backend.src.models import Event, EventSeries, Category, Location, Organizer, EventPerformer, Performer
 from backend.src.utils.logging_config import get_logger
@@ -170,7 +170,7 @@ class EventService:
 
         # Exclude deadline entries if requested (T043)
         if not include_deadlines:
-            query = query.filter(Event.is_deadline == False)
+            query = query.filter(Event.is_deadline.is_(False))
 
         # Date range filter
         if start_date:
@@ -310,6 +310,197 @@ class EventService:
             "this_month_count": this_month or 0,
             "attended_count": attended or 0,
         }
+
+    def get_dashboard_stats(self, team_id: int) -> dict:
+        """
+        Get dashboard statistics for upcoming events and logistics needing action.
+
+        - upcoming_30d_count: future/confirmed events in the next 30 days
+        - Logistics counts: ALL future/confirmed events (no date limit) where
+          the requirement is set and status is not the final fulfilled value.
+
+        For logistics counts, inherits requirement flags from EventSeries
+        when the event's own value is NULL.
+
+        Args:
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Dictionary with:
+            - upcoming_30d_count: Total upcoming events in next 30 days
+            - needs_tickets_count: Events where ticket_required and status != 'ready'
+            - needs_pto_count: Events where timeoff_required and status != 'approved'
+            - needs_travel_count: Events where travel_required and status != 'booked'
+
+        Raises:
+            None
+        """
+        today = date.today()
+        end_date = today + timedelta(days=30)
+
+        # Common filters: future events, non-deleted, non-deadline
+        common_filters = [
+            Event.team_id == team_id,
+            Event.event_date >= today,
+            Event.status.in_(["future", "confirmed"]),
+            Event.is_deadline.is_(False),
+            Event.deleted_at.is_(None),
+        ]
+
+        # Upcoming 30d count (with 30-day window)
+        upcoming_30d = (
+            self.db.query(func.count(Event.id))
+            .filter(*common_filters, Event.event_date <= end_date)
+            .scalar()
+        )
+
+        # Logistics counts: ALL future events (no 30-day limit)
+        logistics_base = (
+            self.db.query(func.count(Event.id))
+            .outerjoin(EventSeries, Event.series_id == EventSeries.id)
+            .filter(*common_filters)
+        )
+
+        # Tickets: required AND status is NOT 'ready'
+        effective_ticket_required = case(
+            (Event.ticket_required.isnot(None), Event.ticket_required),
+            else_=EventSeries.ticket_required,
+        )
+        needs_tickets = (
+            logistics_base.filter(
+                effective_ticket_required.is_(True),
+                or_(
+                    Event.ticket_status.is_(None),
+                    Event.ticket_status != "ready",
+                ),
+            ).scalar()
+        )
+
+        # PTO: required AND status is NOT 'approved'
+        effective_timeoff_required = case(
+            (Event.timeoff_required.isnot(None), Event.timeoff_required),
+            else_=EventSeries.timeoff_required,
+        )
+        needs_pto = (
+            logistics_base.filter(
+                effective_timeoff_required.is_(True),
+                or_(
+                    Event.timeoff_status.is_(None),
+                    Event.timeoff_status != "approved",
+                ),
+            ).scalar()
+        )
+
+        # Travel: required AND status is NOT 'booked'
+        effective_travel_required = case(
+            (Event.travel_required.isnot(None), Event.travel_required),
+            else_=EventSeries.travel_required,
+        )
+        needs_travel = (
+            logistics_base.filter(
+                effective_travel_required.is_(True),
+                or_(
+                    Event.travel_status.is_(None),
+                    Event.travel_status != "booked",
+                ),
+            ).scalar()
+        )
+
+        return {
+            "upcoming_30d_count": upcoming_30d or 0,
+            "needs_tickets_count": needs_tickets or 0,
+            "needs_pto_count": needs_pto or 0,
+            "needs_travel_count": needs_travel or 0,
+        }
+
+    def list_by_preset(self, team_id: int, preset: str) -> List[Event]:
+        """
+        List events matching a dashboard preset filter.
+
+        - upcoming_30d: next 30 days, future/confirmed
+        - Logistics presets: ALL future/confirmed events where the requirement
+          is set and status is not the final fulfilled value.
+
+        Args:
+            team_id: Team ID for tenant isolation
+            preset: One of 'upcoming_30d', 'needs_tickets', 'needs_pto', 'needs_travel'
+
+        Returns:
+            List of Event instances ordered by date ASC
+
+        Raises:
+            ValueError: If preset is not one of the supported values
+        """
+        VALID_PRESETS = {"upcoming_30d", "needs_tickets", "needs_pto", "needs_travel"}
+        if preset not in VALID_PRESETS:
+            raise ValueError(
+                f"Invalid preset '{preset}'. Supported presets: {sorted(VALID_PRESETS)}"
+            )
+
+        today = date.today()
+
+        # Common filters: future events, non-deleted, non-deadline
+        common_filters = [
+            Event.team_id == team_id,
+            Event.event_date >= today,
+            Event.status.in_(["future", "confirmed"]),
+            Event.is_deadline.is_(False),
+            Event.deleted_at.is_(None),
+        ]
+
+        query = (
+            self.db.query(Event)
+            .options(
+                joinedload(Event.category),
+                joinedload(Event.series),
+                joinedload(Event.location),
+            )
+            .outerjoin(EventSeries, Event.series_id == EventSeries.id)
+            .filter(*common_filters)
+        )
+
+        if preset == "upcoming_30d":
+            # Only upcoming_30d has the 30-day window
+            end_date = today + timedelta(days=30)
+            query = query.filter(Event.event_date <= end_date)
+        elif preset == "needs_tickets":
+            effective_ticket_required = case(
+                (Event.ticket_required.isnot(None), Event.ticket_required),
+                else_=EventSeries.ticket_required,
+            )
+            query = query.filter(
+                effective_ticket_required.is_(True),
+                or_(
+                    Event.ticket_status.is_(None),
+                    Event.ticket_status != "ready",
+                ),
+            )
+        elif preset == "needs_pto":
+            effective_timeoff_required = case(
+                (Event.timeoff_required.isnot(None), Event.timeoff_required),
+                else_=EventSeries.timeoff_required,
+            )
+            query = query.filter(
+                effective_timeoff_required.is_(True),
+                or_(
+                    Event.timeoff_status.is_(None),
+                    Event.timeoff_status != "approved",
+                ),
+            )
+        elif preset == "needs_travel":
+            effective_travel_required = case(
+                (Event.travel_required.isnot(None), Event.travel_required),
+                else_=EventSeries.travel_required,
+            )
+            query = query.filter(
+                effective_travel_required.is_(True),
+                or_(
+                    Event.travel_status.is_(None),
+                    Event.travel_status != "booked",
+                ),
+            )
+
+        return query.order_by(Event.event_date.asc(), Event.start_time.asc()).all()
 
     def get_series_by_guid(
         self,
@@ -954,7 +1145,7 @@ class EventService:
                 self.db.query(Event)
                 .filter(
                     Event.series_id == series.id,
-                    Event.is_deadline == False,
+                    Event.is_deadline.is_(False),
                     Event.deleted_at.is_(None)
                 )
                 .all()
@@ -998,7 +1189,7 @@ class EventService:
             self.db.query(Event)
             .filter(
                 Event.series_id == series.id,
-                Event.is_deadline == False,
+                Event.is_deadline.is_(False),
                 Event.deleted_at.is_(None)
             )
             .order_by(Event.event_date.asc())
@@ -1346,7 +1537,7 @@ class EventService:
                 .filter(
                     Event.series_id == series.id,
                     Event.deleted_at.is_(None),
-                    Event.is_deadline == False,
+                    Event.is_deadline.is_(False),
                 )
                 .first()
             )
@@ -1448,7 +1639,7 @@ class EventService:
             .filter(
                 Event.series_id == series.id,
                 Event.deleted_at.is_(None),
-                Event.is_deadline == False,  # Exclude deadline entries
+                Event.is_deadline.is_(False),  # Exclude deadline entries
             )
             .scalar()
         )

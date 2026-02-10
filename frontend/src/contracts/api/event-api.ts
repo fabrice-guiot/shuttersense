@@ -19,6 +19,7 @@ export type TicketStatus = 'not_purchased' | 'purchased' | 'ready'
 export type TimeoffStatus = 'planned' | 'booked' | 'approved'
 export type TravelStatus = 'planned' | 'booked'
 export type UpdateScope = 'single' | 'this_and_future' | 'all'
+export type EventPreset = 'upcoming_30d' | 'needs_tickets' | 'needs_pto' | 'needs_travel'
 
 // ============================================================================
 // Summary Types (for embedded responses)
@@ -259,6 +260,7 @@ export interface EventListParams {
   status?: EventStatus
   attendance?: AttendanceStatus
   include_deleted?: boolean
+  preset?: EventPreset                // Dashboard preset filter
 }
 
 // ============================================================================
@@ -277,6 +279,20 @@ export interface EventStatsResponse {
 
   /** Events marked as attended */
   attended_count: number
+}
+
+export interface EventDashboardStatsResponse {
+  /** Events in the next 30 days */
+  upcoming_30d_count: number
+
+  /** Events needing ticket purchase */
+  needs_tickets_count: number
+
+  /** Events needing PTO booking */
+  needs_pto_count: number
+
+  /** Events needing travel booking */
+  needs_travel_count: number
 }
 
 // ============================================================================
