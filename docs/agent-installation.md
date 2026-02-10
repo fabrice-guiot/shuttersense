@@ -84,6 +84,8 @@ Leave the agent running while you want jobs to be processed.
 
 Create `/Library/LaunchDaemons/ai.shuttersense.agent.plist`:
 
+> **Important:** LaunchDaemons run as root, so `~` expands to `/var/root` instead of your home directory. The `SHUSAI_CONFIG_PATH` environment variable must be set to point to your user's agent configuration file. Replace `YOUR_USERNAME` below with your macOS username (run `whoami` in Terminal to find it).
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -97,6 +99,11 @@ Create `/Library/LaunchDaemons/ai.shuttersense.agent.plist`:
         <string>/usr/local/bin/shuttersense-agent</string>
         <string>start</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SHUSAI_CONFIG_PATH</key>
+        <string>/Users/YOUR_USERNAME/Library/Application Support/shuttersense/agent-config.yaml</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -213,7 +220,7 @@ sudo systemctl stop shuttersense-agent
 4. Set action: Start `shuttersense-agent.exe` with argument `start`
 5. Enable "Run whether user is logged on or not"
 
-> **Note:** Task Scheduler does not capture stdout/stderr. Check the application logs at `%APPDATA%\shuttersense-agent\logs\agent.log` for debugging.
+> **Note:** Task Scheduler does not capture stdout/stderr. Check the application logs at `%APPDATA%\shuttersense\logs\agent.log` for debugging.
 
 ## Configuration
 
@@ -221,12 +228,12 @@ Agent configuration is stored in:
 
 | Platform | Location |
 |----------|----------|
-| macOS | `~/Library/Application Support/shuttersense-agent/` |
-| Linux | `~/.config/shuttersense-agent/` |
-| Windows | `%APPDATA%\shuttersense-agent\` |
+| macOS | `~/Library/Application Support/shuttersense/` |
+| Linux | `~/.config/shuttersense/` |
+| Windows | `%APPDATA%\shuttersense\` |
 
 Configuration files:
-- `config.yaml` - Server URL and agent settings
+- `agent-config.yaml` - Server URL and agent settings
 - `agent.key` - Agent authentication credentials (encrypted)
 
 ## Agent Status
@@ -268,6 +275,27 @@ Cloud storage collections (S3, GCS) can run on any agent.
 - For local collections, ensure the agent is bound to the collection
 - Check that the collection path is accessible to the agent
 
+### Agent Reports "Not Registered" When Running as Service (macOS)
+
+If the agent runs fine manually but reports "not registered" when running as a LaunchDaemon:
+
+1. **Cause:** LaunchDaemons run as root, so `~` expands to `/var/root` instead of `/Users/your_username`. The agent can't find its configuration file.
+
+2. **Solution:** Add the `SHUSAI_CONFIG_PATH` environment variable to your plist pointing to your user's config:
+   ```xml
+   <key>EnvironmentVariables</key>
+   <dict>
+       <key>SHUSAI_CONFIG_PATH</key>
+       <string>/Users/YOUR_USERNAME/Library/Application Support/shuttersense/agent-config.yaml</string>
+   </dict>
+   ```
+
+3. **After editing the plist**, reload the service:
+   ```bash
+   sudo launchctl unload /Library/LaunchDaemons/ai.shuttersense.agent.plist
+   sudo launchctl load /Library/LaunchDaemons/ai.shuttersense.agent.plist
+   ```
+
 ### Permission Errors
 
 The agent needs read access to analyze collections. Ensure the user running the agent has permission to read the photo directories.
@@ -289,13 +317,13 @@ sudo journalctl -u shuttersense-agent -f
 **Application logs (all platforms):**
 ```bash
 # macOS
-tail -f ~/Library/Application\ Support/shuttersense-agent/logs/agent.log
+tail -f ~/Library/Application\ Support/shuttersense/logs/agent.log
 
 # Linux
-tail -f ~/.config/shuttersense-agent/logs/agent.log
+tail -f ~/.config/shuttersense/logs/agent.log
 
 # Windows (PowerShell)
-Get-Content -Wait "$env:APPDATA\shuttersense-agent\logs\agent.log"
+Get-Content -Wait "$env:APPDATA\shuttersense\logs\agent.log"
 ```
 
 ## Uninstalling
@@ -317,7 +345,7 @@ sudo rm -rf /var/log/shuttersense
 sudo rm /usr/local/bin/shuttersense-agent
 
 # Remove configuration
-rm -rf ~/Library/Application\ Support/shuttersense-agent
+rm -rf ~/Library/Application\ Support/shuttersense
 ```
 
 ### Linux
@@ -338,14 +366,14 @@ sudo userdel shuttersense
 sudo rm /usr/local/bin/shuttersense-agent
 
 # Remove configuration
-rm -rf ~/.config/shuttersense-agent
+rm -rf ~/.config/shuttersense
 ```
 
 ### Windows
 
 1. Remove the scheduled task from Task Scheduler
 2. Delete the binary (`shuttersense-agent.exe`)
-3. Delete configuration: `%APPDATA%\shuttersense-agent`
+3. Delete configuration: `%APPDATA%\shuttersense`
 
 ### Web UI
 

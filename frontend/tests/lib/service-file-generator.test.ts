@@ -18,7 +18,7 @@ import {
 
 describe('generateLaunchdPlist', () => {
   it('should generate valid plist XML with standard path', () => {
-    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent')
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'johndoe')
 
     expect(plist).toContain('<?xml version="1.0" encoding="UTF-8"?>')
     expect(plist).toContain('<!DOCTYPE plist')
@@ -27,51 +27,73 @@ describe('generateLaunchdPlist', () => {
   })
 
   it('should include the correct service label', () => {
-    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent')
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'johndoe')
     expect(plist).toContain('<string>ai.shuttersense.agent</string>')
   })
 
   it('should include the binary path in ProgramArguments', () => {
-    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent')
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'johndoe')
     expect(plist).toContain('<string>/usr/local/bin/shuttersense-agent</string>')
     expect(plist).toContain('<string>start</string>')
   })
 
   it('should configure RunAtLoad and KeepAlive', () => {
-    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent')
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'johndoe')
     expect(plist).toContain('<key>RunAtLoad</key>')
     expect(plist).toContain('<key>KeepAlive</key>')
   })
 
   it('should configure log paths', () => {
-    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent')
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'johndoe')
     expect(plist).toContain('shuttersense-agent.stdout.log')
     expect(plist).toContain('shuttersense-agent.stderr.log')
     expect(plist).toContain('/var/log/shuttersense/')
   })
 
   it('should handle path with spaces', () => {
-    const plist = generateLaunchdPlist('/Applications/ShutterSense Agent/shuttersense-agent')
+    const plist = generateLaunchdPlist('/Applications/ShutterSense Agent/shuttersense-agent', 'johndoe')
     expect(plist).toContain('<string>/Applications/ShutterSense Agent/shuttersense-agent</string>')
   })
 
   it('should handle path in user home directory', () => {
-    const plist = generateLaunchdPlist('/Users/admin/bin/shuttersense-agent')
+    const plist = generateLaunchdPlist('/Users/admin/bin/shuttersense-agent', 'admin')
     expect(plist).toContain('<string>/Users/admin/bin/shuttersense-agent</string>')
   })
 
   it('should handle empty path (produces output with empty string)', () => {
-    const plist = generateLaunchdPlist('')
+    const plist = generateLaunchdPlist('', 'johndoe')
     expect(plist).toContain('<string></string>')
     // Still valid XML structure
     expect(plist).toContain('</plist>')
   })
 
   it('should escape XML special characters in path', () => {
-    const plist = generateLaunchdPlist('/path/with<special>&"chars')
+    const plist = generateLaunchdPlist('/path/with<special>&"chars', 'johndoe')
     expect(plist).toContain('<string>/path/with&lt;special&gt;&amp;&quot;chars</string>')
     expect(plist).not.toContain('<special>')
     expect(plist).toContain('</plist>')
+  })
+
+  it('should include SHUSAI_CONFIG_PATH environment variable', () => {
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'johndoe')
+    expect(plist).toContain('<key>EnvironmentVariables</key>')
+    expect(plist).toContain('<key>SHUSAI_CONFIG_PATH</key>')
+    expect(plist).toContain('/Users/johndoe/Library/Application Support/shuttersense/agent-config.yaml')
+  })
+
+  it('should use the provided username in config path', () => {
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'fabriceguiot')
+    expect(plist).toContain('/Users/fabriceguiot/Library/Application Support/shuttersense/agent-config.yaml')
+  })
+
+  it('should escape XML special characters in username', () => {
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', 'user<test>')
+    expect(plist).toContain('/Users/user&lt;test&gt;/Library/Application Support/shuttersense/agent-config.yaml')
+  })
+
+  it('should trim whitespace from username', () => {
+    const plist = generateLaunchdPlist('/usr/local/bin/shuttersense-agent', '  johndoe  ')
+    expect(plist).toContain('/Users/johndoe/Library/Application Support/shuttersense/agent-config.yaml')
   })
 })
 
