@@ -20,8 +20,27 @@ describe('ServiceStep', () => {
       expect(input).toHaveValue('/usr/local/bin/shuttersense-agent')
     })
 
-    it('shows launchd service setup sections with valid path', () => {
+    it('shows username input for macOS', () => {
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      expect(usernameInput).toBeInTheDocument()
+      expect(usernameInput).toHaveValue('')
+    })
+
+    it('shows whoami hint when username is empty', () => {
+      render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      expect(screen.getByText(/whoami/i)).toBeInTheDocument()
+    })
+
+    it('shows launchd service setup sections with valid path and username', async () => {
+      const user = userEvent.setup()
+      render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // Enter username to show service config
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      await user.type(usernameInput, 'johndoe')
 
       // Check numbered instruction steps
       expect(screen.getByText('1. Download the service configuration file')).toBeInTheDocument()
@@ -35,30 +54,50 @@ describe('ServiceStep', () => {
       expect(screen.queryByLabelText(/Service User/i)).not.toBeInTheDocument()
     })
 
-    it('has a download button for the plist file', () => {
+    it('has a download button for the plist file', async () => {
+      const user = userEvent.setup()
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // Enter username to show service config
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      await user.type(usernameInput, 'johndoe')
 
       const downloadBtn = screen.getByRole('button', { name: /Download ai\.shuttersense\.agent\.plist/i })
       expect(downloadBtn).toBeInTheDocument()
     })
 
-    it('mentions /Library/LaunchDaemons/ destination', () => {
+    it('mentions /Library/LaunchDaemons/ destination', async () => {
+      const user = userEvent.setup()
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // Enter username to show service config
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      await user.type(usernameInput, 'johndoe')
 
       // The code element containing the path
       const codeEl = screen.getByText('/Library/LaunchDaemons/')
       expect(codeEl).toBeInTheDocument()
     })
 
-    it('has a download button for the newsyslog config', () => {
+    it('has a download button for the newsyslog config', async () => {
+      const user = userEvent.setup()
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // Enter username to show service config
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      await user.type(usernameInput, 'johndoe')
 
       const downloadBtn = screen.getByRole('button', { name: /Download shuttersense\.conf/i })
       expect(downloadBtn).toBeInTheDocument()
     })
 
-    it('shows log rotation section with explanation', () => {
+    it('shows log rotation section with explanation', async () => {
+      const user = userEvent.setup()
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // Enter username to show service config
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      await user.type(usernameInput, 'johndoe')
 
       expect(screen.getByText(/Configure log rotation/i)).toBeInTheDocument()
       expect(screen.getByText(/Without log rotation/i)).toBeInTheDocument()
@@ -67,6 +106,10 @@ describe('ServiceStep', () => {
     it('has expandable file contents for plist and newsyslog', async () => {
       const user = userEvent.setup()
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // Enter username to show service config
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      await user.type(usernameInput, 'johndoe')
 
       // Should have two expandable sections: plist and newsyslog
       const summaries = screen.getAllByText(/View file contents/i)
@@ -79,6 +122,13 @@ describe('ServiceStep', () => {
       // Expand the newsyslog section
       await user.click(summaries[1])
       expect(screen.getByLabelText(/Copy newsyslog config/i)).toBeInTheDocument()
+    })
+
+    it('hides service config when username is empty', () => {
+      render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // With valid path but empty username, service config should not be visible
+      expect(screen.queryByText('1. Download the service configuration file')).not.toBeInTheDocument()
     })
   })
 
@@ -184,9 +234,13 @@ describe('ServiceStep', () => {
       expect(screen.getByText(/Path contains spaces/i)).toBeInTheDocument()
     })
 
-    it('hides service config when path is empty', async () => {
+    it('hides service config when path is empty (macOS)', async () => {
       const user = userEvent.setup()
       render(<ServiceStep selectedPlatform="darwin-arm64" />)
+
+      // Enter username
+      const usernameInput = screen.getByLabelText(/macOS Username/i)
+      await user.type(usernameInput, 'johndoe')
 
       const input = screen.getByLabelText(/Agent Binary Path/i)
       await user.clear(input)

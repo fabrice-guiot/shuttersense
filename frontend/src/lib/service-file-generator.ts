@@ -27,15 +27,22 @@ function escapeXml(str: string): string {
  * Generate a macOS launchd plist for the ShutterSense agent.
  *
  * The generated plist configures the agent to:
- * - Start at login (RunAtLoad)
+ * - Start at boot (RunAtLoad)
  * - Restart automatically if it exits (KeepAlive)
  * - Log stdout/stderr to /var/log/shuttersense/
+ * - Use SHUSAI_CONFIG_PATH to point to user's config (required for LaunchDaemons)
+ *
+ * LaunchDaemons run as root, so the config path must be explicitly set to the
+ * user's config location since ~ expands to /var/root instead of /Users/<username>.
  *
  * @param binaryPath - Absolute path to the agent binary
+ * @param username - macOS username (used to build config path)
  * @returns XML plist string
  */
-export function generateLaunchdPlist(binaryPath: string): string {
+export function generateLaunchdPlist(binaryPath: string, username: string): string {
   const safePath = escapeXml(binaryPath)
+  const safeUsername = escapeXml(username.trim())
+  const configPath = `/Users/${safeUsername}/Library/Application Support/shuttersense/agent-config.yaml`
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -48,6 +55,11 @@ export function generateLaunchdPlist(binaryPath: string): string {
         <string>${safePath}</string>
         <string>start</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SHUSAI_CONFIG_PATH</key>
+        <string>${configPath}</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>

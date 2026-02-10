@@ -68,6 +68,7 @@ export function ServiceStep({ selectedPlatform }: ServiceStepProps) {
 
   const [binaryPath, setBinaryPath] = useState(() => getDefaultBinaryPath(selectedPlatform))
   const [serviceUser, setServiceUser] = useState('shuttersense')
+  const [macUsername, setMacUsername] = useState('')
 
   const pathValidation = useMemo(
     () => validateBinaryPath(binaryPath, selectedPlatform),
@@ -124,6 +125,29 @@ export function ServiceStep({ selectedPlatform }: ServiceStepProps) {
         </p>
       </div>
 
+      {/* macOS username input (required for LaunchDaemon config path) */}
+      {isMacOS && (
+        <div className="space-y-2">
+          <Label htmlFor="mac-username">macOS Username</Label>
+          <Input
+            id="mac-username"
+            value={macUsername}
+            onChange={(e) => setMacUsername(e.target.value)}
+            placeholder="e.g., johndoe"
+            className="w-64"
+          />
+          <p className="text-xs text-muted-foreground">
+            Your macOS username. LaunchDaemons run as root, so the agent config path must be explicitly set
+            to your user&apos;s location (<code className="font-mono bg-muted px-1 py-0.5 rounded">/Users/&lt;username&gt;/Library/Application Support/...</code>).
+          </p>
+          {!macUsername.trim() && (
+            <p className="text-xs text-amber-600">
+              Run <code className="font-mono bg-muted px-1 py-0.5 rounded">whoami</code> in Terminal to find your username.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Service user input for Linux (T042) */}
       {isLinux && (
         <div className="space-y-2">
@@ -147,7 +171,9 @@ export function ServiceStep({ selectedPlatform }: ServiceStepProps) {
       {/* Generated service file + installation commands */}
       {pathValidation.valid && (
         <>
-          {isMacOS && <MacOSServiceConfig binaryPath={binaryPath.trim()} />}
+          {isMacOS && macUsername.trim() && (
+            <MacOSServiceConfig binaryPath={binaryPath.trim()} username={macUsername.trim()} />
+          )}
           {isLinux && (
             <LinuxServiceConfig
               binaryPath={binaryPath.trim()}
@@ -175,8 +201,8 @@ function downloadTextFile(content: string, filename: string) {
 }
 
 /** macOS launchd plist + installation commands (T041). */
-function MacOSServiceConfig({ binaryPath }: { binaryPath: string }) {
-  const plist = generateLaunchdPlist(binaryPath)
+function MacOSServiceConfig({ binaryPath, username }: { binaryPath: string; username: string }) {
+  const plist = generateLaunchdPlist(binaryPath, username)
   const plistFilename = 'ai.shuttersense.agent.plist'
   const newsyslogConfig = generateNewsyslogConfig()
   const newsyslogFilename = 'shuttersense.conf'
