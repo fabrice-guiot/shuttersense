@@ -187,9 +187,18 @@ class EventSeriesCreate(BaseModel):
     is_all_day: bool = Field(default=False)
     input_timezone: Optional[str] = Field(default=None, max_length=64)
 
+    # Logistics requirements (boolean flags)
     ticket_required: bool = Field(default=False)
     timeoff_required: bool = Field(default=False)
     travel_required: bool = Field(default=False)
+
+    # Logistics status and dates (applied to all events in series)
+    ticket_status: Optional[TicketStatus] = Field(default=None)
+    ticket_purchase_date: Optional[date] = Field(default=None)
+    timeoff_status: Optional[TimeoffStatus] = Field(default=None)
+    timeoff_booking_date: Optional[date] = Field(default=None)
+    travel_status: Optional[TravelStatus] = Field(default=None)
+    travel_booking_date: Optional[date] = Field(default=None)
 
     # Deadline for deliverables (creates a deadline entry in the calendar)
     deadline_date: Optional[date] = Field(

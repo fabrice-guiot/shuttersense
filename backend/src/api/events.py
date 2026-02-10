@@ -478,6 +478,12 @@ async def create_event_series(
             ticket_required=series_data.ticket_required,
             timeoff_required=series_data.timeoff_required,
             travel_required=series_data.travel_required,
+            ticket_status=series_data.ticket_status.value if series_data.ticket_status else None,
+            ticket_purchase_date=series_data.ticket_purchase_date,
+            timeoff_status=series_data.timeoff_status.value if series_data.timeoff_status else None,
+            timeoff_booking_date=series_data.timeoff_booking_date,
+            travel_status=series_data.travel_status.value if series_data.travel_status else None,
+            travel_booking_date=series_data.travel_booking_date,
             deadline_date=series_data.deadline_date,
             deadline_time=series_data.deadline_time,
         )

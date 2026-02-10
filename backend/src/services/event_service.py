@@ -495,14 +495,14 @@ class EventService:
         else:
             response["series"] = None
 
-        # Add logistics
-        response["ticket_required"] = event.ticket_required
+        # Add logistics detail fields
+        # Note: ticket_required, timeoff_required, travel_required are already set
+        # by build_event_response with proper series inheritance - don't overwrite!
+        # Only add the status and date fields here.
         response["ticket_status"] = event.ticket_status
         response["ticket_purchase_date"] = event.ticket_purchase_date
-        response["timeoff_required"] = event.timeoff_required
         response["timeoff_status"] = event.timeoff_status
         response["timeoff_booking_date"] = event.timeoff_booking_date
-        response["travel_required"] = event.travel_required
         response["travel_status"] = event.travel_status
         response["travel_booking_date"] = event.travel_booking_date
         response["deadline_date"] = event.deadline_date
@@ -735,6 +735,12 @@ class EventService:
         ticket_required: bool = False,
         timeoff_required: bool = False,
         travel_required: bool = False,
+        ticket_status: Optional[str] = None,
+        ticket_purchase_date: Optional[date] = None,
+        timeoff_status: Optional[str] = None,
+        timeoff_booking_date: Optional[date] = None,
+        travel_status: Optional[str] = None,
+        travel_booking_date: Optional[date] = None,
         status: str = "future",
         attendance: str = "planned",
         deadline_date: Optional[date] = None,
@@ -759,6 +765,12 @@ class EventService:
             ticket_required: Default ticket requirement
             timeoff_required: Default time-off requirement
             travel_required: Default travel requirement
+            ticket_status: Initial ticket status
+            ticket_purchase_date: Ticket purchase date
+            timeoff_status: Initial timeoff status
+            timeoff_booking_date: Timeoff booking date
+            travel_status: Initial travel status
+            travel_booking_date: Travel booking date
             status: Initial status for all events (default: future)
             attendance: Initial attendance for all events (default: planned)
             deadline_date: Optional deadline date for deliverables
@@ -843,10 +855,17 @@ class EventService:
                 input_timezone=input_timezone,
                 status=status,
                 attendance=attendance,
-                # Logistics inherit from series
+                # Logistics inherit from series (boolean flags)
                 ticket_required=None,
                 timeoff_required=None,
                 travel_required=None,
+                # Logistics status and dates (set directly on events)
+                ticket_status=ticket_status,
+                ticket_purchase_date=ticket_purchase_date,
+                timeoff_status=timeoff_status,
+                timeoff_booking_date=timeoff_booking_date,
+                travel_status=travel_status,
+                travel_booking_date=travel_booking_date,
                 # Deadline is synced across all events in series
                 deadline_date=deadline_date,
                 deadline_time=deadline_time,
@@ -1241,6 +1260,12 @@ class EventService:
 
         Raises:
             NotFoundError: If event not found
+
+        Note:
+            When deleting events from a series:
+            - If 1 event remains, it is converted to a standalone event
+            - If 0 events remain, the series is soft-deleted
+            - Deadline entries are automatically cleaned up with the series
         """
         event = self.get_by_guid(guid)
         now = datetime.utcnow()
@@ -1255,9 +1280,13 @@ class EventService:
         for e in events_to_delete:
             e.deleted_at = now
 
-        # Update series total if needed
-        if event.series and scope != "single":
+        # Flush to make soft-deleted events visible to subsequent queries
+        self.db.flush()
+
+        # Update series total and handle cleanup
+        if event.series:
             self._update_series_total(event.series)
+            self._cleanup_series_if_needed(event.series, now, user_id)
 
         if user_id is not None:
             event.updated_by_user_id = user_id
@@ -1267,6 +1296,110 @@ class EventService:
 
         logger.info(f"Soft deleted event: {event.guid} (scope: {scope}, events: {len(events_to_delete)})")
         return event
+
+    def _cleanup_series_if_needed(
+        self,
+        series: EventSeries,
+        now: datetime,
+        user_id: Optional[int] = None,
+    ) -> None:
+        """
+        Clean up a series if it has 0 or 1 remaining regular events.
+
+        - 0 events: Soft delete the deadline entry (series becomes orphaned)
+        - 1 event: Convert the remaining event to standalone and soft delete deadline
+
+        Note: The series itself is not deleted to preserve data integrity and allow
+        potential restore operations. Orphaned series can be cleaned up periodically.
+
+        Args:
+            series: EventSeries to check
+            now: Current timestamp for soft delete
+            user_id: User ID for audit tracking
+        """
+        remaining_count = series.total_events
+
+        if remaining_count == 0:
+            # No events left - soft delete any deadline entry
+            logger.info(f"Series {series.guid} has 0 events remaining")
+
+            deadline_entry = self._get_deadline_entry(series.id)
+            if deadline_entry:
+                deadline_entry.deleted_at = now
+                deadline_entry.updated_at = now
+                if user_id is not None:
+                    deadline_entry.updated_by_user_id = user_id
+                logger.info(f"Soft deleted deadline entry for empty series: {series.guid}")
+
+            # Update series audit fields
+            series.updated_at = now
+            if user_id is not None:
+                series.updated_by_user_id = user_id
+
+        elif remaining_count == 1:
+            # Only 1 event left - convert to standalone
+            logger.info(f"Series {series.guid} has 1 event, converting to standalone")
+
+            # Find the remaining non-deleted, non-deadline event
+            remaining_event = (
+                self.db.query(Event)
+                .filter(
+                    Event.series_id == series.id,
+                    Event.deleted_at.is_(None),
+                    Event.is_deadline == False,
+                )
+                .first()
+            )
+
+            if remaining_event:
+                # Copy series-level data to the event before detaching
+                if remaining_event.title is None:
+                    remaining_event.title = series.title
+                if remaining_event.description is None:
+                    remaining_event.description = series.description
+                if remaining_event.category_id is None:
+                    remaining_event.category_id = series.category_id
+
+                # Copy logistics from series if event inherited them (NULL)
+                if remaining_event.ticket_required is None:
+                    remaining_event.ticket_required = series.ticket_required
+                if remaining_event.timeoff_required is None:
+                    remaining_event.timeoff_required = series.timeoff_required
+                if remaining_event.travel_required is None:
+                    remaining_event.travel_required = series.travel_required
+
+                # Detach from series
+                remaining_event.series_id = None
+                remaining_event.sequence_number = None
+                remaining_event.updated_at = now
+                if user_id is not None:
+                    remaining_event.updated_by_user_id = user_id
+                logger.info(f"Converted event {remaining_event.guid} to standalone")
+
+                # If the event has a deadline, create a standalone deadline entry
+                if remaining_event.deadline_date:
+                    standalone_deadline = self._create_standalone_deadline_entry(remaining_event)
+                    standalone_deadline.created_at = now
+                    standalone_deadline.updated_at = now
+                    if user_id is not None:
+                        standalone_deadline.created_by_user_id = user_id
+                        standalone_deadline.updated_by_user_id = user_id
+                    logger.info(f"Created standalone deadline entry for {remaining_event.guid}")
+
+            # Soft delete any series deadline entry
+            deadline_entry = self._get_deadline_entry(series.id)
+            if deadline_entry:
+                deadline_entry.deleted_at = now
+                deadline_entry.updated_at = now
+                if user_id is not None:
+                    deadline_entry.updated_by_user_id = user_id
+                logger.info(f"Soft deleted deadline entry for dissolved series: {series.guid}")
+
+            # Update series to reflect it's now empty (event was detached)
+            series.total_events = 0
+            series.updated_at = now
+            if user_id is not None:
+                series.updated_by_user_id = user_id
 
     def restore(self, guid: str, user_id: Optional[int] = None) -> Event:
         """
@@ -1304,7 +1437,8 @@ class EventService:
 
     def _update_series_total(self, series: EventSeries) -> None:
         """
-        Update series total_events count based on non-deleted events.
+        Update series total_events count based on non-deleted regular events.
+        Excludes deadline entries (is_deadline=True) from the count.
 
         Args:
             series: EventSeries to update
@@ -1313,7 +1447,8 @@ class EventService:
             self.db.query(func.count(Event.id))
             .filter(
                 Event.series_id == series.id,
-                Event.deleted_at.is_(None)
+                Event.deleted_at.is_(None),
+                Event.is_deadline == False,  # Exclude deadline entries
             )
             .scalar()
         )

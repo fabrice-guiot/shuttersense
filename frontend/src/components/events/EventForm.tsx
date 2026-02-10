@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { TimezoneCombobox } from '@/components/ui/timezone-combobox'
-import { LocationPicker } from '@/components/events/LocationPicker'
+import { LocationPicker, type LocationLogisticsHint } from '@/components/events/LocationPicker'
 import { OrganizerPicker } from '@/components/events/OrganizerPicker'
 import { LogisticsSection, type LogisticsData } from '@/components/events/LogisticsSection'
 import { useEventStatuses } from '@/hooks/useConfig'
@@ -307,6 +307,43 @@ export const EventForm = ({
     form.setValue('organizer_guid', organizer?.guid || null)
   }
 
+  // Handle ticket required hint from organizer (suggest default)
+  const handleTicketRequiredHint = (ticketRequired: boolean) => {
+    setLogistics((prev) => {
+      // Only suggest if not already set
+      if (prev.ticket_required !== null) {
+        return prev
+      }
+      return {
+        ...prev,
+        ticket_required: ticketRequired,
+        ticket_status: ticketRequired ? 'not_purchased' : null,
+      }
+    })
+  }
+
+  // Handle logistics hints from location (suggest defaults)
+  const handleLocationLogisticsHint = (hint: LocationLogisticsHint) => {
+    setLogistics((prev) => {
+      let hasChanges = false
+      const newLogistics = { ...prev }
+
+      // Only suggest if hint is provided and not already set
+      if (hint.timeoff_required !== undefined && prev.timeoff_required === null) {
+        newLogistics.timeoff_required = hint.timeoff_required
+        newLogistics.timeoff_status = hint.timeoff_required ? 'planned' : null
+        hasChanges = true
+      }
+      if (hint.travel_required !== undefined && prev.travel_required === null) {
+        newLogistics.travel_required = hint.travel_required
+        newLogistics.travel_status = hint.travel_required ? 'planned' : null
+        hasChanges = true
+      }
+
+      return hasChanges ? newLogistics : prev
+    })
+  }
+
   // Handle form submission
   const handleSubmit = async (values: EventFormValues) => {
     // Normalize timezone value (empty string -> undefined/null)
@@ -329,9 +366,18 @@ export const EventForm = ({
         end_time: values.is_all_day ? undefined : (values.end_time || undefined),
         is_all_day: values.is_all_day,
         input_timezone: values.is_all_day ? undefined : timezone,
+        // Logistics requirements
         ticket_required: logistics.ticket_required ?? false,
         timeoff_required: logistics.timeoff_required ?? false,
         travel_required: logistics.travel_required ?? false,
+        // Logistics status and dates
+        ticket_status: logistics.ticket_status,
+        ticket_purchase_date: logistics.ticket_purchase_date,
+        timeoff_status: logistics.timeoff_status,
+        timeoff_booking_date: logistics.timeoff_booking_date,
+        travel_status: logistics.travel_status,
+        travel_booking_date: logistics.travel_booking_date,
+        // Deadline
         deadline_date: logistics.deadline_date || undefined,
         deadline_time: logistics.deadline_time || undefined,
         status: values.status,
@@ -526,6 +572,7 @@ export const EventForm = ({
                   value={selectedLocation}
                   onChange={handleLocationChange}
                   onTimezoneHint={handleTimezoneHint}
+                  onLogisticsHint={handleLocationLogisticsHint}
                   placeholder={selectedCategoryGuid ? 'Select or enter location...' : 'Select a category first'}
                   disabled={!selectedCategoryGuid}
                 />
@@ -550,6 +597,7 @@ export const EventForm = ({
                   categoryGuid={selectedCategoryGuid || null}
                   value={selectedOrganizer}
                   onChange={handleOrganizerChange}
+                  onTicketRequiredHint={handleTicketRequiredHint}
                   placeholder={selectedCategoryGuid ? 'Select organizer...' : 'Select a category first'}
                   disabled={!selectedCategoryGuid}
                 />

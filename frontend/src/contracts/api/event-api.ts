@@ -197,6 +197,14 @@ export interface EventSeriesCreateRequest {
   timeoff_required?: boolean
   travel_required?: boolean
 
+  // Logistics status and dates (applied to all events in series)
+  ticket_status?: TicketStatus | null
+  ticket_purchase_date?: string | null    // ISO date
+  timeoff_status?: TimeoffStatus | null
+  timeoff_booking_date?: string | null    // ISO date
+  travel_status?: TravelStatus | null
+  travel_booking_date?: string | null     // ISO date
+
   // Deadline for deliverables (creates a deadline entry in the calendar)
   deadline_date?: string | null       // ISO date (e.g., client delivery date)
   deadline_time?: string | null       // HH:MM format (e.g., competition cutoff time)
