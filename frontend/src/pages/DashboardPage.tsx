@@ -310,6 +310,7 @@ function RecentResultsCard({
 function UpcomingEventsCard({
   stats,
   loading,
+  error = null,
 }: {
   stats: {
     upcoming_30d_count: number
@@ -318,8 +319,9 @@ function UpcomingEventsCard({
     needs_travel_count: number
   } | null
   loading: boolean
+  error?: string | null
 }) {
-  if (loading || !stats) {
+  if (loading) {
     return (
       <Card>
         <CardHeader className="pb-2">
@@ -329,6 +331,32 @@ function UpcomingEventsCard({
           <div className="flex items-center justify-center h-24">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
           </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">Upcoming Events</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-destructive text-sm">{error}</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!stats) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">Upcoming Events</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-muted-foreground text-sm">No event data available</div>
         </CardContent>
       </Card>
     )
@@ -482,7 +510,7 @@ export default function DashboardPage() {
     error: summaryError,
   } = useTrendSummary()
   const { results: recentResults, loading: recentLoading } = useRecentResults()
-  const { stats: eventDashboardStats, loading: eventDashboardLoading } = useEventDashboardStats()
+  const { stats: eventDashboardStats, loading: eventDashboardLoading, error: eventDashboardError } = useEventDashboardStats()
 
   // Header stats context
   const { setStats } = useHeaderStats()
@@ -562,6 +590,7 @@ export default function DashboardPage() {
         <UpcomingEventsCard
           stats={eventDashboardStats}
           loading={eventDashboardLoading}
+          error={eventDashboardError}
         />
         <QueueOverviewCard
           queueStatus={queueStatus}
