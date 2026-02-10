@@ -170,7 +170,7 @@ class EventService:
 
         # Exclude deadline entries if requested (T043)
         if not include_deadlines:
-            query = query.filter(Event.is_deadline == False)
+            query = query.filter(Event.is_deadline.is_(False))
 
         # Date range filter
         if start_date:
@@ -331,6 +331,9 @@ class EventService:
             - needs_tickets_count: Events where ticket_required and status != 'ready'
             - needs_pto_count: Events where timeoff_required and status != 'approved'
             - needs_travel_count: Events where travel_required and status != 'booked'
+
+        Raises:
+            None
         """
         today = date.today()
         end_date = today + timedelta(days=30)
@@ -340,7 +343,7 @@ class EventService:
             Event.team_id == team_id,
             Event.event_date >= today,
             Event.status.in_(["future", "confirmed"]),
-            Event.is_deadline == False,
+            Event.is_deadline.is_(False),
             Event.deleted_at.is_(None),
         ]
 
@@ -365,7 +368,7 @@ class EventService:
         )
         needs_tickets = (
             logistics_base.filter(
-                effective_ticket_required == True,
+                effective_ticket_required.is_(True),
                 or_(
                     Event.ticket_status.is_(None),
                     Event.ticket_status != "ready",
@@ -380,7 +383,7 @@ class EventService:
         )
         needs_pto = (
             logistics_base.filter(
-                effective_timeoff_required == True,
+                effective_timeoff_required.is_(True),
                 or_(
                     Event.timeoff_status.is_(None),
                     Event.timeoff_status != "approved",
@@ -395,7 +398,7 @@ class EventService:
         )
         needs_travel = (
             logistics_base.filter(
-                effective_travel_required == True,
+                effective_travel_required.is_(True),
                 or_(
                     Event.travel_status.is_(None),
                     Event.travel_status != "booked",
@@ -424,7 +427,16 @@ class EventService:
 
         Returns:
             List of Event instances ordered by date ASC
+
+        Raises:
+            ValueError: If preset is not one of the supported values
         """
+        VALID_PRESETS = {"upcoming_30d", "needs_tickets", "needs_pto", "needs_travel"}
+        if preset not in VALID_PRESETS:
+            raise ValueError(
+                f"Invalid preset '{preset}'. Supported presets: {sorted(VALID_PRESETS)}"
+            )
+
         today = date.today()
 
         # Common filters: future events, non-deleted, non-deadline
@@ -432,7 +444,7 @@ class EventService:
             Event.team_id == team_id,
             Event.event_date >= today,
             Event.status.in_(["future", "confirmed"]),
-            Event.is_deadline == False,
+            Event.is_deadline.is_(False),
             Event.deleted_at.is_(None),
         ]
 
@@ -457,7 +469,7 @@ class EventService:
                 else_=EventSeries.ticket_required,
             )
             query = query.filter(
-                effective_ticket_required == True,
+                effective_ticket_required.is_(True),
                 or_(
                     Event.ticket_status.is_(None),
                     Event.ticket_status != "ready",
@@ -469,7 +481,7 @@ class EventService:
                 else_=EventSeries.timeoff_required,
             )
             query = query.filter(
-                effective_timeoff_required == True,
+                effective_timeoff_required.is_(True),
                 or_(
                     Event.timeoff_status.is_(None),
                     Event.timeoff_status != "approved",
@@ -481,7 +493,7 @@ class EventService:
                 else_=EventSeries.travel_required,
             )
             query = query.filter(
-                effective_travel_required == True,
+                effective_travel_required.is_(True),
                 or_(
                     Event.travel_status.is_(None),
                     Event.travel_status != "booked",
@@ -1133,7 +1145,7 @@ class EventService:
                 self.db.query(Event)
                 .filter(
                     Event.series_id == series.id,
-                    Event.is_deadline == False,
+                    Event.is_deadline.is_(False),
                     Event.deleted_at.is_(None)
                 )
                 .all()
@@ -1177,7 +1189,7 @@ class EventService:
             self.db.query(Event)
             .filter(
                 Event.series_id == series.id,
-                Event.is_deadline == False,
+                Event.is_deadline.is_(False),
                 Event.deleted_at.is_(None)
             )
             .order_by(Event.event_date.asc())
@@ -1525,7 +1537,7 @@ class EventService:
                 .filter(
                     Event.series_id == series.id,
                     Event.deleted_at.is_(None),
-                    Event.is_deadline == False,
+                    Event.is_deadline.is_(False),
                 )
                 .first()
             )
@@ -1627,7 +1639,7 @@ class EventService:
             .filter(
                 Event.series_id == series.id,
                 Event.deleted_at.is_(None),
-                Event.is_deadline == False,  # Exclude deadline entries
+                Event.is_deadline.is_(False),  # Exclude deadline entries
             )
             .scalar()
         )

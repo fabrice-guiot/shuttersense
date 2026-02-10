@@ -2461,7 +2461,8 @@ class TestEventPresetFiltering:
             test_db_session.refresh(e)
         return events
 
-    def test_preset_upcoming_30d(self, test_client, preset_events):
+    @pytest.mark.usefixtures("preset_events")
+    def test_preset_upcoming_30d(self, test_client):
         """Test preset=upcoming_30d returns only events within 30-day window."""
         response = test_client.get("/api/events?preset=upcoming_30d")
         assert response.status_code == 200
@@ -2472,7 +2473,8 @@ class TestEventPresetFiltering:
         assert "Far Future Event" not in titles
         assert "Far Future Needs Ticket" not in titles
 
-    def test_preset_needs_tickets(self, test_client, preset_events):
+    @pytest.mark.usefixtures("preset_events")
+    def test_preset_needs_tickets(self, test_client):
         """Test preset=needs_tickets returns all future events needing tickets (no date limit)."""
         response = test_client.get("/api/events?preset=needs_tickets")
         assert response.status_code == 200
@@ -2483,7 +2485,8 @@ class TestEventPresetFiltering:
         assert "Needs Ticket Event" in titles
         assert "Far Future Needs Ticket" in titles
 
-    def test_preset_needs_pto(self, test_client, preset_events):
+    @pytest.mark.usefixtures("preset_events")
+    def test_preset_needs_pto(self, test_client):
         """Test preset=needs_pto returns only events needing PTO booking."""
         response = test_client.get("/api/events?preset=needs_pto")
         assert response.status_code == 200
@@ -2492,7 +2495,8 @@ class TestEventPresetFiltering:
         assert len(data) == 1
         assert data[0]["title"] == "Needs PTO Event"
 
-    def test_preset_needs_travel(self, test_client, preset_events):
+    @pytest.mark.usefixtures("preset_events")
+    def test_preset_needs_travel(self, test_client):
         """Test preset=needs_travel returns only events needing travel booking."""
         response = test_client.get("/api/events?preset=needs_travel")
         assert response.status_code == 200
@@ -2501,7 +2505,8 @@ class TestEventPresetFiltering:
         assert len(data) == 1
         assert data[0]["title"] == "Needs Travel Event"
 
-    def test_preset_ignores_other_params(self, test_client, preset_events):
+    @pytest.mark.usefixtures("preset_events")
+    def test_preset_ignores_other_params(self, test_client):
         """Test that preset takes precedence over other query params."""
         # Pass start_date/end_date that would normally restrict results,
         # but preset should override them
