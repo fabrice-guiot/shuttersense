@@ -12,6 +12,7 @@ import type {
   EventDetail,
   EventListParams,
   EventStatsResponse,
+  EventDashboardStatsResponse,
   EventCreateRequest,
   EventSeriesCreateRequest,
   EventUpdateRequest,
@@ -39,6 +40,7 @@ export const listEvents = async (params: EventListParams = {}): Promise<Event[]>
   if (params.status) queryParams.status = params.status
   if (params.attendance) queryParams.attendance = params.attendance
   if (params.include_deleted !== undefined) queryParams.include_deleted = params.include_deleted
+  if (params.preset) queryParams.preset = params.preset
 
   const response = await api.get<Event[]>('/events', { params: queryParams })
   return response.data
@@ -65,6 +67,15 @@ export const getEvent = async (guid: string, includeDeleted = false): Promise<Ev
  */
 export const getEventStats = async (): Promise<EventStatsResponse> => {
   const response = await api.get<EventStatsResponse>('/events/stats')
+  return response.data
+}
+
+/**
+ * Get event dashboard statistics (upcoming events and logistics needing action)
+ * Returns counts for the next 30 days
+ */
+export const getEventDashboardStats = async (): Promise<EventDashboardStatsResponse> => {
+  const response = await api.get<EventDashboardStatsResponse>('/events/dashboard-stats')
   return response.data
 }
 

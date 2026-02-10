@@ -7,7 +7,8 @@
  * Issue #39 - Calendar Events feature (Phases 4 & 5).
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -29,27 +30,68 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
-import { useCalendar, useEventStats, useEventMutations } from '@/hooks/useEvents'
+import { useCalendar, useEvents, useEventStats, useEventMutations } from '@/hooks/useEvents'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
 import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
-import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest } from '@/contracts/api/event-api'
+import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest, EventPreset } from '@/contracts/api/event-api'
+
+const PRESET_LABELS: Record<EventPreset, { icon: typeof Calendar; label: string }> = {
+  upcoming_30d: { icon: Calendar, label: 'Upcoming' },
+  needs_tickets: { icon: Ticket, label: 'Needs Tickets' },
+  needs_pto: { icon: Briefcase, label: 'Needs PTO' },
+  needs_travel: { icon: Car, label: 'Needs Travel' },
+}
+
+const VALID_PRESETS: EventPreset[] = ['upcoming_30d', 'needs_tickets', 'needs_pto', 'needs_travel']
 
 export default function EventsPage() {
+  // URL search params for preset filtering
+  const [searchParams, setSearchParams] = useSearchParams()
+  const presetParam = searchParams.get('preset') as EventPreset | null
+  const activePreset = presetParam && VALID_PRESETS.includes(presetParam) ? presetParam : null
+  const viewMode = activePreset ? 'list' : 'calendar'
+
   // Calendar state and navigation
   const calendar = useCalendar()
   const {
-    events,
-    loading,
-    error,
+    events: calendarEvents,
+    loading: calendarLoading,
+    error: calendarError,
     currentYear,
     currentMonth,
     goToPreviousMonth,
     goToNextMonth,
     goToToday,
-    refetch
+    refetch: refetchCalendar
   } = calendar
+
+  // Preset list view
+  const {
+    events: presetEvents,
+    loading: presetLoading,
+    error: presetError,
+    fetchEvents: fetchPresetEvents
+  } = useEvents()
+
+  // Fetch preset events when preset changes
+  useEffect(() => {
+    if (activePreset) {
+      fetchPresetEvents({ preset: activePreset })
+    }
+  }, [activePreset, fetchPresetEvents])
+
+  // Error from whichever view is active
+  const error = viewMode === 'list' ? presetError : calendarError
+
+  const refetch = useCallback(async () => {
+    if (viewMode === 'list' && activePreset) {
+      await fetchPresetEvents({ preset: activePreset })
+    } else {
+      await refetchCalendar()
+    }
+  }, [viewMode, activePreset, fetchPresetEvents, refetchCalendar])
 
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useEventStats()
@@ -60,6 +102,15 @@ export default function EventsPage() {
 
   // Event mutations
   const mutations = useEventMutations()
+
+  // Preset navigation handlers
+  const handlePresetClick = (preset: EventPreset) => {
+    setSearchParams({ preset })
+  }
+
+  const handleShowCalendar = () => {
+    setSearchParams({})
+  }
 
   // Update header stats when data changes
   useEffect(() => {
@@ -104,7 +155,7 @@ export default function EventsPage() {
   // Handle day click - show day detail dialog
   const handleDayClick = (date: Date) => {
     const dateString = formatDateString(date)
-    const dayEvents = events.filter(e => e.event_date === dateString)
+    const dayEvents = calendarEvents.filter(e => e.event_date === dateString)
 
     if (dayEvents.length > 0) {
       setSelectedDay({ date, events: dayEvents })
@@ -300,7 +351,29 @@ export default function EventsPage() {
   return (
     <div className="flex flex-col h-full p-6">
       {/* Action Row (Issue #67 - Single Title Pattern) */}
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+        {/* Preset Filter Bar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {(Object.entries(PRESET_LABELS) as [EventPreset, { icon: typeof Calendar; label: string }][]).map(
+            ([preset, { icon: PresetIcon, label }]) => (
+              <Button
+                key={preset}
+                variant={activePreset === preset ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetClick(preset)}
+              >
+                <PresetIcon className="h-4 w-4 mr-1.5" />
+                {label}
+              </Button>
+            )
+          )}
+          {activePreset && (
+            <Button variant="ghost" size="sm" onClick={handleShowCalendar}>
+              Show Calendar
+            </Button>
+          )}
+        </div>
+
         <Button onClick={handleCreateClick}>
           <Plus className="h-4 w-4 mr-2" />
           New Event
@@ -315,20 +388,39 @@ export default function EventsPage() {
       )}
 
       {/* Calendar View */}
-      <div className="flex-1 min-h-0">
-        <EventCalendar
-          events={events}
-          year={currentYear}
-          month={currentMonth}
-          loading={loading}
-          onPreviousMonth={goToPreviousMonth}
-          onNextMonth={goToNextMonth}
-          onToday={goToToday}
-          onEventClick={handleEventClick}
-          onDayClick={handleDayClick}
-          className="h-full"
-        />
-      </div>
+      {viewMode === 'calendar' && (
+        <div className="flex-1 min-h-0">
+          <EventCalendar
+            events={calendarEvents}
+            year={currentYear}
+            month={currentMonth}
+            loading={calendarLoading}
+            onPreviousMonth={goToPreviousMonth}
+            onNextMonth={goToNextMonth}
+            onToday={goToToday}
+            onEventClick={handleEventClick}
+            onDayClick={handleDayClick}
+            className="h-full"
+          />
+        </div>
+      )}
+
+      {/* Preset List View */}
+      {viewMode === 'list' && (
+        <div className="flex-1 min-h-0">
+          {presetLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+          ) : (
+            <EventList
+              events={presetEvents}
+              onEventClick={handleEventClick}
+              emptyMessage="No events match this filter"
+            />
+          )}
+        </div>
+      )}
 
       {/* Day Detail Dialog */}
       <Dialog

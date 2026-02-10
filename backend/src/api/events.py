@@ -37,6 +37,8 @@ from backend.src.schemas.event import (
     EventResponse,
     EventDetailResponse,
     EventStatsResponse,
+    EventDashboardStatsResponse,
+    EventPreset,
     EventStatus,
     AttendanceStatus,
     UpdateScope,
@@ -130,6 +132,46 @@ async def get_event_stats(
 
 
 @router.get(
+    "/dashboard-stats",
+    response_model=EventDashboardStatsResponse,
+    summary="Get event dashboard statistics",
+    description="Get counts for upcoming events and logistics needing action (next 30 days)",
+)
+async def get_event_dashboard_stats(
+    ctx: TenantContext = Depends(require_auth),
+    event_service: EventService = Depends(get_event_service),
+) -> EventDashboardStatsResponse:
+    """
+    Get dashboard statistics for upcoming events and action-required logistics.
+
+    Returns counts for events in the next 30 days:
+    - upcoming_30d_count: Total future/confirmed events
+    - needs_tickets_count: Events needing ticket purchase
+    - needs_pto_count: Events needing PTO booking
+    - needs_travel_count: Events needing travel booking
+
+    Example:
+        GET /api/events/dashboard-stats
+    """
+    try:
+        stats = event_service.get_dashboard_stats(team_id=ctx.team_id)
+
+        logger.info(
+            "Retrieved event dashboard stats",
+            extra={"upcoming_30d_count": stats["upcoming_30d_count"]},
+        )
+
+        return EventDashboardStatsResponse(**stats)
+
+    except Exception as e:
+        logger.error(f"Error getting event dashboard stats: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve event dashboard statistics",
+        )
+
+
+@router.get(
     "",
     response_model=List[EventResponse],
     summary="List events",
@@ -165,6 +207,10 @@ async def list_events(
         default=True,
         description="Include deadline entries (is_deadline=true). Set to false to exclude them.",
     ),
+    preset: Optional[EventPreset] = Query(
+        default=None,
+        description="Dashboard preset filter. When provided, other date/status params are ignored.",
+    ),
     event_service: EventService = Depends(get_event_service),
 ) -> List[EventResponse]:
     """
@@ -180,34 +226,33 @@ async def list_events(
         status: Filter by event status (future, confirmed, completed, cancelled)
         attendance: Filter by attendance (planned, attended, skipped)
         include_deleted: Include soft-deleted events
+        preset: Dashboard preset filter (overrides other params when set)
 
     Returns:
         List of events ordered by date
 
     Example:
         GET /api/events?start_date=2026-01-01&end_date=2026-01-31
-
-        Response:
-        [
-          {
-            "guid": "evt_xxx",
-            "title": "Airshow Day 1",
-            "event_date": "2026-01-15",
-            ...
-          }
-        ]
+        GET /api/events?preset=needs_tickets
     """
     try:
-        events = event_service.list(
-            team_id=ctx.team_id,
-            start_date=start_date,
-            end_date=end_date,
-            category_guid=category_guid,
-            status=status.value if status else None,
-            attendance=attendance.value if attendance else None,
-            include_deleted=include_deleted,
-            include_deadlines=include_deadlines,
-        )
+        # When preset is provided, delegate to list_by_preset
+        if preset:
+            events = event_service.list_by_preset(
+                team_id=ctx.team_id,
+                preset=preset.value,
+            )
+        else:
+            events = event_service.list(
+                team_id=ctx.team_id,
+                start_date=start_date,
+                end_date=end_date,
+                category_guid=category_guid,
+                status=status.value if status else None,
+                attendance=attendance.value if attendance else None,
+                include_deleted=include_deleted,
+                include_deadlines=include_deadlines,
+            )
 
         logger.info(
             "Listed events",

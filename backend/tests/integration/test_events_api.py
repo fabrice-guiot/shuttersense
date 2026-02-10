@@ -15,9 +15,9 @@ Issue #68 - Make Event Deadline appear in the Calendar view
 """
 
 import pytest
-from datetime import date, time
+from datetime import date, time, timedelta
 
-from backend.src.models import Category, Event, EventSeries, Location, Organizer
+from backend.src.models import Category, Event, EventSeries, Location, Organizer, Team
 
 
 class TestEventsAPI:
@@ -1986,3 +1986,529 @@ class TestEventsDeadline:
         assert detail["is_deadline"] is True
         assert detail["series_guid"] is None
         assert detail["title"] == "Standalone Series Ref Test - Deadline"
+
+
+class TestEventDashboardStats:
+    """Integration tests for GET /api/events/dashboard-stats endpoint."""
+
+    @pytest.fixture
+    def test_category(self, test_db_session, test_team):
+        """Create a test category."""
+        category = Category(
+            name="Dashboard Test Category",
+            icon="plane",
+            color="#3B82F6",
+            is_active=True,
+            display_order=0,
+            team_id=test_team.id,
+        )
+        test_db_session.add(category)
+        test_db_session.commit()
+        test_db_session.refresh(category)
+        return category
+
+    def test_dashboard_stats_empty(self, test_client):
+        """Test dashboard stats returns all zeros when no events exist."""
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["upcoming_30d_count"] == 0
+        assert data["needs_tickets_count"] == 0
+        assert data["needs_pto_count"] == 0
+        assert data["needs_travel_count"] == 0
+
+    def test_dashboard_stats_upcoming_30d(self, test_client, test_db_session, test_category, test_team):
+        """Test upcoming_30d_count counts only events within 30-day window."""
+        today = date.today()
+
+        # Event within 30 days - should count
+        e1 = Event(
+            title="Within 30 days",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+        )
+        # Event beyond 30 days - should NOT count
+        e2 = Event(
+            title="Beyond 30 days",
+            event_date=today + timedelta(days=45),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+        )
+        # Event in the past - should NOT count
+        e3 = Event(
+            title="Past event",
+            event_date=today - timedelta(days=5),
+            status="completed",
+            attendance="attended",
+            category_id=test_category.id,
+            team_id=test_team.id,
+        )
+        test_db_session.add_all([e1, e2, e3])
+        test_db_session.commit()
+
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["upcoming_30d_count"] == 1
+
+    def test_dashboard_stats_excludes_cancelled_deleted_deadlines(
+        self, test_client, test_db_session, test_category, test_team
+    ):
+        """Test that cancelled, deleted, and deadline events are excluded."""
+        today = date.today()
+        from datetime import datetime
+
+        # Cancelled event - should NOT count
+        e1 = Event(
+            title="Cancelled",
+            event_date=today + timedelta(days=5),
+            status="cancelled",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+        )
+        # Deleted event - should NOT count
+        e2 = Event(
+            title="Deleted",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            deleted_at=datetime.utcnow(),
+        )
+        # Deadline entry - should NOT count
+        e3 = Event(
+            title="Deadline Entry",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            is_deadline=True,
+        )
+        # Valid event - should count
+        e4 = Event(
+            title="Valid",
+            event_date=today + timedelta(days=5),
+            status="confirmed",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+        )
+        test_db_session.add_all([e1, e2, e3, e4])
+        test_db_session.commit()
+
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["upcoming_30d_count"] == 1
+
+    def test_dashboard_stats_needs_tickets(self, test_client, test_db_session, test_category, test_team):
+        """Test needs_tickets_count: counts events where status is NOT 'ready'."""
+        today = date.today()
+
+        # Ticket required, not purchased - should count
+        e1 = Event(
+            title="Needs ticket",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            ticket_required=True,
+            ticket_status="not_purchased",
+        )
+        # Ticket required, NULL status - should count
+        e2 = Event(
+            title="Needs ticket (null status)",
+            event_date=today + timedelta(days=10),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            ticket_required=True,
+            ticket_status=None,
+        )
+        # Ticket required, purchased but NOT ready - should count
+        e3 = Event(
+            title="Ticket purchased",
+            event_date=today + timedelta(days=15),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            ticket_required=True,
+            ticket_status="purchased",
+        )
+        # Ticket required, ready - should NOT count (fulfilled)
+        e4 = Event(
+            title="Ticket ready",
+            event_date=today + timedelta(days=18),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            ticket_required=True,
+            ticket_status="ready",
+        )
+        # No ticket required - should NOT count
+        e5 = Event(
+            title="No ticket needed",
+            event_date=today + timedelta(days=20),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            ticket_required=False,
+        )
+        test_db_session.add_all([e1, e2, e3, e4, e5])
+        test_db_session.commit()
+
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        # e1, e2, e3 count (not_purchased, NULL, purchased); e4 excluded (ready); e5 excluded (not required)
+        assert data["needs_tickets_count"] == 3
+
+    def test_dashboard_stats_needs_tickets_series_inheritance(
+        self, test_client, test_db_session, test_category, test_team
+    ):
+        """Test that series events inherit ticket_required from EventSeries."""
+        today = date.today()
+
+        # Create series with ticket_required=True
+        series = EventSeries(
+            title="Series with tickets",
+            category_id=test_category.id,
+            total_events=2,
+            ticket_required=True,
+            timeoff_required=False,
+            travel_required=False,
+            team_id=test_team.id,
+        )
+        test_db_session.add(series)
+        test_db_session.commit()
+        test_db_session.refresh(series)
+
+        # Series event with NULL ticket_required (inherits True from series)
+        e1 = Event(
+            title=None,
+            series_id=series.id,
+            sequence_number=1,
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            team_id=test_team.id,
+            ticket_required=None,  # Inherits from series
+            ticket_status=None,
+        )
+        # Series event that explicitly overrides ticket_required=False
+        e2 = Event(
+            title=None,
+            series_id=series.id,
+            sequence_number=2,
+            event_date=today + timedelta(days=6),
+            status="future",
+            attendance="planned",
+            team_id=test_team.id,
+            ticket_required=False,  # Overrides series
+            ticket_status=None,
+        )
+        test_db_session.add_all([e1, e2])
+        test_db_session.commit()
+
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        # Only e1 should count (inherits ticket_required=True, status is NULL)
+        assert data["needs_tickets_count"] == 1
+
+    def test_dashboard_stats_needs_pto(self, test_client, test_db_session, test_category, test_team):
+        """Test needs_pto_count: counts events where status is NOT 'approved'."""
+        today = date.today()
+
+        # Timeoff required, planned status - should count
+        e1 = Event(
+            title="Needs PTO (planned)",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            timeoff_required=True,
+            timeoff_status="planned",
+        )
+        # Timeoff required, booked but NOT approved - should count
+        e2 = Event(
+            title="Needs PTO (booked)",
+            event_date=today + timedelta(days=10),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            timeoff_required=True,
+            timeoff_status="booked",
+        )
+        # Timeoff required, approved - should NOT count (fulfilled)
+        e3 = Event(
+            title="PTO approved",
+            event_date=today + timedelta(days=15),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            timeoff_required=True,
+            timeoff_status="approved",
+        )
+        test_db_session.add_all([e1, e2, e3])
+        test_db_session.commit()
+
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        # e1 and e2 count (planned, booked); e3 excluded (approved)
+        assert data["needs_pto_count"] == 2
+
+    def test_dashboard_stats_needs_travel(self, test_client, test_db_session, test_category, test_team):
+        """Test needs_travel_count for events needing travel booking."""
+        today = date.today()
+
+        # Travel required, planned status - should count
+        e1 = Event(
+            title="Needs travel",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            travel_required=True,
+            travel_status="planned",
+        )
+        # Travel required, already booked - should NOT count
+        e2 = Event(
+            title="Travel booked",
+            event_date=today + timedelta(days=10),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+            travel_required=True,
+            travel_status="booked",
+        )
+        test_db_session.add_all([e1, e2])
+        test_db_session.commit()
+
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["needs_travel_count"] == 1
+
+    def test_dashboard_stats_team_isolation(self, test_client, test_db_session, test_category, test_team):
+        """Test that dashboard stats only count events for the authenticated team."""
+        today = date.today()
+
+        # Create another team
+        other_team = Team(
+            name="Other Team",
+            slug="other-team",
+            is_active=True,
+        )
+        test_db_session.add(other_team)
+        test_db_session.commit()
+        test_db_session.refresh(other_team)
+
+        other_category = Category(
+            name="Other Category",
+            icon="star",
+            color="#FF0000",
+            is_active=True,
+            display_order=0,
+            team_id=other_team.id,
+        )
+        test_db_session.add(other_category)
+        test_db_session.commit()
+        test_db_session.refresh(other_category)
+
+        # Event for other team - should NOT count
+        e1 = Event(
+            title="Other team event",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=other_category.id,
+            team_id=other_team.id,
+        )
+        # Event for our team - should count
+        e2 = Event(
+            title="Our team event",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="planned",
+            category_id=test_category.id,
+            team_id=test_team.id,
+        )
+        test_db_session.add_all([e1, e2])
+        test_db_session.commit()
+
+        response = test_client.get("/api/events/dashboard-stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["upcoming_30d_count"] == 1
+
+
+class TestEventPresetFiltering:
+    """Integration tests for preset-based event filtering."""
+
+    @pytest.fixture
+    def test_category(self, test_db_session, test_team):
+        """Create a test category."""
+        category = Category(
+            name="Preset Test Category",
+            icon="plane",
+            color="#3B82F6",
+            is_active=True,
+            display_order=0,
+            team_id=test_team.id,
+        )
+        test_db_session.add(category)
+        test_db_session.commit()
+        test_db_session.refresh(category)
+        return category
+
+    @pytest.fixture
+    def preset_events(self, test_db_session, test_category, test_team):
+        """Create a variety of events for preset testing."""
+        today = date.today()
+
+        events = [
+            # e0: upcoming, needs tickets (not_purchased)
+            Event(
+                title="Needs Ticket Event",
+                event_date=today + timedelta(days=5),
+                status="future",
+                attendance="planned",
+                category_id=test_category.id,
+                team_id=test_team.id,
+                ticket_required=True,
+                ticket_status="not_purchased",
+            ),
+            # e1: upcoming, needs PTO (planned)
+            Event(
+                title="Needs PTO Event",
+                event_date=today + timedelta(days=10),
+                status="confirmed",
+                attendance="planned",
+                category_id=test_category.id,
+                team_id=test_team.id,
+                timeoff_required=True,
+                timeoff_status="planned",
+            ),
+            # e2: upcoming, needs travel (NULL status)
+            Event(
+                title="Needs Travel Event",
+                event_date=today + timedelta(days=15),
+                status="future",
+                attendance="planned",
+                category_id=test_category.id,
+                team_id=test_team.id,
+                travel_required=True,
+                travel_status=None,
+            ),
+            # e3: upcoming, all logistics fulfilled
+            Event(
+                title="All Good Event",
+                event_date=today + timedelta(days=20),
+                status="future",
+                attendance="planned",
+                category_id=test_category.id,
+                team_id=test_team.id,
+                ticket_required=True,
+                ticket_status="ready",
+                travel_required=True,
+                travel_status="booked",
+            ),
+            # e4: beyond 30 days, no logistics
+            Event(
+                title="Far Future Event",
+                event_date=today + timedelta(days=60),
+                status="future",
+                attendance="planned",
+                category_id=test_category.id,
+                team_id=test_team.id,
+            ),
+            # e5: beyond 30 days, needs tickets (purchased but not ready)
+            Event(
+                title="Far Future Needs Ticket",
+                event_date=today + timedelta(days=90),
+                status="future",
+                attendance="planned",
+                category_id=test_category.id,
+                team_id=test_team.id,
+                ticket_required=True,
+                ticket_status="purchased",
+            ),
+        ]
+
+        test_db_session.add_all(events)
+        test_db_session.commit()
+        for e in events:
+            test_db_session.refresh(e)
+        return events
+
+    def test_preset_upcoming_30d(self, test_client, preset_events):
+        """Test preset=upcoming_30d returns only events within 30-day window."""
+        response = test_client.get("/api/events?preset=upcoming_30d")
+        assert response.status_code == 200
+        data = response.json()
+        # e0, e1, e2, e3 are within 30 days; e4, e5 are beyond
+        assert len(data) == 4
+        titles = [e["title"] for e in data]
+        assert "Far Future Event" not in titles
+        assert "Far Future Needs Ticket" not in titles
+
+    def test_preset_needs_tickets(self, test_client, preset_events):
+        """Test preset=needs_tickets returns all future events needing tickets (no date limit)."""
+        response = test_client.get("/api/events?preset=needs_tickets")
+        assert response.status_code == 200
+        data = response.json()
+        # e0 (not_purchased) and e5 (purchased, not ready) - no 30-day limit
+        assert len(data) == 2
+        titles = [e["title"] for e in data]
+        assert "Needs Ticket Event" in titles
+        assert "Far Future Needs Ticket" in titles
+
+    def test_preset_needs_pto(self, test_client, preset_events):
+        """Test preset=needs_pto returns only events needing PTO booking."""
+        response = test_client.get("/api/events?preset=needs_pto")
+        assert response.status_code == 200
+        data = response.json()
+        # Only e1 needs PTO (planned status)
+        assert len(data) == 1
+        assert data[0]["title"] == "Needs PTO Event"
+
+    def test_preset_needs_travel(self, test_client, preset_events):
+        """Test preset=needs_travel returns only events needing travel booking."""
+        response = test_client.get("/api/events?preset=needs_travel")
+        assert response.status_code == 200
+        data = response.json()
+        # Only e2 needs travel (NULL status counts as unfulfilled)
+        assert len(data) == 1
+        assert data[0]["title"] == "Needs Travel Event"
+
+    def test_preset_ignores_other_params(self, test_client, preset_events):
+        """Test that preset takes precedence over other query params."""
+        # Pass start_date/end_date that would normally restrict results,
+        # but preset should override them
+        response = test_client.get(
+            "/api/events?preset=upcoming_30d&start_date=2099-01-01&end_date=2099-12-31"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Preset should still return events in next 30 days, ignoring date params
+        assert len(data) == 4

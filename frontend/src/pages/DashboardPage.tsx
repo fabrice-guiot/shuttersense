@@ -23,6 +23,9 @@ import {
   ArrowRight,
   ImageOff,
   Bot,
+  Ticket,
+  Briefcase,
+  Car,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -35,7 +38,7 @@ import { useQueueStatus } from '@/hooks/useTools'
 import { useTrendSummary } from '@/hooks/useTrends'
 import { usePipelineStats } from '@/hooks/usePipelines'
 import { useAgentPoolStatus } from '@/hooks/useAgentPoolStatus'
-import { useRecentResults } from '@/hooks/useDashboard'
+import { useRecentResults, useEventDashboardStats } from '@/hooks/useDashboard'
 import { formatRelativeTime } from '@/utils/dateFormat'
 import type { AnalysisResultSummary, ResultStatus } from '@/contracts/api/results-api'
 
@@ -301,6 +304,105 @@ function RecentResultsCard({
 }
 
 // ============================================================================
+// Upcoming Events Card
+// ============================================================================
+
+function UpcomingEventsCard({
+  stats,
+  loading,
+}: {
+  stats: {
+    upcoming_30d_count: number
+    needs_tickets_count: number
+    needs_pto_count: number
+    needs_travel_count: number
+  } | null
+  loading: boolean
+}) {
+  if (loading || !stats) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">Upcoming Events</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-24">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const items = [
+    {
+      icon: Calendar,
+      label: 'Upcoming (30 days)',
+      value: stats.upcoming_30d_count,
+      href: '/events?preset=upcoming_30d',
+      highlight: false,
+    },
+    {
+      icon: Ticket,
+      label: 'Needs Tickets',
+      value: stats.needs_tickets_count,
+      href: '/events?preset=needs_tickets',
+      highlight: stats.needs_tickets_count > 0,
+    },
+    {
+      icon: Briefcase,
+      label: 'Needs PTO',
+      value: stats.needs_pto_count,
+      href: '/events?preset=needs_pto',
+      highlight: stats.needs_pto_count > 0,
+    },
+    {
+      icon: Car,
+      label: 'Needs Travel',
+      value: stats.needs_travel_count,
+      href: '/events?preset=needs_travel',
+      highlight: stats.needs_travel_count > 0,
+    },
+  ]
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg">Upcoming Events</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {items.map((item) => {
+          const ItemIcon = item.icon
+          return (
+            <Link
+              key={item.label}
+              to={item.href}
+              className="flex items-center justify-between hover:bg-accent rounded-md px-2 py-1 -mx-2 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <ItemIcon className={`h-4 w-4 ${item.highlight ? 'text-destructive' : 'text-muted-foreground'}`} />
+                <span className="text-sm">{item.label}</span>
+              </div>
+              <span className={`text-sm font-semibold ${item.highlight ? 'text-destructive' : ''}`}>
+                {item.value}
+              </span>
+            </Link>
+          )
+        })}
+        <div className="pt-2 border-t">
+          <Link to="/events">
+            <Button variant="ghost" size="sm" className="w-full justify-between">
+              View calendar
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ============================================================================
 // Quick Links Card
 // ============================================================================
 
@@ -380,6 +482,7 @@ export default function DashboardPage() {
     error: summaryError,
   } = useTrendSummary()
   const { results: recentResults, loading: recentLoading } = useRecentResults()
+  const { stats: eventDashboardStats, loading: eventDashboardLoading } = useEventDashboardStats()
 
   // Header stats context
   const { setStats } = useHeaderStats()
@@ -447,12 +550,18 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Trend Summary + Queue Overview */}
+      {/* Trend Summary */}
+      <TrendSummaryCard
+        summary={trendSummary}
+        loading={summaryLoading}
+        error={summaryError}
+      />
+
+      {/* Upcoming Events + Queue Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TrendSummaryCard
-          summary={trendSummary}
-          loading={summaryLoading}
-          error={summaryError}
+        <UpcomingEventsCard
+          stats={eventDashboardStats}
+          loading={eventDashboardLoading}
         />
         <QueueOverviewCard
           queueStatus={queueStatus}
