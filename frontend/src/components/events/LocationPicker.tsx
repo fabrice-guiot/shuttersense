@@ -12,7 +12,7 @@
  */
 
 import * as React from 'react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, ChevronsUpDown, MapPin, Search, Loader2, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -40,6 +40,12 @@ import type { Location, GeocodeResponse, LocationCreateRequest } from '@/contrac
 // Types
 // ============================================================================
 
+/** Logistics hints from location defaults */
+export interface LocationLogisticsHint {
+  timeoff_required?: boolean
+  travel_required?: boolean
+}
+
 export interface LocationPickerProps {
   /** Category GUID to filter known locations (required for category matching) */
   categoryGuid: string | null
@@ -49,6 +55,8 @@ export interface LocationPickerProps {
   onChange: (location: Location | null) => void
   /** Called when a location with timezone is selected (for timezone suggestion) */
   onTimezoneHint?: (timezone: string) => void
+  /** Called when a location with logistics defaults is selected */
+  onLogisticsHint?: (hint: LocationLogisticsHint) => void
   /** Placeholder text */
   placeholder?: string
   /** Disable the picker */
@@ -66,6 +74,7 @@ export function LocationPicker({
   value,
   onChange,
   onTimezoneHint,
+  onLogisticsHint,
   placeholder = 'Select or enter location...',
   disabled = false,
   className,
@@ -110,6 +119,13 @@ export function LocationPicker({
     onChange(location)
     if (location.timezone && onTimezoneHint) {
       onTimezoneHint(location.timezone)
+    }
+    // Suggest logistics defaults if available (use nullish checks to preserve explicit false)
+    if (onLogisticsHint && (location.timeoff_required_default != null || location.travel_required_default != null)) {
+      onLogisticsHint({
+        timeoff_required: location.timeoff_required_default ?? undefined,
+        travel_required: location.travel_required_default ?? undefined,
+      })
     }
     setOpen(false)
   }
@@ -175,6 +191,13 @@ export function LocationPicker({
       onChange(newLocation)
       if (newLocation.timezone && onTimezoneHint) {
         onTimezoneHint(newLocation.timezone)
+      }
+      // Suggest logistics defaults if available (use nullish checks to preserve explicit false)
+      if (onLogisticsHint && (newLocation.timeoff_required_default != null || newLocation.travel_required_default != null)) {
+        onLogisticsHint({
+          timeoff_required: newLocation.timeoff_required_default ?? undefined,
+          travel_required: newLocation.travel_required_default ?? undefined,
+        })
       }
       setOpen(false)
     } catch (err) {

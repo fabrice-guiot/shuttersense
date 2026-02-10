@@ -227,6 +227,7 @@ export function LogisticsSection({
                   onChange={(date) => updateField('ticket_purchase_date', date || null)}
                   placeholder="Select date"
                   disabled={disabled}
+                  clearable
                 />
               </div>
             </div>
@@ -286,6 +287,7 @@ export function LogisticsSection({
                   onChange={(date) => updateField('timeoff_booking_date', date || null)}
                   placeholder="Select date"
                   disabled={disabled}
+                  clearable
                 />
               </div>
             </div>
@@ -345,6 +347,7 @@ export function LogisticsSection({
                   onChange={(date) => updateField('travel_booking_date', date || null)}
                   placeholder="Select date"
                   disabled={disabled}
+                  clearable
                 />
               </div>
             </div>

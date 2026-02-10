@@ -360,8 +360,8 @@ export default function EventsPage() {
         open={selectedEvent !== null}
         onOpenChange={(open) => !open && setSelectedEvent(null)}
       >
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{selectedEvent?.title}</DialogTitle>
             <DialogDescription>
               {selectedEvent && (
@@ -377,7 +377,7 @@ export default function EventsPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedEvent && (
-            <div className="space-y-4 pt-4">
+            <div className="space-y-4 pt-4 overflow-y-auto flex-1">
               {/* Description */}
               {selectedEvent.description && (
                 <div>
@@ -601,7 +601,7 @@ export default function EventsPage() {
           )}
           {/* Edit/Delete buttons hidden for deadline entries (T036-T037) */}
           {selectedEvent && !selectedEvent.is_deadline && (
-            <DialogFooter className="gap-2 sm:gap-0">
+            <DialogFooter className="flex-shrink-0 gap-2 sm:gap-0">
               <Button variant="outline" onClick={handleEditClick}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit
