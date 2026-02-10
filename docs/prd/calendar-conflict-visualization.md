@@ -40,13 +40,16 @@ However, the current calendar offers **no conflict detection or decision-support
 - `frontend/src/components/events/EventCalendar.tsx` — Month grid (will gain conflict indicators)
 - `frontend/src/components/events/EventCard.tsx` — Event cards (will gain conflict badge)
 - `frontend/src/contracts/api/event-api.ts` — Event types (will be extended with conflict/score data)
-- `frontend/src/contracts/api/config-api.ts` — Config types (new conflict settings)
-- `frontend/src/pages/SettingsPage.tsx` — Settings page (new "Conflict Rules" section)
+- `frontend/src/contracts/api/config-api.ts` — Config types (new conflict and scoring weight settings)
+- `frontend/src/pages/SettingsPage.tsx` — Settings page (new "Conflict Rules" and "Scoring Weights" sections)
 - `backend/src/api/events.py` — Event API routes (new conflict detection endpoint)
-- `backend/src/api/config.py` — Config API (new conflict config category)
+- `backend/src/api/config.py` — Config API (new conflict and scoring weight config categories)
 - `backend/src/schemas/event.py` — Event schemas (conflict/score response types)
 - `backend/src/services/event_service.py` — Event service (conflict detection logic)
 - `backend/src/models/location.py` — Location model (has `latitude`/`longitude` already)
+- `backend/src/services/seed_data_service.py` — Team seeding (new `conflict_rules` and `scoring_weights` defaults)
+- `backend/src/services/team_service.py` — Team creation orchestrator (calls seed_team_defaults)
+- `backend/src/scripts/seed_first_team.py` — First team CLI script (uses SeedDataService)
 
 ### Problem Statement
 
@@ -158,9 +161,27 @@ Each event is scored across multiple dimensions, normalized to a 0–100 scale f
 
 **Extensibility**: The scoring engine accepts a list of `ScoringDimension` definitions. New dimensions (e.g., "historical event quality" derived from past analysis results) can be added by registering a new dimension with a name, data accessor, and normalization function. The radar chart and timeline marker automatically adapt to any number of dimensions (tested up to 8; beyond that, the chart becomes less readable).
 
-### Composite Score
+### Composite Score & Dimension Weights
 
-A single composite score (0–100) is computed as the **weighted average** of all dimension scores. Default weights are equal, but users can adjust weights in Settings (future enhancement — not in initial release). The composite score is used for:
+A single composite score (0–100) is computed as the **weighted average** of all dimension scores. Weights are configurable per-team via Settings > Configuration > Scoring Weights. This allows teams to express their priorities (e.g., a team that prioritizes venue quality over logistics ease can weight accordingly).
+
+**Default weights** (equal, summing to 100):
+
+| Dimension | Config Key | Default Weight |
+|-----------|-----------|----------------|
+| Venue Quality | `weight_venue_quality` | 20 |
+| Organizer Reputation | `weight_organizer_reputation` | 20 |
+| Performer Lineup | `weight_performer_lineup` | 20 |
+| Logistics Ease | `weight_logistics_ease` | 20 |
+| Readiness | `weight_readiness` | 20 |
+
+**Formula:** `composite = Σ(dimension_score × weight) / Σ(weights)`
+
+Weights do not need to sum to 100 — they are relative. A team could set Venue Quality to 40 and everything else to 10, making venue quality 4x more important. The denominator normalizes the result to the 0–100 scale.
+
+**UI:** The radar chart axes scale remains 0–100 (absolute dimension scores). The composite score reflects the weighted emphasis. The comparison dialog shows both raw dimension scores and the weighted composite, so users see the impact of their weight configuration.
+
+The composite score is used for:
 
 - Timeline marker color intensity (higher = more saturated)
 - Sorting within conflict groups (recommended event = highest composite)
@@ -395,6 +416,43 @@ A new section in the Settings page under the Configuration tab.
 - `colocation_radius_miles` (integer, default: 10)
 - `performer_ceiling` (integer, default: 5)
 
+### 6. Settings: Scoring Weights Configuration
+
+A new section in the Settings page under the Configuration tab, immediately below Conflict Rules.
+
+**Location:** Settings > Configuration > Scoring Weights (new section)
+
+**Settings UI:**
+```
+┌─── Scoring Weights ─────────────────────────────────────┐
+│                                                         │
+│  Adjust how much each dimension contributes to the      │
+│  composite event score. Higher weight = more influence.  │
+│  Weights are relative (they do not need to sum to 100). │
+│                                                         │
+│  Venue Quality           [  20  ]  ████████████████░░░░ │
+│  Organizer Reputation    [  20  ]  ████████████████░░░░ │
+│  Performer Lineup        [  20  ]  ████████████████░░░░ │
+│  Logistics Ease          [  20  ]  ████████████████░░░░ │
+│  Readiness               [  20  ]  ████████████████░░░░ │
+│                                                         │
+│  Preview: equal weighting across all dimensions.        │
+│                                                         │
+│                                   [Reset Defaults]      │
+└─────────────────────────────────────────────────────────┘
+```
+
+Each weight is an integer input (min: 0, max: 100) paired with a proportional bar showing the relative contribution. A preview label summarizes the current balance in plain language (e.g., "Venue Quality is 3x more important than other dimensions").
+
+Setting a weight to 0 effectively disables that dimension — it contributes nothing to the composite score and its radar axis is dimmed (but still visible for reference).
+
+**Backend Storage:** New config category `scoring_weights` with keys:
+- `weight_venue_quality` (integer, default: 20)
+- `weight_organizer_reputation` (integer, default: 20)
+- `weight_performer_lineup` (integer, default: 20)
+- `weight_logistics_ease` (integer, default: 20)
+- `weight_readiness` (integer, default: 20)
+
 ---
 
 ## Technical Architecture
@@ -410,13 +468,14 @@ ConflictService
 │   ├── _find_distance_conflicts(events, threshold, window) → List[ConflictEdge]
 │   ├── _find_travel_buffer_violations(events, buffer_days, colocation_radius) → List[ConflictEdge]
 │   └── _build_conflict_groups(edges) → List[ConflictGroup]
-├── score_event(event_detail) → EventScores
+├── score_event(event_detail, config) → EventScores
 │   ├── _score_venue_quality(location) → float
 │   ├── _score_organizer_reputation(organizer) → float
 │   ├── _score_performer_lineup(performers, ceiling) → float
 │   ├── _score_logistics_ease(event) → float
-│   └── _score_readiness(event) → float
-└── compute_composite(scores, weights) → float
+│   ├── _score_readiness(event) → float
+│   └── _compute_composite(dimension_scores, scoring_weights) → float
+└── get_scoring_weights(team_id) → ScoringWeightsConfig
 ```
 
 **Haversine implementation:** Pure Python in `backend/src/services/geo_utils.py`. No external geo library needed — the haversine formula is ~10 lines. Coordinates come from `Location.latitude` and `Location.longitude` which are already `Numeric(10,7)`.
@@ -430,6 +489,8 @@ ConflictService
 | `POST` | `/api/events/conflicts/resolve` | Batch-resolve a conflict group (set attendance on selected events). |
 | `GET` | `/api/config/conflict_rules` | Get conflict rule settings. |
 | `PUT` | `/api/config/conflict_rules` | Update conflict rule settings. |
+| `GET` | `/api/config/scoring_weights` | Get scoring weight settings. |
+| `PUT` | `/api/config/scoring_weights` | Update scoring weight settings. |
 
 **Conflict Detection Endpoint Detail:**
 
@@ -496,6 +557,7 @@ Response:
 | `TimelineEventMarker` | `components/events/TimelineEventMarker.tsx` | Individual event row in the timeline with score bar and dimension segments. |
 | `DimensionMicroBar` | `components/events/DimensionMicroBar.tsx` | Linearized radar: segmented micro-bar showing individual dimension scores. |
 | `ConflictRulesSection` | `components/settings/ConflictRulesSection.tsx` | Settings form for conflict detection thresholds. |
+| `ScoringWeightsSection` | `components/settings/ScoringWeightsSection.tsx` | Settings form for dimension weight configuration with proportional bars. |
 
 ### Frontend: New Hooks
 
@@ -504,6 +566,7 @@ Response:
 | `useConflicts(startDate, endDate)` | Fetches conflict groups for a date range. |
 | `useEventScore(guid)` | Fetches quality scores for a single event. |
 | `useConflictRules()` | CRUD for conflict rule settings. |
+| `useScoringWeights()` | CRUD for scoring weight settings. |
 | `useResolveConflict()` | Mutation hook for resolving conflict groups. |
 
 ### Frontend: New API Contracts
@@ -584,6 +647,14 @@ export interface ConflictRulesConfig {
   colocation_radius_miles: number
   performer_ceiling: number
 }
+
+export interface ScoringWeightsConfig {
+  weight_venue_quality: number       // 0–100, default 20
+  weight_organizer_reputation: number // 0–100, default 20
+  weight_performer_lineup: number    // 0–100, default 20
+  weight_logistics_ease: number      // 0–100, default 20
+  weight_readiness: number           // 0–100, default 20
+}
 ```
 
 ---
@@ -599,9 +670,50 @@ export interface ConflictRulesConfig {
 
 ### New Data
 
-- **Config entries**: 5 new entries in the `conflict_rules` config category (see Settings section). Stored in the existing `configurations` table.
+- **Config entries**: 10 new entries across two config categories stored in the existing `configurations` table:
+  - `conflict_rules` category: 5 entries (distance threshold, consecutive window, travel buffer, co-location radius, performer ceiling)
+  - `scoring_weights` category: 5 entries (one weight per scoring dimension)
 - **No new database tables**: Conflict groups are computed at query time, not persisted. This keeps the model simple and avoids stale conflict data when events change.
 - **No schema migrations**: All new data fits in the existing `configurations` table structure.
+
+### Team Seeding Requirements
+
+All new configuration entries MUST be provisioned automatically when a team is created. This is a cross-cutting requirement that affects team creation in two flows:
+
+1. **First team seeding** (`backend/src/scripts/seed_first_team.py`) — The CLI script that bootstraps the initial team calls `SeedDataService.seed_team_defaults()`.
+2. **Super admin team creation** (`POST /api/admin/teams`) — The API endpoint calls `TeamService.create()`, which in turn calls `SeedDataService.seed_team_defaults()`.
+
+**Required changes to `SeedDataService`** (`backend/src/services/seed_data_service.py`):
+
+Add two new class-level default constants and two new seeding methods, following the established pattern used by `seed_event_statuses()` and `seed_collection_ttl()`:
+
+```python
+DEFAULT_CONFLICT_RULES = {
+    "distance_threshold_miles": {"value": 50, "label": "Distance Threshold (miles)"},
+    "consecutive_window_days": {"value": 1, "label": "Consecutive Window (days)"},
+    "travel_buffer_days": {"value": 3, "label": "Travel Buffer (days)"},
+    "colocation_radius_miles": {"value": 10, "label": "Co-location Radius (miles)"},
+    "performer_ceiling": {"value": 5, "label": "Performer Ceiling"},
+}
+
+DEFAULT_SCORING_WEIGHTS = {
+    "weight_venue_quality": {"value": 20, "label": "Venue Quality"},
+    "weight_organizer_reputation": {"value": 20, "label": "Organizer Reputation"},
+    "weight_performer_lineup": {"value": 20, "label": "Performer Lineup"},
+    "weight_logistics_ease": {"value": 20, "label": "Logistics Ease"},
+    "weight_readiness": {"value": 20, "label": "Readiness"},
+}
+```
+
+New methods:
+- `seed_conflict_rules(team_id, user_id=None)` — Seeds `conflict_rules` config entries. Idempotent (checks by `team_id + category + key`).
+- `seed_scoring_weights(team_id, user_id=None)` — Seeds `scoring_weights` config entries. Idempotent.
+
+Update orchestrator:
+- `seed_team_defaults()` must call both new methods alongside the existing `seed_categories()`, `seed_event_statuses()`, `seed_collection_ttl()` calls.
+- Return tuple extended to include the new counts: `(categories_created, event_statuses_created, ttl_configs_created, conflict_rules_created, scoring_weights_created)`.
+
+**Migration:** A new Alembic migration must seed the defaults for all existing teams (same pattern as migrations `019`, `043`, `050`). This ensures teams created before this feature also receive the new settings.
 
 ### Performance Considerations
 
@@ -613,21 +725,27 @@ export interface ConflictRulesConfig {
 
 ## Phased Delivery
 
-### Phase 1: Foundation — Conflict Detection & Settings
+### Phase 1: Foundation — Conflict Detection, Scoring & Settings
 
 **Scope:**
 - Conflict Rules settings section in the Settings page
+- Scoring Weights settings section in the Settings page
 - Backend conflict detection service (all 3 conflict types)
-- Backend scoring service (all 5 initial dimensions)
+- Backend scoring service (all 5 initial dimensions, weighted composite)
 - `GET /api/events/conflicts` endpoint
 - `GET /api/events/{guid}/score` endpoint
 - Haversine geo utility
+- Team seeding for both new config categories (`conflict_rules`, `scoring_weights`)
+- Alembic migration to seed defaults for existing teams
 
 **Deliverables:**
 - ConflictRulesSection component
+- ScoringWeightsSection component
 - conflict_service.py, geo_utils.py
 - API endpoints with tests
 - Config category registration
+- SeedDataService extensions (`seed_conflict_rules`, `seed_scoring_weights`)
+- Alembic migration for existing teams
 
 ### Phase 2: Calendar Conflict Indicators & Resolution Panel
 
@@ -704,15 +822,13 @@ export interface ConflictRulesConfig {
 
 ## Open Questions
 
-1. **Dimension weights**: Should users be able to customize dimension weights in v1, or is equal weighting sufficient for the initial release? (Recommendation: equal weights for v1, configurable weights as a fast-follow.)
+1. **Historical scoring dimension**: When past event analysis results (PhotoStats scores) are available, how should they influence the event score? (Recommendation: defer to a follow-up PRD once the base scoring framework is proven.)
 
-2. **Historical scoring dimension**: When past event analysis results (PhotoStats scores) are available, how should they influence the event score? (Recommendation: defer to a follow-up PRD once the base scoring framework is proven.)
+2. **Conflict notifications**: Should conflict detection run automatically on event creation and push a notification, or only on-demand when the user opens the Planner? (Recommendation: on-demand for v1 to keep the backend simple; async detection as a Phase 5 enhancement.)
 
-3. **Conflict notifications**: Should conflict detection run automatically on event creation and push a notification, or only on-demand when the user opens the Planner? (Recommendation: on-demand for v1 to keep the backend simple; async detection as a Phase 5 enhancement.)
+3. **Series-level conflicts**: If Event A conflicts with Event B[2/5] (part of a series), should the entire series be flagged? (Recommendation: flag only the individual series event that conflicts, not the whole series.)
 
-4. **Series-level conflicts**: If Event A conflicts with Event B[2/5] (part of a series), should the entire series be flagged? (Recommendation: flag only the individual series event that conflicts, not the whole series.)
-
-5. **Unit preference**: Should the distance threshold support both miles and kilometers? (Recommendation: support a unit toggle in Settings; store internally in miles and convert for display.)
+4. **Unit preference**: Should the distance threshold support both miles and kilometers? (Recommendation: support a unit toggle in Settings; store internally in miles and convert for display.)
 
 ---
 
