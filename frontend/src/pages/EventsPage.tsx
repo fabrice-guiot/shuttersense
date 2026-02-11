@@ -417,6 +417,7 @@ export default function EventsPage() {
               events={presetEvents}
               onEventClick={handleEventClick}
               emptyMessage="No events match this filter"
+              showDate
             />
           )}
         </div>

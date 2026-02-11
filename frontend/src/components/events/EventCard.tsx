@@ -9,10 +9,11 @@
  * - Proper role attributes for status indicators
  */
 
-import { LucideIcon, MapPin, ClockAlert } from 'lucide-react'
+import { LucideIcon, MapPin, ClockAlert, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ICON_MAP } from '@/components/settings/CategoryForm'
 import { LogisticsStatusBadges } from '@/components/events/LogisticsSection'
+import { formatTimeOnly, formatDate } from '@/utils/dateFormat'
 import type { Event, AttendanceStatus } from '@/contracts/api/event-api'
 
 // ============================================================================
@@ -47,6 +48,8 @@ interface EventCardProps {
   compact?: boolean
   /** In compact mode, allow text to wrap (up to 3 lines) instead of truncating */
   expanded?: boolean
+  /** Show the event date (useful for list views where date context is not provided) */
+  showDate?: boolean
   className?: string
 }
 
@@ -55,6 +58,7 @@ export const EventCard = ({
   onClick,
   compact = false,
   expanded = false,
+  showDate = false,
   className
 }: EventCardProps) => {
   // Check if this is a deadline entry
@@ -67,12 +71,15 @@ export const EventCard = ({
       ? ICON_MAP[event.category.icon]
       : undefined
 
-  // Format time display
+  // Format time display (localized)
   const timeDisplay = event.is_all_day
     ? 'All day'
     : event.start_time
-      ? event.start_time.slice(0, 5) // HH:MM
+      ? formatTimeOnly(event.start_time)
       : null
+
+  // Format date display (for list views)
+  const dateDisplay = showDate ? formatDate(event.event_date, { dateStyle: 'medium' }) : null
 
   // Series indicator (not shown for deadline entries)
   const seriesIndicator = !isDeadline && event.series_guid && event.sequence_number && event.series_total
@@ -91,6 +98,7 @@ export const EventCard = ({
   const accessibleLabel = [
     isDeadline && 'Deadline:',
     event.title,
+    dateDisplay && `Date: ${dateDisplay}`,
     event.category?.name && `Category: ${event.category.name}`,
     locationShort && `Location: ${locationShort}`,
     timeDisplay && `Time: ${timeDisplay}`,
@@ -258,12 +266,23 @@ export const EventCard = ({
             )}
           </div>
 
-          {/* Time & Category Row */}
+          {/* Date, Time & Category Row */}
           <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-            {timeDisplay && <span>{timeDisplay}</span>}
+            {dateDisplay && (
+              <>
+                <Calendar className="h-3 w-3 flex-shrink-0" />
+                <span>{dateDisplay}</span>
+              </>
+            )}
+            {timeDisplay && (
+              <>
+                {dateDisplay && <span className="text-muted-foreground/50">·</span>}
+                <span>{timeDisplay}</span>
+              </>
+            )}
             {event.category && (
               <>
-                {timeDisplay && <span className="text-muted-foreground/50">·</span>}
+                {(dateDisplay || timeDisplay) && <span className="text-muted-foreground/50">·</span>}
                 <span className="truncate">{event.category.name}</span>
               </>
             )}
@@ -327,6 +346,8 @@ interface EventListProps {
   events: Event[]
   onEventClick?: (event: Event) => void
   emptyMessage?: string
+  /** Show the event date on each card (useful for list views without date context) */
+  showDate?: boolean
   className?: string
 }
 
@@ -334,6 +355,7 @@ export const EventList = ({
   events,
   onEventClick,
   emptyMessage = 'No events',
+  showDate = false,
   className
 }: EventListProps) => {
   if (events.length === 0) {
@@ -355,6 +377,7 @@ export const EventList = ({
           key={event.guid}
           event={event}
           onClick={onEventClick}
+          showDate={showDate}
         />
       ))}
     </div>
