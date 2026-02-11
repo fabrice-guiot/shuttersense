@@ -1990,8 +1990,8 @@ class EventService:
         event = self.get_by_guid(event_guid)
         performer = self._get_performer_by_guid(performer_guid)
 
-        # Validate category match
-        if performer.category_id != event.category_id:
+        # Validate category match (use effective_category_id for series events)
+        if performer.category_id != event.effective_category_id:
             raise ValidationError(
                 f"Performer '{performer.name}' category does not match event category",
                 field="performer_guid"
