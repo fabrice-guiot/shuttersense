@@ -2056,10 +2056,10 @@ class TestEventDashboardStats:
         data = response.json()
         assert data["upcoming_30d_count"] == 1
 
-    def test_dashboard_stats_excludes_cancelled_deleted_deadlines(
+    def test_dashboard_stats_excludes_cancelled_deleted_deadlines_skipped(
         self, test_client, test_db_session, test_category, test_team
     ):
-        """Test that cancelled, deleted, and deadline events are excluded."""
+        """Test that cancelled, deleted, deadline, and skipped events are excluded."""
         today = date.today()
         from datetime import datetime
 
@@ -2092,8 +2092,17 @@ class TestEventDashboardStats:
             team_id=test_team.id,
             is_deadline=True,
         )
-        # Valid event - should count
+        # Skipped attendance - should NOT count
         e4 = Event(
+            title="Skipped Event",
+            event_date=today + timedelta(days=5),
+            status="future",
+            attendance="skipped",
+            category_id=test_category.id,
+            team_id=test_team.id,
+        )
+        # Valid event - should count
+        e5 = Event(
             title="Valid",
             event_date=today + timedelta(days=5),
             status="confirmed",
@@ -2101,7 +2110,7 @@ class TestEventDashboardStats:
             category_id=test_category.id,
             team_id=test_team.id,
         )
-        test_db_session.add_all([e1, e2, e3, e4])
+        test_db_session.add_all([e1, e2, e3, e4, e5])
         test_db_session.commit()
 
         response = test_client.get("/api/events/dashboard-stats")

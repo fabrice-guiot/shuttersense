@@ -173,9 +173,22 @@ export interface EventCreateRequest {
   status?: EventStatus
   attendance?: AttendanceStatus
 
+  // Logistics - Tickets
   ticket_required?: boolean | null
+  ticket_status?: TicketStatus | null
+  ticket_purchase_date?: string | null    // ISO date
+
+  // Logistics - Time Off
   timeoff_required?: boolean | null
+  timeoff_status?: TimeoffStatus | null
+  timeoff_booking_date?: string | null    // ISO date
+
+  // Logistics - Travel
   travel_required?: boolean | null
+  travel_status?: TravelStatus | null
+  travel_booking_date?: string | null     // ISO date
+
+  // Deadline
   deadline_date?: string | null       // ISO date
   deadline_time?: string | null       // HH:MM format
 }

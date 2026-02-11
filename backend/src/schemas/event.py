@@ -116,8 +116,17 @@ class EventCreate(BaseModel):
     attendance: AttendanceStatus = Field(default=AttendanceStatus.PLANNED)
 
     ticket_required: Optional[bool] = Field(default=None)
+    ticket_status: Optional[TicketStatus] = Field(default=None)
+    ticket_purchase_date: Optional[date] = Field(default=None)
+
     timeoff_required: Optional[bool] = Field(default=None)
+    timeoff_status: Optional[TimeoffStatus] = Field(default=None)
+    timeoff_booking_date: Optional[date] = Field(default=None)
+
     travel_required: Optional[bool] = Field(default=None)
+    travel_status: Optional[TravelStatus] = Field(default=None)
+    travel_booking_date: Optional[date] = Field(default=None)
+
     deadline_date: Optional[date] = Field(default=None)
     deadline_time: Optional[time] = Field(default=None)
 
