@@ -416,3 +416,61 @@ export function formatRelativeTime(
     return formatDateTime(dateString)
   }
 }
+
+// ============================================================================
+// Time-Only Formatting
+// ============================================================================
+
+/**
+ * Formats a time-only string (HH:MM or HH:MM:SS) for locale-aware display.
+ *
+ * Uses Intl.DateTimeFormat for locale-aware formatting (e.g., "3:45 PM" in en-US,
+ * "15:45" in de-DE). Falls back to toLocaleTimeString() if Intl API is unavailable.
+ *
+ * @param timeString - Time string in HH:MM or HH:MM:SS format, null, or undefined
+ * @returns Formatted time string (e.g., "3:45 PM"), empty string for null/undefined,
+ *          "Invalid time" for invalid input
+ *
+ * @example
+ * formatTimeOnly('15:45:00') // "3:45 PM" (in en-US locale)
+ * formatTimeOnly('09:30') // "9:30 AM" (in en-US locale)
+ * formatTimeOnly(null) // ""
+ */
+export function formatTimeOnly(
+  timeString: string | null | undefined
+): string {
+  // Handle null/undefined/empty
+  if (!timeString) {
+    return ''
+  }
+
+  // Parse HH:MM or HH:MM:SS format
+  const match = timeString.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/)
+  if (!match) {
+    return 'Invalid time'
+  }
+
+  const hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2], 10)
+  const seconds = match[3] ? parseInt(match[3], 10) : 0
+
+  // Validate ranges
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
+    return 'Invalid time'
+  }
+
+  // Create a date object at an arbitrary date to use Intl formatting
+  // Using Jan 1, 2000 as a neutral reference date
+  const date = new Date(2000, 0, 1, hours, minutes, seconds)
+
+  // Format with Intl API (with fallback)
+  try {
+    if (hasIntlSupport()) {
+      return new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(date)
+    }
+    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  } catch {
+    // Fallback for any formatting errors
+    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  }
+}
