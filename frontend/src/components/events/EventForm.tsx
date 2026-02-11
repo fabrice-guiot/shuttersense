@@ -131,7 +131,7 @@ export const EventForm = ({
   const isEditMode = !!event
 
   // Fetch event statuses from config
-  const { statuses: eventStatuses } = useEventStatuses()
+  const { statuses: eventStatuses, loading: statusesLoading } = useEventStatuses()
 
   // Event mode (single vs series) - only for create mode
   const [mode, setMode] = useState<EventMode>('single')
@@ -186,9 +186,9 @@ export const EventForm = ({
     }
   })
 
-  // Populate form when editing
+  // Populate form when editing - wait for eventStatuses to load to ensure Select works
   useEffect(() => {
-    if (event) {
+    if (event && !statusesLoading) {
       form.reset({
         title: event.title,
         description: event.description || '',
@@ -271,7 +271,7 @@ export const EventForm = ({
         deadline_time: event.deadline_time,
       })
     }
-  }, [event, form])
+  }, [event, form, statusesLoading])
 
   // Add date to series
   const addDateToSeries = () => {

@@ -386,16 +386,30 @@ class ConfigService:
         """
         Get event statuses ordered by their display_order value.
 
+        Falls back to hardcoded defaults if team config is missing.
+
         Args:
             team_id: Team ID for tenant isolation
 
         Returns:
             List of status objects with key, label, and display_order
         """
+        # Hardcoded defaults as fallback (matches migration 019 and seed_data_service)
+        defaults = [
+            {'key': 'future', 'label': 'Future', 'display_order': 0},
+            {'key': 'confirmed', 'label': 'Confirmed', 'display_order': 1},
+            {'key': 'completed', 'label': 'Completed', 'display_order': 2},
+            {'key': 'cancelled', 'label': 'Cancelled', 'display_order': 3},
+        ]
+
         configs = self.db.query(Configuration).filter(
             Configuration.category == "event_statuses",
             Configuration.team_id == team_id
         ).all()
+
+        if not configs:
+            logger.debug(f"No event statuses found for team {team_id}, using defaults")
+            return defaults
 
         # Each status value_json contains: {"label": "...", "display_order": N}
         statuses = []

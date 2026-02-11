@@ -284,6 +284,7 @@ class EventService:
                 Event.deleted_at.is_(None),
                 Event.event_date >= today,
                 Event.status.in_(["future", "confirmed"]),
+                Event.attendance != "skipped",
             ).scalar()
         )
 
@@ -338,11 +339,12 @@ class EventService:
         today = date.today()
         end_date = today + timedelta(days=30)
 
-        # Common filters: future events, non-deleted, non-deadline
+        # Common filters: future events, non-deleted, non-deadline, not skipped
         common_filters = [
             Event.team_id == team_id,
             Event.event_date >= today,
             Event.status.in_(["future", "confirmed"]),
+            Event.attendance != "skipped",
             Event.is_deadline.is_(False),
             Event.deleted_at.is_(None),
         ]
@@ -439,11 +441,12 @@ class EventService:
 
         today = date.today()
 
-        # Common filters: future events, non-deleted, non-deadline
+        # Common filters: future events, non-deleted, non-deadline, not skipped
         common_filters = [
             Event.team_id == team_id,
             Event.event_date >= today,
             Event.status.in_(["future", "confirmed"]),
+            Event.attendance != "skipped",
             Event.is_deadline.is_(False),
             Event.deleted_at.is_(None),
         ]
@@ -815,8 +818,14 @@ class EventService:
         status: str = "future",
         attendance: str = "planned",
         ticket_required: Optional[bool] = None,
+        ticket_status: Optional[str] = None,
+        ticket_purchase_date: Optional[date] = None,
         timeoff_required: Optional[bool] = None,
+        timeoff_status: Optional[str] = None,
+        timeoff_booking_date: Optional[date] = None,
         travel_required: Optional[bool] = None,
+        travel_status: Optional[str] = None,
+        travel_booking_date: Optional[date] = None,
         deadline_date: Optional[date] = None,
         deadline_time: Optional[Any] = None,
         user_id: Optional[int] = None,
@@ -839,8 +848,14 @@ class EventService:
             status: Event status (default: future)
             attendance: Attendance status (default: planned)
             ticket_required: Optional ticket requirement
+            ticket_status: Optional ticket procurement status
+            ticket_purchase_date: Optional ticket purchase date
             timeoff_required: Optional time-off requirement
+            timeoff_status: Optional time-off booking status
+            timeoff_booking_date: Optional time-off booking date
             travel_required: Optional travel requirement
+            travel_status: Optional travel booking status
+            travel_booking_date: Optional travel booking date
             deadline_date: Optional workflow deadline date
             deadline_time: Optional workflow deadline time
             user_id: Optional user ID for audit tracking
@@ -889,8 +904,14 @@ class EventService:
             status=status,
             attendance=attendance,
             ticket_required=effective_ticket_required,
+            ticket_status=ticket_status,
+            ticket_purchase_date=ticket_purchase_date,
             timeoff_required=effective_timeoff_required,
+            timeoff_status=timeoff_status,
+            timeoff_booking_date=timeoff_booking_date,
             travel_required=effective_travel_required,
+            travel_status=travel_status,
+            travel_booking_date=travel_booking_date,
             deadline_date=deadline_date,
             deadline_time=deadline_time,
             created_by_user_id=user_id,
