@@ -43,6 +43,7 @@ class Location(Base, GuidMixin, AuditMixin):
         state: State/province
         country: Country name
         postal_code: ZIP/postal code
+        website: Website URL
         instagram_handle: Instagram username (without @)
         latitude: Geocoded latitude (Decimal 10,7)
         longitude: Geocoded longitude (Decimal 10,7)
@@ -99,6 +100,7 @@ class Location(Base, GuidMixin, AuditMixin):
     state = Column(String(100), nullable=True)
     country = Column(String(100), nullable=True)
     postal_code = Column(String(20), nullable=True)
+    website = Column(String(500), nullable=True)
     instagram_handle = Column(String(100), nullable=True)  # Without @
 
     # Geocoding fields

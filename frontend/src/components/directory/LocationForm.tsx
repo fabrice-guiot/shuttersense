@@ -48,6 +48,7 @@ const locationFormSchema = z.object({
   state: z.string().max(100).optional().nullable(),
   country: z.string().max(100).optional().nullable(),
   postal_code: z.string().max(20).optional().nullable(),
+  website: z.string().max(500).optional().nullable(),
   instagram_handle: z.string().max(100).optional().nullable(),
   latitude: z.number().min(-90).max(90).optional().nullable(),
   longitude: z.number().min(-180).max(180).optional().nullable(),
@@ -160,6 +161,7 @@ export function LocationForm({
       state: null,
       country: null,
       postal_code: null,
+      website: null,
       instagram_handle: null,
       latitude: null,
       longitude: null,
@@ -183,6 +185,7 @@ export function LocationForm({
         state: location.state,
         country: location.country,
         postal_code: location.postal_code,
+        website: location.website,
         instagram_handle: location.instagram_handle,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -243,6 +246,7 @@ export function LocationForm({
       state: data.state || null,
       country: data.country || null,
       postal_code: data.postal_code || null,
+      website: data.website?.trim() || null,
       instagram_handle: data.instagram_handle?.trim()?.replace(/^@/, '') || null,
       timezone: data.timezone || null,
       notes: data.notes || null,
@@ -544,6 +548,29 @@ export function LocationForm({
               </FormControl>
               <FormDescription>
                 Your rating of this venue (optional)
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Website */}
+        <FormField
+          control={form.control}
+          name="website"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Website</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="e.g., https://example.com"
+                  {...field}
+                  value={field.value || ''}
+                  onChange={(e) => field.onChange(e.target.value || null)}
+                />
+              </FormControl>
+              <FormDescription>
+                Link to location's official website
               </FormDescription>
               <FormMessage />
             </FormItem>

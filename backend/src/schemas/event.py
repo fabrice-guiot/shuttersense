@@ -107,6 +107,10 @@ class EventCreate(BaseModel):
     location_guid: Optional[str] = Field(default=None, description="Location GUID")
     organizer_guid: Optional[str] = Field(default=None, description="Organizer GUID")
 
+    # Event-specific social/web fields
+    website: Optional[str] = Field(default=None, max_length=500, description="Event-specific website URL")
+    instagram_handle: Optional[str] = Field(default=None, max_length=100, description="Event-specific Instagram handle (without @)")
+
     start_time: Optional[time] = Field(default=None, description="Start time")
     end_time: Optional[time] = Field(default=None, description="End time")
     is_all_day: bool = Field(default=False)
@@ -190,6 +194,10 @@ class EventSeriesCreate(BaseModel):
 
     location_guid: Optional[str] = Field(default=None)
     organizer_guid: Optional[str] = Field(default=None)
+
+    # Event-specific social/web fields (managed at series level)
+    website: Optional[str] = Field(default=None, max_length=500, description="Event-specific website URL")
+    instagram_handle: Optional[str] = Field(default=None, max_length=100, description="Event-specific Instagram handle (without @)")
 
     start_time: Optional[time] = Field(default=None)
     end_time: Optional[time] = Field(default=None)
@@ -290,6 +298,10 @@ class EventUpdate(BaseModel):
     location_guid: Optional[str] = Field(default=None)
     organizer_guid: Optional[str] = Field(default=None)
 
+    # Event-specific social/web fields (series-level, synced to all events)
+    website: Optional[str] = Field(default=None, max_length=500)
+    instagram_handle: Optional[str] = Field(default=None, max_length=100)
+
     event_date: Optional[date] = Field(default=None)
     start_time: Optional[time] = Field(default=None)
     end_time: Optional[time] = Field(default=None)
@@ -350,6 +362,10 @@ class EventSeriesUpdate(BaseModel):
     organizer_guid: Optional[str] = Field(default=None)
     input_timezone: Optional[str] = Field(default=None, max_length=64)
 
+    # Event-specific social/web fields (synced to all events in series)
+    website: Optional[str] = Field(default=None, max_length=500)
+    instagram_handle: Optional[str] = Field(default=None, max_length=100)
+
     ticket_required: Optional[bool] = Field(default=None)
     timeoff_required: Optional[bool] = Field(default=None)
     travel_required: Optional[bool] = Field(default=None)
@@ -392,6 +408,8 @@ class EventSeriesSummary(BaseModel):
     guid: str = Field(..., description="Series GUID (ser_xxx)")
     title: str
     total_events: int
+    website: Optional[str] = Field(default=None)
+    instagram_handle: Optional[str] = Field(default=None)
 
     model_config = {"from_attributes": True}
 
@@ -453,6 +471,11 @@ class EventResponse(BaseModel):
     series_guid: Optional[str] = Field(default=None, description="Series GUID if part of series")
     sequence_number: Optional[int] = Field(default=None)
     series_total: Optional[int] = Field(default=None)
+
+    # Event-specific social/web fields
+    website: Optional[str] = Field(default=None, description="Event-specific website URL")
+    instagram_handle: Optional[str] = Field(default=None, description="Event-specific Instagram handle")
+    instagram_url: Optional[str] = Field(default=None, description="Full Instagram profile URL")
 
     # Logistics summary (for card display indicators)
     ticket_required: Optional[bool] = Field(default=None)

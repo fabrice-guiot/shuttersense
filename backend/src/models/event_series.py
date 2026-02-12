@@ -44,6 +44,8 @@ class EventSeries(Base, GuidMixin, AuditMixin):
         ticket_required: Default ticket requirement
         timeoff_required: Default time-off requirement
         travel_required: Default travel requirement
+        website: Event-specific website URL (managed at series level)
+        instagram_handle: Event-specific Instagram handle (managed at series level)
         deadline_date: Series-level deadline date for deliverables
         deadline_time: Optional deadline time (e.g., 11:59 PM for competitions)
         total_events: Number of events in series
@@ -109,6 +111,10 @@ class EventSeries(Base, GuidMixin, AuditMixin):
     ticket_required = Column(Boolean, default=False, nullable=False)
     timeoff_required = Column(Boolean, default=False, nullable=False)
     travel_required = Column(Boolean, default=False, nullable=False)
+
+    # Event-specific social/web fields (managed at series level, synced to events)
+    website = Column(String(500), nullable=True)
+    instagram_handle = Column(String(100), nullable=True)  # Without @
 
     # Deadline for deliverables (triggers creation of deadline entry event)
     deadline_date = Column(Date, nullable=True)

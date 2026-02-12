@@ -30,6 +30,7 @@ export interface Location {
   state: string | null
   country: string | null
   postal_code: string | null
+  website: string | null           // Website URL
   instagram_handle: string | null  // Instagram username (without @)
   instagram_url: string | null     // Full Instagram profile URL
   latitude: number | null
@@ -58,6 +59,7 @@ export interface LocationCreateRequest {
   state?: string | null
   country?: string | null
   postal_code?: string | null
+  website?: string | null
   instagram_handle?: string | null
   latitude?: number | null
   longitude?: number | null
@@ -77,6 +79,7 @@ export interface LocationUpdateRequest {
   state?: string | null
   country?: string | null
   postal_code?: string | null
+  website?: string | null
   instagram_handle?: string | null
   latitude?: number | null
   longitude?: number | null

@@ -153,6 +153,10 @@ export const EventForm = ({
   // Selected organizer (for OrganizerPicker display)
   const [selectedOrganizer, setSelectedOrganizer] = useState<Organizer | null>(null)
 
+  // Event-specific social/web fields (managed at series level for series events)
+  const [eventWebsite, setEventWebsite] = useState<string>('')
+  const [eventInstagram, setEventInstagram] = useState<string>('')
+
   // Logistics data
   const [logistics, setLogistics] = useState<LogisticsData>({
     ticket_required: null,
@@ -215,6 +219,7 @@ export const EventForm = ({
           address: null,
           state: null,
           postal_code: null,
+          website: null,
           latitude: null,
           longitude: null,
           category: event.category ? {
@@ -255,6 +260,9 @@ export const EventForm = ({
           updated_at: '',
         })
       }
+      // Set event-specific social/web fields
+      setEventWebsite(event.website || '')
+      setEventInstagram(event.instagram_handle || '')
       // Set logistics data from event
       // deadline_date and deadline_time are synced from series to all events
       setLogistics({
@@ -361,6 +369,9 @@ export const EventForm = ({
         category_guid: values.category_guid,
         location_guid: values.location_guid || undefined,
         organizer_guid: values.organizer_guid || undefined,
+        // Event-specific social/web fields
+        website: eventWebsite.trim() || undefined,
+        instagram_handle: eventInstagram.trim().replace(/^@/, '') || undefined,
         event_dates: seriesDates,
         start_time: values.is_all_day ? undefined : (values.start_time || undefined),
         end_time: values.is_all_day ? undefined : (values.end_time || undefined),
@@ -395,6 +406,9 @@ export const EventForm = ({
         category_guid: values.category_guid,
         location_guid: values.location_guid || null,
         organizer_guid: values.organizer_guid || null,
+        // Event-specific social/web fields
+        website: eventWebsite.trim() || null,
+        instagram_handle: eventInstagram.trim().replace(/^@/, '') || null,
         event_date: selectedDate,
         start_time: values.is_all_day ? null : (values.start_time || null),
         end_time: values.is_all_day ? null : (values.end_time || null),
@@ -609,6 +623,42 @@ export const EventForm = ({
             </FormItem>
           )}
         />
+
+        {/* Event Website */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium leading-none">
+            Event Website
+          </label>
+          <Input
+            placeholder="e.g., https://event-website.com"
+            value={eventWebsite}
+            onChange={(e) => setEventWebsite(e.target.value || '')}
+          />
+          <p className="text-[0.8rem] text-muted-foreground">
+            Website specific to this event (separate from location or organizer)
+          </p>
+        </div>
+
+        {/* Event Instagram Handle */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium leading-none">
+            Event Instagram Handle
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+              @
+            </span>
+            <Input
+              placeholder="username"
+              className="pl-7"
+              value={eventInstagram.replace(/^@/, '')}
+              onChange={(e) => setEventInstagram(e.target.value || '')}
+            />
+          </div>
+          <p className="text-[0.8rem] text-muted-foreground">
+            Instagram handle specific to this event (without the @)
+          </p>
+        </div>
 
         {/* Date Selection - Single Mode */}
         {(mode === 'single' || isEditMode) && (
