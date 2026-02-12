@@ -470,7 +470,7 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
             Search
           </Button>
           {(search || categoryFilter !== 'all') && (
-            <Button variant="ghost" onClick={() => { handleClearSearch(); setCategoryFilter('all') }}>
+            <Button variant="ghost" onClick={() => { setSearch(''); setCategoryFilter('all'); setPage(1) }}>
               Clear
             </Button>
           )}
