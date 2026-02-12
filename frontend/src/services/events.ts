@@ -114,13 +114,9 @@ export const listEventsForCalendarView = async (year: number, month: number): Pr
   const startDate = new Date(firstOfMonth)
   startDate.setDate(startDate.getDate() - startDayOfWeek)
 
-  // Get the last day of the month
-  const lastOfMonth = new Date(year, month, 0)
-
-  // End on the Saturday after or on the last of the month
-  const endDayOfWeek = lastOfMonth.getDay()
-  const endDate = new Date(lastOfMonth)
-  endDate.setDate(endDate.getDate() + (6 - endDayOfWeek))
+  // End after exactly 42 days (6 weeks) to match the calendar grid
+  const endDate = new Date(startDate)
+  endDate.setDate(endDate.getDate() + 41)
 
   const formatDate = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
