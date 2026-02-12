@@ -330,6 +330,7 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
 
   // Search state
   const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -341,12 +342,12 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
   // Fetch with current filters and pagination
   const doFetch = useCallback(() => {
     fetchOrganizers({
-      search: search || undefined,
+      search: appliedSearch || undefined,
       category_guid: categoryFilter !== 'all' ? categoryFilter : undefined,
       limit,
       offset: (page - 1) * limit,
     })
-  }, [fetchOrganizers, search, categoryFilter, limit, page])
+  }, [fetchOrganizers, appliedSearch, categoryFilter, limit, page])
 
   useEffect(() => {
     doFetch()
@@ -413,6 +414,7 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
 
   // Handle search
   const handleSearch = () => {
+    setAppliedSearch(search)
     setPage(1)
   }
 
@@ -424,6 +426,7 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
 
   const handleClearSearch = () => {
     setSearch('')
+    setAppliedSearch('')
     setPage(1)
   }
 

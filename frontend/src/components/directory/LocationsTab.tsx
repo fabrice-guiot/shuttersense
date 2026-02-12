@@ -319,6 +319,7 @@ export function LocationsTab({ categories }: LocationsTabProps) {
 
   // Search state
   const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -330,12 +331,12 @@ export function LocationsTab({ categories }: LocationsTabProps) {
   // Fetch with current filters and pagination
   const doFetch = useCallback(() => {
     fetchLocations({
-      search: search || undefined,
+      search: appliedSearch || undefined,
       category_guid: categoryFilter !== 'all' ? categoryFilter : undefined,
       limit,
       offset: (page - 1) * limit,
     })
-  }, [fetchLocations, search, categoryFilter, limit, page])
+  }, [fetchLocations, appliedSearch, categoryFilter, limit, page])
 
   useEffect(() => {
     doFetch()
@@ -398,6 +399,7 @@ export function LocationsTab({ categories }: LocationsTabProps) {
 
   // Handle search
   const handleSearch = () => {
+    setAppliedSearch(search)
     setPage(1)
   }
 
@@ -409,6 +411,7 @@ export function LocationsTab({ categories }: LocationsTabProps) {
 
   const handleClearSearch = () => {
     setSearch('')
+    setAppliedSearch('')
     setPage(1)
   }
 

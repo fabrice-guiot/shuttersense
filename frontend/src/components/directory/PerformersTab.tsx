@@ -281,6 +281,7 @@ export function PerformersTab({ categories }: PerformersTabProps) {
 
   // Search state
   const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -292,12 +293,12 @@ export function PerformersTab({ categories }: PerformersTabProps) {
   // Fetch with current filters and pagination
   const doFetch = useCallback(() => {
     fetchPerformers({
-      search: search || undefined,
+      search: appliedSearch || undefined,
       category_guid: categoryFilter !== 'all' ? categoryFilter : undefined,
       limit,
       offset: (page - 1) * limit,
     })
-  }, [fetchPerformers, search, categoryFilter, limit, page])
+  }, [fetchPerformers, appliedSearch, categoryFilter, limit, page])
 
   useEffect(() => {
     doFetch()
@@ -360,6 +361,7 @@ export function PerformersTab({ categories }: PerformersTabProps) {
 
   // Handle search
   const handleSearch = () => {
+    setAppliedSearch(search)
     setPage(1)
   }
 
@@ -371,6 +373,7 @@ export function PerformersTab({ categories }: PerformersTabProps) {
 
   const handleClearSearch = () => {
     setSearch('')
+    setAppliedSearch('')
     setPage(1)
   }
 
