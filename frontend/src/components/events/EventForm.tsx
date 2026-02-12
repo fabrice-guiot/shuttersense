@@ -625,40 +625,40 @@ export const EventForm = ({
         />
 
         {/* Event Website */}
-        <FormItem>
-          <FormLabel>Event Website</FormLabel>
-          <FormControl>
-            <Input
-              placeholder="e.g., https://event-website.com"
-              value={eventWebsite}
-              onChange={(e) => setEventWebsite(e.target.value || '')}
-            />
-          </FormControl>
-          <FormDescription>
+        <div className="space-y-2">
+          <label className="text-sm font-medium leading-none">
+            Event Website
+          </label>
+          <Input
+            placeholder="e.g., https://event-website.com"
+            value={eventWebsite}
+            onChange={(e) => setEventWebsite(e.target.value || '')}
+          />
+          <p className="text-[0.8rem] text-muted-foreground">
             Website specific to this event (separate from location or organizer)
-          </FormDescription>
-        </FormItem>
+          </p>
+        </div>
 
         {/* Event Instagram Handle */}
-        <FormItem>
-          <FormLabel>Event Instagram Handle</FormLabel>
-          <FormControl>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                @
-              </span>
-              <Input
-                placeholder="username"
-                className="pl-7"
-                value={eventInstagram.replace(/^@/, '')}
-                onChange={(e) => setEventInstagram(e.target.value || '')}
-              />
-            </div>
-          </FormControl>
-          <FormDescription>
+        <div className="space-y-2">
+          <label className="text-sm font-medium leading-none">
+            Event Instagram Handle
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+              @
+            </span>
+            <Input
+              placeholder="username"
+              className="pl-7"
+              value={eventInstagram.replace(/^@/, '')}
+              onChange={(e) => setEventInstagram(e.target.value || '')}
+            />
+          </div>
+          <p className="text-[0.8rem] text-muted-foreground">
             Instagram handle specific to this event (without the @)
-          </FormDescription>
-        </FormItem>
+          </p>
+        </div>
 
         {/* Date Selection - Single Mode */}
         {(mode === 'single' || isEditMode) && (
