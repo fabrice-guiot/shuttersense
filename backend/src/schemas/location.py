@@ -150,6 +150,7 @@ class LocationCreate(BaseModel):
         state: State/province
         country: Country name
         postal_code: ZIP/postal code
+        website: Website URL
         instagram_handle: Instagram username (without @)
         latitude: Geocoded latitude (-90 to 90)
         longitude: Geocoded longitude (-180 to 180)
@@ -204,6 +205,11 @@ class LocationCreate(BaseModel):
         default=None,
         max_length=20,
         description="ZIP/postal code",
+    )
+    website: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Website URL",
     )
     instagram_handle: Optional[str] = Field(
         default=None,
@@ -291,6 +297,7 @@ class LocationCreate(BaseModel):
                 "state": "New York",
                 "country": "United States",
                 "postal_code": "10001",
+                "website": "https://www.msg.com",
                 "instagram_handle": "thegarden",
                 "latitude": 40.7505,
                 "longitude": -73.9934,
@@ -318,6 +325,7 @@ class LocationUpdate(BaseModel):
         state: New state
         country: New country
         postal_code: New postal code
+        website: New website URL (empty string to clear)
         instagram_handle: New Instagram handle (empty string to clear)
         latitude: New latitude (null to clear)
         longitude: New longitude (null to clear)
@@ -366,6 +374,11 @@ class LocationUpdate(BaseModel):
         default=None,
         max_length=20,
         description="ZIP/postal code",
+    )
+    website: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Website URL",
     )
     instagram_handle: Optional[str] = Field(
         default=None,
@@ -468,6 +481,7 @@ class LocationResponse(BaseModel):
         state: State/province
         country: Country name
         postal_code: ZIP/postal code
+        website: Website URL
         instagram_handle: Instagram username (without @)
         instagram_url: Full Instagram profile URL (computed)
         latitude: Geocoded latitude
@@ -493,6 +507,7 @@ class LocationResponse(BaseModel):
     state: Optional[str]
     country: Optional[str]
     postal_code: Optional[str]
+    website: Optional[str]
     instagram_handle: Optional[str]
     instagram_url: Optional[str] = Field(
         default=None,
@@ -534,6 +549,7 @@ class LocationResponse(BaseModel):
                 "state": "New York",
                 "country": "United States",
                 "postal_code": "10001",
+                "website": "https://www.msg.com",
                 "instagram_handle": "thegarden",
                 "instagram_url": "https://www.instagram.com/thegarden",
                 "latitude": 40.7505,

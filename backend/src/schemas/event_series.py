@@ -54,6 +54,11 @@ class EventSeriesResponse(BaseModel):
     organizer_guid: Optional[str]
     input_timezone: Optional[str]
 
+    # Event-specific social/web fields
+    website: Optional[str] = Field(default=None, description="Event-specific website URL")
+    instagram_handle: Optional[str] = Field(default=None, description="Event-specific Instagram handle")
+    instagram_url: Optional[str] = Field(default=None, description="Full Instagram profile URL")
+
     # Logistics defaults
     ticket_required: bool
     timeoff_required: bool

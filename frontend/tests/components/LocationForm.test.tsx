@@ -70,6 +70,7 @@ const mockLocation: Location = {
   travel_required_default: true,
   notes: 'Home of AirVenture',
   is_known: true,
+  website: null,
   instagram_handle: null,
   instagram_url: null,
   created_at: '2026-01-10T10:00:00Z',

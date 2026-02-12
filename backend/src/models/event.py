@@ -208,6 +208,10 @@ class Event(Base, GuidMixin, AuditMixin):
     travel_status = Column(String(50), nullable=True)
     travel_booking_date = Column(Date, nullable=True)
 
+    # Event-specific social/web fields (synced from series for series events)
+    website = Column(String(500), nullable=True)
+    instagram_handle = Column(String(100), nullable=True)  # Without @
+
     # Workflow
     deadline_date = Column(Date, nullable=True)
     deadline_time = Column(Time, nullable=True)

@@ -433,6 +433,8 @@ async def create_event(
             travel_booking_date=event_data.travel_booking_date,
             deadline_date=event_data.deadline_date,
             deadline_time=event_data.deadline_time,
+            website=event_data.website,
+            instagram_handle=event_data.instagram_handle,
         )
 
         # Reload with relationships
@@ -537,6 +539,8 @@ async def create_event_series(
             travel_booking_date=series_data.travel_booking_date,
             deadline_date=series_data.deadline_date,
             deadline_time=series_data.deadline_time,
+            website=series_data.website,
+            instagram_handle=series_data.instagram_handle,
         )
 
         # Get all events in the series (including deadline entry if present)

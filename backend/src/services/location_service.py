@@ -78,6 +78,7 @@ class LocationService:
         state: Optional[str] = None,
         country: Optional[str] = None,
         postal_code: Optional[str] = None,
+        website: Optional[str] = None,
         instagram_handle: Optional[str] = None,
         latitude: Optional[Decimal] = None,
         longitude: Optional[Decimal] = None,
@@ -101,6 +102,7 @@ class LocationService:
             state: State/province
             country: Country name
             postal_code: ZIP/postal code
+            website: Website URL
             instagram_handle: Instagram username (without @)
             latitude: Geocoded latitude (-90 to 90)
             longitude: Geocoded longitude (-180 to 180)
@@ -152,6 +154,7 @@ class LocationService:
                 state=state,
                 country=country,
                 postal_code=postal_code,
+                website=website,
                 instagram_handle=instagram_handle,
                 latitude=latitude,
                 longitude=longitude,
@@ -298,6 +301,7 @@ class LocationService:
         state: Optional[str] = None,
         country: Optional[str] = None,
         postal_code: Optional[str] = None,
+        website: Optional[str] = None,
         instagram_handle: Optional[str] = None,
         latitude: Optional[Decimal] = None,
         longitude: Optional[Decimal] = None,
@@ -322,6 +326,7 @@ class LocationService:
             state: New state
             country: New country
             postal_code: New postal code
+            website: New website URL (empty string to clear)
             instagram_handle: New Instagram handle (empty string to clear)
             latitude: New latitude
             longitude: New longitude
@@ -371,6 +376,8 @@ class LocationService:
             location.country = country if country else None
         if postal_code is not None:
             location.postal_code = postal_code if postal_code else None
+        if website is not None:
+            location.website = website if website else None
         if instagram_handle is not None:
             location.instagram_handle = instagram_handle if instagram_handle else None
         if latitude is not None:

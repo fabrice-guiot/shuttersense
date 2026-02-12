@@ -36,6 +36,8 @@ export interface EventSeriesSummary {
   guid: string           // Series GUID (ser_xxx)
   title: string
   total_events: number
+  website: string | null             // Event-specific website URL
+  instagram_handle: string | null    // Event-specific Instagram handle
   deadline_date: string | null      // ISO date (YYYY-MM-DD)
   deadline_time: string | null      // HH:MM:SS or null
   deadline_entry_guid: string | null // Event GUID of deadline entry
@@ -96,6 +98,11 @@ export interface Event {
   series_guid: string | null          // Series GUID if part of series
   sequence_number: number | null
   series_total: number | null
+
+  // Event-specific social/web fields
+  website: string | null             // Event-specific website URL
+  instagram_handle: string | null    // Event-specific Instagram handle
+  instagram_url: string | null       // Full Instagram profile URL
 
   // Logistics summary (for card display indicators)
   ticket_required: boolean | null
@@ -202,6 +209,10 @@ export interface EventSeriesCreateRequest {
   location_guid?: string | null
   organizer_guid?: string | null
 
+  // Event-specific social/web fields (managed at series level)
+  website?: string | null
+  instagram_handle?: string | null
+
   start_time?: string | null          // HH:MM format
   end_time?: string | null            // HH:MM format
   is_all_day?: boolean
@@ -234,6 +245,10 @@ export interface EventUpdateRequest {
   category_guid?: string | null
   location_guid?: string | null
   organizer_guid?: string | null
+
+  // Event-specific social/web fields (series-level, synced to all events)
+  website?: string | null
+  instagram_handle?: string | null
 
   event_date?: string | null          // ISO date
   start_time?: string | null          // HH:MM format

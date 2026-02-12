@@ -602,6 +602,16 @@ class EventService:
             if travel_required is None:
                 travel_required = event.series.travel_required
 
+        # Get effective website/instagram (from event, or fall back to series)
+        website = event.website
+        instagram_handle = event.instagram_handle
+        if event.series:
+            if website is None:
+                website = event.series.website
+            if instagram_handle is None:
+                instagram_handle = event.series.instagram_handle
+        instagram_url = f"https://www.instagram.com/{instagram_handle}" if instagram_handle else None
+
         response = {
             "guid": event.guid,
             "title": event.effective_title,
@@ -617,6 +627,10 @@ class EventService:
             "series_guid": event.series.guid if event.series else None,
             "sequence_number": event.sequence_number,
             "series_total": event.series.total_events if event.series else None,
+            # Event-specific social/web fields
+            "website": website,
+            "instagram_handle": instagram_handle,
+            "instagram_url": instagram_url,
             # Logistics summary
             "ticket_required": ticket_required,
             "ticket_status": ticket_status,
@@ -682,6 +696,8 @@ class EventService:
                 "guid": event.series.guid,
                 "title": event.series.title,
                 "total_events": event.series.total_events,
+                "website": event.series.website,
+                "instagram_handle": event.series.instagram_handle,
                 "deadline_date": event.series.deadline_date.isoformat() if event.series.deadline_date else None,
                 "deadline_time": event.series.deadline_time.isoformat() if event.series.deadline_time else None,
                 "deadline_entry_guid": deadline_entry.guid if deadline_entry else None,
@@ -828,6 +844,8 @@ class EventService:
         travel_booking_date: Optional[date] = None,
         deadline_date: Optional[date] = None,
         deadline_time: Optional[Any] = None,
+        website: Optional[str] = None,
+        instagram_handle: Optional[str] = None,
         user_id: Optional[int] = None,
     ) -> Event:
         """
@@ -858,6 +876,8 @@ class EventService:
             travel_booking_date: Optional travel booking date
             deadline_date: Optional workflow deadline date
             deadline_time: Optional workflow deadline time
+            website: Optional event-specific website URL
+            instagram_handle: Optional event-specific Instagram handle
             user_id: Optional user ID for audit tracking
 
         Returns:
@@ -903,6 +923,8 @@ class EventService:
             input_timezone=input_timezone,
             status=status,
             attendance=attendance,
+            website=website,
+            instagram_handle=instagram_handle,
             ticket_required=effective_ticket_required,
             ticket_status=ticket_status,
             ticket_purchase_date=ticket_purchase_date,
@@ -957,6 +979,8 @@ class EventService:
         attendance: str = "planned",
         deadline_date: Optional[date] = None,
         deadline_time: Optional[Any] = None,
+        website: Optional[str] = None,
+        instagram_handle: Optional[str] = None,
         user_id: Optional[int] = None,
     ) -> EventSeries:
         """
@@ -1036,6 +1060,8 @@ class EventService:
             location_id=location.id if location else None,
             organizer_id=organizer.id if organizer else None,
             input_timezone=input_timezone,
+            website=website,
+            instagram_handle=instagram_handle,
             ticket_required=effective_ticket_required,
             timeoff_required=effective_timeoff_required,
             travel_required=effective_travel_required,
@@ -1067,6 +1093,9 @@ class EventService:
                 input_timezone=input_timezone,
                 status=status,
                 attendance=attendance,
+                # Event-specific social/web fields (synced from series)
+                website=website,
+                instagram_handle=instagram_handle,
                 # Logistics inherit from series (boolean flags)
                 ticket_required=None,
                 timeoff_required=None,
@@ -1146,6 +1175,13 @@ class EventService:
             else:
                 updates["organizer_id"] = None
 
+        # Check if website/instagram_handle fields are being updated
+        has_website = "website" in updates
+        has_instagram = "instagram_handle" in updates
+        social_changed = has_website or has_instagram
+        website_value = updates.get("website") if has_website else None
+        instagram_value = updates.get("instagram_handle") if has_instagram else None
+
         # Check if deadline fields are being updated
         has_deadline_date = "deadline_date" in updates
         has_deadline_time = "deadline_time" in updates
@@ -1158,6 +1194,25 @@ class EventService:
             if hasattr(series, field):
                 setattr(series, field, value)
         series.updated_at = datetime.utcnow()
+
+        # Sync website/instagram_handle across all events in the series
+        if social_changed:
+            all_events = (
+                self.db.query(Event)
+                .filter(
+                    Event.series_id == series.id,
+                    Event.is_deadline.is_(False),
+                    Event.deleted_at.is_(None)
+                )
+                .all()
+            )
+            for e in all_events:
+                if has_website:
+                    e.website = website_value
+                if has_instagram:
+                    e.instagram_handle = instagram_value
+                e.updated_at = datetime.utcnow()
+            logger.info(f"Synced website/instagram across {len(all_events)} series events")
 
         # Sync deadline across all events and create/update deadline entry
         if deadline_changed:
@@ -1236,6 +1291,9 @@ class EventService:
             "location_guid": series.location.guid if series.location else None,
             "organizer_guid": series.organizer.guid if series.organizer else None,
             "input_timezone": series.input_timezone,
+            "website": series.website,
+            "instagram_handle": series.instagram_handle,
+            "instagram_url": f"https://www.instagram.com/{series.instagram_handle}" if series.instagram_handle else None,
             "ticket_required": series.ticket_required,
             "timeoff_required": series.timeoff_required,
             "travel_required": series.travel_required,
@@ -1315,6 +1373,14 @@ class EventService:
             else:
                 organizer_id_update = None
 
+        # Handle website/instagram_handle - series-level properties
+        # These are always synced across ALL events in a series and update the series
+        has_website = "website" in updates
+        has_instagram = "instagram_handle" in updates
+        updating_social = has_website or has_instagram
+        website_update = updates.pop("website", None) if has_website else None
+        instagram_update = updates.pop("instagram_handle", None) if has_instagram else None
+
         # Handle deadline fields - series-level property
         # Deadline is stored on EventSeries, synced via deadline entry
         has_deadline_date = "deadline_date" in updates
@@ -1368,6 +1434,35 @@ class EventService:
             else:
                 # Standalone event - just update organizer
                 event.organizer_id = organizer_id_update
+
+        # Handle website/instagram_handle sync for series events
+        # These are series-level properties: update series and sync to all events
+        if updating_social:
+            if event.series:
+                series = event.series
+                if has_website:
+                    series.website = website_update
+                if has_instagram:
+                    series.instagram_handle = instagram_update
+                series.updated_at = datetime.utcnow()
+
+                # Sync to ALL events in the series (regardless of scope)
+                all_series_events = self._get_series_events_for_update(event, "all")
+                for e in all_series_events:
+                    if not e.is_deadline:
+                        if has_website:
+                            e.website = website_update
+                        if has_instagram:
+                            e.instagram_handle = instagram_update
+                        if e not in events_to_update:
+                            e.updated_at = datetime.utcnow()
+                logger.info(f"Synced website/instagram across {len(all_series_events)} series events")
+            else:
+                # Standalone event - just update directly
+                if has_website:
+                    event.website = website_update
+                if has_instagram:
+                    event.instagram_handle = instagram_update
 
         # Handle deadline sync for series events
         # Deadline is a series-level property: update series, sync to all events, and create deadline entry
