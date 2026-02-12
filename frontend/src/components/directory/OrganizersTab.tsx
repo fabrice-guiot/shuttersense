@@ -5,7 +5,7 @@
  * Part of DirectoryPage tabs for Issue #39 - Calendar Events feature (Phase 9).
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Users, Star, Globe, Ticket, Instagram } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,9 +20,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useOrganizers, useOrganizerStats } from '@/hooks/useOrganizers'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { OrganizerForm } from './OrganizerForm'
+import { DirectoryPagination } from './DirectoryPagination'
 import { GuidBadge } from '@/components/GuidBadge'
 import type { Organizer } from '@/contracts/api/organizer-api'
 import type { Category } from '@/contracts/api/category-api'
@@ -314,7 +322,7 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
     createOrganizer,
     updateOrganizer,
     deleteOrganizer
-  } = useOrganizers()
+  } = useOrganizers(false)
 
   // KPI Stats for header
   const { stats, refetch: refetchStats } = useOrganizerStats()
@@ -322,6 +330,28 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
 
   // Search state
   const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+
+  // Category filter state
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+
+  // Fetch with current filters and pagination
+  const doFetch = useCallback(() => {
+    fetchOrganizers({
+      search: appliedSearch || undefined,
+      category_guid: categoryFilter !== 'all' ? categoryFilter : undefined,
+      limit,
+      offset: (page - 1) * limit,
+    })
+  }, [fetchOrganizers, appliedSearch, categoryFilter, limit, page])
+
+  useEffect(() => {
+    doFetch()
+  }, [doFetch])
 
   // Update header stats when data changes
   useEffect(() => {
@@ -365,6 +395,7 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
         refetchStats()
       }
       handleClose()
+      doFetch()
     } catch (err: any) {
       setFormError(err.userMessage || 'Operation failed')
     }
@@ -374,6 +405,7 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
     deleteOrganizer(organizer.guid)
       .then(() => {
         refetchStats()
+        doFetch()
       })
       .catch(() => {
         // Error handled by hook
@@ -382,7 +414,8 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
 
   // Handle search
   const handleSearch = () => {
-    fetchOrganizers({ search: search || undefined })
+    setAppliedSearch(search)
+    setPage(1)
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
@@ -393,14 +426,29 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
 
   const handleClearSearch = () => {
     setSearch('')
-    fetchOrganizers({})
+    setAppliedSearch('')
+    setPage(1)
+  }
+
+  const handleCategoryFilterChange = (value: string) => {
+    setCategoryFilter(value)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+  }
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit)
+    setPage(1)
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Search + Action Row (Issue #67 - Single Title Pattern) */}
+      {/* Search + Filter + Action Row */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Input
             placeholder="Search organizers..."
             value={search}
@@ -408,11 +456,24 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
             onKeyDown={handleSearchKeyDown}
             className="max-w-sm"
           />
+          <Select value={categoryFilter} onValueChange={handleCategoryFilterChange}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat.guid} value={cat.guid}>
+                  {cat.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={handleSearch}>
             Search
           </Button>
-          {search && (
-            <Button variant="ghost" onClick={handleClearSearch}>
+          {(search || categoryFilter !== 'all') && (
+            <Button variant="ghost" onClick={() => { setSearch(''); setCategoryFilter('all'); setPage(1) }}>
               Clear
             </Button>
           )}
@@ -438,11 +499,15 @@ export function OrganizersTab({ categories }: OrganizersTabProps) {
         onDelete={handleDelete}
       />
 
-      {/* Pagination info */}
+      {/* Pagination */}
       {total > 0 && (
-        <div className="text-sm text-muted-foreground">
-          Showing {organizers.length} of {total} organizers
-        </div>
+        <DirectoryPagination
+          page={page}
+          limit={limit}
+          total={total}
+          onPageChange={handlePageChange}
+          onLimitChange={handleLimitChange}
+        />
       )}
 
       {/* Create/Edit Dialog */}

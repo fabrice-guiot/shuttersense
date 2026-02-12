@@ -5,7 +5,7 @@
  * Part of DirectoryPage tabs for Issue #39 - Calendar Events feature (Phase 11).
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Users, Globe, Instagram } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,9 +20,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { usePerformers, usePerformerStats } from '@/hooks/usePerformers'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { PerformerForm } from './PerformerForm'
+import { DirectoryPagination } from './DirectoryPagination'
 import { GuidBadge } from '@/components/GuidBadge'
 import type { Performer } from '@/contracts/api/performer-api'
 import type { Category } from '@/contracts/api/category-api'
@@ -265,7 +273,7 @@ export function PerformersTab({ categories }: PerformersTabProps) {
     createPerformer,
     updatePerformer,
     deletePerformer
-  } = usePerformers()
+  } = usePerformers(false)
 
   // KPI Stats for header
   const { stats, refetch: refetchStats } = usePerformerStats()
@@ -273,6 +281,28 @@ export function PerformersTab({ categories }: PerformersTabProps) {
 
   // Search state
   const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+
+  // Category filter state
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+
+  // Fetch with current filters and pagination
+  const doFetch = useCallback(() => {
+    fetchPerformers({
+      search: appliedSearch || undefined,
+      category_guid: categoryFilter !== 'all' ? categoryFilter : undefined,
+      limit,
+      offset: (page - 1) * limit,
+    })
+  }, [fetchPerformers, appliedSearch, categoryFilter, limit, page])
+
+  useEffect(() => {
+    doFetch()
+  }, [doFetch])
 
   // Update header stats when data changes
   useEffect(() => {
@@ -312,6 +342,7 @@ export function PerformersTab({ categories }: PerformersTabProps) {
         refetchStats()
       }
       handleClose()
+      doFetch()
     } catch (err: any) {
       setFormError(err.userMessage || 'Operation failed')
     }
@@ -321,6 +352,7 @@ export function PerformersTab({ categories }: PerformersTabProps) {
     deletePerformer(performer.guid)
       .then(() => {
         refetchStats()
+        doFetch()
       })
       .catch(() => {
         // Error handled by hook
@@ -329,7 +361,8 @@ export function PerformersTab({ categories }: PerformersTabProps) {
 
   // Handle search
   const handleSearch = () => {
-    fetchPerformers({ search: search || undefined })
+    setAppliedSearch(search)
+    setPage(1)
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
@@ -340,14 +373,29 @@ export function PerformersTab({ categories }: PerformersTabProps) {
 
   const handleClearSearch = () => {
     setSearch('')
-    fetchPerformers({})
+    setAppliedSearch('')
+    setPage(1)
+  }
+
+  const handleCategoryFilterChange = (value: string) => {
+    setCategoryFilter(value)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+  }
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit)
+    setPage(1)
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Search + Action Row (Issue #67 - Single Title Pattern) */}
+      {/* Search + Filter + Action Row */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Input
             placeholder="Search performers..."
             value={search}
@@ -355,11 +403,24 @@ export function PerformersTab({ categories }: PerformersTabProps) {
             onKeyDown={handleSearchKeyDown}
             className="max-w-sm"
           />
+          <Select value={categoryFilter} onValueChange={handleCategoryFilterChange}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat.guid} value={cat.guid}>
+                  {cat.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={handleSearch}>
             Search
           </Button>
-          {search && (
-            <Button variant="ghost" onClick={handleClearSearch}>
+          {(search || categoryFilter !== 'all') && (
+            <Button variant="ghost" onClick={() => { setSearch(''); setCategoryFilter('all'); setPage(1) }}>
               Clear
             </Button>
           )}
@@ -385,11 +446,15 @@ export function PerformersTab({ categories }: PerformersTabProps) {
         onDelete={handleDelete}
       />
 
-      {/* Pagination info */}
+      {/* Pagination */}
       {total > 0 && (
-        <div className="text-sm text-muted-foreground">
-          Showing {performers.length} of {total} performers
-        </div>
+        <DirectoryPagination
+          page={page}
+          limit={limit}
+          total={total}
+          onPageChange={handlePageChange}
+          onLimitChange={handleLimitChange}
+        />
       )}
 
       {/* Create/Edit Dialog */}
