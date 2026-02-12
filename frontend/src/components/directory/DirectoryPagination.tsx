@@ -31,7 +31,7 @@ export function DirectoryPagination({
   onLimitChange,
 }: DirectoryPaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / limit))
-  const rangeStart = (page - 1) * limit + 1
+  const rangeStart = total === 0 ? 0 : (page - 1) * limit + 1
   const rangeEnd = Math.min(page * limit, total)
 
   return (
