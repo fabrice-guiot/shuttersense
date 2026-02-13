@@ -1,0 +1,571 @@
+openapi: 3.0.3
+info:
+  title: Calendar Conflict Visualization API
+  description: |
+    New endpoints for conflict detection, event scoring, and conflict resolution.
+    All endpoints require authentication and are tenant-scoped.
+  version: 1.0.0
+
+security:
+  - TenantAuth: []
+
+paths:
+  /api/events/conflicts:
+    get:
+      summary: Detect conflicts for a date range
+      description: |
+        Returns conflict groups with scored events for the specified date range.
+        Conflicts are computed at query time from event data and team conflict rules.
+      operationId: detectConflicts
+      tags: [Conflicts]
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Start of date range (inclusive)
+          example: "2026-02-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: End of date range (inclusive)
+          example: "2026-04-30"
+      responses:
+        "200":
+          description: Conflict detection results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictDetectionResponse"
+        "401":
+          description: Unauthorized
+        "422":
+          description: Validation error (invalid dates)
+
+  /api/events/{guid}/score:
+    get:
+      summary: Get quality scores for a single event
+      description: |
+        Returns the five dimension scores and weighted composite score for a single event.
+        Uses the team's current scoring weights configuration.
+      operationId: getEventScore
+      tags: [Scoring]
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Event GUID (evt_xxx format)
+          example: "evt_01hgw2bbg0000000000000001"
+      responses:
+        "200":
+          description: Event scores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventScoreResponse"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Event not found
+
+  /api/events/conflicts/resolve:
+    post:
+      summary: Batch-resolve a conflict group
+      description: |
+        Updates attendance values for events in a conflict group.
+        Typically sets one event to "planned" and others to "skipped".
+        The group_id is for tracking purposes only (ephemeral).
+      operationId: resolveConflict
+      tags: [Conflicts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConflictResolveRequest"
+      responses:
+        "200":
+          description: Resolution applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictResolveResponse"
+        "401":
+          description: Unauthorized
+        "404":
+          description: One or more events not found
+        "422":
+          description: Validation error
+
+  /api/config/conflict_rules:
+    get:
+      summary: Get conflict rule settings
+      description: Returns the team's conflict detection configuration.
+      operationId: getConflictRules
+      tags: [Configuration]
+      responses:
+        "200":
+          description: Conflict rules configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictRulesResponse"
+        "401":
+          description: Unauthorized
+    put:
+      summary: Update conflict rule settings
+      description: Updates one or more conflict detection settings.
+      operationId: updateConflictRules
+      tags: [Configuration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConflictRulesUpdateRequest"
+      responses:
+        "200":
+          description: Updated conflict rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictRulesResponse"
+        "401":
+          description: Unauthorized
+        "422":
+          description: Validation error
+
+  /api/config/scoring_weights:
+    get:
+      summary: Get scoring weight settings
+      description: Returns the team's scoring dimension weights.
+      operationId: getScoringWeights
+      tags: [Configuration]
+      responses:
+        "200":
+          description: Scoring weights configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoringWeightsResponse"
+        "401":
+          description: Unauthorized
+    put:
+      summary: Update scoring weight settings
+      description: Updates one or more scoring dimension weights.
+      operationId: updateScoringWeights
+      tags: [Configuration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScoringWeightsUpdateRequest"
+      responses:
+        "200":
+          description: Updated scoring weights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoringWeightsResponse"
+        "401":
+          description: Unauthorized
+        "422":
+          description: Validation error
+
+components:
+  schemas:
+    # --- Enums ---
+
+    ConflictType:
+      type: string
+      enum: [time_overlap, distance, travel_buffer]
+      description: Type of conflict between two events
+
+    ConflictGroupStatus:
+      type: string
+      enum: [unresolved, partially_resolved, resolved]
+      description: |
+        Resolution status derived from member events' attendance.
+        resolved = at most 1 event has attendance planned/attended.
+
+    # --- Scoring ---
+
+    EventScores:
+      type: object
+      required:
+        - venue_quality
+        - organizer_reputation
+        - performer_lineup
+        - logistics_ease
+        - readiness
+        - composite
+      properties:
+        venue_quality:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: "Location rating * 20 (null rating → 50)"
+        organizer_reputation:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: "Organizer rating * 20 (null rating → 50)"
+        performer_lineup:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: "Confirmed performers / ceiling * 100"
+        logistics_ease:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: "Each not-required logistics item → +33.3"
+        readiness:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: "Each resolved required item → proportional share of 100"
+        composite:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Weighted average of all dimension scores
+
+    EventScoreResponse:
+      type: object
+      required: [guid, title, event_date, scores]
+      properties:
+        guid:
+          type: string
+          example: "evt_01hgw2bbg0000000000000001"
+        title:
+          type: string
+          example: "Concert X"
+        event_date:
+          type: string
+          format: date
+        scores:
+          $ref: "#/components/schemas/EventScores"
+
+    # --- Conflict Groups ---
+
+    ScoredEvent:
+      type: object
+      required:
+        - guid
+        - title
+        - event_date
+        - is_all_day
+        - performer_count
+        - attendance
+        - scores
+      properties:
+        guid:
+          type: string
+        title:
+          type: string
+        event_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          pattern: "^\\d{2}:\\d{2}(:\\d{2})?$"
+          nullable: true
+          description: "Time in HH:MM or HH:MM:SS format (24-hour)"
+          example: "14:00"
+        end_time:
+          type: string
+          pattern: "^\\d{2}:\\d{2}(:\\d{2})?$"
+          nullable: true
+          description: "Time in HH:MM or HH:MM:SS format (24-hour)"
+          example: "18:00"
+        is_all_day:
+          type: boolean
+        category:
+          type: object
+          nullable: true
+          properties:
+            guid: { type: string }
+            name: { type: string }
+            icon: { type: string }
+            color: { type: string }
+        location:
+          type: object
+          nullable: true
+          properties:
+            guid: { type: string }
+            name: { type: string }
+            city: { type: string, nullable: true }
+            country: { type: string, nullable: true }
+        organizer:
+          type: object
+          nullable: true
+          properties:
+            guid: { type: string }
+            name: { type: string }
+        performer_count:
+          type: integer
+          description: Number of confirmed performers
+        travel_required:
+          type: boolean
+          nullable: true
+        attendance:
+          type: string
+          enum: [planned, attended, skipped]
+        scores:
+          $ref: "#/components/schemas/EventScores"
+
+    ConflictEdge:
+      type: object
+      required:
+        - event_a_guid
+        - event_b_guid
+        - conflict_type
+        - detail
+      properties:
+        event_a_guid:
+          type: string
+        event_b_guid:
+          type: string
+        conflict_type:
+          $ref: "#/components/schemas/ConflictType"
+        detail:
+          type: string
+          description: Human-readable conflict description
+          example: "Both events: 14:00–18:00 on Feb 8"
+
+    ConflictGroup:
+      type: object
+      required: [group_id, status, events, edges]
+      properties:
+        group_id:
+          type: string
+          description: Ephemeral identifier (e.g., cg_1)
+          example: "cg_1"
+        status:
+          $ref: "#/components/schemas/ConflictGroupStatus"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoredEvent"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConflictEdge"
+
+    ConflictSummary:
+      type: object
+      required:
+        - total_groups
+        - unresolved
+        - partially_resolved
+        - resolved
+      properties:
+        total_groups:
+          type: integer
+        unresolved:
+          type: integer
+        partially_resolved:
+          type: integer
+        resolved:
+          type: integer
+
+    ConflictDetectionResponse:
+      type: object
+      required: [conflict_groups, summary]
+      properties:
+        conflict_groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConflictGroup"
+        summary:
+          $ref: "#/components/schemas/ConflictSummary"
+
+    # --- Conflict Resolution ---
+
+    ConflictDecision:
+      type: object
+      required: [event_guid, attendance]
+      properties:
+        event_guid:
+          type: string
+          description: Event GUID
+        attendance:
+          type: string
+          enum: [planned, skipped]
+          description: Desired attendance status
+
+    ConflictResolveRequest:
+      type: object
+      required: [group_id, decisions]
+      properties:
+        group_id:
+          type: string
+          description: Ephemeral group identifier (for tracking)
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConflictDecision"
+          minItems: 1
+
+    ConflictResolveResponse:
+      type: object
+      required: [success, updated_count]
+      properties:
+        success:
+          type: boolean
+        updated_count:
+          type: integer
+          description: Number of events whose attendance was updated
+        message:
+          type: string
+
+    # --- Configuration ---
+
+    ConflictRulesResponse:
+      type: object
+      required:
+        - distance_threshold_miles
+        - consecutive_window_days
+        - travel_buffer_days
+        - colocation_radius_miles
+        - performer_ceiling
+      properties:
+        distance_threshold_miles:
+          type: integer
+          minimum: 0
+          default: 50
+        consecutive_window_days:
+          type: integer
+          minimum: 0
+          default: 1
+        travel_buffer_days:
+          type: integer
+          minimum: 0
+          default: 3
+        colocation_radius_miles:
+          type: integer
+          minimum: 0
+          default: 10
+        performer_ceiling:
+          type: integer
+          minimum: 1
+          default: 5
+
+    ConflictRulesUpdateRequest:
+      type: object
+      properties:
+        distance_threshold_miles:
+          type: integer
+          minimum: 0
+        consecutive_window_days:
+          type: integer
+          minimum: 0
+        travel_buffer_days:
+          type: integer
+          minimum: 0
+        colocation_radius_miles:
+          type: integer
+          minimum: 0
+        performer_ceiling:
+          type: integer
+          minimum: 1
+
+    ScoringWeightsResponse:
+      type: object
+      description: |
+        Scoring dimension weights used to compute the composite score.
+
+        **Composite Formula:**
+        `composite = Σ(weight_i * score_i) / Σ(weight_i)`
+
+        Weights are normalized at runtime, so they do NOT need to sum to 100.
+        For example, weights of [20, 20, 20, 20, 20] and [1, 1, 1, 1, 1] produce
+        identical composite scores.
+
+        **Edge Cases:**
+        - If all weights are 0, composite defaults to 50 (neutral score).
+        - Partial updates (PATCH semantics via PUT) only modify specified fields;
+          unspecified weights retain their current values.
+      required:
+        - weight_venue_quality
+        - weight_organizer_reputation
+        - weight_performer_lineup
+        - weight_logistics_ease
+        - weight_readiness
+      properties:
+        weight_venue_quality:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 20
+          description: Weight for venue/location quality dimension
+        weight_organizer_reputation:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 20
+          description: Weight for organizer reputation dimension
+        weight_performer_lineup:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 20
+          description: Weight for performer lineup dimension
+        weight_logistics_ease:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 20
+          description: Weight for logistics ease dimension
+        weight_readiness:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 20
+          description: Weight for event readiness dimension
+
+    ScoringWeightsUpdateRequest:
+      type: object
+      description: |
+        Partial update for scoring weights. Only specified fields are updated;
+        omitted fields retain their current values.
+      properties:
+        weight_venue_quality:
+          type: integer
+          minimum: 0
+          maximum: 100
+        weight_organizer_reputation:
+          type: integer
+          minimum: 0
+          maximum: 100
+        weight_performer_lineup:
+          type: integer
+          minimum: 0
+          maximum: 100
+        weight_logistics_ease:
+          type: integer
+          minimum: 0
+          maximum: 100
+        weight_readiness:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+  securitySchemes:
+    TenantAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: |
+        Session-based authentication via HTTP-only cookie.
+        Users authenticate via OAuth flow (/api/auth/*) which sets the session cookie.
+        Alternatively, API tokens can be provided via Bearer header for programmatic access.

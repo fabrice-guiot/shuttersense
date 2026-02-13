@@ -29,6 +29,8 @@ Analysis tools are executed through the ShutterSense agent binary (`shuttersense
 - Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Popover, Tailwind CSS 4.x (frontend) (120-audit-trail-visibility)
 - PostgreSQL 12+ (production), SQLite (tests) — Alembic migrations with dialect-aware code (120-audit-trail-visibility)
 - Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Dialog, Tailwind CSS 4.x, Lucide React (frontend) (136-agent-setup-wizard)
+- Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend) (182-calendar-conflict-viz)
+- PostgreSQL (existing `configurations` table for new settings — no new tables or migrations for schema changes) (182-calendar-conflict-viz)
 
 ### Backend
 - **Python 3.11+** - Required for ExceptionGroup, tomllib, and modern type hinting
@@ -619,9 +621,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 182-calendar-conflict-viz: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend)
 - 136-agent-setup-wizard: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Dialog, Tailwind CSS 4.x, Lucide React (frontend)
 - 120-audit-trail-visibility: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Popover, Tailwind CSS 4.x (frontend)
-- 123-mobile-responsive-tables-tabs: Added TypeScript 5.9.3, React 18.3.1 + shadcn/ui (Table, Tabs, Select, Badge), Tailwind CSS 4.x, Radix UI primitives, class-variance-authority, Lucide React icons
 
 ### Issue #107: Cloud Storage Bucket Inventory Import (2026-01)
 
