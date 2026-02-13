@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import {
@@ -85,23 +85,21 @@ export function DateRangePicker({
       {isCustom ? (
         <div className="flex items-end gap-2">
           <div>
-            <Label htmlFor="range-from" className="text-xs text-muted-foreground mb-1 block">From</Label>
-            <Input
-              id="range-from"
-              type="date"
-              className="h-8 text-sm w-36"
-              value={customStart}
-              onChange={e => onCustomRangeChange(e.target.value, customEnd)}
+            <Label className="text-xs text-muted-foreground mb-1 block">From</Label>
+            <DatePicker
+              value={customStart || undefined}
+              onChange={v => onCustomRangeChange(v ?? '', customEnd)}
+              placeholder="Start date"
+              className="h-8 text-sm w-40"
             />
           </div>
           <div>
-            <Label htmlFor="range-to" className="text-xs text-muted-foreground mb-1 block">To</Label>
-            <Input
-              id="range-to"
-              type="date"
-              className="h-8 text-sm w-36"
-              value={customEnd}
-              onChange={e => onCustomRangeChange(customStart, e.target.value)}
+            <Label className="text-xs text-muted-foreground mb-1 block">To</Label>
+            <DatePicker
+              value={customEnd || undefined}
+              onChange={v => onCustomRangeChange(customStart, v ?? '')}
+              placeholder="End date"
+              className="h-8 text-sm w-40"
             />
           </div>
         </div>

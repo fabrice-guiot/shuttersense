@@ -10,6 +10,21 @@ import userEvent from '@testing-library/user-event'
 import { DateRangePicker } from '../DateRangePicker'
 import type { RangePreset, DateRange } from '@/hooks/useDateRange'
 
+// Mock DatePicker so we can test DateRangePicker in isolation
+vi.mock('@/components/ui/date-picker', () => ({
+  DatePicker: ({ value, onChange, placeholder }: {
+    value?: string
+    onChange?: (v: string | undefined) => void
+    placeholder?: string
+  }) => (
+    <input
+      aria-label={placeholder}
+      value={value ?? ''}
+      onChange={e => onChange?.(e.target.value || undefined)}
+    />
+  ),
+}))
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -103,17 +118,17 @@ describe('DateRangePicker', () => {
     expect(props.onPresetChange).toHaveBeenCalledWith('next_60d')
   })
 
-  test('shows date inputs when custom preset is selected', () => {
+  test('shows date pickers when custom preset is selected', () => {
     renderPicker({
       preset: 'custom',
       customStart: '2026-07-01',
       customEnd: '2026-12-31',
     })
 
-    const fromInput = screen.getByLabelText('From')
-    const toInput = screen.getByLabelText('To')
-    expect(fromInput).toHaveValue('2026-07-01')
-    expect(toInput).toHaveValue('2026-12-31')
+    const fromPicker = screen.getByLabelText('Start date')
+    const toPicker = screen.getByLabelText('End date')
+    expect(fromPicker).toHaveValue('2026-07-01')
+    expect(toPicker).toHaveValue('2026-12-31')
   })
 
   test('hides date range summary when custom preset is active', () => {
@@ -135,8 +150,8 @@ describe('DateRangePicker', () => {
       customEnd: '2026-12-31',
     })
 
-    const fromInput = screen.getByLabelText('From')
-    fireEvent.change(fromInput, { target: { value: '2026-08-01' } })
+    const fromPicker = screen.getByLabelText('Start date')
+    fireEvent.change(fromPicker, { target: { value: '2026-08-01' } })
 
     expect(props.onCustomRangeChange).toHaveBeenCalledWith('2026-08-01', '2026-12-31')
   })
@@ -148,8 +163,8 @@ describe('DateRangePicker', () => {
       customEnd: '2026-12-31',
     })
 
-    const toInput = screen.getByLabelText('To')
-    fireEvent.change(toInput, { target: { value: '2026-09-30' } })
+    const toPicker = screen.getByLabelText('End date')
+    fireEvent.change(toPicker, { target: { value: '2026-09-30' } })
 
     expect(props.onCustomRangeChange).toHaveBeenCalledWith('2026-07-01', '2026-09-30')
   })
@@ -157,5 +172,16 @@ describe('DateRangePicker', () => {
   test('renders Date Range label', () => {
     renderPicker()
     expect(screen.getByText('Date Range')).toBeInTheDocument()
+  })
+
+  test('shows From and To labels when custom preset is active', () => {
+    renderPicker({
+      preset: 'custom',
+      customStart: '2026-07-01',
+      customEnd: '2026-12-31',
+    })
+
+    expect(screen.getByText('From')).toBeInTheDocument()
+    expect(screen.getByText('To')).toBeInTheDocument()
   })
 })
