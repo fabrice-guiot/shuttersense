@@ -6,6 +6,9 @@ info:
     All endpoints require authentication and are tenant-scoped.
   version: 1.0.0
 
+security:
+  - TenantAuth: []
+
 paths:
   /api/events/conflicts:
     get:
@@ -274,12 +277,16 @@ components:
           format: date
         start_time:
           type: string
-          format: time
+          pattern: "^\\d{2}:\\d{2}(:\\d{2})?$"
           nullable: true
+          description: "Time in HH:MM or HH:MM:SS format (24-hour)"
+          example: "14:00"
         end_time:
           type: string
-          format: time
+          pattern: "^\\d{2}:\\d{2}(:\\d{2})?$"
           nullable: true
+          description: "Time in HH:MM or HH:MM:SS format (24-hour)"
+          example: "18:00"
         is_all_day:
           type: boolean
         category:
@@ -474,6 +481,20 @@ components:
 
     ScoringWeightsResponse:
       type: object
+      description: |
+        Scoring dimension weights used to compute the composite score.
+
+        **Composite Formula:**
+        `composite = Σ(weight_i * score_i) / Σ(weight_i)`
+
+        Weights are normalized at runtime, so they do NOT need to sum to 100.
+        For example, weights of [20, 20, 20, 20, 20] and [1, 1, 1, 1, 1] produce
+        identical composite scores.
+
+        **Edge Cases:**
+        - If all weights are 0, composite defaults to 50 (neutral score).
+        - Partial updates (PATCH semantics via PUT) only modify specified fields;
+          unspecified weights retain their current values.
       required:
         - weight_venue_quality
         - weight_organizer_reputation
@@ -486,29 +507,37 @@ components:
           minimum: 0
           maximum: 100
           default: 20
+          description: Weight for venue/location quality dimension
         weight_organizer_reputation:
           type: integer
           minimum: 0
           maximum: 100
           default: 20
+          description: Weight for organizer reputation dimension
         weight_performer_lineup:
           type: integer
           minimum: 0
           maximum: 100
           default: 20
+          description: Weight for performer lineup dimension
         weight_logistics_ease:
           type: integer
           minimum: 0
           maximum: 100
           default: 20
+          description: Weight for logistics ease dimension
         weight_readiness:
           type: integer
           minimum: 0
           maximum: 100
           default: 20
+          description: Weight for event readiness dimension
 
     ScoringWeightsUpdateRequest:
       type: object
+      description: |
+        Partial update for scoring weights. Only specified fields are updated;
+        omitted fields retain their current values.
       properties:
         weight_venue_quality:
           type: integer
@@ -530,3 +559,13 @@ components:
           type: integer
           minimum: 0
           maximum: 100
+
+  securitySchemes:
+    TenantAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: |
+        Session-based authentication via HTTP-only cookie.
+        Users authenticate via OAuth flow (/api/auth/*) which sets the session cookie.
+        Alternatively, API tokens can be provided via Bearer header for programmatic access.
