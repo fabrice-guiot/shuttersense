@@ -83,8 +83,14 @@ export function TimelineEventMarker({ event, onClick, className }: TimelineEvent
 
         {/* Event info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium truncate">{event.title}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-medium truncate min-w-0">{event.title}</span>
+            {event.location && (
+              <span className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground min-w-0 truncate">
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{event.location.name}</span>
+              </span>
+            )}
             <span className="text-xs text-muted-foreground shrink-0">
               {formatDate(event.event_date)}
             </span>
@@ -107,14 +113,6 @@ export function TimelineEventMarker({ event, onClick, className }: TimelineEvent
           {/* Dimension micro-bar (hidden on mobile) */}
           <DimensionMicroBar scores={event.scores} className="mt-0.5" />
         </div>
-
-        {/* Location (desktop only) */}
-        {event.location && (
-          <span className="hidden lg:flex items-center gap-1 text-xs text-muted-foreground shrink-0 max-w-[140px] truncate">
-            <MapPin className="h-3 w-3 shrink-0" />
-            {event.location.name}
-          </span>
-        )}
       </button>
 
       {/* Expanded radar chart */}
