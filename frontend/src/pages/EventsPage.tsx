@@ -495,8 +495,8 @@ export default function EventsPage() {
         open={selectedDay !== null}
         onOpenChange={(open) => !open && setSelectedDay(null)}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {selectedDay && formatDisplayDate(selectedDay.date)}
             </DialogTitle>
@@ -507,8 +507,8 @@ export default function EventsPage() {
 
           {/* Show tabs when conflicts exist, plain list otherwise */}
           {selectedDayConflicts.length > 0 ? (
-            <Tabs defaultValue="events" className="w-full">
-              <TabsList className="w-full">
+            <Tabs defaultValue="events" className="w-full min-h-0 flex flex-col flex-1">
+              <TabsList className="w-full flex-shrink-0">
                 <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
                 <TabsTrigger value="conflicts" className="flex-1 gap-1.5">
                   Conflicts
@@ -519,30 +519,26 @@ export default function EventsPage() {
                   )}
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="events">
-                <div className="max-h-[55vh] overflow-y-auto">
-                  {selectedDay && (
-                    <EventList
-                      events={selectedDay.events}
-                      onEventClick={handleEventClick}
-                    />
-                  )}
-                </div>
-              </TabsContent>
-              <TabsContent value="conflicts">
-                <div className="max-h-[55vh] overflow-y-auto">
-                  <ConflictResolutionPanel
-                    groups={selectedDayConflicts}
-                    onResolved={() => {
-                      refetchConflicts()
-                      refetch()
-                    }}
+              <TabsContent value="events" className="overflow-y-auto min-h-0">
+                {selectedDay && (
+                  <EventList
+                    events={selectedDay.events}
+                    onEventClick={handleEventClick}
                   />
-                </div>
+                )}
+              </TabsContent>
+              <TabsContent value="conflicts" className="overflow-y-auto min-h-0">
+                <ConflictResolutionPanel
+                  groups={selectedDayConflicts}
+                  onResolved={() => {
+                    refetchConflicts()
+                    refetch()
+                  }}
+                />
               </TabsContent>
             </Tabs>
           ) : (
-            <div className="max-h-[60vh] overflow-y-auto">
+            <div className="overflow-y-auto min-h-0 flex-1">
               {selectedDay && (
                 <EventList
                   events={selectedDay.events}

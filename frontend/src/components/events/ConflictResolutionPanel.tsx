@@ -126,14 +126,14 @@ function ConflictEventRow({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 p-2 rounded-md',
+        'flex items-center gap-2 p-1.5 rounded-md',
         isSkipped ? 'opacity-50 bg-muted/30' : 'bg-card',
       )}
     >
       {/* Score badge */}
       <div
         className={cn(
-          'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold',
+          'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold',
           event.scores.composite >= 70
             ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
             : event.scores.composite >= 40
@@ -169,9 +169,9 @@ function ConflictEventRow({
           size="sm"
           disabled={resolving}
           onClick={() => onConfirm(groupId, event.guid, otherGuids)}
-          className="flex-shrink-0"
+          className="flex-shrink-0 h-7 px-2 text-xs"
         >
-          <Check className="h-3.5 w-3.5 mr-1" />
+          <Check className="h-3 w-3 mr-1" />
           Confirm
         </Button>
       )}
