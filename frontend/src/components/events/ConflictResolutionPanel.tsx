@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useResolveConflict } from '@/hooks/useResolveConflict'
 import { RadarComparisonDialog } from './RadarComparisonDialog'
+import { dayOffsetLabel } from './dayOffset'
 import type {
   ConflictGroup,
   ConflictType,
@@ -42,12 +43,13 @@ const CONFLICT_TYPE_ICONS: Record<ConflictType, typeof AlertTriangle> = {
 
 interface ConflictGroupCardProps {
   group: ConflictGroup
+  referenceDate?: string
   onConfirmEvent: (groupId: string, confirmedGuid: string, otherGuids: string[]) => void
   onCompare: (group: ConflictGroup) => void
   resolving: boolean
 }
 
-function ConflictGroupCard({ group, onConfirmEvent, onCompare, resolving }: ConflictGroupCardProps) {
+function ConflictGroupCard({ group, referenceDate, onConfirmEvent, onCompare, resolving }: ConflictGroupCardProps) {
   const isResolved = group.status === 'resolved'
 
   // Get unique conflict types in this group
@@ -101,6 +103,7 @@ function ConflictGroupCard({ group, onConfirmEvent, onCompare, resolving }: Conf
           <ConflictEventRow
             key={event.guid}
             event={event}
+            referenceDate={referenceDate}
             groupId={group.group_id}
             otherGuids={group.events.filter(e => e.guid !== event.guid).map(e => e.guid)}
             isResolved={isResolved}
@@ -119,6 +122,7 @@ function ConflictGroupCard({ group, onConfirmEvent, onCompare, resolving }: Conf
 
 interface ConflictEventRowProps {
   event: ScoredEvent
+  referenceDate?: string
   groupId: string
   otherGuids: string[]
   isResolved: boolean
@@ -128,6 +132,7 @@ interface ConflictEventRowProps {
 
 function ConflictEventRow({
   event,
+  referenceDate,
   groupId,
   otherGuids,
   isResolved,
@@ -135,6 +140,7 @@ function ConflictEventRow({
   resolving,
 }: ConflictEventRowProps) {
   const isSkipped = event.attendance === 'skipped'
+  const offset = dayOffsetLabel(event.event_date, referenceDate)
 
   return (
     <div
@@ -162,6 +168,9 @@ function ConflictEventRow({
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{event.title}</div>
         <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+          {offset && (
+            <span className="font-semibold text-blue-600 dark:text-blue-400">{offset}</span>
+          )}
           {event.start_time && <span>{event.start_time.slice(0, 5)}</span>}
           {event.start_time && event.end_time && <span>-</span>}
           {event.end_time && <span>{event.end_time.slice(0, 5)}</span>}
@@ -205,6 +214,8 @@ function ConflictEventRow({
 interface ConflictResolutionPanelProps {
   /** Conflict groups to display */
   groups: ConflictGroup[]
+  /** Reference date (YYYY-MM-DD) for computing day offset labels */
+  referenceDate?: string
   /** Callback after successful resolution */
   onResolved?: () => void
   className?: string
@@ -212,6 +223,7 @@ interface ConflictResolutionPanelProps {
 
 export function ConflictResolutionPanel({
   groups,
+  referenceDate,
   onResolved,
   className,
 }: ConflictResolutionPanelProps) {
@@ -254,6 +266,7 @@ export function ConflictResolutionPanel({
           <ConflictGroupCard
             key={group.group_id}
             group={group}
+            referenceDate={referenceDate}
             onConfirmEvent={handleConfirmEvent}
             onCompare={setCompareGroup}
             resolving={loading}
@@ -265,6 +278,7 @@ export function ConflictResolutionPanel({
         open={compareGroup !== null}
         onOpenChange={(open) => !open && setCompareGroup(null)}
         group={compareGroup}
+        referenceDate={referenceDate}
         onResolved={onResolved}
       />
     </>

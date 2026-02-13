@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CHART_COLORS } from '@/components/trends/TrendChart'
 import { EventRadarChart, DIMENSIONS } from './EventRadarChart'
+import { dayOffsetLabel } from './dayOffset'
 import { useResolveConflict } from '@/hooks/useResolveConflict'
 import type { ConflictGroup, ScoredEvent } from '@/contracts/api/conflict-api'
 
@@ -30,6 +31,8 @@ interface RadarComparisonDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   group: ConflictGroup | null
+  /** Reference date (YYYY-MM-DD) for day offset labels */
+  referenceDate?: string
   onResolved?: () => void
 }
 
@@ -41,6 +44,7 @@ export function RadarComparisonDialog({
   open,
   onOpenChange,
   group,
+  referenceDate,
   onResolved,
 }: RadarComparisonDialogProps) {
   const { resolve, loading } = useResolveConflict({
@@ -141,6 +145,7 @@ export function RadarComparisonDialog({
               <EventDetailCard
                 key={event.guid}
                 event={event}
+                referenceDate={referenceDate}
                 color={CHART_COLORS[i % CHART_COLORS.length]}
                 isResolved={isResolved}
                 loading={loading}
@@ -160,18 +165,21 @@ export function RadarComparisonDialog({
 
 function EventDetailCard({
   event,
+  referenceDate,
   color,
   isResolved,
   loading,
   onConfirm,
 }: {
   event: ScoredEvent
+  referenceDate?: string
   color: string
   isResolved: boolean
   loading: boolean
   onConfirm: () => void
 }) {
   const isSkipped = event.attendance === 'skipped'
+  const offset = dayOffsetLabel(event.event_date, referenceDate)
 
   return (
     <div
@@ -187,6 +195,11 @@ function EventDetailCard({
           style={{ backgroundColor: color }}
         />
         <span className="font-medium text-sm truncate">{event.title}</span>
+        {offset && (
+          <span className="ml-auto flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400">
+            {offset}
+          </span>
+        )}
       </div>
 
       <div className="text-xs text-muted-foreground space-y-0.5">

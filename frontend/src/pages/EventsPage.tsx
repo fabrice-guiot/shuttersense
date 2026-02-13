@@ -530,6 +530,7 @@ export default function EventsPage() {
               <TabsContent value="conflicts" className="overflow-y-auto min-h-0">
                 <ConflictResolutionPanel
                   groups={selectedDayConflicts}
+                  referenceDate={selectedDay ? formatDateString(selectedDay.date) : undefined}
                   onResolved={() => {
                     refetchConflicts()
                     refetch()
