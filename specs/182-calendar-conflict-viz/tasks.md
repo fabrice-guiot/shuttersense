@@ -183,30 +183,30 @@
 
 ### Implementation for User Story 1
 
-- [ ] T014 [P] [US1] Create useConflicts hook in `frontend/src/hooks/useConflicts.ts`
+- [x] T014 [P] [US1] Create useConflicts hook in `frontend/src/hooks/useConflicts.ts`
   - Follow `useEvents()` pattern: `data`, `loading`, `error` state
   - Accepts `startDate` and `endDate` params
   - Calls `detectConflicts()` from conflicts.ts service
   - Returns `ConflictDetectionResponse` data
 
-- [ ] T015 [P] [US1] Create ConflictBadge component in `frontend/src/components/events/ConflictBadge.tsx`
+- [x] T015 [P] [US1] Create ConflictBadge component in `frontend/src/components/events/ConflictBadge.tsx`
   - Small amber badge with conflict type icon
   - Tooltip on hover: conflict type label + name of conflicting event(s)
   - Use shadcn/ui Tooltip + Lucide icon (e.g., AlertTriangle)
   - Visual states: solid amber (unresolved), dashed gray (resolved)
   - Compact layout on mobile (icon-only, tooltip on tap)
 
-- [ ] T016 [US1] Add conflict indicators to calendar cells in `frontend/src/components/events/EventCalendar.tsx`
+- [x] T016 [US1] Add conflict indicators to calendar cells in `frontend/src/components/events/EventCalendar.tsx`
   - Integrate `useConflicts` hook for visible date range
   - Map conflict groups to calendar dates
   - Show amber indicator with count of conflict groups per day
   - Resolved groups show dashed gray indicator
 
-- [ ] T017 [US1] Add conflict badge to event cards in `frontend/src/components/events/EventCard.tsx`
+- [x] T017 [US1] Add conflict badge to event cards in `frontend/src/components/events/EventCard.tsx`
   - Check if event GUID appears in any conflict group
   - Render `ConflictBadge` with conflict edge details for tooltip
 
-- [ ] T046 [P] [US1] Create ConflictBadge tests in `frontend/src/components/events/__tests__/ConflictBadge.test.tsx`
+- [x] T046 [P] [US1] Create ConflictBadge tests in `frontend/src/components/events/__tests__/ConflictBadge.test.tsx`
   - Follow `AuditTrailPopover.test.tsx` pattern: vitest + React Testing Library
   - Renders amber badge with conflict type icon for unresolved conflict
   - Renders dashed gray badge for resolved conflict

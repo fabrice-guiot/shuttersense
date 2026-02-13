@@ -13,8 +13,10 @@ import { LucideIcon, MapPin, ClockAlert, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ICON_MAP } from '@/components/settings/CategoryForm'
 import { LogisticsStatusBadges } from '@/components/events/LogisticsSection'
+import { ConflictBadge } from './ConflictBadge'
 import { formatTimeOnly, formatDate } from '@/utils/dateFormat'
 import type { Event, AttendanceStatus } from '@/contracts/api/event-api'
+import type { EventConflictInfo } from '@/hooks/useConflicts'
 
 // ============================================================================
 // Attendance Status Colors
@@ -50,6 +52,8 @@ interface EventCardProps {
   expanded?: boolean
   /** Show the event date (useful for list views where date context is not provided) */
   showDate?: boolean
+  /** Conflict info for this event (if it's involved in a conflict) */
+  conflictInfo?: EventConflictInfo
   className?: string
 }
 
@@ -59,6 +63,7 @@ export const EventCard = ({
   compact = false,
   expanded = false,
   showDate = false,
+  conflictInfo,
   className
 }: EventCardProps) => {
   // Check if this is a deadline entry
@@ -111,6 +116,17 @@ export const EventCard = ({
   const deadlineIconColor = 'text-red-500'
   const deadlineBackgroundColor = 'bg-red-500/10'
 
+  // Compact conflict badge (icon-only for calendar cells)
+  const compactConflictBadge = !isDeadline && conflictInfo && conflictInfo.conflicts.length > 0
+    ? (
+      <ConflictBadge
+        conflicts={conflictInfo.conflicts}
+        status={conflictInfo.groupStatus}
+        compact
+      />
+    )
+    : null
+
   // Compact mode - minimal display for small calendar cells
   if (compact) {
     // Expanded mode: allow wrapping up to 3 lines (for single-event days)
@@ -147,12 +163,13 @@ export const EventCard = ({
                 style={{ color: isDeadline ? undefined : event.category?.color || undefined }}
               />
             )}
-            <span className={cn('line-clamp-3', isDeadline && 'font-medium')}>
+            <span className={cn('flex-1 line-clamp-3', isDeadline && 'font-medium')}>
               {event.title}
               {locationShort && (
                 <span className="text-muted-foreground"> ({locationShort})</span>
               )}
             </span>
+            {compactConflictBadge}
           </span>
         </button>
       )
@@ -165,7 +182,7 @@ export const EventCard = ({
         aria-label={accessibleLabel}
         role="listitem"
         className={cn(
-          'w-full text-left px-1.5 py-0.5 rounded text-xs truncate transition-colors',
+          'w-full text-left px-1.5 py-0.5 rounded text-xs transition-colors',
           'hover:bg-accent/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           'border-l-2',
           isDeadline ? deadlineBorderColor : ATTENDANCE_BORDER_COLORS[event.attendance],
@@ -191,12 +208,13 @@ export const EventCard = ({
               style={{ color: isDeadline ? undefined : event.category?.color || undefined }}
             />
           )}
-          <span className={cn('truncate', isDeadline && 'font-medium')}>
+          <span className={cn('flex-1 truncate', isDeadline && 'font-medium')}>
             {event.title}
             {locationShort && (
               <span className="text-muted-foreground"> ({locationShort})</span>
             )}
           </span>
+          {compactConflictBadge}
         </span>
       </button>
     )
@@ -321,18 +339,29 @@ export const EventCard = ({
           )}
         </div>
 
-        {/* Attendance Indicator (not shown for deadline entries) */}
-        {!isDeadline && (
-          <div
-            role="img"
-            aria-label={`Attendance status: ${ATTENDANCE_LABELS[event.attendance]}`}
-            className={cn(
-              'flex-shrink-0 w-2 h-2 rounded-full mt-1.5',
-              ATTENDANCE_COLORS[event.attendance]
-            )}
-            title={`Attendance: ${ATTENDANCE_LABELS[event.attendance]}`}
-          />
-        )}
+        {/* Right-side indicators */}
+        <div className="flex flex-col items-center gap-1 flex-shrink-0 mt-1">
+          {/* Conflict Badge (not shown for deadline entries) */}
+          {!isDeadline && conflictInfo && conflictInfo.conflicts.length > 0 && (
+            <ConflictBadge
+              conflicts={conflictInfo.conflicts}
+              status={conflictInfo.groupStatus}
+            />
+          )}
+
+          {/* Attendance Indicator (not shown for deadline entries) */}
+          {!isDeadline && (
+            <div
+              role="img"
+              aria-label={`Attendance status: ${ATTENDANCE_LABELS[event.attendance]}`}
+              className={cn(
+                'w-2 h-2 rounded-full',
+                ATTENDANCE_COLORS[event.attendance]
+              )}
+              title={`Attendance: ${ATTENDANCE_LABELS[event.attendance]}`}
+            />
+          )}
+        </div>
       </div>
     </button>
   )

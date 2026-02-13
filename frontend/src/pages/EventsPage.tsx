@@ -31,6 +31,7 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
 import { useCalendar, useEvents, useEventStats, useEventMutations } from '@/hooks/useEvents'
+import { useConflicts } from '@/hooks/useConflicts'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
 import { AuditTrailSection } from '@/components/audit'
@@ -74,6 +75,32 @@ export default function EventsPage() {
     error: presetError,
     fetchEvents: fetchPresetEvents
   } = useEvents()
+
+  // Conflict detection for calendar view
+  const { data: conflictData, detectConflicts } = useConflicts()
+
+  // Fetch conflicts when calendar month changes
+  useEffect(() => {
+    if (viewMode === 'calendar') {
+      // Compute the calendar grid date range (6 weeks around current month)
+      const firstOfMonth = new Date(currentYear, currentMonth - 1, 1)
+      const startDayOfWeek = firstOfMonth.getDay()
+      const gridStart = new Date(currentYear, currentMonth - 1, 1 - startDayOfWeek)
+      const gridEnd = new Date(gridStart)
+      gridEnd.setDate(gridEnd.getDate() + 41) // 42 days total
+
+      const fmt = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+
+      detectConflicts(fmt(gridStart), fmt(gridEnd)).catch(() => {
+        // Silently ignore — conflict indicators just won't show
+      })
+    }
+  }, [viewMode, currentYear, currentMonth, detectConflicts])
 
   // Fetch preset events when preset changes
   useEffect(() => {
@@ -395,6 +422,7 @@ export default function EventsPage() {
             year={currentYear}
             month={currentMonth}
             loading={calendarLoading}
+            conflicts={conflictData}
             onPreviousMonth={goToPreviousMonth}
             onNextMonth={goToNextMonth}
             onToday={goToToday}

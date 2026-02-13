@@ -12,13 +12,16 @@
  */
 
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import { EventCard } from './EventCard'
 import { CompactCalendarCell } from './CompactCalendarCell'
 import type { Event } from '@/contracts/api/event-api'
+import type { ConflictDetectionResponse } from '@/contracts/api/conflict-api'
+import { buildConflictLookups } from '@/hooks/useConflicts'
+import type { DayConflictSummary, EventConflictInfo } from '@/hooks/useConflicts'
 
 // ============================================================================
 // Constants
@@ -260,6 +263,10 @@ interface CalendarCellProps {
   onFocus?: () => void
   tabIndex?: number
   onKeyDown?: (e: React.KeyboardEvent) => void
+  /** Conflict summary for this day */
+  dayConflicts?: DayConflictSummary
+  /** Per-event conflict lookup */
+  eventConflictMap?: Map<string, EventConflictInfo>
 }
 
 const CalendarCell = ({
@@ -270,7 +277,9 @@ const CalendarCell = ({
   isFocused = false,
   onFocus,
   tabIndex = -1,
-  onKeyDown
+  onKeyDown,
+  dayConflicts,
+  eventConflictMap,
 }: CalendarCellProps) => {
   const cellRef = useRef<HTMLDivElement>(null)
   const visibleEvents = day.events.slice(0, maxEventsToShow)
@@ -286,13 +295,21 @@ const CalendarCell = ({
     }
   }, [isFocused])
 
+  // Conflict indicator data
+  const unresolvedCount = dayConflicts?.unresolved ?? 0
+  const resolvedCount = dayConflicts?.resolved ?? 0
+  const hasConflicts = unresolvedCount > 0 || resolvedCount > 0
+
   // Format date for ARIA label
+  const conflictLabel = hasConflicts
+    ? `, ${unresolvedCount + resolvedCount} conflict${unresolvedCount + resolvedCount !== 1 ? 's' : ''}${unresolvedCount > 0 ? ` (${unresolvedCount} unresolved)` : ''}`
+    : ''
   const ariaLabel = `${day.date.toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric'
-  })}${day.events.length > 0 ? `, ${day.events.length} event${day.events.length !== 1 ? 's' : ''}` : ', no events'}${day.isToday ? ', today' : ''}`
+  })}${day.events.length > 0 ? `, ${day.events.length} event${day.events.length !== 1 ? 's' : ''}` : ', no events'}${conflictLabel}${day.isToday ? ', today' : ''}`
 
   return (
     <div
@@ -310,20 +327,39 @@ const CalendarCell = ({
         !day.isCurrentMonth && 'bg-muted/30'
       )}
     >
-      {/* Day Number */}
-      <button
-        onClick={() => onDayClick?.(day.date)}
-        tabIndex={-1}
-        aria-hidden="true"
-        className={cn(
-          'w-7 h-7 flex items-center justify-center rounded-full text-sm mb-1',
-          'hover:bg-accent transition-colors',
-          day.isToday && 'bg-primary text-primary-foreground font-semibold',
-          !day.isCurrentMonth && 'text-muted-foreground'
+      {/* Day Number + Conflict Indicator */}
+      <div className="flex items-center gap-1 mb-1">
+        <button
+          onClick={() => onDayClick?.(day.date)}
+          tabIndex={-1}
+          aria-hidden="true"
+          className={cn(
+            'w-7 h-7 flex items-center justify-center rounded-full text-sm',
+            'hover:bg-accent transition-colors',
+            day.isToday && 'bg-primary text-primary-foreground font-semibold',
+            !day.isCurrentMonth && 'text-muted-foreground'
+          )}
+        >
+          {day.date.getDate()}
+        </button>
+
+        {/* Conflict count indicator */}
+        {hasConflicts && (
+          <span
+            role="status"
+            aria-label={`${unresolvedCount + resolvedCount} conflict${unresolvedCount + resolvedCount !== 1 ? 's' : ''}`}
+            className={cn(
+              'inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium',
+              unresolvedCount > 0
+                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                : 'bg-muted text-muted-foreground border border-dashed border-muted-foreground/30',
+            )}
+          >
+            <AlertTriangle className="h-2.5 w-2.5" />
+            {unresolvedCount + resolvedCount}
+          </span>
         )}
-      >
-        {day.date.getDate()}
-      </button>
+      </div>
 
       {/* Events */}
       <div className="flex-1 space-y-0.5 overflow-hidden" role="list" aria-label="Events on this day">
@@ -334,6 +370,7 @@ const CalendarCell = ({
             onClick={onEventClick}
             compact
             expanded={isSingleEvent}
+            conflictInfo={eventConflictMap?.get(event.guid)}
           />
         ))}
 
@@ -362,6 +399,8 @@ interface EventCalendarProps {
   year: number
   month: number
   loading?: boolean
+  /** Conflict detection response for showing conflict indicators */
+  conflicts?: ConflictDetectionResponse | null
   onPreviousMonth: () => void
   onNextMonth: () => void
   onToday: () => void
@@ -375,6 +414,7 @@ export const EventCalendar = ({
   year,
   month,
   loading = false,
+  conflicts,
   onPreviousMonth,
   onNextMonth,
   onToday,
@@ -390,6 +430,12 @@ export const EventCalendar = ({
     () => generateCalendarDays(year, month, events),
     [year, month, events]
   )
+
+  // Build conflict lookup maps
+  const conflictLookups = useMemo(() => {
+    if (!conflicts) return null
+    return buildConflictLookups(conflicts)
+  }, [conflicts])
 
   // Track focused cell index for keyboard navigation
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
@@ -511,9 +557,27 @@ export const EventCalendar = ({
               onKeyDown: (e: React.KeyboardEvent) => handleKeyDown(e, index),
             }
 
+            // Conflict data for this day
+            const dayConflicts = conflictLookups?.byDate.get(day.dateString)
+
             // Render compact cell for mobile, standard cell for desktop
             if (isMobile) {
               const badges = groupEventsByCategory(day.events)
+
+              // Add conflict indicator badge for mobile
+              const hasUnresolved = (dayConflicts?.unresolved ?? 0) > 0
+              const conflictBadges = dayConflicts
+                ? [{
+                    categoryGuid: '__conflicts__',
+                    name: `${(dayConflicts.unresolved + dayConflicts.resolved)} conflict${(dayConflicts.unresolved + dayConflicts.resolved) !== 1 ? 's' : ''}`,
+                    icon: 'alert-triangle',
+                    color: hasUnresolved ? '#d97706' : null, // amber-600
+                    count: dayConflicts.unresolved + dayConflicts.resolved,
+                  }]
+                : []
+
+              const allBadges = [...badges, ...conflictBadges]
+
               return (
                 <CompactCalendarCell
                   key={day.dateString}
@@ -521,8 +585,8 @@ export const EventCalendar = ({
                   dayNumber={day.date.getDate()}
                   isCurrentMonth={day.isCurrentMonth}
                   isToday={day.isToday}
-                  badges={badges.slice(0, MAX_VISIBLE_BADGES)}
-                  overflowCount={Math.max(0, badges.length - MAX_VISIBLE_BADGES)}
+                  badges={allBadges.slice(0, MAX_VISIBLE_BADGES)}
+                  overflowCount={Math.max(0, allBadges.length - MAX_VISIBLE_BADGES)}
                   totalEventCount={day.events.length}
                   onClick={(date) => onDayClick?.(date)}
                   {...commonProps}
@@ -537,6 +601,8 @@ export const EventCalendar = ({
                 day={day}
                 onEventClick={onEventClick}
                 onDayClick={onDayClick}
+                dayConflicts={dayConflicts}
+                eventConflictMap={conflictLookups?.byEvent}
                 {...commonProps}
               />
             )
