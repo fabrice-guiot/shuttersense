@@ -225,12 +225,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] Create useResolveConflict mutation hook in `frontend/src/hooks/useResolveConflict.ts`
+- [x] T018 [P] [US2] Create useResolveConflict mutation hook in `frontend/src/hooks/useResolveConflict.ts`
   - Calls `resolveConflict()` from conflicts.ts service
   - Handles loading/error states
   - Triggers refetch of conflict data on success
 
-- [ ] T019 [US2] Create ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
+- [x] T019 [US2] Create ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
   - Renders list of conflict group cards
   - Each card shows: conflicting events with composite scores, conflict type label
   - Actions per group: "Confirm" button per event (sets it to planned, others to skipped), "Skip" button (defer)
@@ -238,12 +238,12 @@
   - Uses `useResolveConflict` hook for mutations
   - Responsive: stack conflict group cards vertically on mobile
 
-- [ ] T020 [US2] Add Conflicts tab to day detail dialog in `frontend/src/pages/EventsPage.tsx`
+- [x] T020 [US2] Add Conflicts tab to day detail dialog in `frontend/src/pages/EventsPage.tsx`
   - Show "Conflicts" tab alongside existing event list when day has conflicts
   - Tab content renders `ConflictResolutionPanel` with filtered conflict groups for that day
   - Tab badge shows unresolved conflict count
 
-- [ ] T047 [US2] Create ConflictResolutionPanel tests in `frontend/src/components/events/__tests__/ConflictResolutionPanel.test.tsx`
+- [x] T047 [US2] Create ConflictResolutionPanel tests in `frontend/src/components/events/__tests__/ConflictResolutionPanel.test.tsx`
   - Mock `resolveConflict` API via MSW (`server.use()`)
   - Renders conflict group cards with event names and composite scores
   - "Confirm Event A" button sends correct `ConflictResolveRequest` payload (A=planned, B=skipped)

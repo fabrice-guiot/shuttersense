@@ -7,7 +7,7 @@
  * Issue #39 - Calendar Events feature (Phases 4 & 5).
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -30,10 +30,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useCalendar, useEvents, useEventStats, useEventMutations } from '@/hooks/useEvents'
-import { useConflicts } from '@/hooks/useConflicts'
+import { useConflicts, buildConflictLookups } from '@/hooks/useConflicts'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
+import { ConflictResolutionPanel } from '@/components/events/ConflictResolutionPanel'
 import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest, EventPreset } from '@/contracts/api/event-api'
@@ -99,6 +101,26 @@ export default function EventsPage() {
       detectConflicts(fmt(gridStart), fmt(gridEnd)).catch(() => {
         // Silently ignore — conflict indicators just won't show
       })
+    }
+  }, [viewMode, currentYear, currentMonth, detectConflicts])
+
+  // Refetch conflicts (used after resolution)
+  const refetchConflicts = useCallback(() => {
+    if (viewMode === 'calendar') {
+      const firstOfMonth = new Date(currentYear, currentMonth - 1, 1)
+      const startDayOfWeek = firstOfMonth.getDay()
+      const gridStart = new Date(currentYear, currentMonth - 1, 1 - startDayOfWeek)
+      const gridEnd = new Date(gridStart)
+      gridEnd.setDate(gridEnd.getDate() + 41)
+
+      const fmt = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+
+      detectConflicts(fmt(gridStart), fmt(gridEnd)).catch(() => {})
     }
   }, [viewMode, currentYear, currentMonth, detectConflicts])
 
@@ -304,6 +326,19 @@ export default function EventsPage() {
     return `${y}-${m}-${day}`
   }
 
+  // Conflict groups for the selected day
+  const selectedDayConflicts = useMemo(() => {
+    if (!selectedDay || !conflictData) return []
+    const dateStr = formatDateString(selectedDay.date)
+    return conflictData.conflict_groups.filter(group =>
+      group.events.some(e => e.event_date === dateStr)
+    )
+  }, [selectedDay, conflictData])
+
+  const unresolvedConflictCount = selectedDayConflicts.filter(
+    g => g.status !== 'resolved'
+  ).length
+
   // Parse ISO date string (YYYY-MM-DD) as local date (not UTC)
   // This prevents the date from shifting when displayed in timezones west of UTC
   const parseLocalDate = (dateStr: string): Date => {
@@ -465,14 +500,53 @@ export default function EventsPage() {
               {selectedDay?.events.length} event{selectedDay?.events.length !== 1 ? 's' : ''} on this day
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto">
-            {selectedDay && (
-              <EventList
-                events={selectedDay.events}
-                onEventClick={handleEventClick}
-              />
-            )}
-          </div>
+
+          {/* Show tabs when conflicts exist, plain list otherwise */}
+          {selectedDayConflicts.length > 0 ? (
+            <Tabs defaultValue="events" className="w-full">
+              <TabsList className="w-full">
+                <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
+                <TabsTrigger value="conflicts" className="flex-1 gap-1.5">
+                  Conflicts
+                  {unresolvedConflictCount > 0 && (
+                    <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                      {unresolvedConflictCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="events">
+                <div className="max-h-[55vh] overflow-y-auto">
+                  {selectedDay && (
+                    <EventList
+                      events={selectedDay.events}
+                      onEventClick={handleEventClick}
+                    />
+                  )}
+                </div>
+              </TabsContent>
+              <TabsContent value="conflicts">
+                <div className="max-h-[55vh] overflow-y-auto">
+                  <ConflictResolutionPanel
+                    groups={selectedDayConflicts}
+                    onResolved={() => {
+                      refetchConflicts()
+                      refetch()
+                    }}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto">
+              {selectedDay && (
+                <EventList
+                  events={selectedDay.events}
+                  onEventClick={handleEventClick}
+                />
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
