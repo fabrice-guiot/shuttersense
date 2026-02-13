@@ -259,6 +259,7 @@ export default function EventsPage() {
     setCreateDialogOpen(false)
     await refetch()
     await refetchStats()
+    refetchConflicts()
   }
 
   // Handle series create submit
@@ -267,6 +268,7 @@ export default function EventsPage() {
     setCreateDialogOpen(false)
     await refetch()
     await refetchStats()
+    refetchConflicts()
   }
 
   // Handle edit click from detail dialog
@@ -293,6 +295,7 @@ export default function EventsPage() {
       setEditEvent(null)
       await refetch()
       await refetchStats()
+      refetchConflicts()
     }
   }
 
@@ -311,6 +314,7 @@ export default function EventsPage() {
       setDeleteEvent(null)
       await refetch()
       await refetchStats()
+      refetchConflicts()
     }
   }
 
