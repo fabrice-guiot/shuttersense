@@ -47,10 +47,11 @@ type ConflictFilter = 'all' | 'conflicts_only' | 'unresolved_only'
 // Helpers
 // ============================================================================
 
-/** Group events by month key (e.g. "2026-06") */
+/** Group events by month key (e.g. "2026-06"), sorted by date within each group */
 function groupByMonth(events: ScoredEvent[]): Map<string, ScoredEvent[]> {
+  const sorted = [...events].sort((a, b) => a.event_date.localeCompare(b.event_date))
   const groups = new Map<string, ScoredEvent[]>()
-  for (const event of events) {
+  for (const event of sorted) {
     const key = event.event_date.slice(0, 7) // "YYYY-MM"
     const list = groups.get(key) || []
     list.push(event)
@@ -85,6 +86,59 @@ function buildConflictedGuids(groups: ConflictGroup[]): Set<string> {
     }
   }
   return guids
+}
+
+// ============================================================================
+// Segment helpers
+// ============================================================================
+
+type EventSegment =
+  | { type: 'group'; group: ConflictGroup; events: ScoredEvent[] }
+  | { type: 'single'; event: ScoredEvent }
+
+/**
+ * Segment month events into conflict-group runs and standalone events.
+ * Consecutive events belonging to the same conflict group are bundled
+ * so the connector bar can wrap the entire group.
+ */
+function segmentByConflictGroup(
+  events: ScoredEvent[],
+  conflictGroups: ConflictGroup[],
+): EventSegment[] {
+  const segments: EventSegment[] = []
+  let currentGroupId: string | null = null
+  let currentGroupEvents: ScoredEvent[] = []
+  let currentGroup: ConflictGroup | null = null
+
+  const flush = () => {
+    if (currentGroup && currentGroupEvents.length > 0) {
+      segments.push({ type: 'group', group: currentGroup, events: currentGroupEvents })
+    }
+    currentGroupId = null
+    currentGroupEvents = []
+    currentGroup = null
+  }
+
+  for (const event of events) {
+    const group = findEventGroup(event.guid, conflictGroups)
+    const groupId = group?.group_id ?? null
+
+    if (groupId && groupId === currentGroupId) {
+      currentGroupEvents.push(event)
+    } else {
+      flush()
+      if (group) {
+        currentGroupId = group.group_id
+        currentGroup = group
+        currentGroupEvents = [event]
+      } else {
+        segments.push({ type: 'single', event })
+      }
+    }
+  }
+
+  flush()
+  return segments
 }
 
 // ============================================================================
@@ -242,34 +296,36 @@ export function TimelinePlanner({
 
               {/* Event markers with conflict connectors */}
               <div className="space-y-0.5">
-                {monthEvents.map(event => {
-                  const group = findEventGroup(event.guid, conflictGroups)
-                  // Show connector only on first event in group within this month
-                  const isFirstInGroup = group
-                    ? monthEvents.find(e => group.events.some(ge => ge.guid === e.guid))?.guid === event.guid
-                    : false
-                  const groupEventsInMonth = group
-                    ? monthEvents.filter(e => group.events.some(ge => ge.guid === e.guid))
-                    : []
-
-                  return (
-                    <div key={event.guid} className="relative">
-                      {/* Conflict connector (left margin line linking group events) */}
-                      {isFirstInGroup && group && groupEventsInMonth.length > 1 && (
-                        <ConflictConnector
-                          group={group}
-                          onClick={() => setCompareGroup(group)}
-                        />
-                      )}
-
-                      <div className={cn(
-                        group ? 'ml-5' : 'ml-0',
-                      )}>
+                {segmentByConflictGroup(monthEvents, conflictGroups).map((segment, segIdx) => {
+                  if (segment.type === 'single') {
+                    return (
+                      <div key={segment.event.guid} className="ml-5">
                         <TimelineEventMarker
-                          event={event}
-                          onClick={() => onEventClick?.(event)}
+                          event={segment.event}
+                          onClick={() => onEventClick?.(segment.event)}
                         />
                       </div>
+                    )
+                  }
+
+                  // Conflict group segment — wrapper provides positioning context
+                  // for the connector bar to span all grouped events
+                  return (
+                    <div key={`${segment.group.group_id}-${segIdx}`} className="relative">
+                      {segment.events.length > 1 && (
+                        <ConflictConnector
+                          group={segment.group}
+                          onClick={() => setCompareGroup(segment.group)}
+                        />
+                      )}
+                      {segment.events.map(event => (
+                        <div key={event.guid} className="ml-5">
+                          <TimelineEventMarker
+                            event={event}
+                            onClick={() => onEventClick?.(event)}
+                          />
+                        </div>
+                      ))}
                     </div>
                   )
                 })}

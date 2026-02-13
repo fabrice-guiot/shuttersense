@@ -535,13 +535,18 @@ class ConflictService:
             if ep.status == "confirmed"
         )
 
+        # Effective category: fall back to series category (same as EventService)
+        category = event.category
+        if not category and event.series:
+            category = event.series.category
+
         category_info = None
-        if event.category:
+        if category:
             category_info = CategoryInfo(
-                guid=event.category.guid,
-                name=event.category.name,
-                icon=event.category.icon,
-                color=event.category.color,
+                guid=category.guid,
+                name=category.name,
+                icon=category.icon,
+                color=category.color,
             )
 
         location_info = None
