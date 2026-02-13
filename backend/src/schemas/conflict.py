@@ -137,6 +137,7 @@ class ConflictDetectionResponse(BaseModel):
     """Response for GET /events/conflicts."""
 
     conflict_groups: List[ConflictGroup]
+    scored_events: List[ScoredEvent] = []
     summary: ConflictSummary
 
 

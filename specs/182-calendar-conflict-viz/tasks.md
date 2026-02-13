@@ -428,12 +428,12 @@
 
 ### Implementation for User Story 6
 
-- [ ] T035 [P] [US6] Create DimensionMicroBar in `frontend/src/components/events/DimensionMicroBar.tsx`
+- [x] T035 [P] [US6] Create DimensionMicroBar in `frontend/src/components/events/DimensionMicroBar.tsx`
   - Linearized radar segments: 5 colored segments proportional to dimension scores
   - Each segment uses a distinct color from the design system
   - Hidden on mobile viewports (per FR-045)
 
-- [ ] T036 [US6] Create TimelineEventMarker in `frontend/src/components/events/TimelineEventMarker.tsx`
+- [x] T036 [US6] Create TimelineEventMarker in `frontend/src/components/events/TimelineEventMarker.tsx`
   - Event row component showing:
     - Composite score bar (filled proportionally to 0–100 score, labeled "Score: X")
     - DimensionMicroBar below the score bar (desktop only)
@@ -441,7 +441,7 @@
   - Click to expand inline → show full `EventRadarChart`
   - Mobile: tap opens bottom sheet dialog with radar chart
 
-- [ ] T037 [US6] Create TimelinePlanner in `frontend/src/components/events/TimelinePlanner.tsx`
+- [x] T037 [US6] Create TimelinePlanner in `frontend/src/components/events/TimelinePlanner.tsx`
   - Scrollable chronological timeline grouped by month
   - Renders `TimelineEventMarker` for each event
   - Conflict connectors: vertical amber lines on left margin connecting events in same conflict group, with conflict type label
@@ -450,13 +450,13 @@
   - Click conflict connector → expand overlaid radar comparison
   - Uses `useConflicts` and date range from `useDateRange`
 
-- [ ] T038 [US6] Add Planner view mode to `frontend/src/pages/EventsPage.tsx`
+- [x] T038 [US6] Add Planner view mode to `frontend/src/pages/EventsPage.tsx`
   - Add "Planner" as a new view mode alongside Calendar and preset list views
   - Planner uses `DateRangePicker` from US5 for time window control
   - Wire `TimelinePlanner` component into the view
   - URL-synced view mode selection
 
-- [ ] T053 [P] [US6] Create DimensionMicroBar tests in `frontend/src/components/events/__tests__/DimensionMicroBar.test.tsx`
+- [x] T053 [P] [US6] Create DimensionMicroBar tests in `frontend/src/components/events/__tests__/DimensionMicroBar.test.tsx`
   - Renders 5 colored segments proportional to dimension scores
   - All scores 0 → renders empty/minimal bar
   - All scores 100 → renders full-width segments

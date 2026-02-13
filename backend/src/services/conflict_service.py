@@ -265,9 +265,17 @@ class ConflictService:
         edges.extend(self._detect_distance_conflicts(events, rules))
         edges.extend(self._detect_travel_buffer_violations(events, rules))
 
+        # Score all events for planner view
+        performer_ceiling = rules.performer_ceiling
+        all_scored = [
+            self._build_scored_event(event, self.score_event(event, weights, performer_ceiling))
+            for event in events
+        ]
+
         if not edges:
             return ConflictDetectionResponse(
                 conflict_groups=[],
+                scored_events=all_scored,
                 summary=ConflictSummary(
                     total_groups=0, unresolved=0,
                     partially_resolved=0, resolved=0,
@@ -295,6 +303,7 @@ class ConflictService:
 
         return ConflictDetectionResponse(
             conflict_groups=groups,
+            scored_events=all_scored,
             summary=ConflictSummary(
                 total_groups=len(groups),
                 unresolved=unresolved,

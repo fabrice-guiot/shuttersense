@@ -9,7 +9,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle, BarChart3 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,6 +36,7 @@ import { useConflicts, buildConflictLookups } from '@/hooks/useConflicts'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
 import { ConflictResolutionPanel } from '@/components/events/ConflictResolutionPanel'
+import { TimelinePlanner } from '@/components/events/TimelinePlanner'
 import { DateRangePicker } from '@/components/events/DateRangePicker'
 import { useDateRange } from '@/hooks/useDateRange'
 import { AuditTrailSection } from '@/components/audit'
@@ -52,11 +53,14 @@ const PRESET_LABELS: Record<EventPreset, { icon: typeof Calendar; label: string 
 const VALID_PRESETS: EventPreset[] = ['upcoming_30d', 'needs_tickets', 'needs_pto', 'needs_travel']
 
 export default function EventsPage() {
-  // URL search params for preset filtering
+  // URL search params for preset filtering and view mode
   const [searchParams, setSearchParams] = useSearchParams()
   const presetParam = searchParams.get('preset') as EventPreset | null
+  const viewParam = searchParams.get('view')
   const activePreset = presetParam && VALID_PRESETS.includes(presetParam) ? presetParam : null
-  const viewMode = activePreset ? 'list' : 'calendar'
+  const viewMode: 'calendar' | 'list' | 'planner' = viewParam === 'planner'
+    ? 'planner'
+    : activePreset ? 'list' : 'calendar'
 
   // Calendar state and navigation
   const calendar = useCalendar()
@@ -116,8 +120,8 @@ export default function EventsPage() {
     [presetEvents, visibleCount],
   )
 
-  // Conflict detection for calendar view
-  const { data: conflictData, detectConflicts } = useConflicts()
+  // Conflict detection for calendar and planner views
+  const { data: conflictData, loading: conflictLoading, detectConflicts } = useConflicts()
 
   // Fetch conflicts when calendar month changes
   useEffect(() => {
@@ -142,6 +146,13 @@ export default function EventsPage() {
     }
   }, [viewMode, currentYear, currentMonth, detectConflicts])
 
+  // Fetch conflicts for planner view (uses date range picker)
+  useEffect(() => {
+    if (viewMode === 'planner') {
+      detectConflicts(dateRange.range.startDate, dateRange.range.endDate).catch(() => {})
+    }
+  }, [viewMode, dateRange.range.startDate, dateRange.range.endDate, detectConflicts])
+
   // Refetch conflicts (used after resolution)
   const refetchConflicts = useCallback(() => {
     if (viewMode === 'calendar') {
@@ -159,8 +170,10 @@ export default function EventsPage() {
       }
 
       detectConflicts(fmt(gridStart), fmt(gridEnd)).catch(() => {})
+    } else if (viewMode === 'planner') {
+      detectConflicts(dateRange.range.startDate, dateRange.range.endDate).catch(() => {})
     }
-  }, [viewMode, currentYear, currentMonth, detectConflicts])
+  }, [viewMode, currentYear, currentMonth, dateRange.range.startDate, dateRange.range.endDate, detectConflicts])
 
   // Fetch preset events when preset or date range changes
   useEffect(() => {
@@ -183,10 +196,12 @@ export default function EventsPage() {
         start_date: dateRange.range.startDate,
         end_date: dateRange.range.endDate,
       })
+    } else if (viewMode === 'planner') {
+      await detectConflicts(dateRange.range.startDate, dateRange.range.endDate).catch(() => {})
     } else {
       await refetchCalendar()
     }
-  }, [viewMode, activePreset, dateRange.range.startDate, dateRange.range.endDate, fetchPresetEvents, refetchCalendar])
+  }, [viewMode, activePreset, dateRange.range.startDate, dateRange.range.endDate, fetchPresetEvents, detectConflicts, refetchCalendar])
 
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useEventStats()
@@ -205,6 +220,10 @@ export default function EventsPage() {
 
   const handleShowCalendar = () => {
     setSearchParams({})
+  }
+
+  const handleShowPlanner = () => {
+    setSearchParams({ view: 'planner' })
   }
 
   // Update header stats when data changes
@@ -479,7 +498,15 @@ export default function EventsPage() {
               </Button>
             )
           )}
-          {activePreset && (
+          <Button
+            variant={viewMode === 'planner' ? 'default' : 'outline'}
+            size="sm"
+            onClick={handleShowPlanner}
+          >
+            <BarChart3 className="h-4 w-4 mr-1.5" />
+            Planner
+          </Button>
+          {(activePreset || viewMode === 'planner') && (
             <Button variant="ghost" size="sm" onClick={handleShowCalendar}>
               Show Calendar
             </Button>
@@ -552,6 +579,31 @@ export default function EventsPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Planner View (Issue #182, US6) */}
+      {viewMode === 'planner' && (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <DateRangePicker
+            preset={dateRange.preset}
+            range={dateRange.range}
+            customStart={dateRange.customStart}
+            customEnd={dateRange.customEnd}
+            onPresetChange={dateRange.setPreset}
+            onCustomRangeChange={dateRange.setCustomRange}
+            className="mb-3"
+          />
+
+          <div className="overflow-y-auto flex-1 min-h-0">
+            <TimelinePlanner
+              events={conflictData?.scored_events ?? []}
+              conflicts={conflictData}
+              loading={conflictLoading}
+              categories={categories.map(c => ({ guid: c.guid, name: c.name, icon: c.icon, color: c.color }))}
+              onResolved={refetchConflicts}
+            />
+          </div>
         </div>
       )}
 

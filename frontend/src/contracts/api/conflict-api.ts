@@ -95,6 +95,7 @@ export interface ConflictSummary {
 
 export interface ConflictDetectionResponse {
   conflict_groups: ConflictGroup[]
+  scored_events: ScoredEvent[]
   summary: ConflictSummary
 }
 
