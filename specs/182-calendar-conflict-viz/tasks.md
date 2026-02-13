@@ -303,44 +303,44 @@
 
 ### Implementation for User Story 4
 
-- [ ] T025 [P] [US4] Create useConflictRules hook in `frontend/src/hooks/useConflictRules.ts`
+- [x] T025 [P] [US4] Create useConflictRules hook in `frontend/src/hooks/useConflictRules.ts`
   - Fetch via `getConflictRules()`, update via `updateConflictRules()`
   - Loading/error/success states
   - Support reset to defaults
   - On successful save: invalidate/refetch conflict data so changes take effect without page refresh (FR-050)
 
-- [ ] T026 [P] [US4] Create useScoringWeights hook in `frontend/src/hooks/useScoringWeights.ts`
+- [x] T026 [P] [US4] Create useScoringWeights hook in `frontend/src/hooks/useScoringWeights.ts`
   - Fetch via `getScoringWeights()`, update via `updateScoringWeights()`
   - Loading/error/success states
   - Support reset to defaults
   - On successful save: invalidate/refetch scoring data so changes take effect without page refresh (FR-050)
 
-- [ ] T027 [P] [US4] Create ConflictRulesSection in `frontend/src/components/settings/ConflictRulesSection.tsx`
+- [x] T027 [P] [US4] Create ConflictRulesSection in `frontend/src/components/settings/ConflictRulesSection.tsx`
   - Five numeric inputs: distance threshold (miles), consecutive window (days), travel buffer (days), co-location radius (miles), performer ceiling (count)
   - Validation: non-negative integers, performer ceiling ≥ 1
   - "Save" and "Reset Defaults" buttons
   - Uses `useConflictRules` hook
 
-- [ ] T028 [P] [US4] Create ScoringWeightsSection in `frontend/src/components/settings/ScoringWeightsSection.tsx`
+- [x] T028 [P] [US4] Create ScoringWeightsSection in `frontend/src/components/settings/ScoringWeightsSection.tsx`
   - Five numeric inputs (0–100) with proportional bars showing relative weights
   - Visual bar for each weight showing its proportion of the total
   - Weight of 0 dims the corresponding dimension label
   - "Save" and "Reset Defaults" buttons
   - Uses `useScoringWeights` hook
 
-- [ ] T029 [US4] Add Conflict Rules and Scoring Weights sections to Settings page Configuration tab
+- [x] T029 [US4] Add Conflict Rules and Scoring Weights sections to Settings page Configuration tab
   - Locate existing Configuration tab in Settings page
   - Add `ConflictRulesSection` and `ScoringWeightsSection` components
   - Ensure consistent spacing and styling with existing config sections
 
-- [ ] T049 [P] [US4] Create ConflictRulesSection tests in `frontend/src/components/settings/__tests__/ConflictRulesSection.test.tsx`
+- [x] T049 [P] [US4] Create ConflictRulesSection tests in `frontend/src/components/settings/__tests__/ConflictRulesSection.test.tsx`
   - Mock GET/PUT /api/config/conflict_rules via MSW
   - Renders 5 inputs with default values on load
   - Validation: rejects negative values, performer ceiling < 1
   - "Save" sends PUT with updated values
   - "Reset Defaults" restores factory values
 
-- [ ] T050 [P] [US4] Create ScoringWeightsSection tests in `frontend/src/components/settings/__tests__/ScoringWeightsSection.test.tsx`
+- [x] T050 [P] [US4] Create ScoringWeightsSection tests in `frontend/src/components/settings/__tests__/ScoringWeightsSection.test.tsx`
   - Mock GET/PUT /api/config/scoring_weights via MSW
   - Renders 5 inputs with default values (20 each) on load
   - Proportional bars update when weight values change
