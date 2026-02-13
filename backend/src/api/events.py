@@ -45,6 +45,7 @@ from backend.src.schemas.event import (
 )
 from backend.src.schemas.event_series import EventSeriesResponse
 from backend.src.services.event_service import EventService
+from backend.src.services.conflict_service import ConflictService
 from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError, DeadlineProtectionError
 from backend.src.schemas.performer import (
     EventPerformerCreate,
@@ -52,6 +53,12 @@ from backend.src.schemas.performer import (
     EventPerformerResponse,
     EventPerformersListResponse,
     PerformerResponse,
+)
+from backend.src.schemas.conflict import (
+    ConflictDetectionResponse,
+    EventScoreResponse,
+    ConflictResolveRequest,
+    ConflictResolveResponse,
 )
 from backend.src.utils.logging_config import get_logger
 
@@ -72,6 +79,11 @@ router = APIRouter(
 def get_event_service(db: Session = Depends(get_db)) -> EventService:
     """Create EventService instance with database session."""
     return EventService(db=db)
+
+
+def get_conflict_service(db: Session = Depends(get_db)) -> ConflictService:
+    """Create ConflictService instance with database session."""
+    return ConflictService(db=db)
 
 
 # ============================================================================
@@ -168,6 +180,133 @@ async def get_event_dashboard_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve event dashboard statistics",
+        )
+
+
+# ============================================================================
+# Conflict Detection & Scoring Endpoints (must be before /{guid})
+# ============================================================================
+
+
+@router.get(
+    "/conflicts",
+    response_model=ConflictDetectionResponse,
+    summary="Detect scheduling conflicts",
+    description="Returns conflict groups with scored events for the specified date range",
+)
+async def detect_conflicts(
+    start_date: date = Query(..., description="Start of date range (inclusive)"),
+    end_date: date = Query(..., description="End of date range (inclusive)"),
+    ctx: TenantContext = Depends(require_auth),
+    conflict_service: ConflictService = Depends(get_conflict_service),
+) -> ConflictDetectionResponse:
+    """
+    Detect conflicts for a date range.
+
+    Query Parameters:
+        start_date: Start of date range (inclusive)
+        end_date: End of date range (inclusive)
+
+    Returns:
+        ConflictDetectionResponse with conflict groups and summary
+    """
+    try:
+        if end_date < start_date:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="end_date must be >= start_date",
+            )
+
+        return conflict_service.detect_conflicts(
+            team_id=ctx.team_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error detecting conflicts: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to detect conflicts",
+        )
+
+
+@router.post(
+    "/conflicts/resolve",
+    response_model=ConflictResolveResponse,
+    summary="Resolve a conflict group",
+    description="Batch-update attendance for events in a conflict group",
+)
+async def resolve_conflict(
+    request: ConflictResolveRequest,
+    ctx: TenantContext = Depends(require_auth),
+    conflict_service: ConflictService = Depends(get_conflict_service),
+) -> ConflictResolveResponse:
+    """
+    Batch-resolve a conflict group by setting attendance on events.
+
+    Request Body:
+        group_id: Ephemeral group identifier
+        decisions: List of {event_guid, attendance} pairs
+    """
+    try:
+        decisions = [d.model_dump() for d in request.decisions]
+        updated = conflict_service.resolve_conflict(
+            team_id=ctx.team_id,
+            decisions=decisions,
+        )
+
+        return ConflictResolveResponse(
+            success=True,
+            updated_count=updated,
+            message=f"Updated {updated} event(s)",
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error resolving conflict: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve conflict",
+        )
+
+
+@router.get(
+    "/{guid}/score",
+    response_model=EventScoreResponse,
+    summary="Get event quality scores",
+    description="Returns five dimension scores and weighted composite for a single event",
+)
+async def get_event_score(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    conflict_service: ConflictService = Depends(get_conflict_service),
+) -> EventScoreResponse:
+    """
+    Get quality scores for a single event.
+
+    Path Parameters:
+        guid: Event GUID (evt_xxx format)
+    """
+    try:
+        return conflict_service.get_event_score(guid=guid, team_id=ctx.team_id)
+
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event {guid} not found",
+        )
+    except Exception as e:
+        logger.error(f"Error scoring event {guid}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to score event",
         )
 
 

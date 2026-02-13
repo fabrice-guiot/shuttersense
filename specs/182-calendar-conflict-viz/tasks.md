@@ -25,13 +25,13 @@
 
 **Purpose**: Pure utilities, type definitions, and config registration needed by all stories
 
-- [ ] T001 [P] Create haversine distance function in `backend/src/services/geo_utils.py`
+- [x] T001 [P] Create haversine distance function in `backend/src/services/geo_utils.py`
   - Pure Python, no dependencies
   - Input: two `(lat, lon)` pairs → output: distance in miles
   - Use `math.radians`, `math.sin`, `math.cos`, `math.asin`, `math.sqrt`
   - Earth radius: 3,958.8 miles
 
-- [ ] T002 [P] Create Pydantic schemas in `backend/src/schemas/conflict.py`
+- [x] T002 [P] Create Pydantic schemas in `backend/src/schemas/conflict.py`
   - Match schemas from `contracts/conflict-api.yaml`
   - `ConflictType` enum: `time_overlap`, `distance`, `travel_buffer`
   - `ConflictGroupStatus` enum: `unresolved`, `partially_resolved`, `resolved`
@@ -41,7 +41,7 @@
   - `ConflictRulesResponse`, `ConflictRulesUpdateRequest`
   - `ScoringWeightsResponse`, `ScoringWeightsUpdateRequest`
 
-- [ ] T003 [P] Create TypeScript types in `frontend/src/contracts/api/conflict-api.ts`
+- [x] T003 [P] Create TypeScript types in `frontend/src/contracts/api/conflict-api.ts`
   - Mirror all schema types from `contracts/conflict-api.yaml`
   - `ConflictType`, `ConflictGroupStatus`, `EventScores`, `ScoredEvent`
   - `ConflictEdge`, `ConflictGroup`, `ConflictSummary`, `ConflictDetectionResponse`
@@ -49,7 +49,7 @@
   - `ConflictRulesResponse`, `ConflictRulesUpdateRequest`
   - `ScoringWeightsResponse`, `ScoringWeightsUpdateRequest`
 
-- [ ] T004 Register `conflict_rules` and `scoring_weights` in `backend/src/services/config_service.py`
+- [x] T004 Register `conflict_rules` and `scoring_weights` in `backend/src/services/config_service.py`
   - Add both strings to `VALID_CATEGORIES` set
 
 ---
@@ -62,7 +62,7 @@
 
 ### Backend Services
 
-- [ ] T005 Create ConflictService in `backend/src/services/conflict_service.py`
+- [x] T005 Create ConflictService in `backend/src/services/conflict_service.py`
   - Class `ConflictService(db: Session)` — follows EventService pattern
   - Depends on: `EventService`, `ConfigService`, `geo_utils.haversine_miles()`
   - `get_conflict_rules(team_id)` → reads from ConfigService, returns defaults if missing
@@ -77,7 +77,7 @@
     - Derive group status from member events' `attendance` values
   - **Extensibility (FR-014)**: Design dimension scoring as a list of `(name, scorer_fn, weight_key)` tuples rather than hardcoded if/else blocks, so new dimensions can be added by appending to the list without restructuring the scoring loop or radar chart axes
 
-- [ ] T006 Extend seeding in `backend/src/services/seed_data_service.py`
+- [x] T006 Extend seeding in `backend/src/services/seed_data_service.py`
   - Add `DEFAULT_CONFLICT_RULES` dict (5 entries: distance_threshold_miles, consecutive_window_days, travel_buffer_days, colocation_radius_miles, performer_ceiling)
   - Add `DEFAULT_SCORING_WEIGHTS` dict (5 entries: weight_venue_quality, weight_organizer_reputation, weight_performer_lineup, weight_logistics_ease, weight_readiness)
   - Add `seed_conflict_rules(team_id, user_id)` — follow `seed_collection_ttl()` pattern, does NOT commit
@@ -87,14 +87,14 @@
 
 ### API Endpoints
 
-- [ ] T007 Add conflict detection, scoring, and resolution endpoints to `backend/src/api/events.py`
+- [x] T007 Add conflict detection, scoring, and resolution endpoints to `backend/src/api/events.py`
   - `GET /events/conflicts` → `ConflictService.detect_conflicts()` — requires `start_date` and `end_date` query params
   - `GET /events/{guid}/score` → `ConflictService.score_event()` — returns `EventScoreResponse`
   - `POST /events/conflicts/resolve` → batch-update `attendance` on events from `ConflictResolveRequest`
   - **CRITICAL**: Register `/events/conflicts` and `/events/{guid}/score` routes BEFORE `/{guid}` catch-all
   - All endpoints use `get_tenant_context` for team scoping
 
-- [ ] T008 Add conflict_rules and scoring_weights config endpoints to `backend/src/api/config.py`
+- [x] T008 Add conflict_rules and scoring_weights config endpoints to `backend/src/api/config.py`
   - `GET /config/conflict_rules` → read team's conflict rules from ConfigService
   - `PUT /config/conflict_rules` → update team's conflict rules via ConfigService
   - `GET /config/scoring_weights` → read team's scoring weights from ConfigService
@@ -103,14 +103,14 @@
 
 ### Migration & Seeding
 
-- [ ] T009 Create Alembic migration to seed conflict defaults for existing teams in `backend/migrations/versions/`
+- [x] T009 Create Alembic migration to seed conflict defaults for existing teams in `backend/migrations/versions/`
   - Follow migration `050` pattern (iterate teams, insert if missing)
   - Use `sa.sql.table()` and `sa.sql.column()` for migration compatibility
   - Seed both `conflict_rules` and `scoring_weights` for all existing teams
 
 ### Frontend API Client
 
-- [ ] T010 [P] Create API client functions in `frontend/src/services/conflicts.ts`
+- [x] T010 [P] Create API client functions in `frontend/src/services/conflicts.ts`
   - `detectConflicts(startDate, endDate)` → `GET /api/events/conflicts`
   - `getEventScore(guid)` → `GET /api/events/{guid}/score`
   - `resolveConflict(request)` → `POST /api/events/conflicts/resolve`
@@ -122,13 +122,13 @@
 
 ### Tests
 
-- [ ] T011 [P] Create haversine tests in `backend/tests/unit/test_geo_utils.py`
+- [x] T011 [P] Create haversine tests in `backend/tests/unit/test_geo_utils.py`
   - Known city pairs (e.g., NYC→LA ≈ 2,451 mi, London→Paris ≈ 213 mi)
   - Same point → 0 miles
   - Antipodal points → ~12,450 mi
   - Edge cases: equator, poles
 
-- [ ] T012 [P] Create conflict service tests in `backend/tests/unit/test_conflict_service.py`
+- [x] T012 [P] Create conflict service tests in `backend/tests/unit/test_conflict_service.py`
   - Time overlap: same day overlapping times, all-day vs timed, missing times
   - Distance conflict: events beyond threshold, within threshold, missing coordinates
   - Travel buffer violation: travel events too close in time, co-located events exempt
@@ -137,13 +137,13 @@
   - Group construction: transitive closure, status derivation
   - Exclude soft-deleted events and deadline events
 
-- [ ] T013 [P] Create seeding tests in `backend/tests/unit/test_seed_conflict.py`
+- [x] T013 [P] Create seeding tests in `backend/tests/unit/test_seed_conflict.py`
   - Idempotency: running twice produces same result
   - All 10 config entries created (5 conflict_rules + 5 scoring_weights)
   - Existing entries not overwritten
   - Does not commit (session check)
 
-- [ ] T044 [P] Create conflict endpoint integration tests in `backend/tests/integration/test_conflict_endpoints.py`
+- [x] T044 [P] Create conflict endpoint integration tests in `backend/tests/integration/test_conflict_endpoints.py`
   - Follow `test_events_api.py` pattern: use `test_client`, `test_team`, `test_db_session` fixtures
   - **GET /events/conflicts**:
     - Two overlapping events → returns 1 conflict group with `time_overlap` edge
@@ -162,7 +162,7 @@
     - Invalid event GUID in decisions → 404
     - Verify team scoping (cannot resolve other team's events)
 
-- [ ] T045 [P] Create conflict config integration tests in `backend/tests/integration/test_conflict_config_api.py`
+- [x] T045 [P] Create conflict config integration tests in `backend/tests/integration/test_conflict_config_api.py`
   - Follow `test_config_api.py` pattern: use `authenticated_client`, `test_team` fixtures
   - **GET /config/conflict_rules** → returns 5 default values after team seeding
   - **PUT /config/conflict_rules** → partial update (e.g., change only `distance_threshold_miles`), verify only that field changed

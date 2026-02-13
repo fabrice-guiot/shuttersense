@@ -32,7 +32,7 @@ from backend.src.utils.logging_config import get_logger
 logger = get_logger("services")
 
 # Valid configuration categories
-VALID_CATEGORIES = {"extensions", "cameras", "processing_methods", "event_statuses", "collection_ttl"}
+VALID_CATEGORIES = {"extensions", "cameras", "processing_methods", "event_statuses", "collection_ttl", "conflict_rules", "scoring_weights"}
 
 # Import session expiry time (1 hour)
 IMPORT_SESSION_TTL = timedelta(hours=1)
@@ -342,7 +342,9 @@ class ConfigService:
             "cameras": {},
             "processing_methods": {},
             "event_statuses": {},
-            "collection_ttl": {}
+            "collection_ttl": {},
+            "conflict_rules": {},
+            "scoring_weights": {},
         }
 
         configs = self.db.query(Configuration).filter(
@@ -350,16 +352,8 @@ class ConfigService:
         ).all()
 
         for config in configs:
-            if config.category == "extensions":
-                result["extensions"][config.key] = config.value_json
-            elif config.category == "cameras":
-                result["cameras"][config.key] = config.value_json
-            elif config.category == "processing_methods":
-                result["processing_methods"][config.key] = config.value_json
-            elif config.category == "event_statuses":
-                result["event_statuses"][config.key] = config.value_json
-            elif config.category == "collection_ttl":
-                result["collection_ttl"][config.key] = config.value_json
+            if config.category in result:
+                result[config.category][config.key] = config.value_json
 
         return result
 
