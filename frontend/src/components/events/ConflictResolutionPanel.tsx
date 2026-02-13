@@ -169,7 +169,7 @@ function ConflictEventRow({
         <div className="text-sm font-medium truncate">{event.title}</div>
         <div className="text-xs text-muted-foreground flex items-center gap-1.5">
           {offset && (
-            <span className="font-semibold text-blue-600 dark:text-blue-400">{offset}</span>
+            <span className="font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">{offset}</span>
           )}
           {event.start_time && <span>{event.start_time.slice(0, 5)}</span>}
           {event.start_time && event.end_time && <span>-</span>}

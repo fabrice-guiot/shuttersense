@@ -86,10 +86,13 @@ export function RadarComparisonDialog({
         <div className="overflow-y-auto min-h-0 flex-1 space-y-4">
           {/* Radar Chart */}
           <EventRadarChart
-            events={events.map(e => ({
-              label: e.title,
-              scores: e.scores,
-            }))}
+            events={events.map(e => {
+              const off = dayOffsetLabel(e.event_date, referenceDate)
+              return {
+                label: off ? `${e.title} (${off})` : e.title,
+                scores: e.scores,
+              }
+            })}
             height={260}
           />
 
@@ -99,11 +102,15 @@ export function RadarComparisonDialog({
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Dimension</th>
-                  {events.map((event, i) => (
-                    <th key={event.guid} className="text-right py-1.5 px-2 font-medium" style={{ color: CHART_COLORS[i % CHART_COLORS.length] }}>
-                      {event.title}
-                    </th>
-                  ))}
+                  {events.map((event, i) => {
+                    const off = dayOffsetLabel(event.event_date, referenceDate)
+                    return (
+                      <th key={event.guid} className="text-right py-1.5 px-2 font-medium" style={{ color: CHART_COLORS[i % CHART_COLORS.length] }}>
+                        {event.title}
+                        {off && <span className="ml-1 text-[10px] font-bold text-blue-600 dark:text-blue-400">{off}</span>}
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>
