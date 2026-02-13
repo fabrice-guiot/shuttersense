@@ -7,6 +7,7 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 7, US5)
  */
 
+import { format, parseISO } from 'date-fns'
 import {
   Select,
   SelectContent,
@@ -26,6 +27,15 @@ import {
   type RangePreset,
   type DateRange,
 } from '@/hooks/useDateRange'
+
+/** Format an ISO date string (YYYY-MM-DD) to localized display (e.g. "June 15th, 2026"). */
+function formatDate(iso: string): string {
+  try {
+    return format(parseISO(iso), 'PPP')
+  } catch {
+    return iso
+  }
+}
 
 // ============================================================================
 // Types
@@ -90,7 +100,7 @@ export function DateRangePicker({
               value={customStart || undefined}
               onChange={v => onCustomRangeChange(v ?? '', customEnd)}
               placeholder="Start date"
-              className="h-8 text-sm w-40"
+              className="h-8 text-sm w-40 sm:w-52"
             />
           </div>
           <div>
@@ -99,13 +109,13 @@ export function DateRangePicker({
               value={customEnd || undefined}
               onChange={v => onCustomRangeChange(customStart, v ?? '')}
               placeholder="End date"
-              className="h-8 text-sm w-40"
+              className="h-8 text-sm w-40 sm:w-52"
             />
           </div>
         </div>
       ) : (
         <span className="text-xs text-muted-foreground pb-1">
-          {range.startDate} — {range.endDate}
+          {formatDate(range.startDate)} — {formatDate(range.endDate)}
         </span>
       )}
     </div>

@@ -62,9 +62,9 @@ describe('DateRangePicker', () => {
     expect(screen.getByText('Next 30 days')).toBeInTheDocument()
   })
 
-  test('shows date range summary for non-custom preset', () => {
+  test('shows localized date range summary for non-custom preset', () => {
     renderPicker()
-    expect(screen.getByText('2026-06-15 — 2026-07-15')).toBeInTheDocument()
+    expect(screen.getByText('June 15th, 2026 — July 15th, 2026')).toBeInTheDocument()
   })
 
   test('renders all preset options when dropdown is opened', async () => {
@@ -139,8 +139,8 @@ describe('DateRangePicker', () => {
       customEnd: '2026-12-31',
     })
 
-    // Should not show the "startDate — endDate" text
-    expect(screen.queryByText(/2026-07-01 —/)).not.toBeInTheDocument()
+    // Should not show the localized date range summary
+    expect(screen.queryByText(/July 1st, 2026 —/)).not.toBeInTheDocument()
   })
 
   test('calls onCustomRangeChange when start date changes', () => {
