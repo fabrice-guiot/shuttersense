@@ -2,15 +2,18 @@
  * ConflictResolutionPanel Component
  *
  * Displays conflict groups as cards with event details and resolution actions.
- * Users can confirm one event (marking others as skipped) or defer the decision.
+ * Users can confirm one event (marking others as skipped), compare events
+ * via radar charts, or defer the decision.
  *
- * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 4, US2)
+ * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 4, US2; Phase 5, US3)
  */
 
-import { AlertTriangle, Check, Clock, MapPin, Plane, SkipForward } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, BarChart3, Check, Clock, MapPin, Plane, SkipForward } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useResolveConflict } from '@/hooks/useResolveConflict'
+import { RadarComparisonDialog } from './RadarComparisonDialog'
 import type {
   ConflictGroup,
   ConflictType,
@@ -40,10 +43,11 @@ const CONFLICT_TYPE_ICONS: Record<ConflictType, typeof AlertTriangle> = {
 interface ConflictGroupCardProps {
   group: ConflictGroup
   onConfirmEvent: (groupId: string, confirmedGuid: string, otherGuids: string[]) => void
+  onCompare: (group: ConflictGroup) => void
   resolving: boolean
 }
 
-function ConflictGroupCard({ group, onConfirmEvent, resolving }: ConflictGroupCardProps) {
+function ConflictGroupCard({ group, onConfirmEvent, onCompare, resolving }: ConflictGroupCardProps) {
   const isResolved = group.status === 'resolved'
 
   // Get unique conflict types in this group
@@ -58,7 +62,7 @@ function ConflictGroupCard({ group, onConfirmEvent, resolving }: ConflictGroupCa
           : 'border-amber-500/30 bg-amber-500/5',
       )}
     >
-      {/* Conflict type labels */}
+      {/* Conflict type labels + Compare button */}
       <div className="flex items-center gap-2 flex-wrap">
         {conflictTypes.map(type => {
           const Icon = CONFLICT_TYPE_ICONS[type]
@@ -80,6 +84,15 @@ function ConflictGroupCard({ group, onConfirmEvent, resolving }: ConflictGroupCa
         {isResolved && (
           <span className="text-xs text-muted-foreground italic">Resolved</span>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-6 px-2 text-xs text-muted-foreground"
+          onClick={() => onCompare(group)}
+        >
+          <BarChart3 className="h-3 w-3 mr-1" />
+          Compare
+        </Button>
       </div>
 
       {/* Event cards with scores */}
@@ -203,6 +216,7 @@ export function ConflictResolutionPanel({
   className,
 }: ConflictResolutionPanelProps) {
   const { resolve, loading } = useResolveConflict({ onSuccess: onResolved })
+  const [compareGroup, setCompareGroup] = useState<ConflictGroup | null>(null)
 
   const handleConfirmEvent = async (
     groupId: string,
@@ -234,15 +248,25 @@ export function ConflictResolutionPanel({
   }
 
   return (
-    <div className={cn('space-y-3', className)}>
-      {groups.map(group => (
-        <ConflictGroupCard
-          key={group.group_id}
-          group={group}
-          onConfirmEvent={handleConfirmEvent}
-          resolving={loading}
-        />
-      ))}
-    </div>
+    <>
+      <div className={cn('space-y-3', className)}>
+        {groups.map(group => (
+          <ConflictGroupCard
+            key={group.group_id}
+            group={group}
+            onConfirmEvent={handleConfirmEvent}
+            onCompare={setCompareGroup}
+            resolving={loading}
+          />
+        ))}
+      </div>
+
+      <RadarComparisonDialog
+        open={compareGroup !== null}
+        onOpenChange={(open) => !open && setCompareGroup(null)}
+        group={compareGroup}
+        onResolved={onResolved}
+      />
+    </>
   )
 }

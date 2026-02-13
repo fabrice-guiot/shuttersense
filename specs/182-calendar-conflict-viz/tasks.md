@@ -263,17 +263,17 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [P] [US3] Create useEventScore hook in `frontend/src/hooks/useEventScore.ts`
+- [x] T021 [P] [US3] Create useEventScore hook in `frontend/src/hooks/useEventScore.ts`
   - Fetches scores for a single event via `getEventScore()` from conflicts.ts
   - Returns `EventScoreResponse` with loading/error states
 
-- [ ] T022 [US3] Create EventRadarChart in `frontend/src/components/events/EventRadarChart.tsx`
+- [x] T022 [US3] Create EventRadarChart in `frontend/src/components/events/EventRadarChart.tsx`
   - Recharts `RadarChart` wrapper for a single event
   - Five axes: Venue Quality, Organizer Reputation, Performer Lineup, Logistics Ease, Readiness
   - Scale 0–100, uses `CHART_COLORS` CSS variables for dark theme compliance
   - Supports overlaying multiple events (distinct colors per polygon)
 
-- [ ] T023 [US3] Create RadarComparisonDialog in `frontend/src/components/events/RadarComparisonDialog.tsx`
+- [x] T023 [US3] Create RadarComparisonDialog in `frontend/src/components/events/RadarComparisonDialog.tsx`
   - Dialog (shadcn/ui Dialog or Radix UI) with:
     - Overlaid radar chart (one polygon per event, distinct colors)
     - Dimension breakdown table with exact numerical scores per event
@@ -281,11 +281,11 @@
   - "Confirm" button per event (triggers same resolve logic as US2)
   - Responsive: chart stacks above table on mobile
 
-- [ ] T024 [US3] Add "Compare" button to ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
+- [x] T024 [US3] Add "Compare" button to ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
   - Button opens `RadarComparisonDialog` for the selected conflict group
   - Pass conflict group events to the dialog
 
-- [ ] T048 [P] [US3] Create RadarComparisonDialog tests in `frontend/src/components/events/__tests__/RadarComparisonDialog.test.tsx`
+- [x] T048 [P] [US3] Create RadarComparisonDialog tests in `frontend/src/components/events/__tests__/RadarComparisonDialog.test.tsx`
   - Dialog renders when open prop is true, hidden when false
   - Displays dimension breakdown table with correct numerical scores
   - Shows side-by-side event details (location, organizer, performer count)
