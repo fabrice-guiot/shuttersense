@@ -359,7 +359,7 @@
 
 ### Implementation for User Story 5
 
-- [ ] T030 [US5] Create useDateRange hook in `frontend/src/hooks/useDateRange.ts`
+- [x] T030 [US5] Create useDateRange hook in `frontend/src/hooks/useDateRange.ts`
   - State management for selected range type and computed start/end dates
   - URL sync via `useSearchParams` (persist range selection across navigation)
   - Rolling presets: Next 30 / 60 / 90 days (from today)
@@ -368,7 +368,7 @@
   - Default: "Next 30 days"
   - No "All" option
 
-- [ ] T031 [US5] Create DateRangePicker in `frontend/src/components/events/DateRangePicker.tsx`
+- [x] T031 [US5] Create DateRangePicker in `frontend/src/components/events/DateRangePicker.tsx`
   - Dropdown/select with preset options grouped: Rolling (30/60/90 days), Monthly (1/2/3/6 months), Custom
   - Custom range: date input fields for start and end dates
   - Uses `useDateRange` hook
@@ -376,26 +376,26 @@
   - Compact layout for inline use above list views
   - Responsive: compact mobile layout (full-width dropdown, stacked custom date inputs)
 
-- [ ] T032 [US5] Modify useEvents hook to accept start_date/end_date parameters
+- [x] T032 [US5] Modify useEvents hook to accept start_date/end_date parameters
   - Locate existing `useEvents()` hook
   - Add optional `start_date` and `end_date` parameters
   - Pass these to the backend events API as query params
   - Existing preset behavior unchanged when range params not provided
 
-- [ ] T033 [US5] Wire DateRangePicker into all preset list views in `frontend/src/pages/EventsPage.tsx`
+- [x] T033 [US5] Wire DateRangePicker into all preset list views in `frontend/src/pages/EventsPage.tsx`
   - Show `DateRangePicker` above list when any non-calendar view is active (Upcoming, Needs Tickets, Needs PTO, Needs Travel)
   - Pass selected date range to `useEvents()` hook
   - Hide picker when calendar view is active
   - Restore last-selected range when switching back from calendar to list
 
-- [ ] T034 [US5] Add infinite scroll to event list rendering in `frontend/src/pages/EventsPage.tsx`
+- [x] T034 [US5] Add infinite scroll to event list rendering in `frontend/src/pages/EventsPage.tsx`
   - Replace unbounded list rendering with infinite scroll
   - Load events in pages, append on scroll
   - Bounded by date range (finite result set)
   - Show loading indicator during page fetch
   - Empty state when range returns zero events
 
-- [ ] T051 [P] [US5] Create useDateRange hook tests in `frontend/src/hooks/useDateRange.test.ts`
+- [x] T051 [P] [US5] Create useDateRange hook tests in `frontend/src/hooks/__tests__/useDateRange.test.tsx`
   - Follow `useRetention.test.ts` pattern: `renderHook()` + `waitFor()`
   - "Next 30 days": start = today, end = today + 30
   - "Next 60 days": start = today, end = today + 60
@@ -407,7 +407,7 @@
   - Default selection is "Next 30 days"
   - URL sync: range persisted to and restored from search params
 
-- [ ] T052 [P] [US5] Create DateRangePicker tests in `frontend/src/components/events/__tests__/DateRangePicker.test.tsx`
+- [x] T052 [P] [US5] Create DateRangePicker tests in `frontend/src/components/events/__tests__/DateRangePicker.test.tsx`
   - Renders all preset options (3 rolling + 4 monthly + custom)
   - No "All" option present in dropdown
   - Selecting a preset updates the displayed label

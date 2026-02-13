@@ -7,7 +7,7 @@
  * Issue #39 - Calendar Events feature (Phases 4 & 5).
  */
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -36,6 +36,8 @@ import { useConflicts, buildConflictLookups } from '@/hooks/useConflicts'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
 import { ConflictResolutionPanel } from '@/components/events/ConflictResolutionPanel'
+import { DateRangePicker } from '@/components/events/DateRangePicker'
+import { useDateRange } from '@/hooks/useDateRange'
 import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest, EventPreset } from '@/contracts/api/event-api'
@@ -77,6 +79,42 @@ export default function EventsPage() {
     error: presetError,
     fetchEvents: fetchPresetEvents
   } = useEvents()
+
+  // Date range for list views (Issue #182, US5)
+  const dateRange = useDateRange('range')
+
+  // Progressive rendering: show events in chunks (infinite scroll)
+  const PAGE_SIZE = 20
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Reset visible count when events or preset changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [presetEvents, activePreset])
+
+  // IntersectionObserver for progressive rendering
+  useEffect(() => {
+    if (viewMode !== 'list') return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting && visibleCount < presetEvents.length) {
+          setVisibleCount(prev => Math.min(prev + PAGE_SIZE, presetEvents.length))
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [viewMode, visibleCount, presetEvents.length])
+
+  const visiblePresetEvents = useMemo(
+    () => presetEvents.slice(0, visibleCount),
+    [presetEvents, visibleCount],
+  )
 
   // Conflict detection for calendar view
   const { data: conflictData, detectConflicts } = useConflicts()
@@ -124,23 +162,31 @@ export default function EventsPage() {
     }
   }, [viewMode, currentYear, currentMonth, detectConflicts])
 
-  // Fetch preset events when preset changes
+  // Fetch preset events when preset or date range changes
   useEffect(() => {
     if (activePreset) {
-      fetchPresetEvents({ preset: activePreset })
+      fetchPresetEvents({
+        preset: activePreset,
+        start_date: dateRange.range.startDate,
+        end_date: dateRange.range.endDate,
+      })
     }
-  }, [activePreset, fetchPresetEvents])
+  }, [activePreset, dateRange.range.startDate, dateRange.range.endDate, fetchPresetEvents])
 
   // Error from whichever view is active
   const error = viewMode === 'list' ? presetError : calendarError
 
   const refetch = useCallback(async () => {
     if (viewMode === 'list' && activePreset) {
-      await fetchPresetEvents({ preset: activePreset })
+      await fetchPresetEvents({
+        preset: activePreset,
+        start_date: dateRange.range.startDate,
+        end_date: dateRange.range.endDate,
+      })
     } else {
       await refetchCalendar()
     }
-  }, [viewMode, activePreset, fetchPresetEvents, refetchCalendar])
+  }, [viewMode, activePreset, dateRange.range.startDate, dateRange.range.endDate, fetchPresetEvents, refetchCalendar])
 
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useEventStats()
@@ -474,18 +520,37 @@ export default function EventsPage() {
 
       {/* Preset List View */}
       {viewMode === 'list' && (
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* Date Range Picker (Issue #182, US5) */}
+          <DateRangePicker
+            preset={dateRange.preset}
+            range={dateRange.range}
+            customStart={dateRange.customStart}
+            customEnd={dateRange.customEnd}
+            onPresetChange={dateRange.setPreset}
+            onCustomRangeChange={dateRange.setCustomRange}
+            className="mb-3"
+          />
+
           {presetLoading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : (
-            <EventList
-              events={presetEvents}
-              onEventClick={handleEventClick}
-              emptyMessage="No events match this filter"
-              showDate
-            />
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <EventList
+                events={visiblePresetEvents}
+                onEventClick={handleEventClick}
+                emptyMessage="No events match this filter in the selected date range"
+                showDate
+              />
+              {/* Infinite scroll sentinel */}
+              {visibleCount < presetEvents.length && (
+                <div ref={sentinelRef} className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
