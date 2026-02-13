@@ -415,7 +415,13 @@ class EventService:
             "needs_travel_count": needs_travel or 0,
         }
 
-    def list_by_preset(self, team_id: int, preset: str) -> List[Event]:
+    def list_by_preset(
+        self,
+        team_id: int,
+        preset: str,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> List[Event]:
         """
         List events matching a dashboard preset filter.
 
@@ -423,9 +429,14 @@ class EventService:
         - Logistics presets: ALL future/confirmed events where the requirement
           is set and status is not the final fulfilled value.
 
+        When start_date/end_date are provided, they override the preset's
+        default date window while preserving the preset's semantic filters.
+
         Args:
             team_id: Team ID for tenant isolation
             preset: One of 'upcoming_30d', 'needs_tickets', 'needs_pto', 'needs_travel'
+            start_date: Optional start of date range (overrides preset default)
+            end_date: Optional end of date range (overrides preset default)
 
         Returns:
             List of Event instances ordered by date ASC
@@ -440,11 +451,12 @@ class EventService:
             )
 
         today = date.today()
+        effective_start = start_date if start_date is not None else today
 
-        # Common filters: future events, non-deleted, non-deadline, not skipped
+        # Common filters: non-deleted, non-deadline, not skipped, future/confirmed
         common_filters = [
             Event.team_id == team_id,
-            Event.event_date >= today,
+            Event.event_date >= effective_start,
             Event.status.in_(["future", "confirmed"]),
             Event.attendance != "skipped",
             Event.is_deadline.is_(False),
@@ -462,10 +474,12 @@ class EventService:
             .filter(*common_filters)
         )
 
-        if preset == "upcoming_30d":
-            # Only upcoming_30d has the 30-day window
-            end_date = today + timedelta(days=30)
+        # Apply date window: use explicit end_date if provided, else preset default
+        if end_date is not None:
             query = query.filter(Event.event_date <= end_date)
+        elif preset == "upcoming_30d":
+            # Fallback: original 30-day window when no explicit end_date
+            query = query.filter(Event.event_date <= today + timedelta(days=30))
         elif preset == "needs_tickets":
             effective_ticket_required = case(
                 (Event.ticket_required.isnot(None), Event.ticket_required),

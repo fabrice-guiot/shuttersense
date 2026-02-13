@@ -2515,14 +2515,21 @@ class TestEventPresetFiltering:
         assert data[0]["title"] == "Needs Travel Event"
 
     @pytest.mark.usefixtures("preset_events")
-    def test_preset_ignores_other_params(self, test_client):
-        """Test that preset takes precedence over other query params."""
-        # Pass start_date/end_date that would normally restrict results,
-        # but preset should override them
+    def test_preset_respects_date_range(self, test_client):
+        """Test that explicit date range narrows preset results."""
+        # Far-future date range: no events should match
         response = test_client.get(
             "/api/events?preset=upcoming_30d&start_date=2099-01-01&end_date=2099-12-31"
         )
         assert response.status_code == 200
         data = response.json()
-        # Preset should still return events in next 30 days, ignoring date params
+        assert len(data) == 0
+
+    @pytest.mark.usefixtures("preset_events")
+    def test_preset_without_dates_uses_defaults(self, test_client):
+        """Test that preset without explicit dates uses its default window."""
+        response = test_client.get("/api/events?preset=upcoming_30d")
+        assert response.status_code == 200
+        data = response.json()
+        # Default: next 30 days from today → e0, e1, e2, e3
         assert len(data) == 4

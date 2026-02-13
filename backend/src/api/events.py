@@ -348,7 +348,7 @@ async def list_events(
     ),
     preset: Optional[EventPreset] = Query(
         default=None,
-        description="Dashboard preset filter. When provided, other date/status params are ignored.",
+        description="Dashboard preset filter. When provided, start_date/end_date narrow the preset window.",
     ),
     event_service: EventService = Depends(get_event_service),
 ) -> List[EventResponse]:
@@ -365,7 +365,7 @@ async def list_events(
         status: Filter by event status (future, confirmed, completed, cancelled)
         attendance: Filter by attendance (planned, attended, skipped)
         include_deleted: Include soft-deleted events
-        preset: Dashboard preset filter (overrides other params when set)
+        preset: Dashboard preset filter (start_date/end_date narrow the window)
 
     Returns:
         List of events ordered by date
@@ -380,6 +380,8 @@ async def list_events(
             events = event_service.list_by_preset(
                 team_id=ctx.team_id,
                 preset=preset.value,
+                start_date=start_date,
+                end_date=end_date,
             )
         else:
             events = event_service.list(
