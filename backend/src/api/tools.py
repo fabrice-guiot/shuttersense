@@ -424,8 +424,12 @@ def list_jobs(
         collection = collection_service.get_by_guid(
             collection_guid, team_id=ctx.team_id
         )
-        if collection:
-            collection_id = collection.id
+        if not collection:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection not found: {collection_guid}"
+            )
+        collection_id = collection.id
 
     # Resolve agent GUID to internal ID if provided
     agent_id = None
@@ -441,8 +445,12 @@ def list_jobs(
             Agent.uuid == agent_uuid,
             Agent.team_id == ctx.team_id
         ).first()
-        if agent:
-            agent_id = agent.id
+        if not agent:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent not found: {agent_guid}"
+            )
+        agent_id = agent.id
 
     jobs, total = service.list_jobs(
         statuses=job_statuses,
@@ -728,7 +736,11 @@ async def job_progress_websocket(
     # Verify the job belongs to the user's team
     db = SessionLocal()
     try:
-        job_uuid = GuidService.parse_identifier(job_id, expected_prefix="job")
+        try:
+            job_uuid = GuidService.parse_identifier(job_id, expected_prefix="job")
+        except ValueError:
+            await websocket.close(code=4003, reason="Invalid job id")
+            return
         job = db.query(Job).filter(
             Job.uuid == job_uuid, Job.team_id == ctx.team_id
         ).first()
