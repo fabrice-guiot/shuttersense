@@ -29,6 +29,7 @@ import {
   ServerCrash,
   Clock,
   RefreshCw,
+  AlertTriangle,
   type LucideIcon
 } from 'lucide-react'
 
@@ -413,6 +414,7 @@ export type NotificationCategory =
   | 'inflection_point'
   | 'agent_status'
   | 'deadline'
+  | 'conflict'
   | 'retry_warning'
 
 /**
@@ -423,6 +425,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> 
   inflection_point: 'Inflection Points',
   agent_status: 'Agent Status',
   deadline: 'Deadlines',
+  conflict: 'Scheduling Conflicts',
   retry_warning: 'Retry Warnings'
 }
 
@@ -434,6 +437,7 @@ export const NOTIFICATION_CATEGORY_ICONS: Record<NotificationCategory, LucideIco
   inflection_point: TrendingUp,
   agent_status: ServerCrash,
   deadline: Clock,
+  conflict: AlertTriangle,
   retry_warning: RefreshCw
 }
 
@@ -445,6 +449,7 @@ export const NOTIFICATION_CATEGORY_DESCRIPTIONS: Record<NotificationCategory, st
   inflection_point: 'When analysis detects changes in a collection',
   agent_status: 'When agent pool goes offline, errors, or recovers',
   deadline: 'Reminders before event deadlines approach',
+  conflict: 'When new scheduling conflicts are detected between events',
   retry_warning: 'When a job reaches its final retry attempt'
 }
 
@@ -459,6 +464,7 @@ export const NOTIFICATION_CATEGORY_BADGE_VARIANT: Record<
   inflection_point: 'secondary',
   agent_status: 'warning',
   deadline: 'secondary',
+  conflict: 'warning',
   retry_warning: 'muted'
 }
 

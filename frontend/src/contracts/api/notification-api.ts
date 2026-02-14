@@ -62,6 +62,7 @@ export interface NotificationPreferencesResponse {
   inflection_points: boolean
   agent_status: boolean
   deadline: boolean
+  conflict: boolean
   retry_warning: boolean
   deadline_days_before: number
   timezone: string
@@ -77,6 +78,7 @@ export interface NotificationPreferencesUpdateRequest {
   inflection_points?: boolean
   agent_status?: boolean
   deadline?: boolean
+  conflict?: boolean
   retry_warning?: boolean
   deadline_days_before?: number
   timezone?: string
