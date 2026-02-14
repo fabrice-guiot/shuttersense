@@ -227,7 +227,7 @@ components:
           type: number
           minimum: 0
           maximum: 100
-          description: "Each not-required logistics item → +33.3"
+          description: "Cumulative logistics commitment: ticket (max 50) + PTO (max 25) + travel (max 25)"
         readiness:
           type: number
           minimum: 0
