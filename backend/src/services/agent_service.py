@@ -1105,7 +1105,7 @@ class AgentService:
             Job.team_id == team_id,
             Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING]),
             Job.agent_id.isnot(None)
-        ).subquery()
+        ).scalar_subquery()
 
         idle_count = self.db.query(func.count(Agent.id)).filter(
             Agent.team_id == team_id,
