@@ -141,10 +141,17 @@ class ConflictService:
 
     @staticmethod
     def _score_logistics_ease(event: Event, **kwargs) -> float:
-        """Each not-required logistics item → +33.3."""
+        """Each not-required logistics item → proportional share of 100.
+
+        Only known True/False values are counted; None values are ignored
+        as neutral/unknown. Returns 0.0 if all fields are None.
+        """
         items = [event.travel_required, event.timeoff_required, event.ticket_required]
-        easy_count = sum(1 for item in items if not item)  # False or None → easy
-        return (easy_count / 3) * 100
+        known_items = [item for item in items if item is not None]
+        if not known_items:
+            return 0.0  # No known logistics requirements
+        easy_count = sum(1 for item in known_items if item is False)
+        return (easy_count / len(known_items)) * 100
 
     @staticmethod
     def _score_readiness(event: Event, **kwargs) -> float:
@@ -665,9 +672,25 @@ class ConflictService:
         Raises:
             NotFoundError: If any event not found
         """
+        # Allowed attendance values from AttendanceStatus enum
+        ALLOWED_ATTENDANCE = {"planned", "attended", "skipped"}
+
         updated = 0
         for decision in decisions:
-            event_guid = decision["event_guid"]
+            # Safely extract and validate decision fields
+            event_guid = decision.get("event_guid")
+            attendance = decision.get("attendance")
+
+            if not event_guid:
+                raise ValidationError("Decision missing required 'event_guid' field")
+            if not attendance:
+                raise ValidationError("Decision missing required 'attendance' field")
+            if attendance not in ALLOWED_ATTENDANCE:
+                raise ValidationError(
+                    f"Invalid attendance value '{attendance}'. "
+                    f"Must be one of: {', '.join(sorted(ALLOWED_ATTENDANCE))}"
+                )
+
             if not GuidService.validate_guid(event_guid, "evt"):
                 raise NotFoundError("Event", event_guid)
             try:
@@ -684,8 +707,8 @@ class ConflictService:
             if not event:
                 raise NotFoundError("Event", event_guid)
 
-            if event.attendance != decision["attendance"]:
-                event.attendance = decision["attendance"]
+            if event.attendance != attendance:
+                event.attendance = attendance
                 event.updated_by_user_id = user_id
                 updated += 1
 

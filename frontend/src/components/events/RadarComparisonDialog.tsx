@@ -140,7 +140,7 @@ export function RadarComparisonDialog({
                   <td className="py-1.5 px-2">Composite</td>
                   {events.map(event => (
                     <td key={event.guid} className="text-right py-1.5 px-2 tabular-nums">
-                      {Math.round(event.scores.composite)}
+                      {Math.round(event.scores?.composite ?? 0)}
                     </td>
                   ))}
                 </tr>

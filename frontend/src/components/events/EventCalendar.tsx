@@ -349,7 +349,7 @@ const CalendarCell = ({
         {/* Conflict count indicator */}
         {hasConflicts && (
           <span
-            role="status"
+            role="img"
             aria-label={`${unresolvedCount + resolvedCount} conflict${unresolvedCount + resolvedCount !== 1 ? 's' : ''}`}
             className={cn(
               'inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium',

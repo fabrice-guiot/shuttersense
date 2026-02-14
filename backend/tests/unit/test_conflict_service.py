@@ -180,11 +180,23 @@ class TestScoring:
         score = ConflictService._score_logistics_ease(event)
         assert score == 0.0
 
-    def test_logistics_ease_null_treated_as_not_required(self):
-        """Null logistics fields treated as not required → 100."""
+    def test_logistics_ease_null_treated_as_neutral(self):
+        """Null logistics fields treated as neutral/unknown → 0 (no known data)."""
         event = _make_event(travel_required=None, ticket_required=None, timeoff_required=None)
         score = ConflictService._score_logistics_ease(event)
+        assert score == 0.0
+
+    def test_logistics_ease_partial_known(self):
+        """Mix of None and known values only counts known values."""
+        # 1 known False, 2 None → 100% easy (1/1)
+        event = _make_event(travel_required=False, ticket_required=None, timeoff_required=None)
+        score = ConflictService._score_logistics_ease(event)
         assert abs(score - 100.0) < 0.1
+
+        # 1 known True, 1 known False, 1 None → 50% easy (1/2)
+        event = _make_event(travel_required=True, ticket_required=False, timeoff_required=None)
+        score = ConflictService._score_logistics_ease(event)
+        assert abs(score - 50.0) < 0.1
 
     def test_readiness_all_resolved(self):
         """All required items resolved → 100."""
