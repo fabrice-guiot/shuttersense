@@ -132,8 +132,7 @@ Clear the session before populating it with authenticated user data:
 ```python
 def create_session(self, request: Request, user: User) -> None:
     request.session.clear()  # Regenerate session
-    request.session["user_id"] = user.id
-    request.session["user_guid"] = user.guid
+    request.session["user_guid"] = user.guid  # Use GUID only (see M4)
 ```
 
 ---
@@ -292,25 +291,29 @@ The `False` default is intentional for local development where HTTPS is not avai
 **Affected File:** `backend/src/services/auth_service.py` (line 430)
 
 **Description:**
-The session stores `user.id` (internal auto-increment integer) rather than the GUID:
+The session stores both the internal auto-increment integer and the GUID, but authentication lookups use the numeric ID:
 ```python
-request.session["user_id"] = user.id  # Internal numeric ID
+request.session["user_id"] = user.id       # Internal numeric ID — unnecessary
+request.session["user_guid"] = user.guid    # GUID already stored but unused for auth
 ```
 
-The session authentication in `tenant.py:324` then queries using this numeric ID:
+The session authentication in `tenant.py:324` queries using the numeric ID:
 ```python
 user = db.query(User).filter(User.id == user_id).first()
 ```
 
-While the session cookie is signed (preventing tampering), storing sequential integer IDs makes ID prediction trivial if the signing key is compromised. The application's own architecture principle (Issue #42) states that external-facing identifiers should use GUIDs.
+While the session cookie is signed (preventing tampering), storing sequential integer IDs makes ID prediction trivial if the signing key is compromised. The application's own architecture principle (Issue #42) states that external-facing identifiers should use GUIDs. The GUID is already present in the session — it just needs to be used.
 
 **Deployment Note:** The signed session cookie (`SESSION_SECRET_KEY` with 32+ char requirement) makes direct tampering infeasible without key compromise. This finding is about consistency with the GUID architecture principle and defense-in-depth, not an immediately exploitable vulnerability.
 
 **Remediation:**
-Store the GUID in the session and look up by GUID:
+Stop storing the numeric `user_id` in the session and use the existing `user_guid` for lookups:
 ```python
+# In auth_service.py — remove user_id, keep user_guid:
 request.session["user_guid"] = user.guid
-# Then in tenant.py:
+# Do NOT store: request.session["user_id"] = user.id
+
+# In tenant.py — look up by GUID instead of numeric ID:
 user = db.query(User).filter(User.guid == user_guid).first()
 ```
 
@@ -438,7 +441,7 @@ Findings requiring code changes, ordered by severity and effort:
 | 2 | C2 - Unauthenticated WebSockets | Critical | Requires code fix | Add auth checks to 2 endpoints |
 | 3 | H1 - Session fixation | High | Requires code fix | Add `session.clear()` before login |
 | 4 | H3 - Error detail leakage | High | Requires code fix | Replace `str(e)` in ~200 error responses |
-| 5 | M4 - Internal ID in session | Medium | Requires code fix | Switch to GUID-based session |
+| 5 | M4 - Internal ID in session | Medium | Requires code fix | Remove numeric ID; use existing GUID for lookups |
 
 Findings mitigated by deployment (no code change needed, or defense-in-depth only):
 
