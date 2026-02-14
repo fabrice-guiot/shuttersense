@@ -654,6 +654,7 @@ class ToolService:
             pipeline_guid=pipeline_guid,
             pipeline_version=pipeline_version,
             mode=mode_str,
+            team_id=team_id,
         )
         position = self._queue.enqueue(job)
 
@@ -1750,6 +1751,7 @@ class ToolService:
             # Convert to full JobResponse format for the global channel
             job_response = JobAdapter.to_response(job)
             await self.websocket_manager.broadcast_global_job_update(
-                job_response.model_dump(mode="json")
+                job_response.model_dump(mode="json"),
+                team_id=job.team_id
             )
 

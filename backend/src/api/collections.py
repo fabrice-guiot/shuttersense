@@ -154,7 +154,7 @@ async def get_collection_stats(
         logger.error(f"Error getting collection stats: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get collection statistics: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -213,7 +213,7 @@ async def list_collections(
         logger.error(f"Error listing collections: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list collections: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -268,7 +268,8 @@ async def create_collection(
                 collection.connector_guid, expected_prefix="con"
             )
             connector = db.query(Connector).filter(
-                Connector.uuid == connector_uuid
+                Connector.uuid == connector_uuid,
+                Connector.team_id == ctx.team_id
             ).first()
             if not connector:
                 raise ValueError(
@@ -283,7 +284,8 @@ async def create_collection(
                 collection.pipeline_guid, expected_prefix="pip"
             )
             pipeline = db.query(Pipeline).filter(
-                Pipeline.uuid == pipeline_uuid
+                Pipeline.uuid == pipeline_uuid,
+                Pipeline.team_id == ctx.team_id
             ).first()
             if not pipeline:
                 raise ValueError(
@@ -299,7 +301,8 @@ async def create_collection(
                 collection.bound_agent_guid, expected_prefix="agt"
             )
             agent = db.query(Agent).filter(
-                Agent.uuid == bound_agent_uuid
+                Agent.uuid == bound_agent_uuid,
+                Agent.team_id == ctx.team_id
             ).first()
             if not agent:
                 raise ValueError(
@@ -381,7 +384,7 @@ async def create_collection(
         logger.error(f"Error creating collection: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create collection: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -496,7 +499,8 @@ async def update_collection(
                 collection_update.pipeline_guid, expected_prefix="pip"
             )
             pipeline = db.query(Pipeline).filter(
-                Pipeline.uuid == pipeline_uuid
+                Pipeline.uuid == pipeline_uuid,
+                Pipeline.team_id == ctx.team_id
             ).first()
             if not pipeline:
                 raise ValueError(
@@ -513,7 +517,8 @@ async def update_collection(
                 collection_update.bound_agent_guid, expected_prefix="agt"
             )
             agent = db.query(Agent).filter(
-                Agent.uuid == bound_agent_uuid
+                Agent.uuid == bound_agent_uuid,
+                Agent.team_id == ctx.team_id
             ).first()
             if not agent:
                 raise ValueError(
@@ -607,7 +612,7 @@ async def update_collection(
         logger.error(f"Error updating collection: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update collection: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -704,7 +709,7 @@ async def delete_collection(
         logger.error(f"Error deleting collection: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete collection: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -915,7 +920,7 @@ async def test_collection(
         logger.error(f"Error testing collection: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to test collection: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -1026,7 +1031,7 @@ async def refresh_collection_cache(
         logger.error(f"Error refreshing collection cache: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to refresh collection cache: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -1088,7 +1093,10 @@ async def assign_pipeline(
 
         # Resolve pipeline_guid to internal ID using injected db session
         pipeline_uuid = GuidService.parse_identifier(pipeline_guid, expected_prefix="pip")
-        pipeline = db.query(Pipeline).filter(Pipeline.uuid == pipeline_uuid).first()
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.uuid == pipeline_uuid,
+            Pipeline.team_id == ctx.team_id
+        ).first()
         if not pipeline:
             raise ValueError(f"Pipeline not found: {pipeline_guid}")
         pipeline_id = pipeline.id
@@ -1144,7 +1152,7 @@ async def assign_pipeline(
         logger.error(f"Error assigning pipeline: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to assign pipeline: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -1237,7 +1245,7 @@ async def clear_pipeline(
         logger.error(f"Error clearing pipeline: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear pipeline: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -1323,7 +1331,8 @@ async def create_collections_from_inventory(
                         mapping.pipeline_guid, expected_prefix="pip"
                     )
                     pipeline = db.query(Pipeline).filter(
-                        Pipeline.uuid == pipeline_uuid
+                        Pipeline.uuid == pipeline_uuid,
+                        Pipeline.team_id == ctx.team_id
                     ).first()
                     if not pipeline:
                         errors.append(CollectionCreationError(
@@ -1434,7 +1443,7 @@ async def create_collections_from_inventory(
                 )
                 errors.append(CollectionCreationError(
                     folder_guid=mapping.folder_guid,
-                    error=f"Internal error: {str(e)}"
+                    error="An internal error occurred"
                 ))
 
         return CreateCollectionsFromInventoryResponse(
@@ -1453,7 +1462,7 @@ async def create_collections_from_inventory(
         logger.error(f"Error creating collections from inventory: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create collections: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -1560,5 +1569,5 @@ async def clear_inventory_cache(
         logger.error(f"Error clearing inventory cache: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear inventory cache: {str(e)}"
+            detail="An internal error occurred"
         )

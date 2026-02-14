@@ -381,8 +381,10 @@ class TestAgentBindingCrossTeam:
             )
 
             # Should fail - agent belongs to different team
-            assert response.status_code == 400
-            assert "same team" in response.json()["detail"].lower()
+            # With C1 IDOR fix, cross-team agent is not found (team_id filtering)
+            assert response.status_code == 404
+            detail = response.json()["detail"].lower()
+            assert "not found" in detail
 
 
 class TestBoundJobRouting:

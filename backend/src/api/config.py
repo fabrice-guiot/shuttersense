@@ -234,7 +234,7 @@ def export_config(
         logger.error(f"Error exporting config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to export configuration: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -301,7 +301,7 @@ async def start_import(
         logger.error(f"Error starting import: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start import: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -390,7 +390,7 @@ def resolve_import(
         logger.error(f"Error resolving import: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to resolve import: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -598,7 +598,7 @@ def get_all_config(
         logger.error(f"Error getting all config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get configuration: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -638,7 +638,7 @@ def get_category_config(
         logger.error(f"Error getting category {category}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get category: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -725,7 +725,7 @@ def create_config_value(
         logger.error(f"Error creating config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create configuration: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -776,7 +776,7 @@ def update_config_value(
         logger.error(f"Error updating config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update configuration: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -817,5 +817,5 @@ def delete_config_value(
         logger.error(f"Error deleting config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete configuration: {str(e)}"
+            detail="An internal error occurred"
         )

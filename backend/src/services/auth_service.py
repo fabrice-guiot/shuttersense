@@ -427,9 +427,10 @@ class AuthService:
                 "Set SESSION_SECRET_KEY environment variable."
             )
 
-        request.session["user_id"] = user.id
+        # Clear any pre-existing session data to prevent session fixation
+        request.session.clear()
+
         request.session["user_guid"] = user.guid
-        request.session["team_id"] = user.team_id
         request.session["team_guid"] = user.team.guid
         request.session["email"] = user.email
         request.session["is_super_admin"] = is_super_admin(user.email)
@@ -485,14 +486,14 @@ class AuthService:
         if not self._has_session(request):
             return None
 
-        user_id = request.session.get("user_id")
-        if not user_id:
+        user_guid = request.session.get("user_guid")
+        if not user_guid:
             return None
 
         try:
-            return self.user_service.get_by_id(user_id)
-        except NotFoundError:
-            # User deleted, clear invalid session
+            return self.user_service.get_by_guid(user_guid)
+        except (NotFoundError, ValueError):
+            # User deleted or invalid GUID, clear invalid session
             request.session.clear()
             return None
 
@@ -516,7 +517,7 @@ class AuthService:
         """
         if not self._has_session(request):
             return False
-        return request.session.get("user_id") is not None
+        return request.session.get("user_guid") is not None
 
     def get_current_user_info(self, request: Request) -> Optional[dict]:
         """
@@ -534,9 +535,7 @@ class AuthService:
             return None
 
         return {
-            "user_id": request.session.get("user_id"),
             "user_guid": request.session.get("user_guid"),
-            "team_id": request.session.get("team_id"),
             "team_guid": request.session.get("team_guid"),
             "email": request.session.get("email"),
             "is_super_admin": request.session.get("is_super_admin", False),

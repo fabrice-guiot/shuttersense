@@ -189,10 +189,10 @@ async def get_tenant_context(
 
     # Try session authentication
     session = request.session if hasattr(request, 'session') else {}
-    user_id = session.get("user_id")
-    if user_id:
+    user_guid = session.get("user_guid")
+    if user_guid:
         return await _authenticate_session(
-            user_id, db, check_super_admin
+            user_guid, db, check_super_admin
         )
 
     # No valid authentication
@@ -298,7 +298,7 @@ async def _authenticate_api_token(
 
 
 async def _authenticate_session(
-    user_id: int,
+    user_guid: str,
     db: Session,
     check_super_admin
 ) -> TenantContext:
@@ -306,7 +306,7 @@ async def _authenticate_session(
     Authenticate using session data.
 
     Args:
-        user_id: User ID from session
+        user_guid: User GUID from session (usr_xxx format)
         db: Database session
         check_super_admin: Function to check super admin status
 
@@ -319,9 +319,18 @@ async def _authenticate_session(
     """
     # Import models here to avoid circular imports
     from backend.src.models import User, Team
+    from backend.src.services.guid import GuidService
 
-    # Lookup user
-    user = db.query(User).filter(User.id == user_id).first()
+    # Parse GUID to UUID and look up user
+    try:
+        user_uuid = GuidService.parse_identifier(user_guid, expected_prefix="usr")
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or invalid",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    user = db.query(User).filter(User.uuid == user_uuid).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -393,16 +402,21 @@ async def get_websocket_tenant_context(
     # Import here to avoid circular imports
     from backend.src.models import User
     from backend.src.config.super_admins import is_super_admin as check_super_admin
+    from backend.src.services.guid import GuidService
 
     # Access session from WebSocket scope
     session = websocket.session if hasattr(websocket, 'session') else {}
-    user_id = session.get("user_id")
+    user_guid = session.get("user_guid")
 
-    if not user_id:
+    if not user_guid:
         return None
 
-    # Lookup user
-    user = db.query(User).filter(User.id == user_id).first()
+    # Parse GUID to UUID and look up user
+    try:
+        user_uuid = GuidService.parse_identifier(user_guid, expected_prefix="usr")
+    except ValueError:
+        return None
+    user = db.query(User).filter(User.uuid == user_uuid).first()
     if not user or not user.is_active:
         return None
 
@@ -454,20 +468,27 @@ async def get_websocket_tenant_context_standalone(
     # Import here to avoid circular imports
     from backend.src.models import User
     from backend.src.config.super_admins import is_super_admin as check_super_admin
+    from backend.src.services.guid import GuidService
     from backend.src.db.database import SessionLocal
 
     # Access session from WebSocket scope
     session = websocket.session if hasattr(websocket, 'session') else {}
-    user_id = session.get("user_id")
+    user_guid = session.get("user_guid")
 
-    if not user_id:
+    if not user_guid:
+        return None
+
+    # Parse GUID to UUID and look up user
+    try:
+        user_uuid = GuidService.parse_identifier(user_guid, expected_prefix="usr")
+    except ValueError:
         return None
 
     # Create short-lived DB session for authentication only
     db = SessionLocal()
     try:
         # Lookup user
-        user = db.query(User).filter(User.id == user_id).first()
+        user = db.query(User).filter(User.uuid == user_uuid).first()
         if not user or not user.is_active:
             return None
 

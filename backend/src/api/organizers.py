@@ -104,7 +104,7 @@ async def get_organizer_stats(
         logger.error(f"Error getting organizer stats: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get organizer statistics: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -161,7 +161,7 @@ async def get_organizers_by_category(
         logger.error(f"Error listing organizers by category: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list organizers: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -235,7 +235,7 @@ async def list_organizers(
         logger.error(f"Error listing organizers: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list organizers: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -312,7 +312,7 @@ async def create_organizer(
         logger.error(f"Error creating organizer: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create organizer: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -436,7 +436,7 @@ async def update_organizer(
         logger.error(f"Error updating organizer: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update organizer: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -497,7 +497,7 @@ async def delete_organizer(
         logger.error(f"Error deleting organizer: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete organizer: {str(e)}",
+            detail="An internal error occurred",
         )
 
 

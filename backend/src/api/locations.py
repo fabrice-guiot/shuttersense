@@ -109,7 +109,7 @@ async def get_location_stats(
         logger.error(f"Error getting location stats: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get location statistics: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -176,7 +176,7 @@ async def get_locations_by_category(
         logger.error(f"Error listing locations by category: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list locations: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -245,7 +245,7 @@ async def geocode_address(
         logger.error(f"Error geocoding address: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to geocode address: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -328,7 +328,7 @@ async def list_locations(
         logger.error(f"Error listing locations: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list locations: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -419,7 +419,7 @@ async def create_location(
         logger.error(f"Error creating location: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create location: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -559,7 +559,7 @@ async def update_location(
         logger.error(f"Error updating location: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update location: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -623,7 +623,7 @@ async def delete_location(
         logger.error(f"Error deleting location: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete location: {str(e)}",
+            detail="An internal error occurred",
         )
 
 

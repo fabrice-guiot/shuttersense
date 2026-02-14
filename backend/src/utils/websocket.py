@@ -43,8 +43,11 @@ class ConnectionManager:
     Supports team-scoped agent pool status channels for real-time header updates.
     """
 
-    # Special channel ID for global job updates
+    # Special channel ID for global job updates (deprecated — use team-scoped channels)
     GLOBAL_JOBS_CHANNEL = "__global_jobs__"
+
+    # Channel prefix for team-scoped job updates
+    TEAM_JOBS_CHANNEL_PREFIX = "__team_jobs_"
 
     # Channel prefix for agent pool status (team-scoped)
     AGENT_POOL_CHANNEL_PREFIX = "__agent_pool_"
@@ -139,20 +142,37 @@ class ConnectionManager:
         for conn in disconnected:
             self.disconnect(job_id, conn)
 
-    async def broadcast_global_job_update(self, job_data: Dict[str, Any]) -> None:
+    def get_team_jobs_channel(self, team_id: int) -> str:
         """
-        Broadcast a job update to all clients monitoring the global jobs channel.
+        Get the channel ID for a team's job updates.
 
-        This is used to push job status changes to clients watching the Tools page
-        without requiring polling.
+        Args:
+            team_id: Team ID for the channel
+
+        Returns:
+            Channel ID string
+        """
+        return f"{self.TEAM_JOBS_CHANNEL_PREFIX}{team_id}__"
+
+    async def broadcast_global_job_update(
+        self, job_data: Dict[str, Any], team_id: Optional[int] = None
+    ) -> None:
+        """
+        Broadcast a job update to clients monitoring the team's jobs channel.
+
+        When team_id is provided, broadcasts to the team-scoped channel.
+        Falls back to the legacy global channel for backwards compatibility.
 
         Args:
             job_data: Job data to broadcast (typically the full job object)
+            team_id: Team ID to scope the broadcast (recommended)
         """
-        await self.broadcast(self.GLOBAL_JOBS_CHANNEL, {
-            "type": "job_update",
-            "job": job_data
-        })
+        message = {"type": "job_update", "job": job_data}
+        if team_id is not None:
+            await self.broadcast(self.get_team_jobs_channel(team_id), message)
+        else:
+            # Legacy fallback — should not be used after migration
+            await self.broadcast(self.GLOBAL_JOBS_CHANNEL, message)
 
     def get_agent_pool_channel(self, team_id: int) -> str:
         """
@@ -220,8 +240,8 @@ class ConnectionManager:
             "progress": progress
         })
 
-        # Also broadcast to global jobs channel for tools page
-        await self.broadcast(self.GLOBAL_JOBS_CHANNEL, {
+        # Also broadcast to team-scoped jobs channel for tools page
+        await self.broadcast(self.get_team_jobs_channel(team_id), {
             "type": "job_progress",
             "job_guid": job_guid,
             "progress": progress

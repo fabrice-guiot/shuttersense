@@ -269,25 +269,26 @@ class TestConnectionManagerBroadcasts:
         assert manager.get_connection_count(channel) == 1
 
     @pytest.mark.asyncio
-    async def test_job_progress_broadcasts_to_global_channel(self, test_websocket_manager, test_team):
-        """Job progress also broadcasts to global jobs channel."""
+    async def test_job_progress_broadcasts_to_team_channel(self, test_websocket_manager, test_team):
+        """Job progress broadcasts to team-scoped jobs channel."""
         manager = test_websocket_manager
         job_guid = "job_test123456789012345678901"
 
-        # Create mock WebSocket for global channel
-        mock_ws_global = AsyncMock()
-        mock_ws_global.send_json = AsyncMock()
+        # Create mock WebSocket for team-scoped channel
+        mock_ws_team = AsyncMock()
+        mock_ws_team.send_json = AsyncMock()
 
-        # Register to global jobs channel (not job-specific)
-        await manager.register_accepted(ConnectionManager.GLOBAL_JOBS_CHANNEL, mock_ws_global)
+        # Register to team-scoped jobs channel (C2 security fix)
+        team_channel = manager.get_team_jobs_channel(test_team.id)
+        await manager.register_accepted(team_channel, mock_ws_team)
 
         # Broadcast progress
         progress = {"stage": "processing", "percentage": 75}
         await manager.broadcast_job_progress(test_team.id, job_guid, progress)
 
-        # Global channel should receive update
-        mock_ws_global.send_json.assert_called()
-        call_args = mock_ws_global.send_json.call_args[0][0]
+        # Team channel should receive update
+        mock_ws_team.send_json.assert_called()
+        call_args = mock_ws_team.send_json.call_args[0][0]
         assert call_args["type"] == "job_progress"
         assert call_args["job_guid"] == job_guid
 
