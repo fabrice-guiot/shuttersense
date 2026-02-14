@@ -49,7 +49,7 @@ class EventScores(BaseModel):
     venue_quality: float = Field(..., ge=0, le=100, description="Location rating * 20 (null rating → 50)")
     organizer_reputation: float = Field(..., ge=0, le=100, description="Organizer rating * 20 (null rating → 50)")
     performer_lineup: float = Field(..., ge=0, le=100, description="Confirmed performers / ceiling * 100")
-    logistics_ease: float = Field(..., ge=0, le=100, description="Each not-required logistics item → +33.3")
+    logistics_ease: float = Field(..., ge=0, le=100, description="Cumulative logistics commitment: ticket (max 50) + PTO (max 25) + travel (max 25)")
     readiness: float = Field(..., ge=0, le=100, description="Each resolved required item → proportional share of 100")
     composite: float = Field(..., ge=0, le=100, description="Weighted average of all dimension scores")
 

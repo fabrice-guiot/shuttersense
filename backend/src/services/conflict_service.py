@@ -141,17 +141,43 @@ class ConflictService:
 
     @staticmethod
     def _score_logistics_ease(event: Event, **kwargs) -> float:
-        """Each not-required logistics item → proportional share of 100.
+        """Cumulative logistics commitment score.
 
-        Only known True/False values are counted; None values are ignored
-        as neutral/unknown. Returns 0.0 if all fields are None.
+        Scoring matrix (additive milestones):
+        - Ticket: not_required=+25, purchased=+25, ready=+25 (max 50 if required)
+        - PTO:    not_required=+25, booked=+10, approved=+15 (max 25)
+        - Travel: not_required=+25, booked=+25 (max 25)
+
+        None/unknown fields contribute 0. Maximum total: 100.
         """
-        items = [event.travel_required, event.timeoff_required, event.ticket_required]
-        known_items = [item for item in items if item is not None]
-        if not known_items:
-            return 0.0  # No known logistics requirements
-        easy_count = sum(1 for item in known_items if item is False)
-        return (easy_count / len(known_items)) * 100
+        score = 0.0
+
+        # Ticket (max 50 if required+ready, 25 if not required)
+        if event.ticket_required is False:
+            score += 25
+        elif event.ticket_required is True:
+            if event.ticket_status in ("purchased", "ready"):
+                score += 25
+            if event.ticket_status == "ready":
+                score += 25
+
+        # PTO/Timeoff (max 25 either way)
+        if event.timeoff_required is False:
+            score += 25
+        elif event.timeoff_required is True:
+            if event.timeoff_status in ("booked", "approved"):
+                score += 10
+            if event.timeoff_status == "approved":
+                score += 15
+
+        # Travel (max 25 either way)
+        if event.travel_required is False:
+            score += 25
+        elif event.travel_required is True:
+            if event.travel_status == "booked":
+                score += 25
+
+        return score
 
     @staticmethod
     def _score_readiness(event: Event, **kwargs) -> float:
