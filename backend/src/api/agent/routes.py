@@ -356,7 +356,7 @@ async def register_agent(
         logger.exception(f"Unexpected error during agent registration: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -568,7 +568,7 @@ async def claim_job(
             manager = get_connection_manager()
             job_response = _db_job_to_response(job)
             asyncio.create_task(
-                manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+                manager.broadcast_global_job_update(job_response.model_dump(mode="json"), team_id=job.team_id)
             )
             # Continue to claim next job
             continue
@@ -602,7 +602,7 @@ async def claim_job(
     # Broadcast job update so frontend shows the job as running
     job_response = _db_job_to_response(job)
     asyncio.create_task(
-        manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+        manager.broadcast_global_job_update(job_response.model_dump(mode="json"), team_id=job.team_id)
     )
 
     # Get previous result for Input State comparison (Issue #92)
@@ -708,7 +708,7 @@ async def update_job_progress(
         # Also broadcast full job update (for status changes like ASSIGNED -> RUNNING)
         job_response = _db_job_to_response(job)
         asyncio.create_task(
-            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"), team_id=job.team_id)
         )
 
         return JobStatusResponse(
@@ -788,7 +788,7 @@ async def complete_job_no_change(
         # Broadcast full job update so frontend updates the card
         job_response = _db_job_to_response(job)
         asyncio.create_task(
-            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"), team_id=job.team_id)
         )
 
         return JobStatusResponse(
@@ -886,7 +886,7 @@ async def complete_job(
         # Broadcast full job update so frontend updates the card
         job_response = _db_job_to_response(job)
         asyncio.create_task(
-            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"), team_id=job.team_id)
         )
 
         return JobStatusResponse(
@@ -957,7 +957,7 @@ async def fail_job(
         # Broadcast full job update so frontend updates the card
         job_response = _db_job_to_response(job)
         asyncio.create_task(
-            manager.broadcast_global_job_update(job_response.model_dump(mode="json"))
+            manager.broadcast_global_job_update(job_response.model_dump(mode="json"), team_id=job.team_id)
         )
 
         return JobStatusResponse(
@@ -2332,7 +2332,7 @@ async def report_inventory_folders(
         logger.error(f"Error storing inventory folders: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store folders: {str(e)}"
+            detail="An internal error occurred"
         )
 
     db.commit()
@@ -2549,7 +2549,7 @@ async def report_inventory_file_info(
         logger.error(f"Error storing FileInfo: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store FileInfo: {str(e)}"
+            detail="An internal error occurred"
         )
 
     # Update job progress to indicate Phase B complete
@@ -2974,7 +2974,7 @@ async def agent_create_collection(
         logger.exception(f"Failed to create collection for agent {ctx.agent_guid}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create collection: {str(e)}",
+            detail="An internal error occurred",
         )
 
     # Build web URL
@@ -3390,7 +3390,7 @@ async def agent_upload_result(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload result: {str(e)}",
+            detail="An internal error occurred",
         )
 
     logger.info(

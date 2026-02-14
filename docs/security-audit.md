@@ -10,14 +10,16 @@
 
 ShutterSense implements a solid security foundation with OAuth 2.0 + PKCE, Fernet encryption for credentials, tenant isolation, and comprehensive security headers. The production deployment adds significant defense-in-depth through nginx TLS termination, multi-layer firewalls (Hostinger managed + UFW + fail2ban), systemd sandboxing, and explicit production environment configuration.
 
-The audit identified **14 security findings**. Of these, **5 require code-level fixes** (two critical, two high, one medium), while **5 are fully mitigated by the documented deployment configuration** and **4 are partially mitigated** with code improvements still recommended for defense-in-depth.
+The audit identified **14 security findings**. Of these, **5 required code-level fixes** (two critical, two high, one medium), while **5 are fully mitigated by the documented deployment configuration** and **4 are partially mitigated** with code improvements still recommended for defense-in-depth.
 
-| Severity | Count | Requires Code Fix | Mitigated by Deployment |
-|----------|-------|-------------------|------------------------|
+**Phase 1 (completed):** All 5 code-level fixes have been implemented — C1, C2, H1, H3, and M4.
+
+| Severity | Count | Fixed (Phase 1) | Mitigated by Deployment |
+|----------|-------|-----------------|------------------------|
 | Critical | 2 | 2 | 0 |
 | High | 3 | 2 | 0 (1 partially mitigated) |
 | Medium | 5 | 1 | 3 fully + 1 partially |
-| Low | 4 | 1 | 2 fully + 1 partially |
+| Low | 4 | 0 | 2 fully + 1 partially + 1 accepted |
 
 ---
 
@@ -27,43 +29,20 @@ The audit identified **14 security findings**. Of these, **5 require code-level 
 
 **Severity:** CRITICAL
 **OWASP:** A01:2021 - Broken Access Control
-**Status:** Requires code fix
+**Status:** Fixed (Phase 1)
 **Affected Files:**
-- `backend/src/api/collections.py` (lines 270-277, 285-292, 296-308, 494-505, 510-522, 1090-1094, 1322-1334)
-- `backend/src/api/tools.py` (lines 165, 175-192)
+- `backend/src/api/collections.py` — 7 GUID resolution queries
+- `backend/src/api/tools.py` — 4 GUID resolution queries
 
 **Description:**
-When creating or updating collections, the API resolves related entity GUIDs (Connector, Pipeline, Agent) to internal IDs using direct database queries **without filtering by `team_id`**. This allows an authenticated user from Team A to reference resources belonging to Team B.
+When creating or updating collections, the API resolved related entity GUIDs (Connector, Pipeline, Agent) to internal IDs using direct database queries **without filtering by `team_id`**. This allowed an authenticated user from Team A to reference resources belonging to Team B.
 
-**Vulnerable Pattern (collections.py:270-277):**
-```python
-connector = db.query(Connector).filter(
-    Connector.uuid == connector_uuid
-).first()  # No team_id filter!
-connector_id = connector.id
-```
-
-**Impact:**
-- A user can create a collection bound to another team's connector, potentially accessing their cloud storage credentials
-- A user can bind their collection to another team's agent, executing jobs on their infrastructure
-- A user can assign another team's pipeline to their collections
-
-**Specific Vulnerable Endpoints:**
-1. `POST /api/collections` - Connector, Pipeline, and Agent GUIDs resolved without team_id
-2. `PUT /api/collections/{guid}` - Pipeline and Agent GUIDs resolved without team_id
-3. `POST /api/collections/{guid}/assign-pipeline` - Pipeline GUID resolved without team_id
-4. `POST /api/collections/from-inventory` - Pipeline GUID resolved without team_id
-5. `POST /api/tools/run` - Collection GUID resolved without team_id (line 165: `collection_service.get_by_guid(tool_request.collection_guid)` -- missing `team_id=ctx.team_id`)
-6. `POST /api/tools/run` - Pipeline GUID resolved without team_id (line 186)
-
-**Deployment Note:** This is a pure application-layer authorization bug. No infrastructure control can mitigate cross-tenant IDOR; the fix must be in the code.
-
-**Remediation:**
-Add `team_id` filtering to all GUID resolution queries:
+**Fix Applied:**
+Added `team_id == ctx.team_id` filtering to all 11 raw GUID resolution queries across both files:
 ```python
 connector = db.query(Connector).filter(
     Connector.uuid == connector_uuid,
-    Connector.team_id == ctx.team_id
+    Connector.team_id == ctx.team_id  # Added team scoping
 ).first()
 ```
 
@@ -73,33 +52,27 @@ connector = db.query(Connector).filter(
 
 **Severity:** CRITICAL
 **OWASP:** A01:2021 - Broken Access Control
-**Status:** Requires code fix
-**Affected File:** `backend/src/api/tools.py` (lines 600-730)
+**Status:** Fixed (Phase 1)
+**Affected Files:**
+- `backend/src/api/tools.py` — both WebSocket endpoints
+- `backend/src/utils/websocket.py` — team-scoped broadcast channels
+- `backend/src/api/agent/routes.py` — broadcast callers updated
+- `backend/src/services/tool_service.py` — broadcast callers updated
 
 **Description:**
-Two WebSocket endpoints accept connections without any authentication or authorization checks:
+Two WebSocket endpoints accepted connections without any authentication or authorization checks. `/ws/jobs/all` received updates for ALL jobs globally, and `/ws/jobs/{job_id}` allowed subscribing to any job without team verification.
 
-1. **`/ws/jobs/all`** (line 600) - Receives real-time updates for ALL jobs globally, regardless of team. No authentication check performed before `manager.connect()`.
-
-2. **`/ws/jobs/{job_id}`** (line 661) - Receives real-time progress for any job by ID. No verification that the connecting user belongs to the job's team.
-
-**Contrast:** The agent pool status WebSocket (`/ws/pool-status` in `agent/routes.py:1987`) correctly implements authentication using `get_websocket_tenant_context_standalone()`.
-
-**Impact:**
-- Any unauthenticated client can connect and receive job progress data for all teams
-- Job data may contain collection names, tool types, file paths, and analysis results
-- Information leakage across tenant boundaries
-
-**Deployment Note:** Nginx proxies WebSocket connections through with `proxy_set_header Upgrade $http_upgrade` (deployment guide section 9.2). No infrastructure-level authentication is applied to WebSocket upgrades.
-
-**Remediation:**
-Add authentication to both WebSocket handlers following the pattern from `agent/routes.py`:
+**Fix Applied (3 parts):**
+1. **Authentication added** to both WebSocket endpoints using `get_websocket_tenant_context_standalone()` — unauthenticated connections receive code 4001 close
+2. **Team-scoped channels** added to `ConnectionManager` — jobs broadcast to `__team_jobs_{team_id}` instead of the global channel
+3. **All broadcast callers updated** to pass `team_id` for team-scoped delivery
 ```python
 ctx = await get_websocket_tenant_context_standalone(websocket)
 if not ctx:
     await websocket.close(code=4001, reason="Authentication required")
     return
-# Use ctx.team_id to scope job subscriptions
+channel_id = manager.get_team_jobs_channel(ctx.team_id)
+await manager.register_accepted(channel_id, websocket)
 ```
 
 ---
@@ -110,29 +83,19 @@ if not ctx:
 
 **Severity:** HIGH
 **OWASP:** A07:2021 - Identification and Authentication Failures
-**Status:** Requires code fix
-**Affected File:** `backend/src/services/auth_service.py` (line 430)
+**Status:** Fixed (Phase 1)
+**Affected File:** `backend/src/services/auth_service.py`
 
 **Description:**
-After successful OAuth authentication, `create_session()` sets `request.session["user_id"]` without first clearing or regenerating the session. Starlette's `SessionMiddleware` does not automatically regenerate session IDs on privilege escalation.
+After successful OAuth authentication, `create_session()` set session data without first clearing or regenerating the session, enabling session fixation.
 
+**Fix Applied:**
+Added `request.session.clear()` before populating session data:
 ```python
 def create_session(self, request: Request, user: User) -> None:
-    request.session["user_id"] = user.id       # Sets on existing session
-    request.session["user_guid"] = user.guid    # No session regeneration
-```
-
-**Impact:**
-If an attacker can set a session cookie before the victim logs in (e.g., via a subdomain or XSS on a related domain), the attacker's session ID persists post-login and gains the victim's authenticated session.
-
-**Deployment Note:** The production session configuration (`SESSION_SAME_SITE=lax`, `SESSION_HTTPS_ONLY=true`) reduces the attack surface by preventing cross-site cookie injection, but does not fully prevent session fixation from same-site origins. The fix must be in code.
-
-**Remediation:**
-Clear the session before populating it with authenticated user data:
-```python
-def create_session(self, request: Request, user: User) -> None:
-    request.session.clear()  # Regenerate session
-    request.session["user_guid"] = user.guid  # Use GUID only (see M4)
+    request.session.clear()  # Prevent session fixation
+    request.session["user_guid"] = user.guid
+    # ...
 ```
 
 ---
@@ -165,40 +128,22 @@ Apply the same `_record_token_failure` / `_is_token_blocked` pattern from `tenan
 
 **Severity:** HIGH
 **OWASP:** A04:2021 - Insecure Design
-**Status:** Requires code fix
-**Affected Files:** All 18 files in `backend/src/api/`
+**Status:** Fixed (Phase 1)
+**Affected Files:** 10 files in `backend/src/api/`
 
 **Description:**
-Across the API layer, **~200 instances** of exception details are included directly in HTTP error responses:
+Across the API layer, generic `except Exception` handlers included `str(e)` directly in HTTP error responses, potentially leaking database errors, file paths, and internal details.
+
+**Fix Applied:**
+All `except Exception` blocks now return opaque `"An internal error occurred"` messages. Exception details are logged server-side with `exc_info=True` for debugging. Specific exception handlers (`NotFoundError`, `ValidationError`, `ConflictError`) retain their user-safe messages.
 
 ```python
 except Exception as e:
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"Failed to create connector: {str(e)}"  # Leaks internal details
-    )
+    logger.error(f"Error creating connector: {e}", exc_info=True)
+    raise HTTPException(status_code=500, detail="An internal error occurred")
 ```
 
-While `main.py`'s global exception handlers correctly return generic messages, these route-level handlers execute first and expose internal details.
-
-**Examples of potential information leakage:**
-- Database connection strings, table/column names, SQL errors
-- File system paths and permission errors
-- Cloud provider SDK errors (potentially revealing configuration)
-- Pydantic validation internals
-
-**Deployment Note:** Nginx passes through application JSON response bodies without filtering. No infrastructure control can mask application-layer error details. The fix must be in code.
-
-**Remediation:**
-Replace all `str(e)` in HTTP responses with generic messages. Log the details server-side only:
-```python
-except Exception as e:
-    logger.error(f"Error creating connector: {str(e)}", exc_info=True)
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="An internal error occurred. Please try again later."
-    )
-```
+Files updated: `collections.py`, `connectors.py`, `categories.py`, `locations.py`, `organizers.py`, `performers.py`, `config.py`, `agent/routes.py`, `tokens.py` (logger added).
 
 ---
 
@@ -287,35 +232,18 @@ The `False` default is intentional for local development where HTTPS is not avai
 
 **Severity:** MEDIUM
 **OWASP:** A04:2021 - Insecure Design
-**Status:** Requires code fix (defense-in-depth)
-**Affected File:** `backend/src/services/auth_service.py` (line 430)
+**Status:** Fixed (Phase 1)
+**Affected Files:**
+- `backend/src/services/auth_service.py` — session creation and lookup
+- `backend/src/middleware/tenant.py` — session authentication in all 3 auth functions
 
 **Description:**
-The session stores both the internal auto-increment integer and the GUID, but authentication lookups use the numeric ID:
-```python
-request.session["user_id"] = user.id       # Internal numeric ID — unnecessary
-request.session["user_guid"] = user.guid    # GUID already stored but unused for auth
-```
+The session stored internal auto-increment integer IDs (`user_id`, `team_id`) and authentication lookups used the numeric ID, violating the GUID-only external interface principle (Issue #42).
 
-The session authentication in `tenant.py:324` queries using the numeric ID:
-```python
-user = db.query(User).filter(User.id == user_id).first()
-```
-
-While the session cookie is signed (preventing tampering), storing sequential integer IDs makes ID prediction trivial if the signing key is compromised. The application's own architecture principle (Issue #42) states that external-facing identifiers should use GUIDs. The GUID is already present in the session — it just needs to be used.
-
-**Deployment Note:** The signed session cookie (`SESSION_SECRET_KEY` with 32+ char requirement) makes direct tampering infeasible without key compromise. This finding is about consistency with the GUID architecture principle and defense-in-depth, not an immediately exploitable vulnerability.
-
-**Remediation:**
-Stop storing the numeric `user_id` in the session and use the existing `user_guid` for lookups:
-```python
-# In auth_service.py — remove user_id, keep user_guid:
-request.session["user_guid"] = user.guid
-# Do NOT store: request.session["user_id"] = user.id
-
-# In tenant.py — look up by GUID instead of numeric ID:
-user = db.query(User).filter(User.guid == user_guid).first()
-```
+**Fix Applied:**
+1. **Session creation** (`auth_service.py`): Removed `user_id` and `team_id` from session data. Session now stores only: `user_guid`, `team_guid`, `email`, `is_super_admin`, `authenticated_at`
+2. **Session authentication** (`tenant.py`): All three auth functions (`_authenticate_session`, `get_websocket_tenant_context`, `get_websocket_tenant_context_standalone`) now parse `user_guid` via `GuidService.parse_identifier()` and look up by `User.uuid`
+3. **Session helpers** (`auth_service.py`): `is_authenticated()` checks `user_guid`, `get_current_user_info()` returns only GUIDs
 
 ---
 
@@ -431,28 +359,37 @@ API tokens are created with `scopes=["*"]` (full access) and no mechanism exists
 
 ---
 
-## Remediation Priority
+## Remediation Status
 
-Findings requiring code changes, ordered by severity and effort:
+### Phase 1 — Completed
 
-| Priority | Finding | Severity | Status | Effort |
-|----------|---------|----------|--------|--------|
-| 1 | C1 - Cross-tenant IDOR | Critical | Requires code fix | Add `team_id` filters to ~10 queries |
-| 2 | C2 - Unauthenticated WebSockets | Critical | Requires code fix | Add auth checks to 2 endpoints |
-| 3 | H1 - Session fixation | High | Requires code fix | Add `session.clear()` before login |
-| 4 | H3 - Error detail leakage | High | Requires code fix | Replace `str(e)` in ~200 error responses |
-| 5 | M4 - Internal ID in session | Medium | Requires code fix | Remove numeric ID; use existing GUID for lookups |
+All 5 findings requiring code-level fixes have been remediated:
 
-Findings mitigated by deployment (no code change needed, or defense-in-depth only):
+| Priority | Finding | Severity | Status | Summary |
+|----------|---------|----------|--------|---------|
+| 1 | C1 - Cross-tenant IDOR | Critical | **Fixed** | Added `team_id` filters to 11 GUID resolution queries |
+| 2 | C2 - Unauthenticated WebSockets | Critical | **Fixed** | Added auth + team-scoped channels to both WS endpoints |
+| 3 | H1 - Session fixation | High | **Fixed** | Added `session.clear()` before populating auth data |
+| 4 | H3 - Error detail leakage | High | **Fixed** | Replaced `str(e)` with generic messages in ~63 handlers |
+| 5 | M4 - Internal ID in session | Medium | **Fixed** | Removed numeric IDs; all lookups use GUIDs |
 
-| Finding | Severity | Deployment Control | Action |
-|---------|----------|-------------------|--------|
-| M1 - HSTS | Medium | nginx `Strict-Transport-Security` header | No code change needed |
-| M2 - In-memory rate limiting | Medium | fail2ban `shuttersense-token` + `nginx-limit-req` jails | No code change needed |
-| M3 - Session HTTPS default | Medium | `.env` `SESSION_HTTPS_ONLY=true` + nginx HTTPS redirect | No code change needed |
-| H2 - Agent auth rate limiting | High->Medium | fail2ban `nginx-limit-req` catches 401s | Code fix recommended (defense-in-depth) |
-| M5 - Deprecated utcnow() | Medium->Low | Server timezone UTC | Code fix recommended (future-proofing) |
-| L2 - Default CORS localhost | Low | `.env` `CORS_ORIGINS=https://app.shuttersense.ai` | No code change needed |
-| L3 - Secret key defaults | Low | Mandatory key generation in deployment guide | Code fix recommended (fail-fast in prod) |
-| L1 - CSP unsafe-inline | Low | N/A (Tailwind CSS requirement) | Accepted risk |
-| L4 - API token scopes | Low | N/A (future enhancement) | Accepted risk |
+### Phase 2 — Defense-in-Depth Improvements (Planned)
+
+Items that are deployment-mitigated but recommended for code-level hardening:
+
+| Priority | Finding | Current Mitigation | Recommended Action |
+|----------|---------|-------------------|-------------------|
+| 1 | H2 - Agent auth rate limiting | fail2ban catches 401s | Apply SEC-13 `_record_token_failure` pattern to agent auth in `agent/dependencies.py` |
+| 2 | M5 - Deprecated `datetime.utcnow()` | Server timezone UTC | Replace ~90 occurrences with `datetime.now(timezone.utc)` |
+| 3 | L3 - Secret key defaults | Mandatory key generation in deploy guide | Add fail-fast in production mode for `SESSION_SECRET_KEY` and `JWT_SECRET_KEY` |
+| 4 | L4 - API token scopes | Super admin endpoints already blocked | Implement scope-based permissions for API tokens |
+| 5 | L1 - CSP `unsafe-inline` | N/A (Tailwind CSS requirement) | Evaluate nonce-based CSP for styles |
+
+### Deployment-Mitigated (No Code Change Needed)
+
+| Finding | Severity | Deployment Control |
+|---------|----------|--------------------|
+| M1 - HSTS | Medium | nginx `Strict-Transport-Security` header |
+| M2 - In-memory rate limiting | Medium | fail2ban `shuttersense-token` + `nginx-limit-req` jails |
+| M3 - Session HTTPS default | Medium | `.env` `SESSION_HTTPS_ONLY=true` + nginx HTTPS redirect |
+| L2 - Default CORS localhost | Low | `.env` `CORS_ORIGINS=https://app.shuttersense.ai` |

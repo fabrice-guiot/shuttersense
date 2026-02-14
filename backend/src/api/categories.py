@@ -109,7 +109,7 @@ async def get_category_stats(
         logger.error(f"Error getting category stats: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get category statistics: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -166,7 +166,7 @@ async def seed_default_categories(
         logger.error(f"Error seeding default categories: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to seed default categories: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -212,7 +212,7 @@ async def list_categories(
         logger.error(f"Error listing categories: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list categories: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -286,7 +286,7 @@ async def create_category(
         logger.error(f"Error creating category: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create category: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -415,7 +415,7 @@ async def update_category(
         logger.error(f"Error updating category: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update category: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -476,7 +476,7 @@ async def delete_category(
         logger.error(f"Error deleting category: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete category: {str(e)}",
+            detail="An internal error occurred",
         )
 
 
@@ -534,5 +534,5 @@ async def reorder_categories(
         logger.error(f"Error reordering categories: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reorder categories: {str(e)}",
+            detail="An internal error occurred",
         )

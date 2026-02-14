@@ -41,7 +41,7 @@ from backend.src.schemas.inventory import (
 )
 from backend.src.services.connector_service import ConnectorService
 from backend.src.services.inventory_service import InventoryService, InventoryValidationStatus
-from backend.src.services.exceptions import ConflictError
+from backend.src.services.exceptions import ConflictError, ValidationError
 from backend.src.utils.crypto import CredentialEncryptor
 from backend.src.utils.logging_config import get_logger
 from backend.src.middleware.auth import require_auth, TenantContext
@@ -124,7 +124,7 @@ async def get_connector_stats(
         logger.error(f"Error getting connector stats: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get connector statistics: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -175,7 +175,7 @@ async def list_connectors(
         logger.error(f"Error listing connectors: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list connectors: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -266,7 +266,7 @@ async def create_connector(
         logger.error(f"Error creating connector: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create connector: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -422,7 +422,7 @@ async def update_connector(
         logger.error(f"Error updating connector: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update connector: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -518,7 +518,7 @@ async def delete_connector(
         logger.error(f"Error deleting connector: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete connector: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -609,7 +609,7 @@ async def test_connector(
         logger.error(f"Error testing connector: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to test connector: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -690,7 +690,7 @@ async def update_inventory_config(
 
         return ConnectorResponse.model_validate(updated_connector)
 
-    except ValueError as e:
+    except (ValueError, ValidationError) as e:
         error_msg = str(e)
         logger.warning(f"Invalid inventory config: {error_msg}")
         raise HTTPException(
@@ -705,7 +705,7 @@ async def update_inventory_config(
         logger.error(f"Error setting inventory config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to set inventory configuration: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -766,7 +766,7 @@ async def delete_inventory_config(
         logger.error(f"Error clearing inventory config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear inventory configuration: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -908,7 +908,7 @@ async def validate_inventory_config(
         logger.error(f"Error validating inventory config: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate inventory configuration: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -987,7 +987,7 @@ async def get_inventory_status(
         logger.error(f"Error getting inventory status: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get inventory status: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -1095,7 +1095,7 @@ async def list_inventory_folders(
         logger.error(f"Error listing inventory folders: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list inventory folders: {str(e)}"
+            detail="An internal error occurred"
         )
 
 
@@ -1208,5 +1208,5 @@ async def trigger_inventory_import(
         logger.error(f"Error triggering inventory import: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger inventory import: {str(e)}"
+            detail="An internal error occurred"
         )

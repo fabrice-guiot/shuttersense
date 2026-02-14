@@ -1750,6 +1750,7 @@ class ToolService:
             # Convert to full JobResponse format for the global channel
             job_response = JobAdapter.to_response(job)
             await self.websocket_manager.broadcast_global_job_update(
-                job_response.model_dump(mode="json")
+                job_response.model_dump(mode="json"),
+                team_id=job.team_id
             )
 

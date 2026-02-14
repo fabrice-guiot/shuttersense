@@ -22,7 +22,10 @@ from backend.src.schemas.audit import AuditInfo
 from backend.src.services.token_service import TokenService
 from backend.src.services.exceptions import NotFoundError, ValidationError
 from backend.src.config.settings import get_settings
+from backend.src.utils.logging_config import get_logger
 
+
+logger = get_logger("api")
 
 router = APIRouter(prefix="/api/tokens", tags=["Tokens"])
 

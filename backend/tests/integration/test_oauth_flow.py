@@ -382,13 +382,14 @@ class TestSessionManagement:
 
         auth_service.create_session(mock_request, user)
 
-        assert "user_id" in mock_request.session
         assert "user_guid" in mock_request.session
-        assert "team_id" in mock_request.session
         assert "team_guid" in mock_request.session
         assert "email" in mock_request.session
         assert "is_super_admin" in mock_request.session
         assert "authenticated_at" in mock_request.session
+        # Numeric IDs should NOT be in session (M4 security fix)
+        assert "user_id" not in mock_request.session
+        assert "team_id" not in mock_request.session
 
     def test_session_clear_removes_all(self, test_db_session):
         """Test session clear removes all data."""

@@ -263,11 +263,13 @@ class TestAuthServiceSession:
 
         auth_service.create_session(mock_request, user)
 
-        assert mock_request.session["user_id"] == user.id
         assert mock_request.session["user_guid"] == user.guid
-        assert mock_request.session["team_id"] == user.team_id
+        assert mock_request.session["team_guid"] == user.team.guid
         assert mock_request.session["email"] == user.email
         assert "authenticated_at" in mock_request.session
+        # Numeric IDs should NOT be in session (M4 security fix)
+        assert "user_id" not in mock_request.session
+        assert "team_id" not in mock_request.session
 
     def test_clear_session(self, auth_service, mock_request):
         """Test clearing a session."""
@@ -280,7 +282,7 @@ class TestAuthServiceSession:
 
     def test_is_authenticated_true(self, auth_service, mock_request):
         """Test is_authenticated when session exists."""
-        mock_request.session["user_id"] = 1
+        mock_request.session["user_guid"] = "usr_01hgw2bbg0000000000000001"
 
         assert auth_service.is_authenticated(mock_request) is True
 
@@ -291,7 +293,7 @@ class TestAuthServiceSession:
     def test_get_session_user(self, auth_service, sample_user, mock_request):
         """Test getting user from session."""
         user = sample_user(email="getuser@example.com")
-        mock_request.session["user_id"] = user.id
+        mock_request.session["user_guid"] = user.guid
 
         result = auth_service.get_session_user(mock_request)
 
@@ -299,8 +301,8 @@ class TestAuthServiceSession:
         assert result.id == user.id
 
     def test_get_session_user_not_found(self, auth_service, mock_request):
-        """Test getting user when ID not in database."""
-        mock_request.session["user_id"] = 99999
+        """Test getting user when GUID not in database."""
+        mock_request.session["user_guid"] = "usr_00000000000000000000000000"
 
         result = auth_service.get_session_user(mock_request)
 
@@ -311,9 +313,7 @@ class TestAuthServiceSession:
     def test_get_current_user_info(self, auth_service, mock_request):
         """Test getting current user info from session."""
         mock_request.session = {
-            "user_id": 1,
             "user_guid": "usr_123",
-            "team_id": 1,
             "team_guid": "ten_456",
             "email": "info@example.com",
             "is_super_admin": False,

@@ -162,7 +162,9 @@ async def run_tool(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=str(e)
                 )
-            collection = collection_service.get_by_guid(tool_request.collection_guid)
+            collection = collection_service.get_by_guid(
+                tool_request.collection_guid, team_id=ctx.team_id
+            )
             if not collection:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -180,10 +182,13 @@ async def run_tool(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=str(e)
                 )
-            # Look up pipeline by uuid
+            # Look up pipeline by uuid with tenant filtering
             from sqlalchemy.orm import Session
             db: Session = collection_service.db
-            pipeline = db.query(Pipeline).filter(Pipeline.uuid == pipeline_uuid).first()
+            pipeline = db.query(Pipeline).filter(
+                Pipeline.uuid == pipeline_uuid,
+                Pipeline.team_id == ctx.team_id
+            ).first()
             if not pipeline:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -289,7 +294,7 @@ async def run_all_tools(
             detail=str(e)
         )
 
-    collection = collection_service.get_by_guid(collection_guid)
+    collection = collection_service.get_by_guid(collection_guid, team_id=ctx.team_id)
     if not collection:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -416,7 +421,9 @@ def list_jobs(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
             )
-        collection = collection_service.get_by_guid(collection_guid)
+        collection = collection_service.get_by_guid(
+            collection_guid, team_id=ctx.team_id
+        )
         if collection:
             collection_id = collection.id
 
@@ -602,10 +609,13 @@ async def global_jobs_websocket(
     websocket: WebSocket
 ):
     """
-    WebSocket endpoint for real-time job list updates.
+    WebSocket endpoint for real-time job list updates (team-scoped).
 
-    Connect to receive updates for all jobs. This eliminates the need
-    for polling the jobs list endpoint.
+    Requires session authentication. Unauthenticated connections are
+    closed with code 4001.
+
+    Connect to receive updates for your team's jobs. This eliminates
+    the need for polling the jobs list endpoint.
 
     Connection lifecycle:
     - Server closes connection after WEBSOCKET_MAX_LIFETIME_SECONDS
@@ -618,12 +628,25 @@ async def global_jobs_websocket(
         "job": { ...full job object... }
     }
     """
-    manager = get_connection_manager()
-    channel_id = manager.GLOBAL_JOBS_CHANNEL
+    from backend.src.middleware.tenant import get_websocket_tenant_context_standalone
 
-    await manager.connect(channel_id, websocket)
+    await websocket.accept()
+
+    # Authenticate using session cookie
+    ctx = await get_websocket_tenant_context_standalone(websocket)
+    if not ctx:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    manager = get_connection_manager()
+    channel_id = manager.get_team_jobs_channel(ctx.team_id)
+
+    await manager.register_accepted(channel_id, websocket)
     connection_start = time.monotonic()
-    logger.info("WebSocket connected for global jobs channel")
+    logger.info(
+        "WebSocket connected for team jobs channel",
+        extra={"team_id": ctx.team_id}
+    )
 
     try:
         while True:
@@ -631,7 +654,7 @@ async def global_jobs_websocket(
             elapsed = time.monotonic() - connection_start
             if elapsed >= WEBSOCKET_MAX_LIFETIME_SECONDS:
                 logger.info(
-                    f"WebSocket for global jobs exceeded max lifetime "
+                    f"WebSocket for team jobs exceeded max lifetime "
                     f"({WEBSOCKET_MAX_LIFETIME_SECONDS}s), requesting reconnect"
                 )
                 try:
@@ -653,7 +676,7 @@ async def global_jobs_websocket(
                 except Exception:
                     break
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected from global jobs channel")
+        logger.info("WebSocket disconnected from team jobs channel")
     finally:
         manager.disconnect(channel_id, websocket)
 
@@ -665,6 +688,10 @@ async def job_progress_websocket(
 ):
     """
     WebSocket endpoint for real-time job progress updates.
+
+    Requires session authentication. Verifies the job belongs to the
+    user's team before subscribing. Unauthenticated connections are
+    closed with code 4001.
 
     Connect to receive progress updates for a specific job.
     Messages are JSON objects with job status and progress data.
@@ -686,9 +713,33 @@ async def job_progress_websocket(
         }
     }
     """
+    from backend.src.middleware.tenant import get_websocket_tenant_context_standalone
+    from backend.src.db.database import SessionLocal
+    from backend.src.models.job import Job
+
+    await websocket.accept()
+
+    # Authenticate using session cookie
+    ctx = await get_websocket_tenant_context_standalone(websocket)
+    if not ctx:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    # Verify the job belongs to the user's team
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(
+            Job.guid == job_id, Job.team_id == ctx.team_id
+        ).first()
+        if not job:
+            await websocket.close(code=4003, reason="Job not found")
+            return
+    finally:
+        db.close()
+
     manager = get_connection_manager()
 
-    await manager.connect(job_id, websocket)
+    await manager.register_accepted(job_id, websocket)
     connection_start = time.monotonic()
     logger.info(f"WebSocket connected for job {job_id}")
 
