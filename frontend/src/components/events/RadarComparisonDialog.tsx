@@ -22,7 +22,17 @@ import { CHART_COLORS } from '@/components/trends/TrendChart'
 import { EventRadarChart, DIMENSIONS } from './EventRadarChart'
 import { dayOffsetLabel } from './dayOffset'
 import { useResolveConflict } from '@/hooks/useResolveConflict'
-import type { ConflictGroup, ScoredEvent } from '@/contracts/api/conflict-api'
+import type { ConflictGroup, ConflictType, ScoredEvent } from '@/contracts/api/conflict-api'
+
+// ============================================================================
+// Conflict Type Labels
+// ============================================================================
+
+const CONFLICT_TYPE_LABELS: Record<ConflictType, string> = {
+  time_overlap: 'Time Overlap',
+  distance: 'Distance',
+  travel_buffer: 'Travel Buffer',
+}
 
 // ============================================================================
 // Types
@@ -59,6 +69,20 @@ export function RadarComparisonDialog({
 
   const isResolved = group.status === 'resolved'
   const events = group.events
+
+  // Build conflict counts per type per event (unchanged by skip status)
+  const conflictCountsByType = new Map<ConflictType, Map<string, number>>()
+  for (const edge of group.edges) {
+    let countMap = conflictCountsByType.get(edge.conflict_type)
+    if (!countMap) {
+      countMap = new Map<string, number>()
+      conflictCountsByType.set(edge.conflict_type, countMap)
+    }
+    countMap.set(edge.event_a_guid, (countMap.get(edge.event_a_guid) ?? 0) + 1)
+    countMap.set(edge.event_b_guid, (countMap.get(edge.event_b_guid) ?? 0) + 1)
+  }
+  const activeConflictTypes = (Object.keys(CONFLICT_TYPE_LABELS) as ConflictType[])
+    .filter(t => conflictCountsByType.has(t))
 
   const handleSkip = async (eventGuid: string) => {
     try {
@@ -152,6 +176,47 @@ export function RadarComparisonDialog({
                   ))}
                 </tr>
               </tbody>
+
+              {/* Conflict Counts Section */}
+              {activeConflictTypes.length > 0 && (
+                <tbody>
+                  <tr className="border-t">
+                    <td className="py-1.5 px-2 font-medium text-muted-foreground" colSpan={events.length + 1}>
+                      Conflicts
+                    </td>
+                  </tr>
+                  {activeConflictTypes.map(type => {
+                    const countMap = conflictCountsByType.get(type)!
+                    return (
+                      <tr key={type} className="border-b border-border/50">
+                        <td className="py-1.5 px-2 text-muted-foreground">{CONFLICT_TYPE_LABELS[type]}</td>
+                        {events.map(event => {
+                          const count = countMap.get(event.guid) ?? 0
+                          return (
+                            <td key={event.guid} className="text-right py-1.5 px-2 tabular-nums">
+                              {count > 0 ? count : '\u2014'}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                  <tr className="font-medium">
+                    <td className="py-1.5 px-2">Total</td>
+                    {events.map(event => {
+                      let total = 0
+                      for (const countMap of conflictCountsByType.values()) {
+                        total += countMap.get(event.guid) ?? 0
+                      }
+                      return (
+                        <td key={event.guid} className="text-right py-1.5 px-2 tabular-nums">
+                          {total}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                </tbody>
+              )}
             </table>
           </div>
 
