@@ -476,12 +476,12 @@
 
 ### Implementation for User Story 7
 
-- [ ] T039 [US7] Update header stats for Planner view in `frontend/src/pages/EventsPage.tsx`
+- [x] T039 [US7] Update header stats for Planner view in `frontend/src/pages/EventsPage.tsx`
   - Set `useHeaderStats()` when Planner view is active
   - KPIs: Conflicts (total groups), Unresolved (count), Events Scored (count), Avg Quality (average composite score)
   - Clear stats on view change or unmount
 
-- [ ] T040 [US7] Add conflict notification via NotificationService in `backend/src/services/notification_service.py` and event hooks
+- [x] T040 [US7] Add conflict notification via NotificationService in `backend/src/services/notification_service.py` and event hooks
   - Add `"conflict"` to notification categories (alongside existing `job_failure`, `inflection_point`, `agent_status`, `deadline`, `retry_warning`)
   - Add `notify_conflict_detected(self, team_id: int, event_a: Event, event_b: Event, conflict_type: str) -> int` method
     - Follow `notify_job_failure()` pattern: iterate active team users, check preferences, call `send_notification()`

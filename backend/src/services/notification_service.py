@@ -41,6 +41,7 @@ DEFAULT_PREFERENCES = {
     "inflection_points": True,
     "agent_status": True,
     "deadline": True,
+    "conflict": True,
     "retry_warning": False,
     "deadline_days_before": 3,
     "timezone": "UTC",
@@ -53,6 +54,7 @@ CATEGORY_PREFERENCE_KEYS = {
     "inflection_point": "inflection_points",
     "agent_status": "agent_status",
     "deadline": "deadline",
+    "conflict": "conflict",
     "retry_warning": "retry_warning",
 }
 
@@ -803,6 +805,91 @@ class NotificationService:
             "Job failure notifications sent",
             extra={
                 "job_guid": job.guid,
+                "sent_count": sent_count,
+                "team_members": len(team_members),
+            },
+        )
+
+        return sent_count
+
+    def notify_conflict_detected(
+        self,
+        team_id: int,
+        event_a_title: str,
+        event_b_title: str,
+        event_a_guid: str,
+        event_b_guid: str,
+        conflict_type: str,
+        event_date: str,
+    ) -> int:
+        """
+        Send conflict detection notifications to all active team members.
+
+        Called after event create/update when new conflicts are detected.
+
+        Args:
+            team_id: Team that owns the events
+            event_a_title: Title of the first conflicting event
+            event_b_title: Title of the second conflicting event
+            event_a_guid: GUID of the first event
+            event_b_guid: GUID of the second event
+            conflict_type: Type of conflict (time_overlap, distance, travel_buffer)
+            event_date: ISO date string for navigation URL
+
+        Returns:
+            Number of notifications actually sent (preference-filtered)
+        """
+        from backend.src.services.user_service import UserService
+
+        type_label = conflict_type.replace("_", " ")
+        title = "New scheduling conflict detected"
+        body = (
+            f'"{event_a_title}" has a {type_label} conflict with '
+            f'"{event_b_title}" on {event_date}'
+        )
+
+        data = {
+            "url": f"/events?date={event_date}",
+            "event_guids": [event_a_guid, event_b_guid],
+        }
+
+        push_payload = {
+            "title": title,
+            "body": body,
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+            "tag": f"conflict_{event_a_guid}_{event_b_guid}",
+            "data": {
+                **data,
+                "category": "conflict",
+            },
+        }
+
+        user_service = UserService(db=self.db)
+        team_members = user_service.list_by_team(
+            team_id=team_id, active_only=True
+        )
+
+        sent_count = 0
+        for user in team_members:
+            notification = self.send_notification(
+                user=user,
+                team_id=team_id,
+                category="conflict",
+                title=title,
+                body=body,
+                data=data,
+                push_payload=push_payload,
+            )
+            if notification is not None:
+                sent_count += 1
+
+        logger.info(
+            "Conflict notifications sent",
+            extra={
+                "event_a_guid": event_a_guid,
+                "event_b_guid": event_b_guid,
+                "conflict_type": conflict_type,
                 "sent_count": sent_count,
                 "team_members": len(team_members),
             },

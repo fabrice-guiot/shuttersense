@@ -965,6 +965,10 @@ class EventService:
         self.db.refresh(event)
 
         logger.info(f"Created event: {event.guid} - {title}")
+
+        # Check for new conflicts and notify (non-blocking)
+        self._notify_new_conflicts(event.team_id, event.event_date)
+
         return event
 
     def create_series(
@@ -1522,6 +1526,10 @@ class EventService:
         self.db.refresh(event)
 
         logger.info(f"Updated event: {event.guid} (scope: {scope}, events: {len(events_to_update)})")
+
+        # Check for new conflicts and notify (non-blocking)
+        self._notify_new_conflicts(event.team_id, event.event_date)
+
         return event
 
     def _get_series_events_for_update(
@@ -2066,6 +2074,73 @@ class EventService:
                     }
                 )
             return None
+
+    # =========================================================================
+    # Conflict Notification (Issue #182, T040)
+    # =========================================================================
+
+    def _notify_new_conflicts(self, team_id: int, event_date: date) -> None:
+        """
+        Detect conflicts around an event date and notify team members.
+
+        Runs conflict detection for a window around the event date and sends
+        notifications for any unresolved conflict edges found. Errors are
+        suppressed to avoid blocking the main create/update operation.
+        """
+        try:
+            from backend.src.services.conflict_service import ConflictService
+            from backend.src.services.notification_service import NotificationService
+            from backend.src.config.settings import get_settings
+
+            conflict_service = ConflictService(self.db)
+            # Check a ±7 day window around the event date
+            start = event_date - timedelta(days=7)
+            end = event_date + timedelta(days=7)
+            result = conflict_service.detect_conflicts(team_id, start, end)
+
+            if not result.conflict_groups:
+                return
+
+            # Only notify for unresolved groups
+            unresolved_groups = [
+                g for g in result.conflict_groups
+                if g.status != "resolved"
+            ]
+            if not unresolved_groups:
+                return
+
+            settings = get_settings()
+            notification_service = NotificationService(
+                db=self.db,
+                vapid_private_key=settings.vapid_private_key,
+                vapid_claims={"sub": f"mailto:{settings.vapid_subject}"},
+            )
+
+            for group in unresolved_groups:
+                for edge in group.edges:
+                    # Find event titles from the group's scored events
+                    event_a = next(
+                        (e for e in group.events if e.guid == edge.event_a_guid), None
+                    )
+                    event_b = next(
+                        (e for e in group.events if e.guid == edge.event_b_guid), None
+                    )
+                    if event_a and event_b:
+                        notification_service.notify_conflict_detected(
+                            team_id=team_id,
+                            event_a_title=event_a.title,
+                            event_b_title=event_b.title,
+                            event_a_guid=event_a.guid,
+                            event_b_guid=event_b.guid,
+                            conflict_type=edge.conflict_type,
+                            event_date=str(event_date),
+                        )
+        except Exception:
+            # Non-blocking: log and suppress so event CRUD is not affected
+            logger.warning(
+                "Failed to send conflict notifications",
+                exc_info=True,
+            )
 
     # =========================================================================
     # Event Performer Management (T115)

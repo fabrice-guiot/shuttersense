@@ -257,9 +257,20 @@ export default function EventsPage() {
     }
   }
 
-  // Update header stats when data changes
+  // Update header stats — planner-specific KPIs when planner is active
   useEffect(() => {
-    if (stats) {
+    if (viewMode === 'planner' && conflictData) {
+      const scoredEvents = conflictData.scored_events ?? []
+      const avgQuality = scoredEvents.length > 0
+        ? Math.round(scoredEvents.reduce((sum, e) => sum + e.scores.composite, 0) / scoredEvents.length)
+        : 0
+      setStats([
+        { label: 'Conflicts', value: conflictData.summary.total_groups.toLocaleString() },
+        { label: 'Unresolved', value: conflictData.summary.unresolved.toLocaleString() },
+        { label: 'Events Scored', value: scoredEvents.length.toLocaleString() },
+        { label: 'Avg Quality', value: `${avgQuality}` },
+      ])
+    } else if (stats) {
       setStats([
         { label: 'Total Events', value: stats.total_count.toLocaleString() },
         { label: 'Upcoming', value: stats.upcoming_count.toLocaleString() },
@@ -268,7 +279,7 @@ export default function EventsPage() {
       ])
     }
     return () => setStats([]) // Clear stats on unmount
-  }, [stats, setStats])
+  }, [viewMode, conflictData, stats, setStats])
 
   // ============================================================================
   // Dialog States
