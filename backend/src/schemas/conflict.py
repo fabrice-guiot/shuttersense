@@ -16,6 +16,8 @@ from typing import Optional, List
 
 from pydantic import BaseModel, Field
 
+from backend.src.schemas.audit import AuditInfo
+
 
 # ============================================================================
 # Enums
@@ -59,6 +61,7 @@ class EventScoreResponse(BaseModel):
     title: str
     event_date: date
     scores: EventScores
+    audit: Optional[AuditInfo] = None
 
 
 # ============================================================================
@@ -139,6 +142,7 @@ class ConflictDetectionResponse(BaseModel):
     conflict_groups: List[ConflictGroup]
     scored_events: List[ScoredEvent] = []
     summary: ConflictSummary
+    audit: Optional[AuditInfo] = None
 
 
 # ============================================================================
@@ -166,6 +170,7 @@ class ConflictResolveResponse(BaseModel):
     success: bool
     updated_count: int = Field(..., description="Number of events whose attendance was updated")
     message: Optional[str] = None
+    audit: Optional[AuditInfo] = None
 
 
 # ============================================================================
@@ -181,6 +186,7 @@ class ConflictRulesResponse(BaseModel):
     travel_buffer_days: int = Field(default=3, ge=0)
     colocation_radius_miles: int = Field(default=10, ge=0)
     performer_ceiling: int = Field(default=5, ge=1)
+    audit: Optional[AuditInfo] = None
 
 
 class ConflictRulesUpdateRequest(BaseModel):
@@ -206,6 +212,7 @@ class ScoringWeightsResponse(BaseModel):
     weight_performer_lineup: int = Field(default=20, ge=0, le=100)
     weight_logistics_ease: int = Field(default=20, ge=0, le=100)
     weight_readiness: int = Field(default=20, ge=0, le=100)
+    audit: Optional[AuditInfo] = None
 
 
 class ScoringWeightsUpdateRequest(BaseModel):

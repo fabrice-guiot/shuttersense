@@ -88,7 +88,8 @@ class TestNotifyConflictDetected:
             event_a_guid="evt_aaa",
             event_b_guid="evt_bbb",
             conflict_type="time_overlap",
-            event_date="2026-06-15",
+            event_a_date="2026-06-15",
+            event_b_date="2026-06-15",
         )
 
         assert sent == 1
@@ -106,7 +107,8 @@ class TestNotifyConflictDetected:
             event_a_guid="evt_aaa",
             event_b_guid="evt_bbb",
             conflict_type="distance",
-            event_date="2026-07-01",
+            event_a_date="2026-07-01",
+            event_b_date="2026-07-02",
         )
 
         assert sent == 0
@@ -126,7 +128,8 @@ class TestNotifyConflictDetected:
             event_a_guid="evt_aaa",
             event_b_guid="evt_bbb",
             conflict_type="travel_buffer",
-            event_date="2026-08-01",
+            event_a_date="2026-08-01",
+            event_b_date="2026-08-01",
         )
 
         # Find the notification that was created
@@ -193,15 +196,18 @@ class TestEventServiceConflictTrigger:
         assert call_args[0][0] == test_team.id  # team_id
         assert call_args[0][1] == date(2026, 6, 15)  # event_date
 
-    @patch("backend.src.services.event_service.EventService._notify_new_conflicts")
+    @patch("backend.src.services.conflict_service.ConflictService")
     def test_notify_does_not_block_on_error(
-        self, mock_notify, test_db_session, test_team, test_user,
+        self, mock_conflict_service_class, test_db_session, test_team, test_user,
     ):
         """_notify_new_conflicts errors should not prevent event creation."""
         from backend.src.services.event_service import EventService
         from backend.src.models import Category
 
-        mock_notify.side_effect = Exception("Notification failed")
+        # Mock ConflictService.detect_conflicts to raise inside _notify_new_conflicts
+        mock_conflict_service = MagicMock()
+        mock_conflict_service.detect_conflicts.side_effect = Exception("Detection failed")
+        mock_conflict_service_class.return_value = mock_conflict_service
 
         event_service = EventService(db=test_db_session)
 
@@ -221,14 +227,18 @@ class TestEventServiceConflictTrigger:
 
         from datetime import date
 
-        # Should not raise even though _notify_new_conflicts raises
-        # (the mock raises before the try/except in the real method,
-        # but we're testing that the mock was called = hook is in place)
-        with pytest.raises(Exception, match="Notification failed"):
-            event_service.create(
-                team_id=test_team.id,
-                title="Test Event 2",
-                category_guid=category.guid,
-                event_date=date(2026, 6, 20),
-                user_id=test_user.id,
-            )
+        # Should NOT raise - the try/except in _notify_new_conflicts should suppress
+        event = event_service.create(
+            team_id=test_team.id,
+            title="Test Event 2",
+            category_guid=category.guid,
+            event_date=date(2026, 6, 20),
+            user_id=test_user.id,
+        )
+
+        # Event should be created successfully despite the conflict detection error
+        assert event is not None
+        assert event.title == "Test Event 2"
+
+        # Verify the conflict service was called (notification hook triggered)
+        mock_conflict_service.detect_conflicts.assert_called_once()

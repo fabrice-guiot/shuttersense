@@ -451,7 +451,13 @@ class TestGroupConstruction:
         ]
 
         service = ConflictService.__new__(ConflictService)
-        groups = service._build_groups([a, b, c], edges, DEFAULT_WEIGHTS, 5)
+        # Pre-compute scores for the new _build_groups signature
+        scores_by_guid = {
+            "evt_a": EventScores(venue_quality=50, organizer_reputation=50, performer_lineup=0, logistics_ease=100, readiness=100, composite=50),
+            "evt_b": EventScores(venue_quality=50, organizer_reputation=50, performer_lineup=0, logistics_ease=100, readiness=100, composite=50),
+            "evt_c": EventScores(venue_quality=50, organizer_reputation=50, performer_lineup=0, logistics_ease=100, readiness=100, composite=50),
+        }
+        groups = service._build_groups([a, b, c], edges, scores_by_guid)
 
         assert len(groups) == 1
         assert len(groups[0].events) == 3
@@ -477,7 +483,14 @@ class TestGroupConstruction:
         ]
 
         service = ConflictService.__new__(ConflictService)
-        groups = service._build_groups([a, b, c, d], edges, DEFAULT_WEIGHTS, 5)
+        # Pre-compute scores for the new _build_groups signature
+        scores_by_guid = {
+            "evt_a": EventScores(venue_quality=50, organizer_reputation=50, performer_lineup=0, logistics_ease=100, readiness=100, composite=50),
+            "evt_b": EventScores(venue_quality=50, organizer_reputation=50, performer_lineup=0, logistics_ease=100, readiness=100, composite=50),
+            "evt_c": EventScores(venue_quality=50, organizer_reputation=50, performer_lineup=0, logistics_ease=100, readiness=100, composite=50),
+            "evt_d": EventScores(venue_quality=50, organizer_reputation=50, performer_lineup=0, logistics_ease=100, readiness=100, composite=50),
+        }
+        groups = service._build_groups([a, b, c, d], edges, scores_by_guid)
 
         assert len(groups) == 2
 

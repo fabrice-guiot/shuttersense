@@ -820,7 +820,8 @@ class NotificationService:
         event_a_guid: str,
         event_b_guid: str,
         conflict_type: str,
-        event_date: str,
+        event_a_date: str,
+        event_b_date: str,
     ) -> int:
         """
         Send conflict detection notifications to all active team members.
@@ -834,7 +835,8 @@ class NotificationService:
             event_a_guid: GUID of the first event
             event_b_guid: GUID of the second event
             conflict_type: Type of conflict (time_overlap, distance, travel_buffer)
-            event_date: ISO date string for navigation URL
+            event_a_date: ISO date string for the first event
+            event_b_date: ISO date string for the second event
 
         Returns:
             Number of notifications actually sent (preference-filtered)
@@ -843,13 +845,22 @@ class NotificationService:
 
         type_label = conflict_type.replace("_", " ")
         title = "New scheduling conflict detected"
+
+        # For cross-day conflicts, show both dates
+        if event_a_date == event_b_date:
+            date_str = event_a_date
+        else:
+            date_str = f"{event_a_date} and {event_b_date}"
+
         body = (
             f'"{event_a_title}" has a {type_label} conflict with '
-            f'"{event_b_title}" on {event_date}'
+            f'"{event_b_title}" on {date_str}'
         )
 
+        # Navigate to the earlier date
+        nav_date = min(event_a_date, event_b_date)
         data = {
-            "url": f"/events?date={event_date}",
+            "url": f"/events?date={nav_date}",
             "event_guids": [event_a_guid, event_b_guid],
         }
 

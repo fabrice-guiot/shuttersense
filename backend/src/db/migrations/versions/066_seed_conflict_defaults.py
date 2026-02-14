@@ -97,16 +97,26 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove seeded conflict rules and scoring weights."""
+    """Remove only seeded conflict rules and scoring weights (not user edits)."""
     bind = op.get_bind()
 
     configurations_table = table(
         'configurations',
         column('category', sa.String),
+        column('key', sa.String),
+        column('source', sa.String),
     )
+
+    # Only delete rows that were seeded by this migration (source='database' and matching keys)
+    seeded_conflict_keys = [key for key, _, _ in DEFAULT_CONFLICT_RULES]
+    seeded_scoring_keys = [key for key, _, _ in DEFAULT_SCORING_WEIGHTS]
 
     bind.execute(
         configurations_table.delete().where(
-            configurations_table.c.category.in_(["conflict_rules", "scoring_weights"])
+            sa.and_(
+                configurations_table.c.category.in_(["conflict_rules", "scoring_weights"]),
+                configurations_table.c.source == 'database',
+                configurations_table.c.key.in_(seeded_conflict_keys + seeded_scoring_keys),
+            )
         )
     )

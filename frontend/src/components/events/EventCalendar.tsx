@@ -30,6 +30,9 @@ import type { DayConflictSummary, EventConflictInfo } from '@/hooks/useConflicts
 /** Maximum category badges to show in compact mode before overflow */
 const MAX_VISIBLE_BADGES = 4
 
+/** Design system color for unresolved conflict badges (amber-600) */
+const CONFLICT_UNRESOLVED_COLOR = '#d97706'
+
 // ============================================================================
 // Calendar Utilities
 // ============================================================================
@@ -571,7 +574,7 @@ export const EventCalendar = ({
                     categoryGuid: '__conflicts__',
                     name: `${(dayConflicts.unresolved + dayConflicts.resolved)} conflict${(dayConflicts.unresolved + dayConflicts.resolved) !== 1 ? 's' : ''}`,
                     icon: 'alert-triangle',
-                    color: hasUnresolved ? '#d97706' : null, // amber-600
+                    color: hasUnresolved ? CONFLICT_UNRESOLVED_COLOR : null,
                     count: dayConflicts.unresolved + dayConflicts.resolved,
                   }]
                 : []

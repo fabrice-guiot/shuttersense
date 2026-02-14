@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import { AlertTriangle, BarChart3, Check, Clock, MapPin, Plane, SkipForward } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useResolveConflict } from '@/hooks/useResolveConflict'
@@ -246,8 +247,9 @@ export function ConflictResolutionPanel({
           })),
         ],
       })
-    } catch {
-      // Error state handled by the hook
+    } catch (err: any) {
+      // Surface error to user via toast
+      toast.error(err.userMessage || 'Failed to resolve conflict')
     }
   }
 

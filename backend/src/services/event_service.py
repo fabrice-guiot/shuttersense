@@ -2133,7 +2133,8 @@ class EventService:
                             event_a_guid=event_a.guid,
                             event_b_guid=event_b.guid,
                             conflict_type=edge.conflict_type,
-                            event_date=str(event_date),
+                            event_a_date=str(event_a.event_date),
+                            event_b_date=str(event_b.event_date),
                         )
         except Exception:
             # Non-blocking: log and suppress so event CRUD is not affected

@@ -34,13 +34,13 @@ export interface TimelineEventMarkerHandle {
 }
 
 // ============================================================================
-// Attendance styling
+// Attendance styling — uses design system status tokens
 // ============================================================================
 
 const ATTENDANCE_BAR_COLORS: Record<string, string> = {
-  planned: 'bg-amber-500',
-  attended: 'bg-emerald-500',
-  skipped: 'bg-red-400',
+  planned: 'bg-warning',      // Pending/planned state
+  attended: 'bg-success',     // Positive/completed state
+  skipped: 'bg-destructive',  // Negative/skipped state
 }
 
 // ============================================================================

@@ -206,7 +206,9 @@ export function TimelinePlanner({
       const unresolvedGuids = new Set<string>()
       for (const g of conflictGroups) {
         if (g.status !== 'resolved') {
-          g.events.forEach(e => unresolvedGuids.add(e.guid))
+          for (const e of g.events) {
+            unresolvedGuids.add(e.guid)
+          }
         }
       }
       result = result.filter(e => unresolvedGuids.has(e.guid))

@@ -56,7 +56,7 @@ describe('ConflictRulesSection', () => {
     expect(screen.getByText('Consecutive Window')).toBeInTheDocument()
     expect(screen.getByText('3 days')).toBeInTheDocument()
     expect(screen.getByText('Travel Buffer')).toBeInTheDocument()
-    expect(screen.getByText('1 days')).toBeInTheDocument()
+    expect(screen.getByText('1 day')).toBeInTheDocument()
     expect(screen.getByText('Co-location Radius')).toBeInTheDocument()
     expect(screen.getByText('5 miles')).toBeInTheDocument()
     expect(screen.getByText('Performer Ceiling')).toBeInTheDocument()

@@ -316,7 +316,7 @@
   - On successful save: invalidate/refetch scoring data so changes take effect without page refresh (FR-050)
 
 - [x] T027 [P] [US4] Create ConflictRulesSection in `frontend/src/components/settings/ConflictRulesSection.tsx`
-  - Five numeric inputs: distance threshold (miles), consecutive window (days), travel buffer (days), co-location radius (miles), performer ceiling (count)
+  - Five numeric inputs: distance threshold (miles), consecutive window (days), travel buffer (days), colocation radius (miles), performer ceiling (count)
   - Validation: non-negative integers, performer ceiling ≥ 1
   - "Save" and "Reset Defaults" buttons
   - Uses `useConflictRules` hook

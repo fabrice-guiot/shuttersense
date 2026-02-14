@@ -515,7 +515,9 @@ class TestConfigServiceGetAll:
             "cameras": {},
             "processing_methods": {},
             "event_statuses": {},
-            "collection_ttl": {}
+            "collection_ttl": {},
+            "conflict_rules": {},
+            "scoring_weights": {}
         }
 
 

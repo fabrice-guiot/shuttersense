@@ -7,7 +7,7 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 5, US3)
  */
 
-import { Check, Clock, MapPin, Plane, SkipForward, Users } from 'lucide-react'
+import { Building2, Check, Clock, MapPin, SkipForward, Users } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -237,7 +237,7 @@ function EventDetailCard({
         {/* Organizer */}
         {event.organizer && (
           <div className="flex items-center gap-1.5">
-            <Plane className="h-3 w-3" />
+            <Building2 className="h-3 w-3" />
             <span className="truncate">{event.organizer.name}</span>
           </div>
         )}

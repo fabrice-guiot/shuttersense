@@ -248,7 +248,7 @@ async def resolve_conflict(
     Batch-resolve a conflict group by setting attendance on events.
 
     Request Body:
-        group_id: Ephemeral group identifier
+        group_id: Ephemeral group identifier (used for logging)
         decisions: List of {event_guid, attendance} pairs
     """
     try:
@@ -256,6 +256,8 @@ async def resolve_conflict(
         updated = conflict_service.resolve_conflict(
             team_id=ctx.team_id,
             decisions=decisions,
+            user_id=ctx.user_id,
+            group_id=request.group_id,
         )
 
         return ConflictResolveResponse(

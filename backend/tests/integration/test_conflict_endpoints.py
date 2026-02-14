@@ -345,9 +345,10 @@ class TestConflictResolve:
             params={"start_date": "2026-08-01", "end_date": "2026-08-31"},
         )
         data = response.json()
-        if data["conflict_groups"]:
-            group = data["conflict_groups"][0]
-            assert group["status"] == "resolved"
+        # Assert that we have conflict groups (the fixture creates overlapping events)
+        assert data["conflict_groups"], "Expected at least one conflict group after resolution"
+        group = data["conflict_groups"][0]
+        assert group["status"] == "resolved"
 
 
 class TestEventScore:

@@ -265,10 +265,16 @@ class ConflictService:
         edges.extend(self._detect_distance_conflicts(events, rules))
         edges.extend(self._detect_travel_buffer_violations(events, rules))
 
-        # Score all events for planner view
+        # Pre-compute scores for all events (used for both all_scored and groups)
         performer_ceiling = rules.performer_ceiling
+        scores_by_guid: Dict[str, EventScores] = {
+            event.guid: self.score_event(event, weights, performer_ceiling)
+            for event in events
+        }
+
+        # Build scored events for planner view
         all_scored = [
-            self._build_scored_event(event, self.score_event(event, weights, performer_ceiling))
+            self._build_scored_event(event, scores_by_guid[event.guid])
             for event in events
         ]
 
@@ -282,8 +288,8 @@ class ConflictService:
                 ),
             )
 
-        # Build groups via Union-Find
-        groups = self._build_groups(events, edges, weights, rules.performer_ceiling)
+        # Build groups via Union-Find (reuse pre-computed scores)
+        groups = self._build_groups(events, edges, scores_by_guid)
 
         # Summary
         unresolved = sum(1 for g in groups if g.status == ConflictGroupStatus.UNRESOLVED)
@@ -319,6 +325,7 @@ class ConflictService:
             joinedload(Event.location),
             joinedload(Event.organizer),
             joinedload(Event.series),
+            joinedload(Event.event_performers),
         ).filter(
             Event.team_id == team_id,
             Event.deleted_at.is_(None),
@@ -455,8 +462,7 @@ class ConflictService:
         self,
         events: List[Event],
         edges: List[ConflictEdge],
-        weights: ScoringWeightsResponse,
-        performer_ceiling: int,
+        scores_by_guid: Dict[str, EventScores],
     ) -> List[ConflictGroup]:
         """Build conflict groups from edges using Union-Find."""
         # Map GUIDs to events
@@ -503,7 +509,9 @@ class ConflictService:
                 event = event_map.get(guid)
                 if event is None:
                     continue
-                scores = self.score_event(event, weights, performer_ceiling)
+                scores = scores_by_guid.get(guid)
+                if scores is None:
+                    continue
                 group_events.append(self._build_scored_event(event, scores))
 
             status = self._derive_group_status(group_events)
@@ -603,13 +611,14 @@ class ConflictService:
             raise NotFoundError("Event", guid)
         try:
             uuid_value = GuidService.parse_guid(guid, "evt")
-        except ValueError:
-            raise NotFoundError("Event", guid)
+        except ValueError as err:
+            raise NotFoundError("Event", guid) from err
 
         event = self.db.query(Event).options(
             joinedload(Event.location),
             joinedload(Event.organizer),
             joinedload(Event.category),
+            joinedload(Event.event_performers),
         ).filter(
             Event.uuid == uuid_value,
             Event.team_id == team_id,
@@ -638,6 +647,8 @@ class ConflictService:
         self,
         team_id: int,
         decisions: List[Dict[str, str]],
+        user_id: int,
+        group_id: Optional[str] = None,
     ) -> int:
         """
         Batch-update attendance for events in a conflict group.
@@ -645,6 +656,8 @@ class ConflictService:
         Args:
             team_id: Team ID for tenant isolation
             decisions: List of {"event_guid": ..., "attendance": "planned"|"skipped"}
+            user_id: User ID for audit attribution
+            group_id: Ephemeral group identifier for logging (optional)
 
         Returns:
             Number of events whose attendance was updated
@@ -659,8 +672,8 @@ class ConflictService:
                 raise NotFoundError("Event", event_guid)
             try:
                 uuid_value = GuidService.parse_guid(event_guid, "evt")
-            except ValueError:
-                raise NotFoundError("Event", event_guid)
+            except ValueError as err:
+                raise NotFoundError("Event", event_guid) from err
 
             event = self.db.query(Event).filter(
                 Event.uuid == uuid_value,
@@ -673,6 +686,7 @@ class ConflictService:
 
             if event.attendance != decision["attendance"]:
                 event.attendance = decision["attendance"]
+                event.updated_by_user_id = user_id
                 updated += 1
 
         if updated > 0:
@@ -680,7 +694,7 @@ class ConflictService:
 
         logger.info(
             f"Resolved conflict for team {team_id}",
-            extra={"decisions": len(decisions), "updated": updated},
+            extra={"group_id": group_id, "decisions": len(decisions), "updated": updated},
         )
 
         return updated

@@ -65,6 +65,19 @@ interface RuleConfig {
   step: number
 }
 
+/**
+ * Format a value with its unit, using singular form when value is 1.
+ */
+function formatValueWithUnit(value: number, unit: string): string {
+  // Handle singular/plural for common units
+  if (value === 1) {
+    if (unit === 'days') return '1 day'
+    if (unit === 'miles') return '1 mile'
+    if (unit === 'performers') return '1 performer'
+  }
+  return `${value} ${unit}`
+}
+
 const RULES: RuleConfig[] = [
   {
     key: 'distance_threshold_miles',
@@ -143,6 +156,11 @@ export function ConflictRulesSection({
       setFormError('Please enter a valid number')
       return
     }
+    // For integer-only rules (step === 1), reject non-integer input
+    if (editingRule.step === 1 && !Number.isInteger(parsed)) {
+      setFormError('Please enter an integer value')
+      return
+    }
     if (parsed < editingRule.min) {
       setFormError(`Minimum value is ${editingRule.min}`)
       return
@@ -204,7 +222,7 @@ export function ConflictRulesSection({
                   </TableCell>
                   <TableCell>
                     <span className="font-mono">
-                      {settings[rule.key]} {rule.unit}
+                      {formatValueWithUnit(settings[rule.key], rule.unit)}
                     </span>
                   </TableCell>
                   <TableCell>
