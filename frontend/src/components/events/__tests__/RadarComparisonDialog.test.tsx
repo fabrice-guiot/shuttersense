@@ -221,9 +221,16 @@ describe('RadarComparisonDialog', () => {
       />
     )
 
-    // Click Confirm on the first event (Morning Workshop)
+    // First click shows the confirmation warning (two-step confirmation guard)
     const confirmButtons = screen.getAllByRole('button', { name: /Confirm/i })
     await user.click(confirmButtons[0])
+
+    // Warning should now be visible
+    expect(screen.getByText(/This will skip 1 other event/)).toBeInTheDocument()
+
+    // Second click actually confirms the selection
+    const confirmSelectionButton = screen.getByRole('button', { name: /Confirm Selection/i })
+    await user.click(confirmSelectionButton)
 
     await waitFor(() => {
       expect(capturedPayload).not.toBeNull()
