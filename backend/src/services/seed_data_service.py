@@ -51,6 +51,24 @@ DEFAULT_COLLECTION_TTL = {
     'archived': {'value': 604800, 'label': 'Archived (7 days)'},
 }
 
+# Default conflict detection rules
+DEFAULT_CONFLICT_RULES = {
+    'distance_threshold_miles': {'value': 150, 'label': 'Distance Threshold (miles)'},
+    'consecutive_window_days': {'value': 1, 'label': 'Consecutive Window (days)'},
+    'travel_buffer_days': {'value': 3, 'label': 'Travel Buffer (days)'},
+    'colocation_radius_miles': {'value': 70, 'label': 'Co-location Radius (miles)'},
+    'performer_ceiling': {'value': 5, 'label': 'Performer Ceiling'},
+}
+
+# Default scoring dimension weights
+DEFAULT_SCORING_WEIGHTS = {
+    'weight_venue_quality': {'value': 20, 'label': 'Venue Quality'},
+    'weight_organizer_reputation': {'value': 20, 'label': 'Organizer Reputation'},
+    'weight_performer_lineup': {'value': 20, 'label': 'Performer Lineup'},
+    'weight_logistics_ease': {'value': 20, 'label': 'Logistics Ease'},
+    'weight_readiness': {'value': 20, 'label': 'Readiness'},
+}
+
 
 class SeedDataService:
     """
@@ -76,7 +94,7 @@ class SeedDataService:
 
     def seed_team_defaults(
         self, team_id: int, user_id: Optional[int] = None
-    ) -> Tuple[int, int, int]:
+    ) -> Tuple[int, int, int, int, int]:
         """
         Seed all default data for a team.
 
@@ -88,21 +106,31 @@ class SeedDataService:
             user_id: Optional user ID for audit trail (created_by/updated_by)
 
         Returns:
-            Tuple of (categories_created, event_statuses_created, ttl_configs_created)
+            Tuple of (categories_created, event_statuses_created, ttl_configs_created,
+                       conflict_rules_created, scoring_weights_created)
         """
         categories_created = self.seed_categories(team_id, user_id=user_id)
         event_statuses_created = self.seed_event_statuses(team_id, user_id=user_id)
         ttl_configs_created = self.seed_collection_ttl(team_id, user_id=user_id)
+        conflict_rules_created = self.seed_conflict_rules(team_id, user_id=user_id)
+        scoring_weights_created = self.seed_scoring_weights(team_id, user_id=user_id)
 
-        total_configs = event_statuses_created + ttl_configs_created
+        total_configs = (
+            event_statuses_created + ttl_configs_created
+            + conflict_rules_created + scoring_weights_created
+        )
         if categories_created > 0 or total_configs > 0:
             self.db.commit()
             logger.info(
                 f"Seeded team {team_id}: {categories_created} categories, "
-                f"{event_statuses_created} event statuses, {ttl_configs_created} TTL configs"
+                f"{event_statuses_created} event statuses, {ttl_configs_created} TTL configs, "
+                f"{conflict_rules_created} conflict rules, {scoring_weights_created} scoring weights"
             )
 
-        return categories_created, event_statuses_created, ttl_configs_created
+        return (
+            categories_created, event_statuses_created, ttl_configs_created,
+            conflict_rules_created, scoring_weights_created,
+        )
 
     def seed_categories(self, team_id: int, user_id: Optional[int] = None) -> int:
         """
@@ -239,6 +267,88 @@ class SeedDataService:
             self.db.add(config)
             created_count += 1
             logger.debug(f"Created collection TTL '{state_key}' for team {team_id}")
+
+        return created_count
+
+    def seed_conflict_rules(self, team_id: int, user_id: Optional[int] = None) -> int:
+        """
+        Seed default conflict detection rules for a team.
+
+        Creates conflict rule configurations if they don't already exist.
+        Does NOT commit — caller must commit.
+
+        Args:
+            team_id: Team ID to seed conflict rules for
+            user_id: Optional user ID for audit trail
+
+        Returns:
+            Number of conflict rules created
+        """
+        created_count = 0
+
+        for key, data in DEFAULT_CONFLICT_RULES.items():
+            existing = self.db.query(Configuration).filter(
+                Configuration.team_id == team_id,
+                Configuration.category == 'conflict_rules',
+                Configuration.key == key,
+            ).first()
+
+            if existing:
+                continue
+
+            config = Configuration(
+                team_id=team_id,
+                category='conflict_rules',
+                key=key,
+                value_json=data,
+                description=f"Conflict rule: {data['label']}",
+                source=ConfigSource.DATABASE,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
+            )
+            self.db.add(config)
+            created_count += 1
+
+        return created_count
+
+    def seed_scoring_weights(self, team_id: int, user_id: Optional[int] = None) -> int:
+        """
+        Seed default scoring dimension weights for a team.
+
+        Creates scoring weight configurations if they don't already exist.
+        Does NOT commit — caller must commit.
+
+        Args:
+            team_id: Team ID to seed scoring weights for
+            user_id: Optional user ID for audit trail
+
+        Returns:
+            Number of scoring weights created
+        """
+        created_count = 0
+
+        for key, data in DEFAULT_SCORING_WEIGHTS.items():
+            existing = self.db.query(Configuration).filter(
+                Configuration.team_id == team_id,
+                Configuration.category == 'scoring_weights',
+                Configuration.key == key,
+            ).first()
+
+            if existing:
+                continue
+
+            config = Configuration(
+                team_id=team_id,
+                category='scoring_weights',
+                key=key,
+                value_json=data,
+                description=f"Scoring weight: {data['label']}",
+                source=ConfigSource.DATABASE,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id,
+            )
+            self.db.add(config)
+            created_count += 1
 
         return created_count
 

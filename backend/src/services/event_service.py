@@ -415,7 +415,13 @@ class EventService:
             "needs_travel_count": needs_travel or 0,
         }
 
-    def list_by_preset(self, team_id: int, preset: str) -> List[Event]:
+    def list_by_preset(
+        self,
+        team_id: int,
+        preset: str,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> List[Event]:
         """
         List events matching a dashboard preset filter.
 
@@ -423,9 +429,14 @@ class EventService:
         - Logistics presets: ALL future/confirmed events where the requirement
           is set and status is not the final fulfilled value.
 
+        When start_date/end_date are provided, they override the preset's
+        default date window while preserving the preset's semantic filters.
+
         Args:
             team_id: Team ID for tenant isolation
             preset: One of 'upcoming_30d', 'needs_tickets', 'needs_pto', 'needs_travel'
+            start_date: Optional start of date range (overrides preset default)
+            end_date: Optional end of date range (overrides preset default)
 
         Returns:
             List of Event instances ordered by date ASC
@@ -440,11 +451,12 @@ class EventService:
             )
 
         today = date.today()
+        effective_start = start_date if start_date is not None else today
 
-        # Common filters: future events, non-deleted, non-deadline, not skipped
+        # Common filters: non-deleted, non-deadline, not skipped, future/confirmed
         common_filters = [
             Event.team_id == team_id,
-            Event.event_date >= today,
+            Event.event_date >= effective_start,
             Event.status.in_(["future", "confirmed"]),
             Event.attendance != "skipped",
             Event.is_deadline.is_(False),
@@ -462,10 +474,12 @@ class EventService:
             .filter(*common_filters)
         )
 
-        if preset == "upcoming_30d":
-            # Only upcoming_30d has the 30-day window
-            end_date = today + timedelta(days=30)
+        # Apply date window: use explicit end_date if provided, else preset default
+        if end_date is not None:
             query = query.filter(Event.event_date <= end_date)
+        elif preset == "upcoming_30d":
+            # Fallback: original 30-day window when no explicit end_date
+            query = query.filter(Event.event_date <= today + timedelta(days=30))
         elif preset == "needs_tickets":
             effective_ticket_required = case(
                 (Event.ticket_required.isnot(None), Event.ticket_required),
@@ -951,6 +965,10 @@ class EventService:
         self.db.refresh(event)
 
         logger.info(f"Created event: {event.guid} - {title}")
+
+        # Check for new conflicts and notify (non-blocking)
+        self._notify_new_conflicts(event.team_id, event.event_date)
+
         return event
 
     def create_series(
@@ -1508,6 +1526,10 @@ class EventService:
         self.db.refresh(event)
 
         logger.info(f"Updated event: {event.guid} (scope: {scope}, events: {len(events_to_update)})")
+
+        # Check for new conflicts and notify (non-blocking)
+        self._notify_new_conflicts(event.team_id, event.event_date)
+
         return event
 
     def _get_series_events_for_update(
@@ -2052,6 +2074,83 @@ class EventService:
                     }
                 )
             return None
+
+    # =========================================================================
+    # Conflict Notification (Issue #182, T040)
+    # =========================================================================
+
+    def _notify_new_conflicts(self, team_id: int, event_date: date) -> None:
+        """
+        Detect conflicts around an event date and notify team members.
+
+        Runs conflict detection for a window around the event date and sends
+        notifications for any unresolved conflict edges found. Errors are
+        suppressed to avoid blocking the main create/update operation;
+        callers should not expect exceptions to propagate.
+
+        Args:
+            team_id (int): Team identifier for tenant isolation.
+            event_date (date): Date around which conflicts are detected
+                (a +/-7 day window is used).
+
+        Returns:
+            None
+        """
+        try:
+            from backend.src.services.conflict_service import ConflictService
+            from backend.src.services.notification_service import NotificationService
+            from backend.src.config.settings import get_settings
+
+            conflict_service = ConflictService(self.db)
+            # Check a ±7 day window around the event date
+            start = event_date - timedelta(days=7)
+            end = event_date + timedelta(days=7)
+            result = conflict_service.detect_conflicts(team_id, start, end)
+
+            if not result.conflict_groups:
+                return
+
+            # Only notify for unresolved groups
+            unresolved_groups = [
+                g for g in result.conflict_groups
+                if g.status != "resolved"
+            ]
+            if not unresolved_groups:
+                return
+
+            settings = get_settings()
+            notification_service = NotificationService(
+                db=self.db,
+                vapid_private_key=settings.vapid_private_key,
+                vapid_claims={"sub": f"mailto:{settings.vapid_subject}"},
+            )
+
+            for group in unresolved_groups:
+                for edge in group.edges:
+                    # Find event titles from the group's scored events
+                    event_a = next(
+                        (e for e in group.events if e.guid == edge.event_a_guid), None
+                    )
+                    event_b = next(
+                        (e for e in group.events if e.guid == edge.event_b_guid), None
+                    )
+                    if event_a and event_b:
+                        notification_service.notify_conflict_detected(
+                            team_id=team_id,
+                            event_a_title=event_a.title,
+                            event_b_title=event_b.title,
+                            event_a_guid=event_a.guid,
+                            event_b_guid=event_b.guid,
+                            conflict_type=edge.conflict_type,
+                            event_a_date=str(event_a.event_date),
+                            event_b_date=str(event_b.event_date),
+                        )
+        except Exception:
+            # Non-blocking: log and suppress so event CRUD is not affected
+            logger.warning(
+                "Failed to send conflict notifications",
+                exc_info=True,
+            )
 
     # =========================================================================
     # Event Performer Management (T115)

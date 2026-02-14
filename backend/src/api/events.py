@@ -45,6 +45,7 @@ from backend.src.schemas.event import (
 )
 from backend.src.schemas.event_series import EventSeriesResponse
 from backend.src.services.event_service import EventService
+from backend.src.services.conflict_service import ConflictService
 from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError, DeadlineProtectionError
 from backend.src.schemas.performer import (
     EventPerformerCreate,
@@ -52,6 +53,12 @@ from backend.src.schemas.performer import (
     EventPerformerResponse,
     EventPerformersListResponse,
     PerformerResponse,
+)
+from backend.src.schemas.conflict import (
+    ConflictDetectionResponse,
+    EventScoreResponse,
+    ConflictResolveRequest,
+    ConflictResolveResponse,
 )
 from backend.src.utils.logging_config import get_logger
 
@@ -72,6 +79,18 @@ router = APIRouter(
 def get_event_service(db: Session = Depends(get_db)) -> EventService:
     """Create EventService instance with database session."""
     return EventService(db=db)
+
+
+def get_conflict_service(db: Session = Depends(get_db)) -> ConflictService:
+    """Create ConflictService instance with database session.
+
+    Args:
+        db: Database session injected via Depends(get_db) (sqlalchemy.orm.Session).
+
+    Returns:
+        ConflictService: Service for conflict detection and event quality scoring.
+    """
+    return ConflictService(db=db)
 
 
 # ============================================================================
@@ -171,6 +190,158 @@ async def get_event_dashboard_stats(
         )
 
 
+# ============================================================================
+# Conflict Detection & Scoring Endpoints (must be before /{guid})
+# ============================================================================
+
+
+@router.get(
+    "/conflicts",
+    response_model=ConflictDetectionResponse,
+    summary="Detect scheduling conflicts",
+    description="Returns conflict groups with scored events for the specified date range",
+)
+async def detect_conflicts(
+    start_date: date = Query(..., description="Start of date range (inclusive)"),
+    end_date: date = Query(..., description="End of date range (inclusive)"),
+    ctx: TenantContext = Depends(require_auth),
+    conflict_service: ConflictService = Depends(get_conflict_service),
+) -> ConflictDetectionResponse:
+    """
+    Detect conflicts for a date range.
+
+    Args:
+        start_date: Start of date range, inclusive (date, required query param).
+        end_date: End of date range, inclusive (date, required query param).
+        ctx: Tenant context with team_id, injected via Depends(require_auth).
+        conflict_service: ConflictService instance, injected via Depends.
+
+    Returns:
+        ConflictDetectionResponse with conflict groups, scored events, and summary.
+
+    Raises:
+        HTTPException(422): If end_date < start_date.
+        HTTPException(500): On unexpected server error.
+    """
+    try:
+        if end_date < start_date:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="end_date must be >= start_date",
+            )
+
+        return conflict_service.detect_conflicts(
+            team_id=ctx.team_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error detecting conflicts: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to detect conflicts",
+        )
+
+
+@router.post(
+    "/conflicts/resolve",
+    response_model=ConflictResolveResponse,
+    summary="Resolve a conflict group",
+    description="Batch-update attendance for events in a conflict group",
+)
+async def resolve_conflict(
+    request: ConflictResolveRequest,
+    ctx: TenantContext = Depends(require_auth),
+    conflict_service: ConflictService = Depends(get_conflict_service),
+) -> ConflictResolveResponse:
+    """
+    Batch-resolve a conflict group by setting attendance on events.
+
+    Args:
+        request: ConflictResolveRequest with group_id and list of decisions.
+        ctx: Tenant context with team_id, injected via Depends(require_auth).
+        conflict_service: ConflictService instance, injected via Depends.
+
+    Returns:
+        ConflictResolveResponse with success status, updated count, and message.
+
+    Raises:
+        HTTPException(404): If any event GUID is not found.
+        HTTPException(500): On unexpected server error.
+    """
+    try:
+        decisions = [d.model_dump() for d in request.decisions]
+        updated = conflict_service.resolve_conflict(
+            team_id=ctx.team_id,
+            decisions=decisions,
+            user_id=ctx.user_id,
+            group_id=request.group_id,
+        )
+
+        return ConflictResolveResponse(
+            success=True,
+            updated_count=updated,
+            message=f"Updated {updated} event(s)",
+        )
+
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error resolving conflict: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve conflict",
+        )
+
+
+@router.get(
+    "/{guid}/score",
+    response_model=EventScoreResponse,
+    summary="Get event quality scores",
+    description="Returns five dimension scores and weighted composite for a single event",
+)
+async def get_event_score(
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    conflict_service: ConflictService = Depends(get_conflict_service),
+) -> EventScoreResponse:
+    """
+    Get quality scores for a single event.
+
+    Args:
+        guid: Event GUID in evt_xxx format (str, path parameter).
+        ctx: Tenant context with team_id, injected via Depends(require_auth).
+        conflict_service: ConflictService instance, injected via Depends.
+
+    Returns:
+        EventScoreResponse with event info and five dimension scores plus composite.
+
+    Raises:
+        HTTPException(404): If event not found.
+        HTTPException(500): On unexpected server error.
+    """
+    try:
+        return conflict_service.get_event_score(guid=guid, team_id=ctx.team_id)
+
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event {guid} not found",
+        )
+    except Exception as e:
+        logger.error(f"Error scoring event {guid}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to score event",
+        )
+
+
 @router.get(
     "",
     response_model=List[EventResponse],
@@ -209,7 +380,7 @@ async def list_events(
     ),
     preset: Optional[EventPreset] = Query(
         default=None,
-        description="Dashboard preset filter. When provided, other date/status params are ignored.",
+        description="Dashboard preset filter. When provided, start_date/end_date narrow the preset window.",
     ),
     event_service: EventService = Depends(get_event_service),
 ) -> List[EventResponse]:
@@ -226,7 +397,7 @@ async def list_events(
         status: Filter by event status (future, confirmed, completed, cancelled)
         attendance: Filter by attendance (planned, attended, skipped)
         include_deleted: Include soft-deleted events
-        preset: Dashboard preset filter (overrides other params when set)
+        preset: Dashboard preset filter (start_date/end_date narrow the window)
 
     Returns:
         List of events ordered by date
@@ -241,6 +412,8 @@ async def list_events(
             events = event_service.list_by_preset(
                 team_id=ctx.team_id,
                 preset=preset.value,
+                start_date=start_date,
+                end_date=end_date,
             )
         else:
             events = event_service.list(

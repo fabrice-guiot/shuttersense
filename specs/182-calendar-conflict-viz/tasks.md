@@ -25,13 +25,13 @@
 
 **Purpose**: Pure utilities, type definitions, and config registration needed by all stories
 
-- [ ] T001 [P] Create haversine distance function in `backend/src/services/geo_utils.py`
+- [x] T001 [P] Create haversine distance function in `backend/src/services/geo_utils.py`
   - Pure Python, no dependencies
   - Input: two `(lat, lon)` pairs → output: distance in miles
   - Use `math.radians`, `math.sin`, `math.cos`, `math.asin`, `math.sqrt`
   - Earth radius: 3,958.8 miles
 
-- [ ] T002 [P] Create Pydantic schemas in `backend/src/schemas/conflict.py`
+- [x] T002 [P] Create Pydantic schemas in `backend/src/schemas/conflict.py`
   - Match schemas from `contracts/conflict-api.yaml`
   - `ConflictType` enum: `time_overlap`, `distance`, `travel_buffer`
   - `ConflictGroupStatus` enum: `unresolved`, `partially_resolved`, `resolved`
@@ -41,7 +41,7 @@
   - `ConflictRulesResponse`, `ConflictRulesUpdateRequest`
   - `ScoringWeightsResponse`, `ScoringWeightsUpdateRequest`
 
-- [ ] T003 [P] Create TypeScript types in `frontend/src/contracts/api/conflict-api.ts`
+- [x] T003 [P] Create TypeScript types in `frontend/src/contracts/api/conflict-api.ts`
   - Mirror all schema types from `contracts/conflict-api.yaml`
   - `ConflictType`, `ConflictGroupStatus`, `EventScores`, `ScoredEvent`
   - `ConflictEdge`, `ConflictGroup`, `ConflictSummary`, `ConflictDetectionResponse`
@@ -49,7 +49,7 @@
   - `ConflictRulesResponse`, `ConflictRulesUpdateRequest`
   - `ScoringWeightsResponse`, `ScoringWeightsUpdateRequest`
 
-- [ ] T004 Register `conflict_rules` and `scoring_weights` in `backend/src/services/config_service.py`
+- [x] T004 Register `conflict_rules` and `scoring_weights` in `backend/src/services/config_service.py`
   - Add both strings to `VALID_CATEGORIES` set
 
 ---
@@ -62,7 +62,7 @@
 
 ### Backend Services
 
-- [ ] T005 Create ConflictService in `backend/src/services/conflict_service.py`
+- [x] T005 Create ConflictService in `backend/src/services/conflict_service.py`
   - Class `ConflictService(db: Session)` — follows EventService pattern
   - Depends on: `EventService`, `ConfigService`, `geo_utils.haversine_miles()`
   - `get_conflict_rules(team_id)` → reads from ConfigService, returns defaults if missing
@@ -77,7 +77,7 @@
     - Derive group status from member events' `attendance` values
   - **Extensibility (FR-014)**: Design dimension scoring as a list of `(name, scorer_fn, weight_key)` tuples rather than hardcoded if/else blocks, so new dimensions can be added by appending to the list without restructuring the scoring loop or radar chart axes
 
-- [ ] T006 Extend seeding in `backend/src/services/seed_data_service.py`
+- [x] T006 Extend seeding in `backend/src/services/seed_data_service.py`
   - Add `DEFAULT_CONFLICT_RULES` dict (5 entries: distance_threshold_miles, consecutive_window_days, travel_buffer_days, colocation_radius_miles, performer_ceiling)
   - Add `DEFAULT_SCORING_WEIGHTS` dict (5 entries: weight_venue_quality, weight_organizer_reputation, weight_performer_lineup, weight_logistics_ease, weight_readiness)
   - Add `seed_conflict_rules(team_id, user_id)` — follow `seed_collection_ttl()` pattern, does NOT commit
@@ -87,14 +87,14 @@
 
 ### API Endpoints
 
-- [ ] T007 Add conflict detection, scoring, and resolution endpoints to `backend/src/api/events.py`
+- [x] T007 Add conflict detection, scoring, and resolution endpoints to `backend/src/api/events.py`
   - `GET /events/conflicts` → `ConflictService.detect_conflicts()` — requires `start_date` and `end_date` query params
   - `GET /events/{guid}/score` → `ConflictService.score_event()` — returns `EventScoreResponse`
   - `POST /events/conflicts/resolve` → batch-update `attendance` on events from `ConflictResolveRequest`
   - **CRITICAL**: Register `/events/conflicts` and `/events/{guid}/score` routes BEFORE `/{guid}` catch-all
   - All endpoints use `get_tenant_context` for team scoping
 
-- [ ] T008 Add conflict_rules and scoring_weights config endpoints to `backend/src/api/config.py`
+- [x] T008 Add conflict_rules and scoring_weights config endpoints to `backend/src/api/config.py`
   - `GET /config/conflict_rules` → read team's conflict rules from ConfigService
   - `PUT /config/conflict_rules` → update team's conflict rules via ConfigService
   - `GET /config/scoring_weights` → read team's scoring weights from ConfigService
@@ -103,14 +103,14 @@
 
 ### Migration & Seeding
 
-- [ ] T009 Create Alembic migration to seed conflict defaults for existing teams in `backend/migrations/versions/`
+- [x] T009 Create Alembic migration to seed conflict defaults for existing teams in `backend/migrations/versions/`
   - Follow migration `050` pattern (iterate teams, insert if missing)
   - Use `sa.sql.table()` and `sa.sql.column()` for migration compatibility
   - Seed both `conflict_rules` and `scoring_weights` for all existing teams
 
 ### Frontend API Client
 
-- [ ] T010 [P] Create API client functions in `frontend/src/services/conflicts.ts`
+- [x] T010 [P] Create API client functions in `frontend/src/services/conflicts.ts`
   - `detectConflicts(startDate, endDate)` → `GET /api/events/conflicts`
   - `getEventScore(guid)` → `GET /api/events/{guid}/score`
   - `resolveConflict(request)` → `POST /api/events/conflicts/resolve`
@@ -122,13 +122,13 @@
 
 ### Tests
 
-- [ ] T011 [P] Create haversine tests in `backend/tests/unit/test_geo_utils.py`
+- [x] T011 [P] Create haversine tests in `backend/tests/unit/test_geo_utils.py`
   - Known city pairs (e.g., NYC→LA ≈ 2,451 mi, London→Paris ≈ 213 mi)
   - Same point → 0 miles
   - Antipodal points → ~12,450 mi
   - Edge cases: equator, poles
 
-- [ ] T012 [P] Create conflict service tests in `backend/tests/unit/test_conflict_service.py`
+- [x] T012 [P] Create conflict service tests in `backend/tests/unit/test_conflict_service.py`
   - Time overlap: same day overlapping times, all-day vs timed, missing times
   - Distance conflict: events beyond threshold, within threshold, missing coordinates
   - Travel buffer violation: travel events too close in time, co-located events exempt
@@ -137,13 +137,13 @@
   - Group construction: transitive closure, status derivation
   - Exclude soft-deleted events and deadline events
 
-- [ ] T013 [P] Create seeding tests in `backend/tests/unit/test_seed_conflict.py`
+- [x] T013 [P] Create seeding tests in `backend/tests/unit/test_seed_conflict.py`
   - Idempotency: running twice produces same result
   - All 10 config entries created (5 conflict_rules + 5 scoring_weights)
   - Existing entries not overwritten
   - Does not commit (session check)
 
-- [ ] T044 [P] Create conflict endpoint integration tests in `backend/tests/integration/test_conflict_endpoints.py`
+- [x] T044 [P] Create conflict endpoint integration tests in `backend/tests/integration/test_conflict_endpoints.py`
   - Follow `test_events_api.py` pattern: use `test_client`, `test_team`, `test_db_session` fixtures
   - **GET /events/conflicts**:
     - Two overlapping events → returns 1 conflict group with `time_overlap` edge
@@ -162,7 +162,7 @@
     - Invalid event GUID in decisions → 404
     - Verify team scoping (cannot resolve other team's events)
 
-- [ ] T045 [P] Create conflict config integration tests in `backend/tests/integration/test_conflict_config_api.py`
+- [x] T045 [P] Create conflict config integration tests in `backend/tests/integration/test_conflict_config_api.py`
   - Follow `test_config_api.py` pattern: use `authenticated_client`, `test_team` fixtures
   - **GET /config/conflict_rules** → returns 5 default values after team seeding
   - **PUT /config/conflict_rules** → partial update (e.g., change only `distance_threshold_miles`), verify only that field changed
@@ -183,30 +183,30 @@
 
 ### Implementation for User Story 1
 
-- [ ] T014 [P] [US1] Create useConflicts hook in `frontend/src/hooks/useConflicts.ts`
+- [x] T014 [P] [US1] Create useConflicts hook in `frontend/src/hooks/useConflicts.ts`
   - Follow `useEvents()` pattern: `data`, `loading`, `error` state
   - Accepts `startDate` and `endDate` params
   - Calls `detectConflicts()` from conflicts.ts service
   - Returns `ConflictDetectionResponse` data
 
-- [ ] T015 [P] [US1] Create ConflictBadge component in `frontend/src/components/events/ConflictBadge.tsx`
+- [x] T015 [P] [US1] Create ConflictBadge component in `frontend/src/components/events/ConflictBadge.tsx`
   - Small amber badge with conflict type icon
   - Tooltip on hover: conflict type label + name of conflicting event(s)
   - Use shadcn/ui Tooltip + Lucide icon (e.g., AlertTriangle)
   - Visual states: solid amber (unresolved), dashed gray (resolved)
   - Compact layout on mobile (icon-only, tooltip on tap)
 
-- [ ] T016 [US1] Add conflict indicators to calendar cells in `frontend/src/components/events/EventCalendar.tsx`
+- [x] T016 [US1] Add conflict indicators to calendar cells in `frontend/src/components/events/EventCalendar.tsx`
   - Integrate `useConflicts` hook for visible date range
   - Map conflict groups to calendar dates
   - Show amber indicator with count of conflict groups per day
   - Resolved groups show dashed gray indicator
 
-- [ ] T017 [US1] Add conflict badge to event cards in `frontend/src/components/events/EventCard.tsx`
+- [x] T017 [US1] Add conflict badge to event cards in `frontend/src/components/events/EventCard.tsx`
   - Check if event GUID appears in any conflict group
   - Render `ConflictBadge` with conflict edge details for tooltip
 
-- [ ] T046 [P] [US1] Create ConflictBadge tests in `frontend/src/components/events/__tests__/ConflictBadge.test.tsx`
+- [x] T046 [P] [US1] Create ConflictBadge tests in `frontend/src/components/events/__tests__/ConflictBadge.test.tsx`
   - Follow `AuditTrailPopover.test.tsx` pattern: vitest + React Testing Library
   - Renders amber badge with conflict type icon for unresolved conflict
   - Renders dashed gray badge for resolved conflict
@@ -225,12 +225,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] Create useResolveConflict mutation hook in `frontend/src/hooks/useResolveConflict.ts`
+- [x] T018 [P] [US2] Create useResolveConflict mutation hook in `frontend/src/hooks/useResolveConflict.ts`
   - Calls `resolveConflict()` from conflicts.ts service
   - Handles loading/error states
   - Triggers refetch of conflict data on success
 
-- [ ] T019 [US2] Create ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
+- [x] T019 [US2] Create ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
   - Renders list of conflict group cards
   - Each card shows: conflicting events with composite scores, conflict type label
   - Actions per group: "Confirm" button per event (sets it to planned, others to skipped), "Skip" button (defer)
@@ -238,12 +238,12 @@
   - Uses `useResolveConflict` hook for mutations
   - Responsive: stack conflict group cards vertically on mobile
 
-- [ ] T020 [US2] Add Conflicts tab to day detail dialog in `frontend/src/pages/EventsPage.tsx`
+- [x] T020 [US2] Add Conflicts tab to day detail dialog in `frontend/src/pages/EventsPage.tsx`
   - Show "Conflicts" tab alongside existing event list when day has conflicts
   - Tab content renders `ConflictResolutionPanel` with filtered conflict groups for that day
   - Tab badge shows unresolved conflict count
 
-- [ ] T047 [US2] Create ConflictResolutionPanel tests in `frontend/src/components/events/__tests__/ConflictResolutionPanel.test.tsx`
+- [x] T047 [US2] Create ConflictResolutionPanel tests in `frontend/src/components/events/__tests__/ConflictResolutionPanel.test.tsx`
   - Mock `resolveConflict` API via MSW (`server.use()`)
   - Renders conflict group cards with event names and composite scores
   - "Confirm Event A" button sends correct `ConflictResolveRequest` payload (A=planned, B=skipped)
@@ -263,17 +263,17 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [P] [US3] Create useEventScore hook in `frontend/src/hooks/useEventScore.ts`
+- [x] T021 [P] [US3] Create useEventScore hook in `frontend/src/hooks/useEventScore.ts`
   - Fetches scores for a single event via `getEventScore()` from conflicts.ts
   - Returns `EventScoreResponse` with loading/error states
 
-- [ ] T022 [US3] Create EventRadarChart in `frontend/src/components/events/EventRadarChart.tsx`
+- [x] T022 [US3] Create EventRadarChart in `frontend/src/components/events/EventRadarChart.tsx`
   - Recharts `RadarChart` wrapper for a single event
   - Five axes: Venue Quality, Organizer Reputation, Performer Lineup, Logistics Ease, Readiness
   - Scale 0–100, uses `CHART_COLORS` CSS variables for dark theme compliance
   - Supports overlaying multiple events (distinct colors per polygon)
 
-- [ ] T023 [US3] Create RadarComparisonDialog in `frontend/src/components/events/RadarComparisonDialog.tsx`
+- [x] T023 [US3] Create RadarComparisonDialog in `frontend/src/components/events/RadarComparisonDialog.tsx`
   - Dialog (shadcn/ui Dialog or Radix UI) with:
     - Overlaid radar chart (one polygon per event, distinct colors)
     - Dimension breakdown table with exact numerical scores per event
@@ -281,11 +281,11 @@
   - "Confirm" button per event (triggers same resolve logic as US2)
   - Responsive: chart stacks above table on mobile
 
-- [ ] T024 [US3] Add "Compare" button to ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
+- [x] T024 [US3] Add "Compare" button to ConflictResolutionPanel in `frontend/src/components/events/ConflictResolutionPanel.tsx`
   - Button opens `RadarComparisonDialog` for the selected conflict group
   - Pass conflict group events to the dialog
 
-- [ ] T048 [P] [US3] Create RadarComparisonDialog tests in `frontend/src/components/events/__tests__/RadarComparisonDialog.test.tsx`
+- [x] T048 [P] [US3] Create RadarComparisonDialog tests in `frontend/src/components/events/__tests__/RadarComparisonDialog.test.tsx`
   - Dialog renders when open prop is true, hidden when false
   - Displays dimension breakdown table with correct numerical scores
   - Shows side-by-side event details (location, organizer, performer count)
@@ -303,44 +303,44 @@
 
 ### Implementation for User Story 4
 
-- [ ] T025 [P] [US4] Create useConflictRules hook in `frontend/src/hooks/useConflictRules.ts`
+- [x] T025 [P] [US4] Create useConflictRules hook in `frontend/src/hooks/useConflictRules.ts`
   - Fetch via `getConflictRules()`, update via `updateConflictRules()`
   - Loading/error/success states
   - Support reset to defaults
   - On successful save: invalidate/refetch conflict data so changes take effect without page refresh (FR-050)
 
-- [ ] T026 [P] [US4] Create useScoringWeights hook in `frontend/src/hooks/useScoringWeights.ts`
+- [x] T026 [P] [US4] Create useScoringWeights hook in `frontend/src/hooks/useScoringWeights.ts`
   - Fetch via `getScoringWeights()`, update via `updateScoringWeights()`
   - Loading/error/success states
   - Support reset to defaults
   - On successful save: invalidate/refetch scoring data so changes take effect without page refresh (FR-050)
 
-- [ ] T027 [P] [US4] Create ConflictRulesSection in `frontend/src/components/settings/ConflictRulesSection.tsx`
-  - Five numeric inputs: distance threshold (miles), consecutive window (days), travel buffer (days), co-location radius (miles), performer ceiling (count)
+- [x] T027 [P] [US4] Create ConflictRulesSection in `frontend/src/components/settings/ConflictRulesSection.tsx`
+  - Five numeric inputs: distance threshold (miles), consecutive window (days), travel buffer (days), colocation radius (miles), performer ceiling (count)
   - Validation: non-negative integers, performer ceiling ≥ 1
   - "Save" and "Reset Defaults" buttons
   - Uses `useConflictRules` hook
 
-- [ ] T028 [P] [US4] Create ScoringWeightsSection in `frontend/src/components/settings/ScoringWeightsSection.tsx`
+- [x] T028 [P] [US4] Create ScoringWeightsSection in `frontend/src/components/settings/ScoringWeightsSection.tsx`
   - Five numeric inputs (0–100) with proportional bars showing relative weights
   - Visual bar for each weight showing its proportion of the total
   - Weight of 0 dims the corresponding dimension label
   - "Save" and "Reset Defaults" buttons
   - Uses `useScoringWeights` hook
 
-- [ ] T029 [US4] Add Conflict Rules and Scoring Weights sections to Settings page Configuration tab
+- [x] T029 [US4] Add Conflict Rules and Scoring Weights sections to Settings page Configuration tab
   - Locate existing Configuration tab in Settings page
   - Add `ConflictRulesSection` and `ScoringWeightsSection` components
   - Ensure consistent spacing and styling with existing config sections
 
-- [ ] T049 [P] [US4] Create ConflictRulesSection tests in `frontend/src/components/settings/__tests__/ConflictRulesSection.test.tsx`
+- [x] T049 [P] [US4] Create ConflictRulesSection tests in `frontend/src/components/settings/__tests__/ConflictRulesSection.test.tsx`
   - Mock GET/PUT /api/config/conflict_rules via MSW
   - Renders 5 inputs with default values on load
   - Validation: rejects negative values, performer ceiling < 1
   - "Save" sends PUT with updated values
   - "Reset Defaults" restores factory values
 
-- [ ] T050 [P] [US4] Create ScoringWeightsSection tests in `frontend/src/components/settings/__tests__/ScoringWeightsSection.test.tsx`
+- [x] T050 [P] [US4] Create ScoringWeightsSection tests in `frontend/src/components/settings/__tests__/ScoringWeightsSection.test.tsx`
   - Mock GET/PUT /api/config/scoring_weights via MSW
   - Renders 5 inputs with default values (20 each) on load
   - Proportional bars update when weight values change
@@ -359,7 +359,7 @@
 
 ### Implementation for User Story 5
 
-- [ ] T030 [US5] Create useDateRange hook in `frontend/src/hooks/useDateRange.ts`
+- [x] T030 [US5] Create useDateRange hook in `frontend/src/hooks/useDateRange.ts`
   - State management for selected range type and computed start/end dates
   - URL sync via `useSearchParams` (persist range selection across navigation)
   - Rolling presets: Next 30 / 60 / 90 days (from today)
@@ -368,7 +368,7 @@
   - Default: "Next 30 days"
   - No "All" option
 
-- [ ] T031 [US5] Create DateRangePicker in `frontend/src/components/events/DateRangePicker.tsx`
+- [x] T031 [US5] Create DateRangePicker in `frontend/src/components/events/DateRangePicker.tsx`
   - Dropdown/select with preset options grouped: Rolling (30/60/90 days), Monthly (1/2/3/6 months), Custom
   - Custom range: date input fields for start and end dates
   - Uses `useDateRange` hook
@@ -376,26 +376,26 @@
   - Compact layout for inline use above list views
   - Responsive: compact mobile layout (full-width dropdown, stacked custom date inputs)
 
-- [ ] T032 [US5] Modify useEvents hook to accept start_date/end_date parameters
+- [x] T032 [US5] Modify useEvents hook to accept start_date/end_date parameters
   - Locate existing `useEvents()` hook
   - Add optional `start_date` and `end_date` parameters
   - Pass these to the backend events API as query params
   - Existing preset behavior unchanged when range params not provided
 
-- [ ] T033 [US5] Wire DateRangePicker into all preset list views in `frontend/src/pages/EventsPage.tsx`
+- [x] T033 [US5] Wire DateRangePicker into all preset list views in `frontend/src/pages/EventsPage.tsx`
   - Show `DateRangePicker` above list when any non-calendar view is active (Upcoming, Needs Tickets, Needs PTO, Needs Travel)
   - Pass selected date range to `useEvents()` hook
   - Hide picker when calendar view is active
   - Restore last-selected range when switching back from calendar to list
 
-- [ ] T034 [US5] Add infinite scroll to event list rendering in `frontend/src/pages/EventsPage.tsx`
+- [x] T034 [US5] Add infinite scroll to event list rendering in `frontend/src/pages/EventsPage.tsx`
   - Replace unbounded list rendering with infinite scroll
   - Load events in pages, append on scroll
   - Bounded by date range (finite result set)
   - Show loading indicator during page fetch
   - Empty state when range returns zero events
 
-- [ ] T051 [P] [US5] Create useDateRange hook tests in `frontend/src/hooks/useDateRange.test.ts`
+- [x] T051 [P] [US5] Create useDateRange hook tests in `frontend/src/hooks/__tests__/useDateRange.test.tsx`
   - Follow `useRetention.test.ts` pattern: `renderHook()` + `waitFor()`
   - "Next 30 days": start = today, end = today + 30
   - "Next 60 days": start = today, end = today + 60
@@ -407,7 +407,7 @@
   - Default selection is "Next 30 days"
   - URL sync: range persisted to and restored from search params
 
-- [ ] T052 [P] [US5] Create DateRangePicker tests in `frontend/src/components/events/__tests__/DateRangePicker.test.tsx`
+- [x] T052 [P] [US5] Create DateRangePicker tests in `frontend/src/components/events/__tests__/DateRangePicker.test.tsx`
   - Renders all preset options (3 rolling + 4 monthly + custom)
   - No "All" option present in dropdown
   - Selecting a preset updates the displayed label
@@ -428,12 +428,12 @@
 
 ### Implementation for User Story 6
 
-- [ ] T035 [P] [US6] Create DimensionMicroBar in `frontend/src/components/events/DimensionMicroBar.tsx`
+- [x] T035 [P] [US6] Create DimensionMicroBar in `frontend/src/components/events/DimensionMicroBar.tsx`
   - Linearized radar segments: 5 colored segments proportional to dimension scores
   - Each segment uses a distinct color from the design system
   - Hidden on mobile viewports (per FR-045)
 
-- [ ] T036 [US6] Create TimelineEventMarker in `frontend/src/components/events/TimelineEventMarker.tsx`
+- [x] T036 [US6] Create TimelineEventMarker in `frontend/src/components/events/TimelineEventMarker.tsx`
   - Event row component showing:
     - Composite score bar (filled proportionally to 0–100 score, labeled "Score: X")
     - DimensionMicroBar below the score bar (desktop only)
@@ -441,7 +441,7 @@
   - Click to expand inline → show full `EventRadarChart`
   - Mobile: tap opens bottom sheet dialog with radar chart
 
-- [ ] T037 [US6] Create TimelinePlanner in `frontend/src/components/events/TimelinePlanner.tsx`
+- [x] T037 [US6] Create TimelinePlanner in `frontend/src/components/events/TimelinePlanner.tsx`
   - Scrollable chronological timeline grouped by month
   - Renders `TimelineEventMarker` for each event
   - Conflict connectors: vertical amber lines on left margin connecting events in same conflict group, with conflict type label
@@ -450,13 +450,13 @@
   - Click conflict connector → expand overlaid radar comparison
   - Uses `useConflicts` and date range from `useDateRange`
 
-- [ ] T038 [US6] Add Planner view mode to `frontend/src/pages/EventsPage.tsx`
+- [x] T038 [US6] Add Planner view mode to `frontend/src/pages/EventsPage.tsx`
   - Add "Planner" as a new view mode alongside Calendar and preset list views
   - Planner uses `DateRangePicker` from US5 for time window control
   - Wire `TimelinePlanner` component into the view
   - URL-synced view mode selection
 
-- [ ] T053 [P] [US6] Create DimensionMicroBar tests in `frontend/src/components/events/__tests__/DimensionMicroBar.test.tsx`
+- [x] T053 [P] [US6] Create DimensionMicroBar tests in `frontend/src/components/events/__tests__/DimensionMicroBar.test.tsx`
   - Renders 5 colored segments proportional to dimension scores
   - All scores 0 → renders empty/minimal bar
   - All scores 100 → renders full-width segments
@@ -476,12 +476,12 @@
 
 ### Implementation for User Story 7
 
-- [ ] T039 [US7] Update header stats for Planner view in `frontend/src/pages/EventsPage.tsx`
+- [x] T039 [US7] Update header stats for Planner view in `frontend/src/pages/EventsPage.tsx`
   - Set `useHeaderStats()` when Planner view is active
   - KPIs: Conflicts (total groups), Unresolved (count), Events Scored (count), Avg Quality (average composite score)
   - Clear stats on view change or unmount
 
-- [ ] T040 [US7] Add conflict notification via NotificationService in `backend/src/services/notification_service.py` and event hooks
+- [x] T040 [US7] Add conflict notification via NotificationService in `backend/src/services/notification_service.py` and event hooks
   - Add `"conflict"` to notification categories (alongside existing `job_failure`, `inflection_point`, `agent_status`, `deadline`, `retry_warning`)
   - Add `notify_conflict_detected(self, team_id: int, event_a: Event, event_b: Event, conflict_type: str) -> int` method
     - Follow `notify_job_failure()` pattern: iterate active team users, check preferences, call `send_notification()`
@@ -500,12 +500,12 @@
 
 **Purpose**: Responsive adaptations, accessibility, and final validation
 
-- [ ] T042 Keyboard navigation for timeline planner
+- [x] T042 Keyboard navigation for timeline planner
   - Arrow keys to navigate between timeline markers
   - Enter to expand/collapse event details
   - Escape to close expanded views
 
-- [ ] T043 Run quickstart.md validation
+- [x] T043 Run quickstart.md validation
   - Execute all test commands from quickstart.md
   - `venv/bin/python -m pytest backend/tests/unit/test_geo_utils.py -v`
   - `venv/bin/python -m pytest backend/tests/unit/test_conflict_service.py -v`

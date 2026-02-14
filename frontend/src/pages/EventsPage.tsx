@@ -7,11 +7,18 @@
  * Issue #39 - Calendar Events feature (Phases 4 & 5).
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle, BarChart3 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -30,9 +37,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useCalendar, useEvents, useEventStats, useEventMutations } from '@/hooks/useEvents'
+import { useConflicts, buildConflictLookups } from '@/hooks/useConflicts'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
+import { ConflictResolutionPanel } from '@/components/events/ConflictResolutionPanel'
+import { TimelinePlanner } from '@/components/events/TimelinePlanner'
+import { DateRangePicker } from '@/components/events/DateRangePicker'
+import { useDateRange } from '@/hooks/useDateRange'
 import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest, EventPreset } from '@/contracts/api/event-api'
@@ -46,12 +59,25 @@ const PRESET_LABELS: Record<EventPreset, { icon: typeof Calendar; label: string 
 
 const VALID_PRESETS: EventPreset[] = ['upcoming_30d', 'needs_tickets', 'needs_pto', 'needs_travel']
 
+/** All view options for the responsive dropdown */
+const VIEW_OPTIONS: { value: string; label: string; icon: typeof Calendar }[] = [
+  { value: 'calendar', label: 'Calendar', icon: Calendar },
+  { value: 'upcoming_30d', label: 'Upcoming', icon: Calendar },
+  { value: 'needs_tickets', label: 'Needs Tickets', icon: Ticket },
+  { value: 'needs_pto', label: 'Needs PTO', icon: Briefcase },
+  { value: 'needs_travel', label: 'Needs Travel', icon: Car },
+  { value: 'planner', label: 'Planner', icon: BarChart3 },
+]
+
 export default function EventsPage() {
-  // URL search params for preset filtering
+  // URL search params for preset filtering and view mode
   const [searchParams, setSearchParams] = useSearchParams()
   const presetParam = searchParams.get('preset') as EventPreset | null
+  const viewParam = searchParams.get('view')
   const activePreset = presetParam && VALID_PRESETS.includes(presetParam) ? presetParam : null
-  const viewMode = activePreset ? 'list' : 'calendar'
+  const viewMode: 'calendar' | 'list' | 'planner' = viewParam === 'planner'
+    ? 'planner'
+    : activePreset ? 'list' : 'calendar'
 
   // Calendar state and navigation
   const calendar = useCalendar()
@@ -75,23 +101,124 @@ export default function EventsPage() {
     fetchEvents: fetchPresetEvents
   } = useEvents()
 
-  // Fetch preset events when preset changes
+  // Date range for list views (Issue #182, US5)
+  const dateRange = useDateRange('range')
+
+  // Progressive rendering: show events in chunks (infinite scroll)
+  const PAGE_SIZE = 20
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Reset visible count when events or preset changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [presetEvents, activePreset])
+
+  // IntersectionObserver for progressive rendering
+  useEffect(() => {
+    if (viewMode !== 'list') return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting && visibleCount < presetEvents.length) {
+          setVisibleCount(prev => Math.min(prev + PAGE_SIZE, presetEvents.length))
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [viewMode, visibleCount, presetEvents.length])
+
+  const visiblePresetEvents = useMemo(
+    () => presetEvents.slice(0, visibleCount),
+    [presetEvents, visibleCount],
+  )
+
+  // Conflict detection for calendar and planner views
+  const { data: conflictData, loading: conflictLoading, detectConflicts } = useConflicts()
+
+  // Fetch conflicts when calendar month changes
+  useEffect(() => {
+    if (viewMode === 'calendar') {
+      // Compute the calendar grid date range (6 weeks around current month)
+      const firstOfMonth = new Date(currentYear, currentMonth - 1, 1)
+      const startDayOfWeek = firstOfMonth.getDay()
+      const gridStart = new Date(currentYear, currentMonth - 1, 1 - startDayOfWeek)
+      const gridEnd = new Date(gridStart)
+      gridEnd.setDate(gridEnd.getDate() + 41) // 42 days total
+
+      const fmt = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+
+      detectConflicts(fmt(gridStart), fmt(gridEnd)).catch(() => {
+        // Silently ignore — conflict indicators just won't show
+      })
+    }
+  }, [viewMode, currentYear, currentMonth, detectConflicts])
+
+  // Fetch conflicts for planner view (uses date range picker)
+  useEffect(() => {
+    if (viewMode === 'planner') {
+      detectConflicts(dateRange.range.startDate, dateRange.range.endDate).catch(() => {})
+    }
+  }, [viewMode, dateRange.range.startDate, dateRange.range.endDate, detectConflicts])
+
+  // Refetch conflicts (used after resolution)
+  const refetchConflicts = useCallback(() => {
+    if (viewMode === 'calendar') {
+      const firstOfMonth = new Date(currentYear, currentMonth - 1, 1)
+      const startDayOfWeek = firstOfMonth.getDay()
+      const gridStart = new Date(currentYear, currentMonth - 1, 1 - startDayOfWeek)
+      const gridEnd = new Date(gridStart)
+      gridEnd.setDate(gridEnd.getDate() + 41)
+
+      const fmt = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+
+      detectConflicts(fmt(gridStart), fmt(gridEnd)).catch(() => {})
+    } else if (viewMode === 'planner') {
+      detectConflicts(dateRange.range.startDate, dateRange.range.endDate).catch(() => {})
+    }
+  }, [viewMode, currentYear, currentMonth, dateRange.range.startDate, dateRange.range.endDate, detectConflicts])
+
+  // Fetch preset events when preset or date range changes
   useEffect(() => {
     if (activePreset) {
-      fetchPresetEvents({ preset: activePreset })
+      fetchPresetEvents({
+        preset: activePreset,
+        start_date: dateRange.range.startDate,
+        end_date: dateRange.range.endDate,
+      })
     }
-  }, [activePreset, fetchPresetEvents])
+  }, [activePreset, dateRange.range.startDate, dateRange.range.endDate, fetchPresetEvents])
 
   // Error from whichever view is active
   const error = viewMode === 'list' ? presetError : calendarError
 
   const refetch = useCallback(async () => {
     if (viewMode === 'list' && activePreset) {
-      await fetchPresetEvents({ preset: activePreset })
+      await fetchPresetEvents({
+        preset: activePreset,
+        start_date: dateRange.range.startDate,
+        end_date: dateRange.range.endDate,
+      })
+    } else if (viewMode === 'planner') {
+      await detectConflicts(dateRange.range.startDate, dateRange.range.endDate).catch(() => {})
     } else {
       await refetchCalendar()
     }
-  }, [viewMode, activePreset, fetchPresetEvents, refetchCalendar])
+  }, [viewMode, activePreset, dateRange.range.startDate, dateRange.range.endDate, fetchPresetEvents, detectConflicts, refetchCalendar])
 
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useEventStats()
@@ -112,9 +239,38 @@ export default function EventsPage() {
     setSearchParams({})
   }
 
-  // Update header stats when data changes
+  const handleShowPlanner = () => {
+    setSearchParams({ view: 'planner' })
+  }
+
+  // Active view value for responsive dropdown
+  const activeView = viewMode === 'planner' ? 'planner' : activePreset ?? 'calendar'
+
+  // Handle view change from responsive dropdown
+  const handleViewChange = (value: string) => {
+    if (value === 'calendar') {
+      handleShowCalendar()
+    } else if (value === 'planner') {
+      handleShowPlanner()
+    } else {
+      handlePresetClick(value as EventPreset)
+    }
+  }
+
+  // Update header stats — planner-specific KPIs when planner is active
   useEffect(() => {
-    if (stats) {
+    if (viewMode === 'planner' && conflictData) {
+      const scoredEvents = conflictData.scored_events ?? []
+      const avgQuality = scoredEvents.length > 0
+        ? Math.round(scoredEvents.reduce((sum, e) => sum + e.scores.composite, 0) / scoredEvents.length)
+        : 0
+      setStats([
+        { label: 'Conflicts', value: conflictData.summary.total_groups.toLocaleString() },
+        { label: 'Unresolved', value: conflictData.summary.unresolved.toLocaleString() },
+        { label: 'Events Scored', value: scoredEvents.length.toLocaleString() },
+        { label: 'Avg Quality', value: `${avgQuality}` },
+      ])
+    } else if (stats) {
       setStats([
         { label: 'Total Events', value: stats.total_count.toLocaleString() },
         { label: 'Upcoming', value: stats.upcoming_count.toLocaleString() },
@@ -123,7 +279,7 @@ export default function EventsPage() {
       ])
     }
     return () => setStats([]) // Clear stats on unmount
-  }, [stats, setStats])
+  }, [viewMode, conflictData, stats, setStats])
 
   // ============================================================================
   // Dialog States
@@ -210,6 +366,7 @@ export default function EventsPage() {
     setCreateDialogOpen(false)
     await refetch()
     await refetchStats()
+    refetchConflicts()
   }
 
   // Handle series create submit
@@ -218,6 +375,7 @@ export default function EventsPage() {
     setCreateDialogOpen(false)
     await refetch()
     await refetchStats()
+    refetchConflicts()
   }
 
   // Handle edit click from detail dialog
@@ -244,6 +402,7 @@ export default function EventsPage() {
       setEditEvent(null)
       await refetch()
       await refetchStats()
+      refetchConflicts()
     }
   }
 
@@ -262,6 +421,7 @@ export default function EventsPage() {
       setDeleteEvent(null)
       await refetch()
       await refetchStats()
+      refetchConflicts()
     }
   }
 
@@ -276,6 +436,19 @@ export default function EventsPage() {
     const day = String(d.getDate()).padStart(2, '0')
     return `${y}-${m}-${day}`
   }
+
+  // Conflict groups for the selected day
+  const selectedDayConflicts = useMemo(() => {
+    if (!selectedDay || !conflictData) return []
+    const dateStr = formatDateString(selectedDay.date)
+    return conflictData.conflict_groups.filter(group =>
+      group.events.some(e => e.event_date === dateStr)
+    )
+  }, [selectedDay, conflictData])
+
+  const unresolvedConflictCount = selectedDayConflicts.filter(
+    g => g.status !== 'resolved'
+  ).length
 
   // Parse ISO date string (YYYY-MM-DD) as local date (not UTC)
   // This prevents the date from shifting when displayed in timezones west of UTC
@@ -352,8 +525,42 @@ export default function EventsPage() {
     <div className="flex flex-col h-full p-6">
       {/* Action Row (Issue #67 - Single Title Pattern) */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
-        {/* Preset Filter Bar */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Mobile: dropdown selector */}
+        <div className="md:hidden">
+          <Select value={activeView} onValueChange={handleViewChange}>
+            <SelectTrigger>
+              <SelectValue>
+                {(() => {
+                  const opt = VIEW_OPTIONS.find(o => o.value === activeView)
+                  if (!opt) return null
+                  const Icon = opt.icon
+                  return (
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      {opt.label}
+                    </span>
+                  )
+                })()}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {VIEW_OPTIONS.map(opt => {
+                const Icon = opt.icon
+                return (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      {opt.label}
+                    </span>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Desktop: button bar */}
+        <div className="hidden md:flex items-center gap-2 flex-wrap">
           {(Object.entries(PRESET_LABELS) as [EventPreset, { icon: typeof Calendar; label: string }][]).map(
             ([preset, { icon: PresetIcon, label }]) => (
               <Button
@@ -367,7 +574,15 @@ export default function EventsPage() {
               </Button>
             )
           )}
-          {activePreset && (
+          <Button
+            variant={viewMode === 'planner' ? 'default' : 'outline'}
+            size="sm"
+            onClick={handleShowPlanner}
+          >
+            <BarChart3 className="h-4 w-4 mr-1.5" />
+            Planner
+          </Button>
+          {(activePreset || viewMode === 'planner') && (
             <Button variant="ghost" size="sm" onClick={handleShowCalendar}>
               Show Calendar
             </Button>
@@ -395,6 +610,7 @@ export default function EventsPage() {
             year={currentYear}
             month={currentMonth}
             loading={calendarLoading}
+            conflicts={conflictData}
             onPreviousMonth={goToPreviousMonth}
             onNextMonth={goToNextMonth}
             onToday={goToToday}
@@ -407,19 +623,63 @@ export default function EventsPage() {
 
       {/* Preset List View */}
       {viewMode === 'list' && (
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* Date Range Picker (Issue #182, US5) */}
+          <DateRangePicker
+            preset={dateRange.preset}
+            range={dateRange.range}
+            customStart={dateRange.customStart}
+            customEnd={dateRange.customEnd}
+            onPresetChange={dateRange.setPreset}
+            onCustomRangeChange={dateRange.setCustomRange}
+            className="mb-3"
+          />
+
           {presetLoading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : (
-            <EventList
-              events={presetEvents}
-              onEventClick={handleEventClick}
-              emptyMessage="No events match this filter"
-              showDate
-            />
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <EventList
+                events={visiblePresetEvents}
+                onEventClick={handleEventClick}
+                emptyMessage="No events match this filter in the selected date range"
+                showDate
+              />
+              {/* Infinite scroll sentinel */}
+              {visibleCount < presetEvents.length && (
+                <div ref={sentinelRef} className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+                </div>
+              )}
+            </div>
           )}
+        </div>
+      )}
+
+      {/* Planner View (Issue #182, US6) */}
+      {viewMode === 'planner' && (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <DateRangePicker
+            preset={dateRange.preset}
+            range={dateRange.range}
+            customStart={dateRange.customStart}
+            customEnd={dateRange.customEnd}
+            onPresetChange={dateRange.setPreset}
+            onCustomRangeChange={dateRange.setCustomRange}
+            className="mb-3"
+          />
+
+          <div className="overflow-y-auto flex-1 min-h-0">
+            <TimelinePlanner
+              events={conflictData?.scored_events ?? []}
+              conflicts={conflictData}
+              loading={conflictLoading}
+              categories={categories.map(c => ({ guid: c.guid, name: c.name, icon: c.icon, color: c.color }))}
+              onResolved={refetchConflicts}
+            />
+          </div>
         </div>
       )}
 
@@ -428,8 +688,8 @@ export default function EventsPage() {
         open={selectedDay !== null}
         onOpenChange={(open) => !open && setSelectedDay(null)}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>
               {selectedDay && formatDisplayDate(selectedDay.date)}
             </DialogTitle>
@@ -437,14 +697,50 @@ export default function EventsPage() {
               {selectedDay?.events.length} event{selectedDay?.events.length !== 1 ? 's' : ''} on this day
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto">
-            {selectedDay && (
-              <EventList
-                events={selectedDay.events}
-                onEventClick={handleEventClick}
-              />
-            )}
-          </div>
+
+          {/* Show tabs when conflicts exist, plain list otherwise */}
+          {selectedDayConflicts.length > 0 ? (
+            <Tabs defaultValue="events" className="w-full min-h-0 flex flex-col flex-1">
+              <TabsList className="w-full flex-shrink-0">
+                <TabsTrigger value="events" className="flex-1">Events</TabsTrigger>
+                <TabsTrigger value="conflicts" className="flex-1 gap-1.5">
+                  Conflicts
+                  {unresolvedConflictCount > 0 && (
+                    <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                      {unresolvedConflictCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="events" className="overflow-y-auto min-h-0">
+                {selectedDay && (
+                  <EventList
+                    events={selectedDay.events}
+                    onEventClick={handleEventClick}
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="conflicts" className="overflow-y-auto min-h-0">
+                <ConflictResolutionPanel
+                  groups={selectedDayConflicts}
+                  referenceDate={selectedDay ? formatDateString(selectedDay.date) : undefined}
+                  onResolved={() => {
+                    refetchConflicts()
+                    refetch()
+                  }}
+                />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <div className="overflow-y-auto min-h-0 flex-1">
+              {selectedDay && (
+                <EventList
+                  events={selectedDay.events}
+                  onEventClick={handleEventClick}
+                />
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

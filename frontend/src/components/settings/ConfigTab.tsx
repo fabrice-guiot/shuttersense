@@ -41,7 +41,11 @@ import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventStatusesSection } from '@/components/settings/EventStatusesSection'
 import { CollectionTTLSection } from '@/components/settings/CollectionTTLSection'
 import { ResultRetentionSection } from '@/components/settings/ResultRetentionSection'
+import { ConflictRulesSection } from '@/components/settings/ConflictRulesSection'
+import { ScoringWeightsSection } from '@/components/settings/ScoringWeightsSection'
 import { useRetention } from '@/hooks/useRetention'
+import { useConflictRules } from '@/hooks/useConflictRules'
+import { useScoringWeights } from '@/hooks/useScoringWeights'
 import type {
   ConfigCategory,
   ImportSessionResponse,
@@ -226,6 +230,18 @@ export function ConfigTab() {
     loading: retentionLoading,
     updateSettings: updateRetention
   } = useRetention()
+
+  // Conflict rules & scoring weights (Issue #182)
+  const {
+    settings: conflictRules,
+    loading: conflictRulesLoading,
+    updateSettings: updateConflictRules
+  } = useConflictRules()
+  const {
+    settings: scoringWeights,
+    loading: scoringWeightsLoading,
+    updateSettings: updateScoringWeights
+  } = useScoringWeights()
 
   // KPI Stats for header (Issue #37)
   const { stats, refetch: refetchStats } = useConfigStats()
@@ -699,6 +715,16 @@ export function ConfigTab() {
           settings={retentionSettings}
           loading={retentionLoading}
           onUpdate={updateRetention}
+        />
+        <ConflictRulesSection
+          settings={conflictRules}
+          loading={conflictRulesLoading}
+          onUpdate={updateConflictRules}
+        />
+        <ScoringWeightsSection
+          settings={scoringWeights}
+          loading={scoringWeightsLoading}
+          onUpdate={updateScoringWeights}
         />
       </div>
 

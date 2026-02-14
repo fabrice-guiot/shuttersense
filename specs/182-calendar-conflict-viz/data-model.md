@@ -66,10 +66,10 @@ All entries use the existing `configurations` table structure:
 
 | Key | Default Value | Description |
 |-----|---------------|-------------|
-| `distance_threshold_miles` | `{"value": 50, "label": "Distance Threshold (miles)"}` | Maximum miles between events before flagging a distance conflict |
+| `distance_threshold_miles` | `{"value": 150, "label": "Distance Threshold (miles)"}` | Distance above which travel buffer rules apply between events |
 | `consecutive_window_days` | `{"value": 1, "label": "Consecutive Window (days)"}` | Number of days forward to check for distance conflicts (0 = same-day only) |
-| `travel_buffer_days` | `{"value": 3, "label": "Travel Buffer (days)"}` | Minimum days between two non-co-located travel events |
-| `colocation_radius_miles` | `{"value": 10, "label": "Co-location Radius (miles)"}` | Two locations within this radius are considered co-located |
+| `travel_buffer_days` | `{"value": 3, "label": "Travel Buffer (days)"}` | Minimum days between two distant events when at least one requires travel |
+| `colocation_radius_miles` | `{"value": 70, "label": "Co-location Radius (miles)"}` | Maximum distance between venues considered co-located (no distance conflict) |
 | `performer_ceiling` | `{"value": 5, "label": "Performer Ceiling"}` | Confirmed performer count that maps to 100% on Performer Lineup dimension |
 
 ### Category: `scoring_weights`
@@ -206,22 +206,21 @@ For each pair (A, B) where:
     AND B.location has coordinates:
 
     distance = haversine(A.location, B.location)
-    if distance > distance_threshold_miles:
-        → conflict
+    if distance > colocation_radius_miles:
+        → conflict (events are not co-located)
 ```
 
 ### Travel Buffer Violation
 ```
 For each pair (A, B) where:
-    A.travel_required == True
-    AND B.travel_required == True
+    (A.travel_required == True OR B.travel_required == True)
     AND A.location has coordinates
     AND B.location has coordinates
-    AND haversine(A.location, B.location) > colocation_radius_miles:
+    AND haversine(A.location, B.location) > distance_threshold_miles:
 
     days_between = abs(A.event_date - B.event_date)
     if days_between < travel_buffer_days:
-        → conflict
+        → conflict (distant events with insufficient travel buffer)
 ```
 
 ### Group Construction (Union-Find)

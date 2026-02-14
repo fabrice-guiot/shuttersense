@@ -31,6 +31,10 @@ from backend.src.schemas.config import (
     ConfigStatsResponse, DeleteResponse, ConfigConflict,
     EventStatusItem, EventStatusesResponse
 )
+from backend.src.schemas.conflict import (
+    ConflictRulesResponse, ConflictRulesUpdateRequest,
+    ScoringWeightsResponse, ScoringWeightsUpdateRequest,
+)
 from backend.src.schemas.retention import (
     RetentionSettingsResponse, RetentionSettingsUpdate
 )
@@ -417,6 +421,128 @@ def cancel_import(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+
+
+# ============================================================================
+# Conflict Rules Endpoints (must be before /{category})
+# ============================================================================
+
+
+@router.get(
+    "/conflict_rules",
+    response_model=ConflictRulesResponse,
+    summary="Get conflict rule settings",
+)
+def get_conflict_rules(
+    ctx: TenantContext = Depends(require_auth),
+    service: ConfigService = Depends(get_config_service),
+) -> ConflictRulesResponse:
+    """Get the team's conflict detection configuration."""
+    from backend.src.services.conflict_service import ConflictService
+    conflict_service = ConflictService(service.db)
+    return conflict_service.get_conflict_rules(ctx.team_id)
+
+
+@router.put(
+    "/conflict_rules",
+    response_model=ConflictRulesResponse,
+    summary="Update conflict rule settings",
+)
+def update_conflict_rules(
+    update: ConflictRulesUpdateRequest,
+    ctx: TenantContext = Depends(require_auth),
+    service: ConfigService = Depends(get_config_service),
+) -> ConflictRulesResponse:
+    """Update one or more conflict detection settings."""
+    try:
+        updates = update.model_dump(exclude_unset=True)
+        for key, value in updates.items():
+            existing = service.get("conflict_rules", key, team_id=ctx.team_id)
+            if existing:
+                current = existing.value if isinstance(existing.value, dict) else {}
+                current["value"] = value
+                service.update(
+                    category="conflict_rules", key=key,
+                    team_id=ctx.team_id, value=current,
+                    user_id=ctx.user_id,
+                )
+            else:
+                service.create(
+                    category="conflict_rules", key=key,
+                    value={"value": value, "label": key.replace("_", " ").title()},
+                    team_id=ctx.team_id, user_id=ctx.user_id,
+                )
+
+        from backend.src.services.conflict_service import ConflictService
+        conflict_service = ConflictService(service.db)
+        return conflict_service.get_conflict_rules(ctx.team_id)
+
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+
+# ============================================================================
+# Scoring Weights Endpoints (must be before /{category})
+# ============================================================================
+
+
+@router.get(
+    "/scoring_weights",
+    response_model=ScoringWeightsResponse,
+    summary="Get scoring weight settings",
+)
+def get_scoring_weights(
+    ctx: TenantContext = Depends(require_auth),
+    service: ConfigService = Depends(get_config_service),
+) -> ScoringWeightsResponse:
+    """Get the team's scoring dimension weights."""
+    from backend.src.services.conflict_service import ConflictService
+    conflict_service = ConflictService(service.db)
+    return conflict_service.get_scoring_weights(ctx.team_id)
+
+
+@router.put(
+    "/scoring_weights",
+    response_model=ScoringWeightsResponse,
+    summary="Update scoring weight settings",
+)
+def update_scoring_weights(
+    update: ScoringWeightsUpdateRequest,
+    ctx: TenantContext = Depends(require_auth),
+    service: ConfigService = Depends(get_config_service),
+) -> ScoringWeightsResponse:
+    """Update one or more scoring dimension weights."""
+    try:
+        updates = update.model_dump(exclude_unset=True)
+        for key, value in updates.items():
+            existing = service.get("scoring_weights", key, team_id=ctx.team_id)
+            if existing:
+                current = existing.value if isinstance(existing.value, dict) else {}
+                current["value"] = value
+                service.update(
+                    category="scoring_weights", key=key,
+                    team_id=ctx.team_id, value=current,
+                    user_id=ctx.user_id,
+                )
+            else:
+                service.create(
+                    category="scoring_weights", key=key,
+                    value={"value": value, "label": key.replace("_", " ").title()},
+                    team_id=ctx.team_id, user_id=ctx.user_id,
+                )
+
+        from backend.src.services.conflict_service import ConflictService
+        conflict_service = ConflictService(service.db)
+        return conflict_service.get_scoring_weights(ctx.team_id)
+
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
         )
 
 
