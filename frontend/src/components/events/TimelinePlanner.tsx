@@ -49,9 +49,15 @@ type ConflictFilter = 'all' | 'conflicts_only' | 'unresolved_only'
 // Helpers
 // ============================================================================
 
-/** Sort events chronologically by date */
+/** Sort events chronologically by date, then start time (all-day / null → 00:00) */
 function sortByDate(events: ScoredEvent[]): ScoredEvent[] {
-  return [...events].sort((a, b) => a.event_date.localeCompare(b.event_date))
+  return [...events].sort((a, b) => {
+    const dateCmp = a.event_date.localeCompare(b.event_date)
+    if (dateCmp !== 0) return dateCmp
+    const timeA = a.start_time ?? '00:00'
+    const timeB = b.start_time ?? '00:00'
+    return timeA.localeCompare(timeB)
+  })
 }
 
 /** Find which conflict group an event belongs to */
