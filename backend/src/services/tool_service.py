@@ -654,6 +654,7 @@ class ToolService:
             pipeline_guid=pipeline_guid,
             pipeline_version=pipeline_version,
             mode=mode_str,
+            team_id=team_id,
         )
         position = self._queue.enqueue(job)
 

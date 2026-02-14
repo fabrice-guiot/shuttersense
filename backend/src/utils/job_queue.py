@@ -53,6 +53,7 @@ class AnalysisJob:
         collection_guid: External GUID of the collection (col_xxx format, None for display_graph mode)
         tool: Analysis tool name ('photostats', 'photo_pairing', 'pipeline_validation')
         pipeline_id: Internal pipeline ID for Pipeline Validation tool
+        team_id: Team ID for tenant isolation (used for WebSocket broadcasts)
         pipeline_guid: External pipeline GUID (pip_xxx format)
         pipeline_version: Optional pipeline version used at execution time
         mode: Optional execution mode for pipeline_validation ('collection' or 'display_graph')
@@ -71,6 +72,7 @@ class AnalysisJob:
     collection_id: Optional[int]  # Internal ID, optional for display_graph mode
     tool: str
     pipeline_id: Optional[int]  # Internal ID
+    team_id: Optional[int] = None  # Team ID for tenant isolation
     collection_guid: Optional[str] = None  # External GUID (col_xxx)
     pipeline_guid: Optional[str] = None  # External GUID (pip_xxx)
     pipeline_version: Optional[int] = None
