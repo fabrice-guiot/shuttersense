@@ -1,14 +1,13 @@
 /**
  * TimelinePlanner Component
  *
- * Scrollable chronological timeline grouped by month with score bars,
+ * Scrollable chronological timeline with score bars,
  * conflict connectors, and inline radar comparison.
  *
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 8, US6)
  */
 
 import { useState, useMemo } from 'react'
-import { format, parseISO } from 'date-fns'
 import { Filter, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -47,26 +46,9 @@ type ConflictFilter = 'all' | 'conflicts_only' | 'unresolved_only'
 // Helpers
 // ============================================================================
 
-/** Group events by month key (e.g. "2026-06"), sorted by date within each group */
-function groupByMonth(events: ScoredEvent[]): Map<string, ScoredEvent[]> {
-  const sorted = [...events].sort((a, b) => a.event_date.localeCompare(b.event_date))
-  const groups = new Map<string, ScoredEvent[]>()
-  for (const event of sorted) {
-    const key = event.event_date.slice(0, 7) // "YYYY-MM"
-    const list = groups.get(key) || []
-    list.push(event)
-    groups.set(key, list)
-  }
-  return groups
-}
-
-/** Format month key to display string */
-function formatMonthLabel(monthKey: string): string {
-  try {
-    return format(parseISO(`${monthKey}-01`), 'MMMM yyyy')
-  } catch {
-    return monthKey
-  }
+/** Sort events chronologically by date */
+function sortByDate(events: ScoredEvent[]): ScoredEvent[] {
+  return [...events].sort((a, b) => a.event_date.localeCompare(b.event_date))
 }
 
 /** Find which conflict group an event belongs to */
@@ -97,7 +79,7 @@ type EventSegment =
   | { type: 'single'; event: ScoredEvent }
 
 /**
- * Segment month events into conflict-group runs and standalone events.
+ * Segment events into conflict-group runs and standalone events.
  * Consecutive events belonging to the same conflict group are bundled
  * so the connector bar can wrap the entire group.
  */
@@ -222,7 +204,7 @@ export function TimelinePlanner({
     return result
   }, [events, categoryFilter, conflictFilter, conflictedGuids, conflictGroups])
 
-  const monthGroups = useMemo(() => groupByMonth(filteredEvents), [filteredEvents])
+  const sortedEvents = useMemo(() => sortByDate(filteredEvents), [filteredEvents])
 
   // Loading state
   if (loading) {
@@ -278,60 +260,45 @@ export function TimelinePlanner({
       </div>
 
       {/* Timeline */}
-      {filteredEvents.length === 0 ? (
+      {sortedEvents.length === 0 ? (
         <div className="text-center text-sm text-muted-foreground py-12">
           No events match the current filters
         </div>
       ) : (
-        <div className="space-y-6">
-          {[...monthGroups.entries()].map(([monthKey, monthEvents]) => (
-            <div key={monthKey}>
-              {/* Month header */}
-              <h3 className="text-sm font-semibold text-muted-foreground mb-2 sticky top-0 bg-background/95 backdrop-blur-sm py-1 z-10">
-                {formatMonthLabel(monthKey)}
-                <span className="ml-2 text-xs font-normal">
-                  ({monthEvents.length} event{monthEvents.length !== 1 ? 's' : ''})
-                </span>
-              </h3>
+        <div className="space-y-0.5">
+          {segmentByConflictGroup(sortedEvents, conflictGroups).map((segment, segIdx) => {
+            if (segment.type === 'single') {
+              return (
+                <div key={segment.event.guid} className="ml-5">
+                  <TimelineEventMarker
+                    event={segment.event}
+                    onClick={() => onEventClick?.(segment.event)}
+                  />
+                </div>
+              )
+            }
 
-              {/* Event markers with conflict connectors */}
-              <div className="space-y-0.5">
-                {segmentByConflictGroup(monthEvents, conflictGroups).map((segment, segIdx) => {
-                  if (segment.type === 'single') {
-                    return (
-                      <div key={segment.event.guid} className="ml-5">
-                        <TimelineEventMarker
-                          event={segment.event}
-                          onClick={() => onEventClick?.(segment.event)}
-                        />
-                      </div>
-                    )
-                  }
-
-                  // Conflict group segment — wrapper provides positioning context
-                  // for the connector bar to span all grouped events
-                  return (
-                    <div key={`${segment.group.group_id}-${segIdx}`} className="relative">
-                      {segment.events.length > 1 && (
-                        <ConflictConnector
-                          group={segment.group}
-                          onClick={() => setCompareGroup(segment.group)}
-                        />
-                      )}
-                      {segment.events.map(event => (
-                        <div key={event.guid} className="ml-5">
-                          <TimelineEventMarker
-                            event={event}
-                            onClick={() => onEventClick?.(event)}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
+            // Conflict group segment — wrapper provides positioning context
+            // for the connector bar to span all grouped events
+            return (
+              <div key={`${segment.group.group_id}-${segIdx}`} className="relative">
+                {segment.events.length > 1 && (
+                  <ConflictConnector
+                    group={segment.group}
+                    onClick={() => setCompareGroup(segment.group)}
+                  />
+                )}
+                {segment.events.map(event => (
+                  <div key={event.guid} className="ml-5">
+                    <TimelineEventMarker
+                      event={event}
+                      onClick={() => onEventClick?.(event)}
+                    />
+                  </div>
+                ))}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
