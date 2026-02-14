@@ -46,6 +46,7 @@ import { ConflictResolutionPanel } from '@/components/events/ConflictResolutionP
 import { TimelinePlanner } from '@/components/events/TimelinePlanner'
 import { DateRangePicker } from '@/components/events/DateRangePicker'
 import { useDateRange } from '@/hooks/useDateRange'
+import { useScoringWeights } from '@/hooks/useScoringWeights'
 import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest, EventPreset } from '@/contracts/api/event-api'
@@ -136,6 +137,9 @@ export default function EventsPage() {
     () => presetEvents.slice(0, visibleCount),
     [presetEvents, visibleCount],
   )
+
+  // Scoring weights for planner micro-bars (Issue #208)
+  const { settings: scoringWeights } = useScoringWeights()
 
   // Conflict detection for calendar and planner views
   const { data: conflictData, loading: conflictLoading, detectConflicts } = useConflicts()
@@ -727,6 +731,7 @@ export default function EventsPage() {
               conflicts={conflictData}
               loading={conflictLoading}
               categories={categories.map(c => ({ guid: c.guid, name: c.name, icon: c.icon, color: c.color }))}
+              scoringWeights={scoringWeights ?? undefined}
               onResolved={refetchConflicts}
             />
           </div>

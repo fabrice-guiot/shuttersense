@@ -24,8 +24,9 @@ import type {
   ScoredEvent,
   ConflictGroup,
   ConflictDetectionResponse,
+  ScoringWeightsResponse,
+  CategoryInfo,
 } from '@/contracts/api/conflict-api'
-import type { CategoryInfo } from '@/contracts/api/conflict-api'
 
 // ============================================================================
 // Types
@@ -36,6 +37,7 @@ interface TimelinePlannerProps {
   conflicts: ConflictDetectionResponse | null
   loading?: boolean
   categories?: CategoryInfo[]
+  scoringWeights?: ScoringWeightsResponse
   onEventClick?: (event: ScoredEvent) => void
   onResolved?: () => void
   className?: string
@@ -166,6 +168,7 @@ export function TimelinePlanner({
   conflicts,
   loading = false,
   categories = [],
+  scoringWeights,
   onEventClick,
   onResolved,
   className,
@@ -323,6 +326,7 @@ export function TimelinePlanner({
                   <TimelineEventMarker
                     ref={handle => setMarkerRef(segment.event.guid, handle)}
                     event={segment.event}
+                    scoringWeights={scoringWeights}
                     onClick={() => onEventClick?.(segment.event)}
                   />
                 </div>
@@ -344,6 +348,7 @@ export function TimelinePlanner({
                     <TimelineEventMarker
                       ref={handle => setMarkerRef(event.guid, handle)}
                       event={event}
+                      scoringWeights={scoringWeights}
                       onClick={() => onEventClick?.(event)}
                     />
                   </div>
