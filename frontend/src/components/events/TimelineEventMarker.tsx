@@ -39,7 +39,7 @@ export interface TimelineEventMarkerHandle {
 
 function scoreBarColor(score: number): string {
   if (score >= 75) return 'bg-success'
-  if (score >= 35) return 'bg-warning'
+  if (score >= 35) return 'bg-amber-500'
   return 'bg-destructive'
 }
 
