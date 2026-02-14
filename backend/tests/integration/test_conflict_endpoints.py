@@ -20,6 +20,15 @@ class TestConflictDetection:
 
     @pytest.fixture
     def category(self, test_db_session, test_team):
+        """Create a test category for conflict detection tests.
+
+        Args:
+            test_db_session: SQLAlchemy test database session.
+            test_team: Test team instance providing team_id.
+
+        Returns:
+            Category: A persisted Category instance with id and team_id set.
+        """
         cat = Category(
             name="Conflict Test Category",
             icon="calendar",
@@ -170,7 +179,7 @@ class TestConflictDetection:
         assert response.status_code == 200
         assert response.json()["conflict_groups"] == []
 
-    def test_time_overlap_detected(self, test_client, overlapping_events):
+    def test_time_overlap_detected(self, test_client, _overlapping_events):
         """Two overlapping same-day events → one conflict group."""
         response = test_client.get(
             "/api/events/conflicts",
@@ -186,7 +195,7 @@ class TestConflictDetection:
         assert group["edges"][0]["conflict_type"] == "time_overlap"
         assert group["status"] == "unresolved"
 
-    def test_distance_conflict_detected(self, test_client, distant_events):
+    def test_distance_conflict_detected(self, test_client, _distant_events):
         """Distant consecutive-day events → distance conflict."""
         response = test_client.get(
             "/api/events/conflicts",
@@ -203,7 +212,7 @@ class TestConflictDetection:
         distance_edges = [e for e in all_edges if e["conflict_type"] == "distance"]
         assert len(distance_edges) >= 1
 
-    def test_scored_events_in_group(self, test_client, overlapping_events):
+    def test_scored_events_in_group(self, test_client, _overlapping_events):
         """Events in conflict groups include quality scores."""
         response = test_client.get(
             "/api/events/conflicts",
@@ -235,7 +244,7 @@ class TestConflictDetection:
         response = test_client.get("/api/events/conflicts")
         assert response.status_code == 422
 
-    def test_response_summary_structure(self, test_client, overlapping_events):
+    def test_response_summary_structure(self, test_client, _overlapping_events):
         """Summary includes all required counts."""
         response = test_client.get(
             "/api/events/conflicts",

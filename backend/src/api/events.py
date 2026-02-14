@@ -82,7 +82,14 @@ def get_event_service(db: Session = Depends(get_db)) -> EventService:
 
 
 def get_conflict_service(db: Session = Depends(get_db)) -> ConflictService:
-    """Create ConflictService instance with database session."""
+    """Create ConflictService instance with database session.
+
+    Args:
+        db: Database session injected via Depends(get_db) (sqlalchemy.orm.Session).
+
+    Returns:
+        ConflictService: Service for conflict detection and event quality scoring.
+    """
     return ConflictService(db=db)
 
 
@@ -203,12 +210,18 @@ async def detect_conflicts(
     """
     Detect conflicts for a date range.
 
-    Query Parameters:
-        start_date: Start of date range (inclusive)
-        end_date: End of date range (inclusive)
+    Args:
+        start_date: Start of date range, inclusive (date, required query param).
+        end_date: End of date range, inclusive (date, required query param).
+        ctx: Tenant context with team_id, injected via Depends(require_auth).
+        conflict_service: ConflictService instance, injected via Depends.
 
     Returns:
-        ConflictDetectionResponse with conflict groups and summary
+        ConflictDetectionResponse with conflict groups, scored events, and summary.
+
+    Raises:
+        HTTPException(422): If end_date < start_date.
+        HTTPException(500): On unexpected server error.
     """
     try:
         if end_date < start_date:
@@ -247,9 +260,17 @@ async def resolve_conflict(
     """
     Batch-resolve a conflict group by setting attendance on events.
 
-    Request Body:
-        group_id: Ephemeral group identifier (used for logging)
-        decisions: List of {event_guid, attendance} pairs
+    Args:
+        request: ConflictResolveRequest with group_id and list of decisions.
+        ctx: Tenant context with team_id, injected via Depends(require_auth).
+        conflict_service: ConflictService instance, injected via Depends.
+
+    Returns:
+        ConflictResolveResponse with success status, updated count, and message.
+
+    Raises:
+        HTTPException(404): If any event GUID is not found.
+        HTTPException(500): On unexpected server error.
     """
     try:
         decisions = [d.model_dump() for d in request.decisions]
@@ -293,8 +314,17 @@ async def get_event_score(
     """
     Get quality scores for a single event.
 
-    Path Parameters:
-        guid: Event GUID (evt_xxx format)
+    Args:
+        guid: Event GUID in evt_xxx format (str, path parameter).
+        ctx: Tenant context with team_id, injected via Depends(require_auth).
+        conflict_service: ConflictService instance, injected via Depends.
+
+    Returns:
+        EventScoreResponse with event info and five dimension scores plus composite.
+
+    Raises:
+        HTTPException(404): If event not found.
+        HTTPException(500): On unexpected server error.
     """
     try:
         return conflict_service.get_event_score(guid=guid, team_id=ctx.team_id)

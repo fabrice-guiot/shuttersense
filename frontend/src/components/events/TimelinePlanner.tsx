@@ -312,14 +312,14 @@ export function TimelinePlanner({
       ) : (
         <div
           className="space-y-0.5"
-          role="listbox"
+          role="list"
           aria-label="Timeline events"
           onKeyDown={handleTimelineKeyDown}
         >
           {segmentByConflictGroup(sortedEvents, conflictGroups).map((segment, segIdx) => {
             if (segment.type === 'single') {
               return (
-                <div key={segment.event.guid} className="ml-5" role="option" aria-selected={false}>
+                <div key={segment.event.guid} className="ml-5" role="listitem">
                   <TimelineEventMarker
                     ref={handle => setMarkerRef(segment.event.guid, handle)}
                     event={segment.event}
@@ -340,7 +340,7 @@ export function TimelinePlanner({
                   />
                 )}
                 {segment.events.map(event => (
-                  <div key={event.guid} className="ml-5" role="option" aria-selected={false}>
+                  <div key={event.guid} className="ml-5" role="listitem">
                     <TimelineEventMarker
                       ref={handle => setMarkerRef(event.guid, handle)}
                       event={event}

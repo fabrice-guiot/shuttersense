@@ -2085,7 +2085,16 @@ class EventService:
 
         Runs conflict detection for a window around the event date and sends
         notifications for any unresolved conflict edges found. Errors are
-        suppressed to avoid blocking the main create/update operation.
+        suppressed to avoid blocking the main create/update operation;
+        callers should not expect exceptions to propagate.
+
+        Args:
+            team_id (int): Team identifier for tenant isolation.
+            event_date (date): Date around which conflicts are detected
+                (a +/-7 day window is used).
+
+        Returns:
+            None
         """
         try:
             from backend.src.services.conflict_service import ConflictService
