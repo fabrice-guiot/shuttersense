@@ -21,7 +21,7 @@ export interface EventScores {
   venue_quality: number        // 0–100: Location rating * 20 (null → 50)
   organizer_reputation: number // 0–100: Organizer rating * 20 (null → 50)
   performer_lineup: number     // 0–100: Confirmed performers / ceiling * 100
-  logistics_ease: number       // 0–100: Each not-required item → +33.3
+  logistics_ease: number       // 0–100: Cumulative logistics commitment (ticket max 50, PTO max 25, travel max 25)
   readiness: number            // 0–100: Each resolved required item → proportional share
   composite: number            // 0–100: Weighted average of all dimensions
 }

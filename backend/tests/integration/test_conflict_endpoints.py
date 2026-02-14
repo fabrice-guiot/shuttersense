@@ -430,7 +430,7 @@ class TestEventScore:
         scores = data["scores"]
         assert scores["venue_quality"] == 80.0  # rating 4 * 20
         assert scores["organizer_reputation"] == 100.0  # rating 5 * 20
-        assert scores["logistics_ease"] == 100.0  # nothing required → 100
+        assert scores["logistics_ease"] == 75.0  # nothing required → 75 (25+25+25)
         assert scores["readiness"] == 100.0  # nothing required → 100
         assert 0 <= scores["composite"] <= 100
 

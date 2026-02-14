@@ -168,35 +168,91 @@ class TestScoring:
         score = ConflictService._score_performer_lineup(event, performer_ceiling=5)
         assert score == 0.0
 
-    def test_logistics_ease_all_not_required(self):
-        """All logistics not required → 100."""
-        event = _make_event(travel_required=False, ticket_required=False, timeoff_required=False)
-        score = ConflictService._score_logistics_ease(event)
-        assert abs(score - 100.0) < 0.1
-
-    def test_logistics_ease_all_required(self):
-        """All logistics required → 0."""
-        event = _make_event(travel_required=True, ticket_required=True, timeoff_required=True)
-        score = ConflictService._score_logistics_ease(event)
-        assert score == 0.0
-
-    def test_logistics_ease_null_treated_as_neutral(self):
-        """Null logistics fields treated as neutral/unknown → 0 (no known data)."""
+    def test_logistics_ease_all_none(self):
+        """All None (unknown) → 0."""
         event = _make_event(travel_required=None, ticket_required=None, timeoff_required=None)
         score = ConflictService._score_logistics_ease(event)
         assert score == 0.0
 
-    def test_logistics_ease_partial_known(self):
-        """Mix of None and known values only counts known values."""
-        # 1 known False, 2 None → 100% easy (1/1)
+    def test_logistics_ease_all_not_required(self):
+        """All logistics not required → 75 (25+25+25)."""
+        event = _make_event(travel_required=False, ticket_required=False, timeoff_required=False)
+        score = ConflictService._score_logistics_ease(event)
+        assert score == 75.0
+
+    def test_logistics_ease_all_required_initial(self):
+        """All required, initial status → 0."""
+        event = _make_event(
+            ticket_required=True, ticket_status="not_purchased",
+            timeoff_required=True, timeoff_status="planned",
+            travel_required=True, travel_status="planned",
+        )
+        score = ConflictService._score_logistics_ease(event)
+        assert score == 0.0
+
+    def test_logistics_ease_all_required_intermediate(self):
+        """All required, intermediate status → 60 (25+10+25)."""
+        event = _make_event(
+            ticket_required=True, ticket_status="purchased",
+            timeoff_required=True, timeoff_status="booked",
+            travel_required=True, travel_status="booked",
+        )
+        score = ConflictService._score_logistics_ease(event)
+        assert score == 60.0
+
+    def test_logistics_ease_all_required_final(self):
+        """All required, final status → 100 (50+25+25)."""
+        event = _make_event(
+            ticket_required=True, ticket_status="ready",
+            timeoff_required=True, timeoff_status="approved",
+            travel_required=True, travel_status="booked",
+        )
+        score = ConflictService._score_logistics_ease(event)
+        assert score == 100.0
+
+    def test_logistics_ease_ticket_ready_rest_none(self):
+        """Ticket required+ready, rest None → 50."""
+        event = _make_event(
+            ticket_required=True, ticket_status="ready",
+            timeoff_required=None, travel_required=None,
+        )
+        score = ConflictService._score_logistics_ease(event)
+        assert score == 50.0
+
+    def test_logistics_ease_mixed_statuses(self):
+        """Ticket not required, PTO approved, travel booked → 75 (25+25+25)."""
+        event = _make_event(
+            ticket_required=False,
+            timeoff_required=True, timeoff_status="approved",
+            travel_required=True, travel_status="booked",
+        )
+        score = ConflictService._score_logistics_ease(event)
+        assert score == 75.0
+
+    def test_logistics_ease_one_false_two_none(self):
+        """One not required, two None → 25."""
         event = _make_event(travel_required=False, ticket_required=None, timeoff_required=None)
         score = ConflictService._score_logistics_ease(event)
-        assert abs(score - 100.0) < 0.1
+        assert score == 25.0
 
-        # 1 known True, 1 known False, 1 None → 50% easy (1/2)
-        event = _make_event(travel_required=True, ticket_required=False, timeoff_required=None)
+    def test_logistics_ease_ticket_purchased_rest_not_required(self):
+        """Ticket purchased (not ready), rest not required → 75 (25+25+25)."""
+        event = _make_event(
+            ticket_required=True, ticket_status="purchased",
+            timeoff_required=False, travel_required=False,
+        )
         score = ConflictService._score_logistics_ease(event)
-        assert abs(score - 50.0) < 0.1
+        assert score == 75.0
+
+    def test_logistics_ease_timeoff_booked_rest_not_required(self):
+        """Timeoff booked (not approved), rest not required → 60 (25+10+25)."""
+        event = _make_event(
+            ticket_required=False,
+            timeoff_required=True, timeoff_status="booked",
+            travel_required=False,
+        )
+        score = ConflictService._score_logistics_ease(event)
+        assert score == 60.0
 
     def test_readiness_all_resolved(self):
         """All required items resolved → 100."""
@@ -244,14 +300,14 @@ class TestCompositeScore:
             location=_make_location(rating=4),  # 80
             organizer=_make_organizer(rating=3),  # 60
             event_performers=[_make_performer("confirmed")],  # 20 (1/5)
-            travel_required=False, ticket_required=False, timeoff_required=False,  # 100
+            travel_required=False, ticket_required=False, timeoff_required=False,  # 75
         )  # Readiness: nothing required → 100
 
         service = ConflictService.__new__(ConflictService)
         scores = service.score_event(event, DEFAULT_WEIGHTS, performer_ceiling=5)
 
-        # (80 + 60 + 20 + 100 + 100) / 5 = 72
-        assert abs(scores.composite - 72.0) < 0.5
+        # (80 + 60 + 20 + 75 + 100) / 5 = 67
+        assert abs(scores.composite - 67.0) < 0.5
 
     def test_zero_weights_returns_50(self):
         """All zero weights → neutral composite of 50."""
