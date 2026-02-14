@@ -14,7 +14,7 @@ import { ICON_MAP } from '@/components/settings/CategoryForm'
 import { DimensionMicroBar } from './DimensionMicroBar'
 import { EventRadarChart } from './EventRadarChart'
 import { formatDate } from '@/utils/dateFormat'
-import type { ScoredEvent } from '@/contracts/api/conflict-api'
+import type { ScoredEvent, ScoringWeightsResponse } from '@/contracts/api/conflict-api'
 
 // ============================================================================
 // Types
@@ -22,6 +22,7 @@ import type { ScoredEvent } from '@/contracts/api/conflict-api'
 
 interface TimelineEventMarkerProps {
   event: ScoredEvent
+  scoringWeights?: ScoringWeightsResponse
   onClick?: (event: ScoredEvent) => void
   className?: string
   focused?: boolean
@@ -48,7 +49,7 @@ function scoreBarColor(score: number): string {
 // ============================================================================
 
 export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, TimelineEventMarkerProps>(
-  function TimelineEventMarker({ event, onClick, className, focused }, ref) {
+  function TimelineEventMarker({ event, scoringWeights, onClick, className, focused }, ref) {
   const [expanded, setExpanded] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const score = Math.round(event.scores.composite)
@@ -147,7 +148,7 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
           </div>
 
           {/* Dimension micro-bar (hidden on mobile) */}
-          <DimensionMicroBar scores={event.scores} className="mt-0.5" />
+          <DimensionMicroBar scores={event.scores} weights={scoringWeights} className="mt-0.5" />
         </div>
       </button>
 

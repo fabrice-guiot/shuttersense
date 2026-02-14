@@ -24,8 +24,9 @@ import type {
   ScoredEvent,
   ConflictGroup,
   ConflictDetectionResponse,
+  ScoringWeightsResponse,
+  CategoryInfo,
 } from '@/contracts/api/conflict-api'
-import type { CategoryInfo } from '@/contracts/api/conflict-api'
 
 // ============================================================================
 // Types
@@ -36,6 +37,7 @@ interface TimelinePlannerProps {
   conflicts: ConflictDetectionResponse | null
   loading?: boolean
   categories?: CategoryInfo[]
+  scoringWeights?: ScoringWeightsResponse
   onEventClick?: (event: ScoredEvent) => void
   onResolved?: () => void
   className?: string
@@ -47,9 +49,15 @@ type ConflictFilter = 'all' | 'conflicts_only' | 'unresolved_only'
 // Helpers
 // ============================================================================
 
-/** Sort events chronologically by date */
+/** Sort events chronologically by date, then start time (all-day / null → 00:00) */
 function sortByDate(events: ScoredEvent[]): ScoredEvent[] {
-  return [...events].sort((a, b) => a.event_date.localeCompare(b.event_date))
+  return [...events].sort((a, b) => {
+    const dateCmp = a.event_date.localeCompare(b.event_date)
+    if (dateCmp !== 0) return dateCmp
+    const timeA = a.start_time ?? '00:00'
+    const timeB = b.start_time ?? '00:00'
+    return timeA.localeCompare(timeB)
+  })
 }
 
 /** Find which conflict group an event belongs to */
@@ -166,6 +174,7 @@ export function TimelinePlanner({
   conflicts,
   loading = false,
   categories = [],
+  scoringWeights,
   onEventClick,
   onResolved,
   className,
@@ -323,6 +332,7 @@ export function TimelinePlanner({
                   <TimelineEventMarker
                     ref={handle => setMarkerRef(segment.event.guid, handle)}
                     event={segment.event}
+                    scoringWeights={scoringWeights}
                     onClick={() => onEventClick?.(segment.event)}
                   />
                 </div>
@@ -344,6 +354,7 @@ export function TimelinePlanner({
                     <TimelineEventMarker
                       ref={handle => setMarkerRef(event.guid, handle)}
                       event={event}
+                      scoringWeights={scoringWeights}
                       onClick={() => onEventClick?.(event)}
                     />
                   </div>
