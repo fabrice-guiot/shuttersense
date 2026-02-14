@@ -728,8 +728,9 @@ async def job_progress_websocket(
     # Verify the job belongs to the user's team
     db = SessionLocal()
     try:
+        job_uuid = GuidService.parse_identifier(job_id, expected_prefix="job")
         job = db.query(Job).filter(
-            Job.guid == job_id, Job.team_id == ctx.team_id
+            Job.uuid == job_uuid, Job.team_id == ctx.team_id
         ).first()
         if not job:
             await websocket.close(code=4003, reason="Job not found")
