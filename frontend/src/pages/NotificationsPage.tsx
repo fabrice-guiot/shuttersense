@@ -64,6 +64,7 @@ const NOTIFICATION_CATEGORY_VALUES: NotificationCategory[] = [
   'inflection_point',
   'agent_status',
   'deadline',
+  'conflict',
   'retry_warning',
 ]
 

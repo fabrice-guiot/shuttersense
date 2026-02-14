@@ -109,6 +109,7 @@ class NotificationPreferencesResponse(BaseModel):
     inflection_points: bool = True
     agent_status: bool = True
     deadline: bool = True
+    conflict: bool = True
     retry_warning: bool = False
     deadline_days_before: int = Field(3, ge=1, le=30)
     timezone: str = Field("UTC", description="IANA timezone identifier")
@@ -127,6 +128,7 @@ class NotificationPreferencesUpdate(BaseModel):
     inflection_points: Optional[bool] = None
     agent_status: Optional[bool] = None
     deadline: Optional[bool] = None
+    conflict: Optional[bool] = None
     retry_warning: Optional[bool] = None
     deadline_days_before: Optional[int] = Field(default=None, ge=1, le=30)
     timezone: Optional[str] = Field(

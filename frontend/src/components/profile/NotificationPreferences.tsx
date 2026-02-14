@@ -55,6 +55,7 @@ const CATEGORY_TOGGLES: {
   { key: 'inflection_point', prefKey: 'inflection_points' },
   { key: 'agent_status', prefKey: 'agent_status' },
   { key: 'deadline', prefKey: 'deadline' },
+  { key: 'conflict', prefKey: 'conflict' },
   { key: 'retry_warning', prefKey: 'retry_warning' },
 ]
 
