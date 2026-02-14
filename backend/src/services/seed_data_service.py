@@ -53,10 +53,10 @@ DEFAULT_COLLECTION_TTL = {
 
 # Default conflict detection rules
 DEFAULT_CONFLICT_RULES = {
-    'distance_threshold_miles': {'value': 50, 'label': 'Distance Threshold (miles)'},
+    'distance_threshold_miles': {'value': 150, 'label': 'Distance Threshold (miles)'},
     'consecutive_window_days': {'value': 1, 'label': 'Consecutive Window (days)'},
     'travel_buffer_days': {'value': 3, 'label': 'Travel Buffer (days)'},
-    'colocation_radius_miles': {'value': 10, 'label': 'Co-location Radius (miles)'},
+    'colocation_radius_miles': {'value': 70, 'label': 'Co-location Radius (miles)'},
     'performer_ceiling': {'value': 5, 'label': 'Performer Ceiling'},
 }
 

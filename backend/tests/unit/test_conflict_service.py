@@ -318,7 +318,7 @@ class TestDistanceConflict:
     """Tests for distance conflict detection."""
 
     def test_distant_events_conflict(self):
-        """Events > threshold miles apart within window → conflict."""
+        """Events > colocation radius apart within window → conflict."""
         loc_nyc = _make_location(latitude=40.7128, longitude=-74.0060)
         loc_la = _make_location(latitude=34.0522, longitude=-118.2437)
 
@@ -326,14 +326,14 @@ class TestDistanceConflict:
         b = _make_event(guid="evt_b", event_date=date(2026, 3, 15), location=loc_la)
 
         service = ConflictService.__new__(ConflictService)
-        rules = ConflictRulesResponse(distance_threshold_miles=50, consecutive_window_days=1)
+        rules = ConflictRulesResponse(colocation_radius_miles=70, consecutive_window_days=1)
         edges = service._detect_distance_conflicts([a, b], rules)
 
         assert len(edges) == 1
         assert edges[0].conflict_type == ConflictType.DISTANCE
 
     def test_close_events_no_conflict(self):
-        """Events within threshold miles → no conflict."""
+        """Events within colocation radius → no conflict."""
         loc_a = _make_location(latitude=40.7128, longitude=-74.0060)
         loc_b = _make_location(latitude=40.7580, longitude=-73.9855)
 
@@ -341,7 +341,7 @@ class TestDistanceConflict:
         b = _make_event(guid="evt_b", event_date=date(2026, 3, 15), location=loc_b)
 
         service = ConflictService.__new__(ConflictService)
-        rules = ConflictRulesResponse(distance_threshold_miles=50, consecutive_window_days=1)
+        rules = ConflictRulesResponse(colocation_radius_miles=70, consecutive_window_days=1)
         edges = service._detect_distance_conflicts([a, b], rules)
 
         assert len(edges) == 0
@@ -355,7 +355,7 @@ class TestDistanceConflict:
         b = _make_event(guid="evt_b", event_date=date(2026, 3, 15), location=loc_nyc)
 
         service = ConflictService.__new__(ConflictService)
-        rules = ConflictRulesResponse(distance_threshold_miles=50, consecutive_window_days=1)
+        rules = ConflictRulesResponse(colocation_radius_miles=70, consecutive_window_days=1)
         edges = service._detect_distance_conflicts([a, b], rules)
 
         assert len(edges) == 0
@@ -369,7 +369,7 @@ class TestDistanceConflict:
         b = _make_event(guid="evt_b", event_date=date(2026, 3, 20), location=loc_la)
 
         service = ConflictService.__new__(ConflictService)
-        rules = ConflictRulesResponse(distance_threshold_miles=50, consecutive_window_days=1)
+        rules = ConflictRulesResponse(colocation_radius_miles=70, consecutive_window_days=1)
         edges = service._detect_distance_conflicts([a, b], rules)
 
         assert len(edges) == 0
@@ -379,7 +379,7 @@ class TestTravelBuffer:
     """Tests for travel buffer violation detection."""
 
     def test_travel_events_within_buffer(self):
-        """Two travel events too close in time → conflict."""
+        """Two distant travel events too close in time → conflict."""
         loc_nyc = _make_location(latitude=40.7128, longitude=-74.0060)
         loc_la = _make_location(latitude=34.0522, longitude=-118.2437)
 
@@ -393,14 +393,35 @@ class TestTravelBuffer:
         )
 
         service = ConflictService.__new__(ConflictService)
-        rules = ConflictRulesResponse(travel_buffer_days=3, colocation_radius_miles=10)
+        rules = ConflictRulesResponse(travel_buffer_days=3, distance_threshold_miles=150)
         edges = service._detect_travel_buffer_violations([a, b], rules)
 
         assert len(edges) == 1
         assert edges[0].conflict_type == ConflictType.TRAVEL_BUFFER
 
-    def test_colocated_travel_events_exempt(self):
-        """Co-located travel events within buffer → no conflict."""
+    def test_one_travel_event_triggers_buffer(self):
+        """Only one event requires travel → still flags buffer violation."""
+        loc_nyc = _make_location(latitude=40.7128, longitude=-74.0060)
+        loc_la = _make_location(latitude=34.0522, longitude=-118.2437)
+
+        a = _make_event(
+            guid="evt_a", event_date=date(2026, 3, 15),
+            location=loc_nyc, travel_required=True,
+        )
+        b = _make_event(
+            guid="evt_b", event_date=date(2026, 3, 16),
+            location=loc_la, travel_required=False,
+        )
+
+        service = ConflictService.__new__(ConflictService)
+        rules = ConflictRulesResponse(travel_buffer_days=3, distance_threshold_miles=150)
+        edges = service._detect_travel_buffer_violations([a, b], rules)
+
+        assert len(edges) == 1
+        assert edges[0].conflict_type == ConflictType.TRAVEL_BUFFER
+
+    def test_close_travel_events_no_conflict(self):
+        """Travel events within distance threshold → no conflict."""
         loc_a = _make_location(latitude=40.7128, longitude=-74.0060)
         loc_b = _make_location(latitude=40.7200, longitude=-74.0000)  # ~0.5 miles
 
@@ -414,13 +435,13 @@ class TestTravelBuffer:
         )
 
         service = ConflictService.__new__(ConflictService)
-        rules = ConflictRulesResponse(travel_buffer_days=3, colocation_radius_miles=10)
+        rules = ConflictRulesResponse(travel_buffer_days=3, distance_threshold_miles=150)
         edges = service._detect_travel_buffer_violations([a, b], rules)
 
         assert len(edges) == 0
 
     def test_non_travel_events_ignored(self):
-        """Non-travel events → no travel buffer conflict."""
+        """Neither event requires travel → no travel buffer conflict."""
         loc_nyc = _make_location(latitude=40.7128, longitude=-74.0060)
         loc_la = _make_location(latitude=34.0522, longitude=-118.2437)
 
@@ -434,7 +455,7 @@ class TestTravelBuffer:
         )
 
         service = ConflictService.__new__(ConflictService)
-        rules = ConflictRulesResponse(travel_buffer_days=3, colocation_radius_miles=10)
+        rules = ConflictRulesResponse(travel_buffer_days=3, distance_threshold_miles=150)
         edges = service._detect_travel_buffer_violations([a, b], rules)
 
         assert len(edges) == 0

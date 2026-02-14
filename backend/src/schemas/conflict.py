@@ -181,10 +181,10 @@ class ConflictResolveResponse(BaseModel):
 class ConflictRulesResponse(BaseModel):
     """Response for GET /config/conflict_rules."""
 
-    distance_threshold_miles: int = Field(default=50, ge=0)
+    distance_threshold_miles: int = Field(default=150, ge=0)
     consecutive_window_days: int = Field(default=1, ge=0)
     travel_buffer_days: int = Field(default=3, ge=0)
-    colocation_radius_miles: int = Field(default=10, ge=0)
+    colocation_radius_miles: int = Field(default=70, ge=0)
     performer_ceiling: int = Field(default=5, ge=1)
     audit: Optional[AuditInfo] = None
 

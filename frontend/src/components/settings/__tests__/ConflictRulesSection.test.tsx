@@ -197,7 +197,7 @@ describe('ConflictRulesSection', () => {
     render(
       <ConflictRulesSection settings={defaultSettings} onUpdate={vi.fn()} />
     )
-    expect(screen.getByText('Maximum distance between venues to flag as a conflict')).toBeInTheDocument()
-    expect(screen.getByText('Minimum days required between distant events for travel')).toBeInTheDocument()
+    expect(screen.getByText('Distance above which travel buffer rules apply between events')).toBeInTheDocument()
+    expect(screen.getByText('Minimum days between distant events when at least one requires travel')).toBeInTheDocument()
   })
 })

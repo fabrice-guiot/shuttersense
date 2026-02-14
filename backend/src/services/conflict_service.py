@@ -48,10 +48,10 @@ logger = get_logger("services")
 
 # Default conflict rules (used when team config is missing)
 DEFAULT_CONFLICT_RULES = {
-    "distance_threshold_miles": 50,
+    "distance_threshold_miles": 150,
     "consecutive_window_days": 1,
     "travel_buffer_days": 3,
-    "colocation_radius_miles": 10,
+    "colocation_radius_miles": 70,
     "performer_ceiling": 5,
 }
 
@@ -388,8 +388,13 @@ class ConflictService:
     def _detect_distance_conflicts(
         self, events: List[Event], rules: ConflictRulesResponse,
     ) -> List[ConflictEdge]:
-        """Detect distance conflicts between events on consecutive days."""
-        if rules.distance_threshold_miles <= 0:
+        """Detect distance conflicts between events on consecutive days.
+
+        Events within consecutive_window_days that are farther apart than
+        colocation_radius_miles are flagged — they are not co-located and
+        attending both may be difficult.
+        """
+        if rules.colocation_radius_miles <= 0:
             return []
 
         edges = []
@@ -406,7 +411,7 @@ class ConflictService:
                     continue
 
                 distance = haversine_miles(coords_a, coords_b)
-                if distance > rules.distance_threshold_miles:
+                if distance > rules.colocation_radius_miles:
                     edges.append(ConflictEdge(
                         event_a_guid=a.guid,
                         event_b_guid=b.guid,
@@ -418,16 +423,25 @@ class ConflictService:
     def _detect_travel_buffer_violations(
         self, events: List[Event], rules: ConflictRulesResponse,
     ) -> List[ConflictEdge]:
-        """Detect travel buffer violations between travel-required events."""
+        """Detect travel buffer violations between distant events.
+
+        Triggers when at least one event requires travel and the events
+        are farther apart than distance_threshold_miles with fewer than
+        travel_buffer_days between them.
+        """
         if rules.travel_buffer_days <= 0:
             return []
 
-        travel_events = [e for e in events if e.travel_required]
         edges = []
 
-        for i in range(len(travel_events)):
-            for j in range(i + 1, len(travel_events)):
-                a, b = travel_events[i], travel_events[j]
+        for i in range(len(events)):
+            for j in range(i + 1, len(events)):
+                a, b = events[i], events[j]
+
+                # At least one event must require travel
+                if not (a.travel_required or b.travel_required):
+                    continue
+
                 days_between = abs((a.event_date - b.event_date).days)
                 if days_between >= rules.travel_buffer_days:
                     continue
@@ -437,9 +451,9 @@ class ConflictService:
                 if coords_a is None or coords_b is None:
                     continue
 
-                # Co-located events are exempt
+                # Only flag events that are truly distant (beyond threshold)
                 distance = haversine_miles(coords_a, coords_b)
-                if distance <= rules.colocation_radius_miles:
+                if distance <= rules.distance_threshold_miles:
                     continue
 
                 edges.append(ConflictEdge(

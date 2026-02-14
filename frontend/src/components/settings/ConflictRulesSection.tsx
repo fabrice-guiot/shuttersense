@@ -82,7 +82,7 @@ const RULES: RuleConfig[] = [
   {
     key: 'distance_threshold_miles',
     label: 'Distance Threshold',
-    description: 'Maximum distance between venues to flag as a conflict',
+    description: 'Distance above which travel buffer rules apply between events',
     unit: 'miles',
     min: 1,
     max: 500,
@@ -100,7 +100,7 @@ const RULES: RuleConfig[] = [
   {
     key: 'travel_buffer_days',
     label: 'Travel Buffer',
-    description: 'Minimum days required between distant events for travel',
+    description: 'Minimum days between distant events when at least one requires travel',
     unit: 'days',
     min: 0,
     max: 7,
@@ -109,11 +109,11 @@ const RULES: RuleConfig[] = [
   {
     key: 'colocation_radius_miles',
     label: 'Co-location Radius',
-    description: 'Radius within which venues are considered co-located',
+    description: 'Maximum distance between venues considered co-located (no distance conflict)',
     unit: 'miles',
-    min: 0.1,
-    max: 50,
-    step: 0.1,
+    min: 1,
+    max: 200,
+    step: 1,
   },
   {
     key: 'performer_ceiling',

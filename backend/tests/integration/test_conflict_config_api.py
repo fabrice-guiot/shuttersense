@@ -24,10 +24,10 @@ class TestConflictRulesAPI:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["distance_threshold_miles"] == 50
+        assert data["distance_threshold_miles"] == 150
         assert data["consecutive_window_days"] == 1
         assert data["travel_buffer_days"] == 3
-        assert data["colocation_radius_miles"] == 10
+        assert data["colocation_radius_miles"] == 70
         assert data["performer_ceiling"] == 5
 
     def test_update_single_field(self, test_client):

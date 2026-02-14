@@ -22,10 +22,10 @@ depends_on = None
 
 # Default conflict detection rules
 DEFAULT_CONFLICT_RULES = [
-    ("distance_threshold_miles", {"value": 50, "label": "Distance Threshold (miles)"}, "Maximum miles between events before flagging a distance conflict"),
+    ("distance_threshold_miles", {"value": 150, "label": "Distance Threshold (miles)"}, "Distance above which travel buffer rules apply between events"),
     ("consecutive_window_days", {"value": 1, "label": "Consecutive Window (days)"}, "Days forward to check for distance conflicts"),
-    ("travel_buffer_days", {"value": 3, "label": "Travel Buffer (days)"}, "Minimum days between two non-co-located travel events"),
-    ("colocation_radius_miles", {"value": 10, "label": "Co-location Radius (miles)"}, "Two locations within this radius are co-located"),
+    ("travel_buffer_days", {"value": 3, "label": "Travel Buffer (days)"}, "Minimum days between distant events when at least one requires travel"),
+    ("colocation_radius_miles", {"value": 70, "label": "Co-location Radius (miles)"}, "Maximum distance between venues considered co-located (no distance conflict)"),
     ("performer_ceiling", {"value": 5, "label": "Performer Ceiling"}, "Confirmed performer count that maps to 100% on Performer Lineup"),
 ]
 
