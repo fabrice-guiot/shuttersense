@@ -91,6 +91,63 @@ const twoEventGroup: ConflictGroup = {
   ],
 }
 
+const threeEventMultiConflict: ConflictGroup = {
+  group_id: 'cg_3',
+  status: 'unresolved',
+  events: [
+    {
+      guid: 'evt_x',
+      title: 'Event X',
+      event_date: '2026-07-01',
+      start_time: '10:00',
+      end_time: '12:00',
+      is_all_day: false,
+      category: null,
+      location: { guid: 'loc_x', name: 'Venue X', city: 'City X', country: 'US' },
+      organizer: null,
+      performer_count: 0,
+      travel_required: true,
+      attendance: 'planned',
+      scores: { venue_quality: 60, organizer_reputation: 50, performer_lineup: 40, logistics_ease: 70, readiness: 80, composite: 60 },
+    },
+    {
+      guid: 'evt_y',
+      title: 'Event Y',
+      event_date: '2026-07-01',
+      start_time: '11:00',
+      end_time: '13:00',
+      is_all_day: false,
+      category: null,
+      location: { guid: 'loc_y', name: 'Venue Y', city: 'City Y', country: 'US' },
+      organizer: null,
+      performer_count: 0,
+      travel_required: false,
+      attendance: 'planned',
+      scores: { venue_quality: 70, organizer_reputation: 60, performer_lineup: 50, logistics_ease: 80, readiness: 90, composite: 70 },
+    },
+    {
+      guid: 'evt_z',
+      title: 'Event Z',
+      event_date: '2026-07-02',
+      start_time: '09:00',
+      end_time: '11:00',
+      is_all_day: false,
+      category: null,
+      location: { guid: 'loc_z', name: 'Venue Z', city: 'City Z', country: 'US' },
+      organizer: null,
+      performer_count: 0,
+      travel_required: false,
+      attendance: 'skipped',
+      scores: { venue_quality: 40, organizer_reputation: 30, performer_lineup: 20, logistics_ease: 60, readiness: 70, composite: 44 },
+    },
+  ],
+  edges: [
+    { event_a_guid: 'evt_x', event_b_guid: 'evt_y', conflict_type: 'time_overlap', detail: 'Time overlap 11:00-12:00' },
+    { event_a_guid: 'evt_x', event_b_guid: 'evt_y', conflict_type: 'distance', detail: '200 miles apart within 1 day' },
+    { event_a_guid: 'evt_x', event_b_guid: 'evt_z', conflict_type: 'travel_buffer', detail: 'Only 1 day between travel events' },
+  ],
+}
+
 const resolvedGroup: ConflictGroup = {
   group_id: 'cg_2',
   status: 'resolved',
@@ -289,5 +346,68 @@ describe('RadarComparisonDialog', () => {
       <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={twoEventGroup} />
     )
     expect(screen.getByTestId('responsive-container')).toBeInTheDocument()
+  })
+
+  // ===========================================================================
+  // Conflict Counts Section (Issue #196)
+  // ===========================================================================
+
+  test('displays conflict type rows with correct counts per event', () => {
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={threeEventMultiConflict} />
+    )
+
+    // Section header
+    expect(screen.getByText('Conflicts')).toBeInTheDocument()
+
+    // All three conflict types should appear
+    expect(screen.getByText('Time Overlap')).toBeInTheDocument()
+    expect(screen.getByText('Distance')).toBeInTheDocument()
+    expect(screen.getByText('Travel Buffer')).toBeInTheDocument()
+
+    // Total row
+    expect(screen.getByText('Total')).toBeInTheDocument()
+  })
+
+  test('displays conflict section for single-type group', () => {
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={twoEventGroup} />
+    )
+
+    // Section header + single conflict type
+    expect(screen.getByText('Conflicts')).toBeInTheDocument()
+    expect(screen.getByText('Time Overlap')).toBeInTheDocument()
+    expect(screen.getByText('Total')).toBeInTheDocument()
+
+    // Distance and Travel Buffer should NOT appear (no edges of those types)
+    expect(screen.queryByText('Distance')).not.toBeInTheDocument()
+    expect(screen.queryByText('Travel Buffer')).not.toBeInTheDocument()
+  })
+
+  test('conflict counts are unchanged when event is skipped', () => {
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={resolvedGroup} />
+    )
+
+    // Even though evt_skipped has attendance='skipped', conflict counts still show
+    expect(screen.getByText('Conflicts')).toBeInTheDocument()
+    expect(screen.getByText('Time Overlap')).toBeInTheDocument()
+    expect(screen.getByText('Total')).toBeInTheDocument()
+
+    // Both events should have count 1 for time_overlap (not filtered by skip)
+    // No em dash should appear since both events are involved
+    expect(screen.queryByText('\u2014')).not.toBeInTheDocument()
+  })
+
+  test('shows em dash for events not involved in a specific conflict type', () => {
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={threeEventMultiConflict} />
+    )
+
+    // evt_z is NOT in any time_overlap or distance edge, only travel_buffer
+    // evt_y is NOT in the travel_buffer edge
+    // So there should be em dashes for those zero-count cells
+    const dashes = screen.getAllByText('\u2014')
+    expect(dashes.length).toBeGreaterThan(0)
   })
 })

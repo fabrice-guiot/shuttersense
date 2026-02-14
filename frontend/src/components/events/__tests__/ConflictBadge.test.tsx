@@ -84,7 +84,7 @@ describe('ConflictBadge', () => {
       <ConflictBadge conflicts={timeOverlapConflict} status="unresolved" />
     )
     const badge = screen.getByRole('img')
-    expect(badge.getAttribute('aria-label')).toContain('Time overlap')
+    expect(badge.getAttribute('aria-label')).toContain('Time Overlap')
     expect(badge.getAttribute('aria-label')).toContain('Event B')
   })
 
@@ -93,8 +93,8 @@ describe('ConflictBadge', () => {
       <ConflictBadge conflicts={multipleConflicts} status="unresolved" />
     )
     const badge = screen.getByRole('img')
-    expect(badge.getAttribute('aria-label')).toContain('Time overlap with Event A')
-    expect(badge.getAttribute('aria-label')).toContain('Distance conflict with Event B')
+    expect(badge.getAttribute('aria-label')).toContain('Time Overlap with Event A')
+    expect(badge.getAttribute('aria-label')).toContain('Distance with Event B')
     // Shows count for multiple conflicts
     expect(screen.getByText('2')).toBeInTheDocument()
   })
@@ -105,7 +105,7 @@ describe('ConflictBadge', () => {
     )
     const badge = screen.getByRole('img')
     expect(badge).toBeInTheDocument()
-    expect(badge.getAttribute('aria-label')).toContain('Distance conflict')
+    expect(badge.getAttribute('aria-label')).toContain('Distance')
     expect(badge.getAttribute('aria-label')).toContain('LA Event')
   })
 

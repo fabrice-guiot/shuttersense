@@ -7,7 +7,7 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 3, US1)
  */
 
-import { AlertTriangle, Clock, MapPin, Plane } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
@@ -15,23 +15,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { CONFLICT_TYPE_LABELS, CONFLICT_TYPE_ICONS } from '@/contracts/domain-labels'
 import type { ConflictType, ConflictGroupStatus } from '@/contracts/api/conflict-api'
-
-// ============================================================================
-// Conflict Type Labels & Icons
-// ============================================================================
-
-const CONFLICT_TYPE_LABELS: Record<ConflictType, string> = {
-  time_overlap: 'Time overlap',
-  distance: 'Distance conflict',
-  travel_buffer: 'Travel buffer conflict',
-}
-
-const CONFLICT_TYPE_ICONS: Record<ConflictType, typeof AlertTriangle> = {
-  time_overlap: Clock,
-  distance: MapPin,
-  travel_buffer: Plane,
-}
 
 // ============================================================================
 // ConflictBadge Component
