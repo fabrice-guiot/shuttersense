@@ -16,7 +16,7 @@ All data is already available in `ConflictGroup.edges`. The change adds a new **
 
 ### Table Layout
 
-```
+```text
 ┌─────────────┬──────────────────┬──────────────────┐
 │ Dimension   │ Morning Workshop │ Afternoon Meetup  │
 ├─────────────┼──────────────────┼──────────────────┤
@@ -33,6 +33,8 @@ All data is already available in `ConflictGroup.edges`. The change adds a new **
 │ Total       │ 2                │ 1                │  ← bold
 └─────────────┴──────────────────┴──────────────────┘
 ```
+
+> **Note:** This example is illustrative, showing how multi-type conflict groups would render. A two-event group with only a time overlap edge would display just the "Time Overlap" row.
 
 ### Rules
 

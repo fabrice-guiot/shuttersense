@@ -30,10 +30,12 @@ import {
   Clock,
   RefreshCw,
   AlertTriangle,
+  Plane,
   type LucideIcon
 } from 'lucide-react'
 
 import type { ConnectorType } from './api/connector-api'
+import type { ConflictType } from './api/conflict-api'
 import type { CollectionType, CollectionState } from './api/collection-api'
 
 // ============================================================================
@@ -480,4 +482,26 @@ export function getNotificationCategoryLabel(category: NotificationCategory): st
  */
 export function getNotificationCategoryIcon(category: NotificationCategory): LucideIcon {
   return NOTIFICATION_CATEGORY_ICONS[category]
+}
+
+// ============================================================================
+// Conflict Types (Calendar Conflicts - Issue #182)
+// ============================================================================
+
+/**
+ * Human-readable labels for conflict types
+ */
+export const CONFLICT_TYPE_LABELS: Record<ConflictType, string> = {
+  time_overlap: 'Time Overlap',
+  distance: 'Distance',
+  travel_buffer: 'Travel Buffer',
+}
+
+/**
+ * Icons for conflict types
+ */
+export const CONFLICT_TYPE_ICONS: Record<ConflictType, LucideIcon> = {
+  time_overlap: Clock,
+  distance: MapPin,
+  travel_buffer: Plane,
 }

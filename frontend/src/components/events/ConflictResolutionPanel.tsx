@@ -9,34 +9,18 @@
  */
 
 import { useState } from 'react'
-import { AlertTriangle, BarChart3, Clock, MapPin, Plane, RotateCcw, SkipForward } from 'lucide-react'
+import { BarChart3, RotateCcw, SkipForward } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useResolveConflict } from '@/hooks/useResolveConflict'
 import { RadarComparisonDialog } from './RadarComparisonDialog'
 import { dayOffsetLabel } from './dayOffset'
+import { CONFLICT_TYPE_LABELS, CONFLICT_TYPE_ICONS } from '@/contracts/domain-labels'
 import type {
   ConflictGroup,
-  ConflictType,
   ScoredEvent,
 } from '@/contracts/api/conflict-api'
-
-// ============================================================================
-// Conflict Type Display
-// ============================================================================
-
-const CONFLICT_TYPE_LABELS: Record<ConflictType, string> = {
-  time_overlap: 'Time Overlap',
-  distance: 'Distance Conflict',
-  travel_buffer: 'Travel Buffer',
-}
-
-const CONFLICT_TYPE_ICONS: Record<ConflictType, typeof AlertTriangle> = {
-  time_overlap: Clock,
-  distance: MapPin,
-  travel_buffer: Plane,
-}
 
 // ============================================================================
 // ConflictGroupCard Component

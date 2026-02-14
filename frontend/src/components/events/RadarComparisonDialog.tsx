@@ -22,17 +22,8 @@ import { CHART_COLORS } from '@/components/trends/TrendChart'
 import { EventRadarChart, DIMENSIONS } from './EventRadarChart'
 import { dayOffsetLabel } from './dayOffset'
 import { useResolveConflict } from '@/hooks/useResolveConflict'
+import { CONFLICT_TYPE_LABELS } from '@/contracts/domain-labels'
 import type { ConflictGroup, ConflictType, ScoredEvent } from '@/contracts/api/conflict-api'
-
-// ============================================================================
-// Conflict Type Labels
-// ============================================================================
-
-const CONFLICT_TYPE_LABELS: Record<ConflictType, string> = {
-  time_overlap: 'Time Overlap',
-  distance: 'Distance',
-  travel_buffer: 'Travel Buffer',
-}
 
 // ============================================================================
 // Types
