@@ -48,6 +48,8 @@ import {
   Crown,
   Briefcase,
   Calendar,
+  // System icons (not in user-facing picker)
+  AlertTriangle,
   type LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -127,10 +129,15 @@ export const AVAILABLE_ICONS: IconOption[] = [
 
 /**
  * Map of icon names to their components for quick lookup.
+ * Includes user-selectable icons from AVAILABLE_ICONS plus system icons
+ * (e.g., conflict indicators) that aren't shown in the category picker.
  */
-export const ICON_MAP: Record<string, LucideIcon> = Object.fromEntries(
-  AVAILABLE_ICONS.map(({ name, icon }) => [name, icon])
-)
+export const ICON_MAP: Record<string, LucideIcon> = {
+  ...Object.fromEntries(
+    AVAILABLE_ICONS.map(({ name, icon }) => [name, icon])
+  ),
+  'alert-triangle': AlertTriangle,
+}
 
 // ============================================================================
 // Form Schema
