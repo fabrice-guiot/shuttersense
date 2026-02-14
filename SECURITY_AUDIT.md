@@ -1,21 +1,23 @@
 # ShutterSense Security Audit Report
 
 **Date:** 2026-02-14
-**Scope:** Full codebase (backend, frontend, agent)
-**Methodology:** Manual code review against OWASP Top 10 and multi-tenant security best practices
+**Scope:** Full codebase (backend, frontend, agent) + production deployment (`docs/deployment-hostinger-kvm2.md`)
+**Methodology:** Manual code review against OWASP Top 10 and multi-tenant security best practices, cross-referenced with documented production infrastructure controls
 
 ---
 
 ## Executive Summary
 
-ShutterSense implements a solid security foundation with OAuth 2.0 + PKCE, Fernet encryption for credentials, tenant isolation, and comprehensive security headers. However, the audit identified **14 security issues** ranging from critical cross-tenant access control bypasses to medium-severity configuration gaps.
+ShutterSense implements a solid security foundation with OAuth 2.0 + PKCE, Fernet encryption for credentials, tenant isolation, and comprehensive security headers. The production deployment adds significant defense-in-depth through nginx TLS termination, multi-layer firewalls (Hostinger managed + UFW + fail2ban), systemd sandboxing, and explicit production environment configuration.
 
-| Severity | Count | Summary |
-|----------|-------|---------|
-| Critical | 2 | Cross-tenant IDOR, unauthenticated WebSockets |
-| High | 3 | Session fixation, missing agent auth rate limiting, error detail leakage |
-| Medium | 5 | Missing HSTS, in-memory rate limiting bypass, insecure session defaults, deprecated datetime API, internal ID in session |
-| Low | 4 | CSP unsafe-inline, default CORS localhost, empty secret key defaults, API token scope granularity |
+The audit identified **14 security findings**. Of these, **5 require code-level fixes** (two critical, two high, one medium), while **5 are fully mitigated by the documented deployment configuration** and **4 are partially mitigated** with code improvements still recommended for defense-in-depth.
+
+| Severity | Count | Requires Code Fix | Mitigated by Deployment |
+|----------|-------|-------------------|------------------------|
+| Critical | 2 | 2 | 0 |
+| High | 3 | 2 | 0 (1 partially mitigated) |
+| Medium | 5 | 1 | 3 fully + 1 partially |
+| Low | 4 | 1 | 2 fully + 1 partially |
 
 ---
 
@@ -25,6 +27,7 @@ ShutterSense implements a solid security foundation with OAuth 2.0 + PKCE, Ferne
 
 **Severity:** CRITICAL
 **OWASP:** A01:2021 - Broken Access Control
+**Status:** Requires code fix
 **Affected Files:**
 - `backend/src/api/collections.py` (lines 270-277, 285-292, 296-308, 494-505, 510-522, 1090-1094, 1322-1334)
 - `backend/src/api/tools.py` (lines 165, 175-192)
@@ -53,6 +56,8 @@ connector_id = connector.id
 5. `POST /api/tools/run` - Collection GUID resolved without team_id (line 165: `collection_service.get_by_guid(tool_request.collection_guid)` -- missing `team_id=ctx.team_id`)
 6. `POST /api/tools/run` - Pipeline GUID resolved without team_id (line 186)
 
+**Deployment Note:** This is a pure application-layer authorization bug. No infrastructure control can mitigate cross-tenant IDOR; the fix must be in the code.
+
 **Remediation:**
 Add `team_id` filtering to all GUID resolution queries:
 ```python
@@ -68,6 +73,7 @@ connector = db.query(Connector).filter(
 
 **Severity:** CRITICAL
 **OWASP:** A01:2021 - Broken Access Control
+**Status:** Requires code fix
 **Affected File:** `backend/src/api/tools.py` (lines 600-730)
 
 **Description:**
@@ -83,6 +89,8 @@ Two WebSocket endpoints accept connections without any authentication or authori
 - Any unauthenticated client can connect and receive job progress data for all teams
 - Job data may contain collection names, tool types, file paths, and analysis results
 - Information leakage across tenant boundaries
+
+**Deployment Note:** Nginx proxies WebSocket connections through with `proxy_set_header Upgrade $http_upgrade` (deployment guide section 9.2). No infrastructure-level authentication is applied to WebSocket upgrades.
 
 **Remediation:**
 Add authentication to both WebSocket handlers following the pattern from `agent/routes.py`:
@@ -102,6 +110,7 @@ if not ctx:
 
 **Severity:** HIGH
 **OWASP:** A07:2021 - Identification and Authentication Failures
+**Status:** Requires code fix
 **Affected File:** `backend/src/services/auth_service.py` (line 430)
 
 **Description:**
@@ -116,6 +125,8 @@ def create_session(self, request: Request, user: User) -> None:
 **Impact:**
 If an attacker can set a session cookie before the victim logs in (e.g., via a subdomain or XSS on a related domain), the attacker's session ID persists post-login and gains the victim's authenticated session.
 
+**Deployment Note:** The production session configuration (`SESSION_SAME_SITE=lax`, `SESSION_HTTPS_ONLY=true`) reduces the attack surface by preventing cross-site cookie injection, but does not fully prevent session fixation from same-site origins. The fix must be in code.
+
 **Remediation:**
 Clear the session before populating it with authenticated user data:
 ```python
@@ -129,20 +140,25 @@ def create_session(self, request: Request, user: User) -> None:
 
 ### H2. No Rate Limiting on Agent Authentication
 
-**Severity:** HIGH
+**Severity:** HIGH (reduced to MEDIUM by deployment mitigation)
 **OWASP:** A07:2021 - Identification and Authentication Failures
+**Status:** Partially mitigated by deployment; code fix recommended for defense-in-depth
 **Affected File:** `backend/src/api/agent/dependencies.py` (lines 60-157)
 
 **Description:**
-The agent authentication endpoint (`get_agent_context`) has no rate limiting for failed API key validation attempts. In contrast, user API token authentication in `backend/src/middleware/tenant.py` (lines 32-95) implements per-IP failure tracking with blocking after 20 failures.
+The agent authentication endpoint (`get_agent_context`) has no application-level rate limiting for failed API key validation attempts. In contrast, user API token authentication in `backend/src/middleware/tenant.py` (lines 32-95) implements per-IP failure tracking with blocking after 20 failures.
 
-Agent API keys use the format `agt_key_xxxxx` with SHA-256 hash comparison. Without rate limiting, the endpoint is vulnerable to brute-force attacks against agent API keys.
+**Deployment Mitigation:**
+The production deployment provides infrastructure-level brute-force protection via fail2ban:
+- **`nginx-limit-req` jail** (section 5.4): Catches HTTP 401 responses in the nginx access log — agent auth failures returning 401 trigger this jail (10 retries in 1 minute, 30-minute ban)
+- **`recidive` jail**: Escalates repeat offenders to 1-week bans after 3 bans in a day
 
-**Impact:**
-An attacker can make unlimited authentication attempts against the agent API without being blocked.
+This means agent auth brute-force attempts ARE caught and blocked at the infrastructure layer, though with different thresholds than the in-app SEC-13 mechanism.
 
-**Remediation:**
-Apply the same `_record_token_failure` / `_is_token_blocked` pattern from `tenant.py` to agent authentication.
+**Residual Risk:** If fail2ban is misconfigured or the deployment deviates from the documented guide, there is no application-level fallback.
+
+**Recommended Improvement:**
+Apply the same `_record_token_failure` / `_is_token_blocked` pattern from `tenant.py` to agent authentication for consistent defense-in-depth.
 
 ---
 
@@ -150,6 +166,7 @@ Apply the same `_record_token_failure` / `_is_token_blocked` pattern from `tenan
 
 **Severity:** HIGH
 **OWASP:** A04:2021 - Insecure Design
+**Status:** Requires code fix
 **Affected Files:** All 18 files in `backend/src/api/`
 
 **Description:**
@@ -171,8 +188,7 @@ While `main.py`'s global exception handlers correctly return generic messages, t
 - Cloud provider SDK errors (potentially revealing configuration)
 - Pydantic validation internals
 
-**Impact:**
-Attackers can use error messages to map internal architecture, discover database schema, and identify technology stack details useful for further attacks.
+**Deployment Note:** Nginx passes through application JSON response bodies without filtering. No infrastructure control can mask application-layer error details. The fix must be in code.
 
 **Remediation:**
 Replace all `str(e)` in HTTP responses with generic messages. Log the details server-side only:
@@ -189,21 +205,26 @@ except Exception as e:
 
 ## Medium Findings
 
-### M1. Missing HSTS (Strict-Transport-Security) Header
+### M1. Missing HSTS (Strict-Transport-Security) Header in Application Code
 
 **Severity:** MEDIUM
 **OWASP:** A05:2021 - Security Misconfiguration
+**Status:** Mitigated by deployment (nginx)
 **Affected File:** `backend/src/main.py` (SecurityHeadersMiddleware, lines 76-148)
 
 **Description:**
-The `SecurityHeadersMiddleware` adds X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, CSP, and Permissions-Policy headers but does **not** set `Strict-Transport-Security`. Without HSTS, browsers may accept HTTP connections, enabling protocol downgrade and MITM attacks.
+The application-level `SecurityHeadersMiddleware` does not set `Strict-Transport-Security`. In isolation, this would allow protocol downgrade attacks.
 
-**Remediation:**
-Add HSTS header to `SecurityHeadersMiddleware` (only when running behind HTTPS):
-```python
-if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-```
+**Deployment Mitigation:**
+The nginx reverse proxy configuration (deployment guide section 9.2, 9.6) handles HSTS at the infrastructure layer:
+
+1. **HTTP-to-HTTPS redirect:** `return 301 https://$host$request_uri;` ensures all HTTP traffic is redirected
+2. **HSTS header:** `add_header Strict-Transport-Security "max-age=63072000" always;` is configured in nginx with a documented staged rollout (5 min -> 1 day -> 1 week -> 2 years)
+3. **TLS configuration:** Modern TLS 1.2/1.3 only, with strong cipher suite and session ticket disabled
+
+This is the correct architectural placement for HSTS — the TLS-terminating reverse proxy (nginx) is the authoritative layer for transport security headers, not the application behind it.
+
+**No code change needed.** The application correctly delegates transport security to the reverse proxy.
 
 ---
 
@@ -211,22 +232,26 @@ if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == 
 
 **Severity:** MEDIUM
 **OWASP:** A07:2021 - Identification and Authentication Failures
+**Status:** Mitigated by deployment (fail2ban)
 **Affected File:** `backend/src/middleware/tenant.py` (lines 43-44)
 
 **Description:**
-The per-IP token failure tracking uses in-process dictionaries (`_token_failures`, `_token_blocked`). In production with multiple uvicorn workers, each worker maintains separate counters. An attacker distributing requests across workers can bypass the 20-failure threshold.
+The per-IP token failure tracking uses in-process dictionaries (`_token_failures`, `_token_blocked`). With 4 Gunicorn workers in production, each worker maintains separate counters.
 
-**Current:**
-```python
-_token_failures: dict[str, list[float]] = defaultdict(list)  # Per-process
-_token_blocked: dict[str, float] = {}                        # Per-process
-```
+**Deployment Mitigation:**
+fail2ban provides persistent, cross-process brute-force protection that supersedes the in-memory counters:
 
-**Additionally:** The `slowapi` rate limiter defaults to `memory://` storage, which has the same multi-worker bypass issue.
+| Jail | Monitors | Threshold | Ban Duration |
+|------|----------|-----------|-------------|
+| `shuttersense-token` | Application SEC-13 log messages | 10 in 5m | 2 hours |
+| `nginx-limit-req` | Nginx 429/401 responses | 10 in 1m | 30 minutes |
+| `recidive` | Repeat bans across all jails | 3 bans/day | 1 week |
 
-**Remediation:**
-- Set `RATE_LIMIT_STORAGE_URI=redis://...` in production
-- Document that multi-worker deployments require Redis for rate limiting to be effective
+The `shuttersense-token` jail reads from `/var/log/shuttersense/api.log`, which aggregates logs from all workers. This means that even though individual workers have separate in-memory counters, the fail2ban jail sees the total failure count across all workers and blocks the IP at the firewall level (UFW).
+
+The in-memory counters still provide value as a fast first-line defense within each worker process.
+
+**No code change needed.** The multi-layer approach (per-worker in-memory + cross-worker fail2ban) provides effective protection.
 
 ---
 
@@ -234,22 +259,28 @@ _token_blocked: dict[str, float] = {}                        # Per-process
 
 **Severity:** MEDIUM
 **OWASP:** A02:2021 - Cryptographic Failures
+**Status:** Mitigated by deployment (environment config + nginx)
 **Affected File:** `backend/src/config/session.py` (line 53-55)
 
 **Description:**
-```python
-session_https_only: bool = Field(
-    default=False,  # Set to True in production
-)
+The code defaults `session_https_only` to `False`, which in isolation would send session cookies over HTTP.
+
+**Deployment Mitigation:**
+The production `.env` template (deployment guide section 7.7) explicitly sets:
+```bash
+SESSION_HTTPS_ONLY=true
+SESSION_SAME_SITE=lax
 ```
 
-The session cookie defaults to being sent over both HTTP and HTTPS. While there is a startup warning in `main.py` when running in production mode with `SESSION_HTTPS_ONLY=false`, the default-insecure configuration could lead to session hijacking if operators miss the warning.
+Additionally, multiple infrastructure layers prevent HTTP session exposure:
+1. **Nginx redirects** all HTTP to HTTPS (`return 301 https://...`)
+2. **Gunicorn binds to `127.0.0.1:8000`** only — the application never receives external HTTP requests directly
+3. **Hostinger/UFW firewalls** only expose ports 80 (redirect) and 443 (HTTPS)
+4. **Startup warning** in `main.py` alerts operators if `SESSION_HTTPS_ONLY=false` in production mode
 
-**Remediation:**
-Consider defaulting to `True` and requiring explicit opt-out for development:
-```python
-session_https_only: bool = Field(default=True)
-```
+The `False` default is intentional for local development where HTTPS is not available.
+
+**No code change needed.** The deployment configuration and architecture prevent this from being exploitable.
 
 ---
 
@@ -257,6 +288,7 @@ session_https_only: bool = Field(default=True)
 
 **Severity:** MEDIUM
 **OWASP:** A04:2021 - Insecure Design
+**Status:** Requires code fix (defense-in-depth)
 **Affected File:** `backend/src/services/auth_service.py` (line 430)
 
 **Description:**
@@ -272,6 +304,8 @@ user = db.query(User).filter(User.id == user_id).first()
 
 While the session cookie is signed (preventing tampering), storing sequential integer IDs makes ID prediction trivial if the signing key is compromised. The application's own architecture principle (Issue #42) states that external-facing identifiers should use GUIDs.
 
+**Deployment Note:** The signed session cookie (`SESSION_SECRET_KEY` with 32+ char requirement) makes direct tampering infeasible without key compromise. This finding is about consistency with the GUID architecture principle and defense-in-depth, not an immediately exploitable vulnerability.
+
 **Remediation:**
 Store the GUID in the session and look up by GUID:
 ```python
@@ -284,17 +318,21 @@ user = db.query(User).filter(User.guid == user_guid).first()
 
 ### M5. Deprecated `datetime.utcnow()` Usage
 
-**Severity:** MEDIUM
+**Severity:** MEDIUM (reduced to LOW by deployment)
 **OWASP:** N/A (Reliability/Correctness)
+**Status:** Partially mitigated by deployment; code fix recommended
 **Affected Files:** ~90 occurrences across models and services
 
 **Description:**
 `datetime.utcnow()` is deprecated since Python 3.12 and returns naive (timezone-unaware) datetimes. This affects token expiry checks (e.g., `api_token.py` line 206, `agent_registration_token.py` lines 160, 184) and all model timestamps.
 
-While the application targets Python 3.11+, mixing naive and timezone-aware datetimes can lead to token expiry being calculated incorrectly, especially when running across timezones or with timezone-aware database columns.
+**Deployment Mitigation:**
+The production server is configured with UTC timezone (deployment guide section 4.5: `timedatectl set-timezone UTC`), which eliminates the primary risk of timezone mismatch between `utcnow()` and the system clock. PostgreSQL also stores timestamps without timezone ambiguity when the server runs in UTC.
 
-**Remediation:**
-Replace all `datetime.utcnow()` with `datetime.now(timezone.utc)`:
+**Residual Risk:** The deprecation warning will become a removal in a future Python version. This is a technical debt item that should be addressed during a future Python version upgrade.
+
+**Recommended Improvement:**
+Replace all `datetime.utcnow()` with `datetime.now(timezone.utc)` as part of routine maintenance:
 ```python
 from datetime import datetime, timezone
 # Before: datetime.utcnow()
@@ -308,65 +346,110 @@ from datetime import datetime, timezone
 ### L1. CSP Allows `unsafe-inline` for Styles
 
 **Severity:** LOW
+**Status:** Accepted risk (Tailwind CSS requirement)
 **Affected File:** `backend/src/main.py` (line 130)
 
-The SPA Content-Security-Policy includes `style-src 'self' 'unsafe-inline'`. This weakens CSP protection against style-based attacks. This is a known trade-off required by Tailwind CSS and many component libraries. Consider using nonces or hashes in the future.
+The SPA Content-Security-Policy includes `style-src 'self' 'unsafe-inline'`. This weakens CSP protection against style-based attacks. This is a known trade-off required by Tailwind CSS and many component libraries (including Radix UI primitives used by shadcn/ui). Consider using nonces or hashes in the future.
 
 ### L2. Default CORS Origins Include Localhost
 
 **Severity:** LOW
+**Status:** Mitigated by deployment (environment config)
 **Affected File:** `backend/src/main.py` (lines 741-746)
 
-When `CORS_ORIGINS` is not set, the default includes `http://localhost:3000` and `http://localhost:8000`. These should be removed in production. The application relies on operators setting `CORS_ORIGINS` correctly.
+When `CORS_ORIGINS` is not set, the default includes `http://localhost:3000` and `http://localhost:8000`.
+
+**Deployment Mitigation:** The production `.env` (section 7.7) explicitly sets `CORS_ORIGINS=https://app.shuttersense.ai`, which completely overrides the defaults. The localhost origins only apply during local development where they are needed.
+
+**No code change needed.**
 
 ### L3. Secret Keys Default to Empty String
 
 **Severity:** LOW
+**Status:** Partially mitigated by deployment
 **Affected Files:** `backend/src/config/settings.py` (line 36), `backend/src/config/session.py` (line 28)
 
-Both `JWT_SECRET_KEY` and `SESSION_SECRET_KEY` default to empty string. While the application checks `is_configured` and logs warnings, it can still start without functional authentication. Consider failing fast on startup in production mode.
+Both `JWT_SECRET_KEY` and `SESSION_SECRET_KEY` default to empty string.
+
+**Deployment Mitigation:**
+- `SHUSAI_MASTER_KEY`: The application calls `validate_master_key()` on startup and **exits immediately** if it is missing or invalid (section 7.7-7.8). This is a hard fail.
+- `SESSION_SECRET_KEY`: If empty, `is_configured` returns `False` and session middleware is not installed, with a `UserWarning`. Sessions simply don't work.
+- `JWT_SECRET_KEY`: If empty, `jwt_configured` returns `False`. Token generation would fail at usage time.
+- The deployment guide (section 7.8) requires generating all three keys before the application will function.
+
+**Recommended Improvement:** Add fail-fast behavior in production mode (`SHUSAI_ENV=production`) for `SESSION_SECRET_KEY` and `JWT_SECRET_KEY`, matching the existing behavior for `SHUSAI_MASTER_KEY`.
 
 ### L4. API Token Scopes Not Enforced
 
 **Severity:** LOW
+**Status:** Accepted risk (future enhancement)
 **Affected File:** `backend/src/services/token_service.py` (line 169)
 
-API tokens are created with `scopes=["*"]` (full access) and no mechanism exists to restrict token permissions to specific operations. This violates the principle of least privilege.
+API tokens are created with `scopes=["*"]` (full access) and no mechanism exists to restrict token permissions to specific operations. This violates the principle of least privilege. Note that API tokens already cannot access super admin endpoints (enforced in `require_super_admin`).
 
 ---
 
 ## Positive Security Findings
 
-The following areas are well-implemented:
+### Application-Level Controls
 
 1. **OAuth 2.0 with PKCE** - Properly configured with state/nonce validation
 2. **Credential Encryption** - Fernet (AES-128-CBC + HMAC) with environment-based key management
 3. **Tenant Isolation** - Service layer consistently filters by `team_id` (the IDOR issues are at the API layer)
-4. **Security Headers** - Comprehensive CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
+4. **Security Headers** - Comprehensive CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
 5. **Path Traversal Protection** - `is_path_authorized()` and `is_safe_static_file_path()` properly validate paths
 6. **No SQL Injection** - Exclusive use of SQLAlchemy ORM with parameterized queries
 7. **No Dangerous Functions** - No `eval()`, `exec()`, or `subprocess(shell=True)` patterns
 8. **No Hardcoded Secrets** - All secrets loaded from environment variables
 9. **Token Hash Storage** - API tokens and agent keys stored as SHA-256 hashes
-10. **Super Admin via Hashed Emails** - No plaintext admin identifiers
+10. **Super Admin via Hashed Emails** - No plaintext admin identifiers in configuration
 11. **Frontend Security** - No `dangerouslySetInnerHTML`, proper XSS prevention, no client-side secret storage
 12. **Request Size Limiting** - 10MB body limit with both Content-Length and streaming checks
 13. **Audit Trail** - `AuditMixin` with `created_by_user_id` / `updated_by_user_id` on all entities
-14. **GeoIP Geofencing** - Optional country-based access control
+14. **GeoIP Geofencing** - Optional country-based access control with fail-closed default
+15. **Per-IP Token Brute-Force Protection** (SEC-13) - In-memory tracking with auto-block after 20 failures
+
+### Deployment-Level Controls (from `docs/deployment-hostinger-kvm2.md`)
+
+16. **Three-Layer Firewall** - Hostinger managed firewall (cloud) + UFW (OS) + fail2ban (application-aware)
+17. **TLS Termination at Nginx** - Modern TLS 1.2/1.3, strong cipher suites, session tickets disabled
+18. **HSTS** - Staged rollout via nginx (5 min -> 1 day -> 1 week -> 2 years)
+19. **HTTP-to-HTTPS Redirect** - nginx `return 301` for all HTTP traffic
+20. **Localhost-Only Binding** - Gunicorn on `127.0.0.1:8000`, PostgreSQL on `localhost:5432`
+21. **Systemd Sandboxing** - `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ProtectHome=yes`
+22. **fail2ban Jails** - SSH (3 retries/24h ban), nginx rate limiting, bot scanning, OAuth abuse, API token brute-force, recidive escalation
+23. **PostgreSQL Hardening** - SCRAM-SHA-256 auth, explicit reject for non-local connections, minimal privileges
+24. **SSH Key-Only Auth** - Password auth disabled, root login disabled, max 3 auth tries
+25. **Automatic Security Updates** - `unattended-upgrades` enabled for OS packages
+26. **Secret File Permissions** - `.env` file with `chmod 600`, owned by application user
+27. **CAA DNS Record** - Restricts certificate issuance to Let's Encrypt only
+28. **Production Cleanup** - Development artifacts, test suites, and source maps removed from production
+29. **Log Rotation** - 14-day retention with compression
 
 ---
 
 ## Remediation Priority
 
-| Priority | Finding | Effort |
-|----------|---------|--------|
-| 1 | C1 - Cross-tenant IDOR | Add `team_id` filters to ~10 queries |
-| 2 | C2 - Unauthenticated WebSockets | Add auth checks to 2 endpoints |
-| 3 | H1 - Session fixation | Add `session.clear()` before login |
-| 4 | H3 - Error detail leakage | Replace `str(e)` in ~200 error responses |
-| 5 | H2 - Agent auth rate limiting | Copy pattern from tenant.py |
-| 6 | M1 - Missing HSTS | Add header to SecurityHeadersMiddleware |
-| 7 | M2 - In-memory rate limiting | Document Redis requirement |
-| 8 | M3 - Session HTTPS default | Change default or fail in production |
-| 9 | M4 - Internal ID in session | Switch to GUID-based session |
-| 10 | M5 - Deprecated utcnow() | Replace across codebase |
+Findings requiring code changes, ordered by severity and effort:
+
+| Priority | Finding | Severity | Status | Effort |
+|----------|---------|----------|--------|--------|
+| 1 | C1 - Cross-tenant IDOR | Critical | Requires code fix | Add `team_id` filters to ~10 queries |
+| 2 | C2 - Unauthenticated WebSockets | Critical | Requires code fix | Add auth checks to 2 endpoints |
+| 3 | H1 - Session fixation | High | Requires code fix | Add `session.clear()` before login |
+| 4 | H3 - Error detail leakage | High | Requires code fix | Replace `str(e)` in ~200 error responses |
+| 5 | M4 - Internal ID in session | Medium | Requires code fix | Switch to GUID-based session |
+
+Findings mitigated by deployment (no code change needed, or defense-in-depth only):
+
+| Finding | Severity | Deployment Control | Action |
+|---------|----------|-------------------|--------|
+| M1 - HSTS | Medium | nginx `Strict-Transport-Security` header | No code change needed |
+| M2 - In-memory rate limiting | Medium | fail2ban `shuttersense-token` + `nginx-limit-req` jails | No code change needed |
+| M3 - Session HTTPS default | Medium | `.env` `SESSION_HTTPS_ONLY=true` + nginx HTTPS redirect | No code change needed |
+| H2 - Agent auth rate limiting | High->Medium | fail2ban `nginx-limit-req` catches 401s | Code fix recommended (defense-in-depth) |
+| M5 - Deprecated utcnow() | Medium->Low | Server timezone UTC | Code fix recommended (future-proofing) |
+| L2 - Default CORS localhost | Low | `.env` `CORS_ORIGINS=https://app.shuttersense.ai` | No code change needed |
+| L3 - Secret key defaults | Low | Mandatory key generation in deployment guide | Code fix recommended (fail-fast in prod) |
+| L1 - CSP unsafe-inline | Low | N/A (Tailwind CSS requirement) | Accepted risk |
+| L4 - API token scopes | Low | N/A (future enhancement) | Accepted risk |
