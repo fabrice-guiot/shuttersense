@@ -18,7 +18,7 @@ from typing import List, Optional, Dict, Any, Tuple, Callable
 
 from sqlalchemy.orm import Session, joinedload
 
-from backend.src.models import Event, EventPerformer, Configuration, ConfigSource
+from backend.src.models import Event, EventPerformer, EventSeries, Configuration, ConfigSource
 from backend.src.services.event_service import EventService
 from backend.src.services.config_service import ConfigService
 from backend.src.services.guid import GuidService
@@ -331,7 +331,7 @@ class ConflictService:
             joinedload(Event.category),
             joinedload(Event.location),
             joinedload(Event.organizer),
-            joinedload(Event.series),
+            joinedload(Event.series).joinedload(EventSeries.location),
             # Note: event_performers uses lazy="dynamic" and cannot be eagerly loaded
         ).filter(
             Event.team_id == team_id,
@@ -465,12 +465,22 @@ class ConflictService:
         return edges
 
     @staticmethod
+    def _effective_location(event: Event):
+        """Get event's location, falling back to series location if missing."""
+        if event.location is not None:
+            return event.location
+        if event.series and event.series.location is not None:
+            return event.series.location
+        return None
+
+    @staticmethod
     def _get_coordinates(event: Event) -> Optional[Tuple[float, float]]:
-        """Extract (lat, lon) from event's location, or None if unavailable."""
-        if event.location is None:
+        """Extract (lat, lon) from event's effective location, or None if unavailable."""
+        loc = ConflictService._effective_location(event)
+        if loc is None:
             return None
-        lat = event.location.latitude
-        lon = event.location.longitude
+        lat = loc.latitude
+        lon = loc.longitude
         if lat is None or lon is None:
             return None
         return (float(lat), float(lon))
@@ -598,13 +608,15 @@ class ConflictService:
                 color=category.color,
             )
 
+        # Effective location: fall back to series location (same pattern as category)
+        location = self._effective_location(event)
         location_info = None
-        if event.location:
+        if location:
             location_info = LocationInfo(
-                guid=event.location.guid,
-                name=event.location.name,
-                city=event.location.city,
-                country=event.location.country,
+                guid=location.guid,
+                name=location.name,
+                city=location.city,
+                country=location.country,
             )
 
         organizer_info = None
@@ -659,6 +671,7 @@ class ConflictService:
             joinedload(Event.location),
             joinedload(Event.organizer),
             joinedload(Event.category),
+            joinedload(Event.series).joinedload(EventSeries.location),
             # Note: event_performers uses lazy="dynamic" and cannot be eagerly loaded
         ).filter(
             Event.uuid == uuid_value,
