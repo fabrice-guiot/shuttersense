@@ -12,16 +12,16 @@
 
 ## Executive Summary
 
-A comprehensive code quality assessment was performed across the entire ShutterSense.ai repository (~262K lines of code, 784 source files). The codebase is **production-grade** with an overall rating of **A-** (Very Good). The backend is the strongest component (A), with excellent architecture, security, and testing. The agent scores similarly well (A-) with strong CLI design and thorough documentation. The frontend (B+) is solid architecturally but has the widest improvement gap, primarily in test coverage and component size.
+A comprehensive code quality assessment was performed across the entire ShutterSense.ai repository (~262K lines of code, 784 source files). The codebase is **production-grade** with an overall rating of **A-** (Very Good). The backend is the strongest component (A), with excellent architecture, security, and testing. The agent scores similarly well (A-) with strong CLI design and thorough documentation. The frontend (B+) is solid architecturally but has the widest improvement gap, primarily in uneven test distribution and component size.
 
-This PRD documents the findings and defines a prioritized improvement roadmap organized into four phases. The focus areas are: increasing frontend test coverage, decomposing oversized files, tightening TypeScript strictness, and reducing minor code smells across the stack.
+This PRD documents the findings and defines a prioritized improvement roadmap organized into four phases. The focus areas are: closing frontend test coverage gaps, decomposing oversized files, tightening TypeScript strictness, and reducing minor code smells across the stack.
 
 ### Key Design Decisions
 
 1. **Phased approach over big-bang refactoring**: Improvements are organized into four phases of increasing scope. Each phase is independently shippable and delivers measurable value without disrupting feature development.
 2. **Frontend-first prioritization**: The frontend has the largest quality gap relative to the backend and agent. Investing in frontend testing and component decomposition yields the highest marginal return.
 3. **No architectural changes**: The existing layered architecture (API/Service/Model), multi-tenancy patterns, GUID system, and audit trails are all well-implemented. This roadmap focuses on incremental quality improvements, not structural redesign.
-4. **Measurable checkpoints**: Each phase has concrete success criteria (e.g., "frontend test file coverage reaches 30%") to avoid subjective assessments of "done."
+4. **Measurable checkpoints**: Each phase has concrete success criteria (e.g., "frontend test file coverage reaches 50%") to avoid subjective assessments of "done."
 
 ---
 
@@ -41,12 +41,14 @@ This PRD documents the findings and defines a prioritized improvement roadmap or
 
 **Test Coverage:**
 
-| Component | Test Files | Test Lines | Test-to-Code Ratio |
-|-----------|-----------|------------|---------------------|
-| Backend | 132 | 64,029 | 47% |
-| Agent | 43 | 15,964 | 47% |
-| Frontend | 14 | 24,601 | 28% (but only 9% file coverage) |
-| **Total** | **182+** | **~104,594** | **40%** |
+| Component | Test Files | Source Files Covered | File Coverage |
+|-----------|-----------|---------------------|---------------|
+| Backend | 132 | — | 47% (test-to-code ratio) |
+| Agent | 43 | — | 47% (test-to-code ratio) |
+| Frontend | 84 (17 co-located + 67 in `tests/`) | 78 of 254 | 30.7% |
+| **Total** | **259** | — | — |
+
+> **Note on frontend test layout:** The frontend uses a split test structure. 17 test files are co-located alongside source files in `frontend/src/` (e.g., `__tests__/` subdirectories). The remaining 67 reside in a dedicated `frontend/tests/` directory organized by type (components, hooks, integration, lib, utils). Both locations are included in test runs.
 
 **Architecture Compliance:**
 All documented architectural principles from CLAUDE.md are properly implemented:
@@ -60,7 +62,7 @@ All documented architectural principles from CLAUDE.md are properly implemented:
 
 While the codebase is production-ready, several quality gaps create maintainability and reliability risks:
 
-- **Frontend test coverage is critically low**: Only 14 of 157 TypeScript files (~9%) have tests. Hooks containing critical business logic (debouncing, API error handling) are completely untested.
+- **Frontend test coverage is uneven**: 78 of 254 source files (30.7%) have test coverage via 84 test files (17 co-located in `src/`, 67 in `tests/`). Hooks are relatively well-covered (18 of ~30 hooks tested), but many components (especially forms, dialogs, and smaller UI pieces) and service files lack tests entirely.
 - **Oversized files increase cognitive load**: 5 backend services exceed 1,800 lines; 3 frontend pages exceed 800 lines. Large files slow code reviews, increase merge conflict frequency, and make onboarding harder.
 - **Inconsistent error handling in the frontend**: Some hooks use `setError()`, others use toast notifications, and some detect error types via fragile string matching.
 - **Code duplication across CLI commands**: The same config-loading boilerplate is repeated 5+ times across agent CLI commands.
@@ -80,7 +82,7 @@ Addressing these gaps now is important because:
 
 ### Primary Goals
 
-1. **Increase frontend test coverage** from 9% file coverage to 40%+ file coverage, prioritizing hooks and services.
+1. **Increase frontend test coverage** from 30.7% to 50%+ file coverage, closing gaps in components, services, and pages.
 2. **Decompose oversized files** so no single source file exceeds 800 lines (backend services) or 600 lines (frontend components/pages).
 3. **Establish consistent error handling patterns** across the frontend with structured error codes instead of string matching.
 4. **Eliminate code duplication** in agent CLI commands via shared utility functions.
@@ -138,7 +140,7 @@ Addressing these gaps now is important because:
 
 | ID | Issue | Severity | Files Affected |
 |----|-------|----------|----------------|
-| FE-1 | Critically low test coverage (9% file coverage) | High | All hooks/, services/, most pages/ |
+| FE-1 | Uneven test coverage (30.7% file coverage) with significant gaps | Medium | Untested components, forms, dialogs; 7 of ~20 pages tested; service files |
 | FE-2 | Oversized page components | High | `PipelineEditorPage.tsx` (1,278), `EventsPage.tsx` (1,083), `AnalyticsPage.tsx` (794) |
 | FE-3 | `console.log` statements in production code | Medium | `CollectionForm.tsx` (lines 208, 214-217), `api.ts` (lines 72-92) |
 | FE-4 | `any` types in page handlers | Medium | `CollectionsPage.tsx` (line 114) |
@@ -181,7 +183,7 @@ Addressing these gaps now is important because:
 
 | ID | Issue | Severity | Files Affected |
 |----|-------|----------|----------------|
-| TS-1 | Frontend test coverage critically low (9%) | High | Frontend hooks, services, pages |
+| TS-1 | Frontend test coverage gaps (30.7%, 78/254 files) | Medium | Untested components, forms, dialogs, service files |
 | TS-2 | Limited use of `@pytest.mark.parametrize` | Low | Across agent and backend tests |
 | TS-3 | Some tests use implicit assertion messages | Low | Various test files |
 | TS-4 | `@pytest.mark.integration` not consistently applied | Low | Backend integration tests |
@@ -193,10 +195,10 @@ Addressing these gaps now is important because:
 ### Functional Requirements
 
 **FR-100: Frontend Test Coverage Expansion**
-- FR-100.1: All custom hooks in `frontend/src/hooks/` MUST have test files covering primary flows and error paths.
+- FR-100.1: All custom hooks in `frontend/src/hooks/` MUST have test files covering primary flows and error paths. (18 of ~30 currently covered — close the remaining gaps.)
 - FR-100.2: All service files in `frontend/src/services/` MUST have test files covering API call success and failure scenarios.
-- FR-100.3: All page components in `frontend/src/pages/` SHOULD have at least smoke tests verifying rendering without errors.
-- FR-100.4: Frontend test file coverage MUST reach 40% (minimum 63 of 157 files).
+- FR-100.3: All page components in `frontend/src/pages/` SHOULD have at least smoke tests verifying rendering without errors. (7 of ~20 currently covered.)
+- FR-100.4: Frontend test file coverage MUST reach 50% (minimum 127 of 254 source files).
 
 **FR-200: File Size Reduction**
 - FR-200.1: No backend service file SHALL exceed 800 lines. Files exceeding this limit MUST be decomposed into focused sub-modules.
@@ -232,12 +234,23 @@ Addressing these gaps now is important because:
 
 ### Phase 1: Frontend Test Coverage (Priority: HIGH)
 
-The highest-impact improvement. Frontend hooks contain critical business logic (API error handling, search debouncing, optimistic updates) that is currently untested.
+The highest-impact improvement. While 78 of 254 source files (30.7%) already have test coverage — including 18 hooks, 7 pages, and 46 components — significant gaps remain in service files, form components, dialogs, and the remaining hooks and pages.
+
+**Current coverage by category:**
+
+| Category | Tested | Approximate Total | Gap |
+|----------|--------|-------------------|-----|
+| Hooks | 18 | ~30 | ~12 hooks untested |
+| Pages | 7 | ~20 | ~13 pages untested |
+| Components | 46 | ~143 | ~97 components untested |
+| Services | 0 | ~10 | All untested |
+| Utils | 4 | ~15 | ~11 untested |
+| Lib | 2 | ~8 | ~6 untested |
 
 **Tasks:**
 
-1. **Add tests for all custom hooks** (`frontend/src/hooks/`)
-   - Priority targets: `useCollections.ts`, `useTools.ts`, `useEvents.ts`, `usePipelines.ts`
+1. **Close remaining hook coverage gaps** (`frontend/src/hooks/`)
+   - Priority targets: untested hooks (e.g., `useEvents.ts`, `useOrganizers.ts`, remaining ~12 hooks)
    - Cover: primary CRUD flows, error handling, debounce behavior, state transitions
    - Use `@testing-library/react` with `renderHook` utility
 
@@ -246,12 +259,17 @@ The highest-impact improvement. Frontend hooks contain critical business logic (
    - Cover: successful API calls, error transformation, auth redirect on 401
    - Use MSW (Mock Service Worker) for API mocking
 
-3. **Add smoke tests for page components** (`frontend/src/pages/`)
-   - Verify each page renders without errors
-   - Verify loading states and error states display correctly
-   - Priority targets: `CollectionsPage.tsx`, `EventsPage.tsx`, `AnalyticsPage.tsx`
+3. **Add smoke tests for remaining page components** (`frontend/src/pages/`)
+   - 7 pages already tested (AgentDetail, Agents, Configuration, Dashboard, Directory, Events, Settings)
+   - Add tests for remaining ~13 pages
+   - Verify each page renders without errors; verify loading and error states
+   - Priority targets: `CollectionsPage.tsx`, `PipelineEditorPage.tsx`, `AnalyticsPage.tsx`
 
-**Checkpoint:** Frontend test file coverage reaches 40% (63+ test files). All hooks and services have test coverage.
+4. **Add tests for high-value untested components**
+   - Priority targets: form components (`CollectionForm`, `EventForm`, `ConnectorForm`), dialog components, and domain-specific components without coverage
+   - Focus on components with complex logic or user interaction patterns
+
+**Checkpoint:** Frontend test file coverage reaches 50% (127+ of 254 source files). All hooks and services have test coverage.
 
 ---
 
@@ -354,7 +372,7 @@ Incremental strictness improvements and test infrastructure refinements.
 
 | Metric | Current | Target | Phase |
 |--------|---------|--------|-------|
-| Frontend test file coverage | 9% (14/157) | 40% (63/157) | Phase 1 |
+| Frontend test file coverage | 30.7% (78/254) | 50% (127/254) | Phase 1 |
 | Max backend service file size | 2,459 lines | 800 lines | Phase 2 |
 | Max frontend page file size | 1,278 lines | 600 lines | Phase 2 |
 | Unguarded `console.log` in production | 5+ instances | 0 | Phase 3 |
@@ -376,7 +394,7 @@ Incremental strictness improvements and test infrastructure refinements.
 | Error Handling | 5/5 | 3/5 | 4/5 |
 | Documentation & Docstrings | 5/5 | 3.5/5 | 5/5 |
 | Security | 5/5 | 4/5 | 4/5 |
-| Test Coverage | 4.5/5 | 2/5 | 4/5 |
+| Test Coverage | 4.5/5 | 3/5 | 4/5 |
 | Code Reuse / DRY | 4/5 | 3.5/5 | 3.5/5 |
 | API Design | 5/5 | 4/5 | 4.5/5 |
 | **Overall** | **A** | **B+** | **A-** |
@@ -430,3 +448,4 @@ All patterns below were confirmed as properly implemented and do NOT require cha
 ## Revision History
 
 - **2026-02-14 (v1.0)**: Initial code quality assessment and improvement roadmap.
+- **2026-02-14 (v1.1)**: Corrected frontend test coverage metrics. Actual: 254 source files, 84 test files (17 co-located + 67 in `tests/`), 78 unique source files covered = 30.7% file coverage. Updated targets from 40% to 50%, adjusted severity ratings and Phase 1 tasks accordingly.
