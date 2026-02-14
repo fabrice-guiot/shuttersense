@@ -13,6 +13,13 @@ import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calend
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -51,6 +58,16 @@ const PRESET_LABELS: Record<EventPreset, { icon: typeof Calendar; label: string 
 }
 
 const VALID_PRESETS: EventPreset[] = ['upcoming_30d', 'needs_tickets', 'needs_pto', 'needs_travel']
+
+/** All view options for the responsive dropdown */
+const VIEW_OPTIONS: { value: string; label: string; icon: typeof Calendar }[] = [
+  { value: 'calendar', label: 'Calendar', icon: Calendar },
+  { value: 'upcoming_30d', label: 'Upcoming', icon: Calendar },
+  { value: 'needs_tickets', label: 'Needs Tickets', icon: Ticket },
+  { value: 'needs_pto', label: 'Needs PTO', icon: Briefcase },
+  { value: 'needs_travel', label: 'Needs Travel', icon: Car },
+  { value: 'planner', label: 'Planner', icon: BarChart3 },
+]
 
 export default function EventsPage() {
   // URL search params for preset filtering and view mode
@@ -224,6 +241,20 @@ export default function EventsPage() {
 
   const handleShowPlanner = () => {
     setSearchParams({ view: 'planner' })
+  }
+
+  // Active view value for responsive dropdown
+  const activeView = viewMode === 'planner' ? 'planner' : activePreset ?? 'calendar'
+
+  // Handle view change from responsive dropdown
+  const handleViewChange = (value: string) => {
+    if (value === 'calendar') {
+      handleShowCalendar()
+    } else if (value === 'planner') {
+      handleShowPlanner()
+    } else {
+      handlePresetClick(value as EventPreset)
+    }
   }
 
   // Update header stats when data changes
@@ -483,8 +514,42 @@ export default function EventsPage() {
     <div className="flex flex-col h-full p-6">
       {/* Action Row (Issue #67 - Single Title Pattern) */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
-        {/* Preset Filter Bar */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Mobile: dropdown selector */}
+        <div className="md:hidden">
+          <Select value={activeView} onValueChange={handleViewChange}>
+            <SelectTrigger>
+              <SelectValue>
+                {(() => {
+                  const opt = VIEW_OPTIONS.find(o => o.value === activeView)
+                  if (!opt) return null
+                  const Icon = opt.icon
+                  return (
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      {opt.label}
+                    </span>
+                  )
+                })()}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {VIEW_OPTIONS.map(opt => {
+                const Icon = opt.icon
+                return (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      {opt.label}
+                    </span>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Desktop: button bar */}
+        <div className="hidden md:flex items-center gap-2 flex-wrap">
           {(Object.entries(PRESET_LABELS) as [EventPreset, { icon: typeof Calendar; label: string }][]).map(
             ([preset, { icon: PresetIcon, label }]) => (
               <Button
