@@ -354,7 +354,7 @@ const CalendarCell = ({
             className={cn(
               'inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium',
               unresolvedCount > 0
-                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                ? 'bg-warning/15 text-warning-foreground'
                 : 'bg-muted text-muted-foreground border border-dashed border-muted-foreground/30',
             )}
           >

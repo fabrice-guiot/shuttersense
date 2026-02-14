@@ -112,7 +112,7 @@ class TestNotifyConflictDetected:
         mock_deliver.assert_called_once()
 
     def test_suppressed_when_preference_disabled(
-        self, notification_service, _test_user, test_team,
+        self, notification_service, test_user, test_team,
     ):
         """Should not send when user has notifications disabled (default)."""
         # test_user has default prefs (enabled=False)
@@ -131,7 +131,7 @@ class TestNotifyConflictDetected:
 
     @patch("backend.src.services.notification_service.NotificationService.deliver_push")
     def test_notification_content(
-        self, mock_deliver, notification_service, _enabled_user, test_team,
+        self, mock_deliver, notification_service, enabled_user, test_team,
         test_db_session,
     ):
         """Should include conflict type and event titles in notification body."""

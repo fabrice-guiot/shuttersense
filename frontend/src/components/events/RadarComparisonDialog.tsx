@@ -7,7 +7,8 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 5, US3)
  */
 
-import { Building2, Check, Clock, MapPin, SkipForward, Users } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, Building2, Check, Clock, MapPin, SkipForward, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -48,7 +49,7 @@ export function RadarComparisonDialog({
   referenceDate,
   onResolved,
 }: RadarComparisonDialogProps) {
-  const { resolve, loading, error } = useResolveConflict({
+  const { resolve, loading } = useResolveConflict({
     onSuccess: () => {
       onResolved?.()
       onOpenChange(false)
@@ -119,7 +120,7 @@ export function RadarComparisonDialog({
                   <tr key={dim.key} className="border-b border-border/50">
                     <td className="py-1.5 px-2 text-muted-foreground">{dim.label}</td>
                     {events.map(event => {
-                      const val = Math.round(event.scores[dim.key])
+                      const val = Math.round(event.scores?.[dim.key] ?? 0)
                       return (
                         <td key={event.guid} className="text-right py-1.5 px-2 tabular-nums">
                           <span className={cn(
@@ -158,6 +159,7 @@ export function RadarComparisonDialog({
                 isResolved={isResolved}
                 loading={loading}
                 onConfirm={() => handleConfirm(event.guid)}
+                otherEventCount={events.length - 1}
               />
             ))}
           </div>
@@ -178,6 +180,7 @@ function EventDetailCard({
   isResolved,
   loading,
   onConfirm,
+  otherEventCount,
 }: {
   event: ScoredEvent
   referenceDate?: string
@@ -185,9 +188,22 @@ function EventDetailCard({
   isResolved: boolean
   loading: boolean
   onConfirm: () => void
+  /** Number of other events that will be skipped if this one is confirmed */
+  otherEventCount: number
 }) {
+  const [pendingConfirm, setPendingConfirm] = useState(false)
   const isSkipped = event.attendance === 'skipped'
   const offset = dayOffsetLabel(event.event_date, referenceDate)
+
+  const handleConfirmClick = () => {
+    // If there are other events that will be skipped and we haven't shown warning yet
+    if (otherEventCount > 0 && !pendingConfirm) {
+      setPendingConfirm(true)
+      return
+    }
+    // User has confirmed or there are no other events to skip
+    onConfirm()
+  }
 
   return (
     <div
@@ -254,16 +270,26 @@ function EventDetailCard({
 
       {/* Action */}
       {!isResolved && !isSkipped && (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={loading}
-          onClick={onConfirm}
-          className="w-full h-7 text-xs"
-        >
-          <Check className="h-3 w-3 mr-1" />
-          Confirm
-        </Button>
+        <div className="space-y-1.5">
+          {pendingConfirm && otherEventCount > 0 && (
+            <div className="flex items-center gap-1.5 text-[11px] text-warning-foreground bg-warning/10 rounded px-2 py-1">
+              <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+              <span>
+                This will skip {otherEventCount} other event{otherEventCount !== 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
+          <Button
+            variant={pendingConfirm ? 'default' : 'outline'}
+            size="sm"
+            disabled={loading}
+            onClick={handleConfirmClick}
+            className="w-full h-7 text-xs"
+          >
+            <Check className="h-3 w-3 mr-1" />
+            {pendingConfirm ? 'Confirm Selection' : 'Confirm'}
+          </Button>
+        </div>
       )}
       {isSkipped && (
         <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground py-1">

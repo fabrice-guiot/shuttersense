@@ -325,7 +325,7 @@ class ConflictService:
             joinedload(Event.location),
             joinedload(Event.organizer),
             joinedload(Event.series),
-            joinedload(Event.event_performers),
+            # Note: event_performers uses lazy="dynamic" and cannot be eagerly loaded
         ).filter(
             Event.team_id == team_id,
             Event.deleted_at.is_(None),
@@ -618,7 +618,7 @@ class ConflictService:
             joinedload(Event.location),
             joinedload(Event.organizer),
             joinedload(Event.category),
-            joinedload(Event.event_performers),
+            # Note: event_performers uses lazy="dynamic" and cannot be eagerly loaded
         ).filter(
             Event.uuid == uuid_value,
             Event.team_id == team_id,
