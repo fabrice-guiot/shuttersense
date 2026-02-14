@@ -7,7 +7,7 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 8, US6)
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import { Filter, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TimelineEventMarker } from './TimelineEventMarker'
+import type { TimelineEventMarkerHandle } from './TimelineEventMarker'
 import { RadarComparisonDialog } from './RadarComparisonDialog'
 import type {
   ScoredEvent,
@@ -173,6 +174,16 @@ export function TimelinePlanner({
   const [conflictFilter, setConflictFilter] = useState<ConflictFilter>('all')
   const [compareGroup, setCompareGroup] = useState<ConflictGroup | null>(null)
 
+  const markerRefs = useRef<Map<string, TimelineEventMarkerHandle>>(new Map())
+
+  const setMarkerRef = useCallback((guid: string, handle: TimelineEventMarkerHandle | null) => {
+    if (handle) {
+      markerRefs.current.set(guid, handle)
+    } else {
+      markerRefs.current.delete(guid)
+    }
+  }, [])
+
   const conflictGroups = conflicts?.conflict_groups ?? []
   const conflictedGuids = useMemo(
     () => buildConflictedGuids(conflictGroups),
@@ -205,6 +216,38 @@ export function TimelinePlanner({
   }, [events, categoryFilter, conflictFilter, conflictedGuids, conflictGroups])
 
   const sortedEvents = useMemo(() => sortByDate(filteredEvents), [filteredEvents])
+
+  /** Keyboard navigation: ArrowUp/Down move focus, Enter toggles expand, Escape collapses */
+  const handleTimelineKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!sortedEvents.length) return
+
+    const guids = sortedEvents.map(ev => ev.guid)
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      // Find currently focused marker by checking document.activeElement
+      let currentIdx = -1
+      for (let i = 0; i < guids.length; i++) {
+        if (document.activeElement === document.querySelector(`[data-marker-guid="${guids[i]}"]`)) {
+          currentIdx = i
+          break
+        }
+      }
+      let nextIdx: number
+      if (currentIdx === -1) {
+        nextIdx = e.key === 'ArrowDown' ? 0 : guids.length - 1
+      } else {
+        nextIdx = e.key === 'ArrowDown'
+          ? Math.min(currentIdx + 1, guids.length - 1)
+          : Math.max(currentIdx - 1, 0)
+      }
+      markerRefs.current.get(guids[nextIdx])?.focus()
+    } else if (e.key === 'Escape') {
+      for (const guid of guids) {
+        markerRefs.current.get(guid)?.collapse()
+      }
+    }
+  }, [sortedEvents])
 
   // Loading state
   if (loading) {
@@ -265,12 +308,18 @@ export function TimelinePlanner({
           No events match the current filters
         </div>
       ) : (
-        <div className="space-y-0.5">
+        <div
+          className="space-y-0.5"
+          role="listbox"
+          aria-label="Timeline events"
+          onKeyDown={handleTimelineKeyDown}
+        >
           {segmentByConflictGroup(sortedEvents, conflictGroups).map((segment, segIdx) => {
             if (segment.type === 'single') {
               return (
-                <div key={segment.event.guid} className="ml-5">
+                <div key={segment.event.guid} className="ml-5" role="option" aria-selected={false}>
                   <TimelineEventMarker
+                    ref={handle => setMarkerRef(segment.event.guid, handle)}
                     event={segment.event}
                     onClick={() => onEventClick?.(segment.event)}
                   />
@@ -289,8 +338,9 @@ export function TimelinePlanner({
                   />
                 )}
                 {segment.events.map(event => (
-                  <div key={event.guid} className="ml-5">
+                  <div key={event.guid} className="ml-5" role="option" aria-selected={false}>
                     <TimelineEventMarker
+                      ref={handle => setMarkerRef(event.guid, handle)}
                       event={event}
                       onClick={() => onEventClick?.(event)}
                     />

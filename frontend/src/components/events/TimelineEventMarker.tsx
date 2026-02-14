@@ -7,7 +7,7 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 8, US6)
  */
 
-import { useState } from 'react'
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { ChevronDown, ChevronRight, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ICON_MAP } from '@/components/settings/CategoryForm'
@@ -24,6 +24,13 @@ interface TimelineEventMarkerProps {
   event: ScoredEvent
   onClick?: (event: ScoredEvent) => void
   className?: string
+  focused?: boolean
+}
+
+export interface TimelineEventMarkerHandle {
+  focus: () => void
+  toggleExpand: () => void
+  collapse: () => void
 }
 
 // ============================================================================
@@ -40,8 +47,10 @@ const ATTENDANCE_BAR_COLORS: Record<string, string> = {
 // Component
 // ============================================================================
 
-export function TimelineEventMarker({ event, onClick, className }: TimelineEventMarkerProps) {
+export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, TimelineEventMarkerProps>(
+  function TimelineEventMarker({ event, onClick, className, focused }, ref) {
   const [expanded, setExpanded] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const score = Math.round(event.scores.composite)
   const barColor = ATTENDANCE_BAR_COLORS[event.attendance] ?? 'bg-primary'
 
@@ -50,12 +59,29 @@ export function TimelineEventMarker({ event, onClick, className }: TimelineEvent
     : undefined
   const CategoryIcon = categoryIcon ?? MapPin
 
+  useImperativeHandle(ref, () => ({
+    focus: () => buttonRef.current?.focus(),
+    toggleExpand: () => setExpanded(prev => !prev),
+    collapse: () => setExpanded(false),
+  }))
+
+  useEffect(() => {
+    if (focused) {
+      buttonRef.current?.focus()
+    }
+  }, [focused])
+
   return (
     <div className={cn('group', className)}>
       {/* Main row */}
       <button
+        ref={buttonRef}
         type="button"
-        className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors"
+        data-marker-guid={event.guid}
+        className={cn(
+          'w-full text-left flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+        )}
         onClick={() => {
           setExpanded(prev => !prev)
           onClick?.(event)
@@ -127,4 +153,4 @@ export function TimelineEventMarker({ event, onClick, className }: TimelineEvent
       )}
     </div>
   )
-}
+})

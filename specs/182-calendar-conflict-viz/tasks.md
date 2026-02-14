@@ -500,12 +500,12 @@
 
 **Purpose**: Responsive adaptations, accessibility, and final validation
 
-- [ ] T042 Keyboard navigation for timeline planner
+- [x] T042 Keyboard navigation for timeline planner
   - Arrow keys to navigate between timeline markers
   - Enter to expand/collapse event details
   - Escape to close expanded views
 
-- [ ] T043 Run quickstart.md validation
+- [x] T043 Run quickstart.md validation
   - Execute all test commands from quickstart.md
   - `venv/bin/python -m pytest backend/tests/unit/test_geo_utils.py -v`
   - `venv/bin/python -m pytest backend/tests/unit/test_conflict_service.py -v`
