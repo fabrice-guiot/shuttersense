@@ -8,6 +8,7 @@
  */
 
 import { Building2, Check, Clock, MapPin, SkipForward, Users } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
@@ -47,7 +48,7 @@ export function RadarComparisonDialog({
   referenceDate,
   onResolved,
 }: RadarComparisonDialogProps) {
-  const { resolve, loading } = useResolveConflict({
+  const { resolve, loading, error } = useResolveConflict({
     onSuccess: () => {
       onResolved?.()
       onOpenChange(false)
@@ -68,8 +69,8 @@ export function RadarComparisonDialog({
           attendance: e.guid === confirmedGuid ? 'planned' as const : 'skipped' as const,
         })),
       })
-    } catch {
-      // Error handled by hook
+    } catch (err: any) {
+      toast.error(err.userMessage || 'Failed to resolve conflict')
     }
   }
 

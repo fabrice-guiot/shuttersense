@@ -25,7 +25,14 @@ from backend.src.services.notification_service import (
 
 @pytest.fixture
 def notification_service(test_db_session):
-    """Create a NotificationService with test VAPID config."""
+    """Create a NotificationService with test VAPID config.
+
+    Args:
+        test_db_session: SQLAlchemy test database session.
+
+    Returns:
+        NotificationService: Configured with test VAPID private key and claims.
+    """
     return NotificationService(
         db=test_db_session,
         vapid_private_key="test-private-key",
@@ -35,7 +42,16 @@ def notification_service(test_db_session):
 
 @pytest.fixture
 def enabled_user(test_db_session, test_user):
-    """Set up a user with conflict notifications enabled."""
+    """Set up a user with conflict notifications enabled.
+
+    Args:
+        test_db_session: SQLAlchemy test database session.
+        test_user: Test user instance to enable notifications on.
+
+    Returns:
+        User: The test_user with conflict notifications enabled
+            (preferences_json updated and committed).
+    """
     test_user.preferences_json = json.dumps({
         "notifications": {
             **DEFAULT_PREFERENCES,
@@ -96,7 +112,7 @@ class TestNotifyConflictDetected:
         mock_deliver.assert_called_once()
 
     def test_suppressed_when_preference_disabled(
-        self, notification_service, test_user, test_team,
+        self, notification_service, _test_user, test_team,
     ):
         """Should not send when user has notifications disabled (default)."""
         # test_user has default prefs (enabled=False)
@@ -115,7 +131,7 @@ class TestNotifyConflictDetected:
 
     @patch("backend.src.services.notification_service.NotificationService.deliver_push")
     def test_notification_content(
-        self, mock_deliver, notification_service, enabled_user, test_team,
+        self, mock_deliver, notification_service, _enabled_user, test_team,
         test_db_session,
     ):
         """Should include conflict type and event titles in notification body."""

@@ -369,7 +369,7 @@ class ConflictService:
     @staticmethod
     def _time_overlap_detail(a: Event, b: Event) -> str:
         """Generate human-readable detail for a time overlap."""
-        date_str = a.event_date.strftime("%b %-d")
+        date_str = f"{a.event_date.strftime('%b')} {a.event_date.day}"
         if a.is_all_day or b.is_all_day:
             return f"All-day event conflict on {date_str}"
         if a.start_time and a.end_time and b.start_time and b.end_time:

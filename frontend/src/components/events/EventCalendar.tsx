@@ -579,7 +579,10 @@ export const EventCalendar = ({
                   }]
                 : []
 
-              const allBadges = [...badges, ...conflictBadges]
+              // Prepend conflict badge so it is always visible
+              const allBadges = [...conflictBadges, ...badges]
+              const visibleBadges = allBadges.slice(0, MAX_VISIBLE_BADGES)
+              const overflowCount = Math.max(0, allBadges.length - MAX_VISIBLE_BADGES)
 
               return (
                 <CompactCalendarCell
@@ -588,8 +591,8 @@ export const EventCalendar = ({
                   dayNumber={day.date.getDate()}
                   isCurrentMonth={day.isCurrentMonth}
                   isToday={day.isToday}
-                  badges={allBadges.slice(0, MAX_VISIBLE_BADGES)}
-                  overflowCount={Math.max(0, allBadges.length - MAX_VISIBLE_BADGES)}
+                  badges={visibleBadges}
+                  overflowCount={overflowCount}
                   totalEventCount={day.events.length}
                   onClick={(date) => onDayClick?.(date)}
                   {...commonProps}
