@@ -34,6 +34,8 @@ interface EventRadarChartProps {
   events: EventOverlay[]
   /** Chart height in pixels (default: 280) */
   height?: number
+  /** Color axis labels to match dimension colors (use only for single-event charts) */
+  colorDimensions?: boolean
   className?: string
 }
 
@@ -50,10 +52,30 @@ const DIMENSIONS: { key: keyof Omit<EventScores, 'composite'>; label: string }[]
 ]
 
 // ============================================================================
+// Custom Tick — colors each dimension label to match the DimensionMicroBar
+// ============================================================================
+
+function DimensionTick(props: Record<string, unknown>) {
+  const { x, y, payload, textAnchor } = props as {
+    x: number
+    y: number
+    payload: { value: string }
+    textAnchor: 'start' | 'middle' | 'end'
+  }
+  const idx = DIMENSIONS.findIndex(d => d.label === payload.value)
+  const color = idx >= 0 ? CHART_COLORS[idx] : 'hsl(var(--muted-foreground))'
+  return (
+    <text x={x} y={y} textAnchor={textAnchor} fill={color} fontSize={11} fontWeight={500}>
+      {payload.value}
+    </text>
+  )
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
-export function EventRadarChart({ events, height = 280, className }: EventRadarChartProps) {
+export function EventRadarChart({ events, height = 280, colorDimensions, className }: EventRadarChartProps) {
   // Transform scores into Recharts data format
   const data = DIMENSIONS.map(dim => {
     const point: Record<string, string | number> = { dimension: dim.label }
@@ -70,7 +92,7 @@ export function EventRadarChart({ events, height = 280, className }: EventRadarC
           <PolarGrid stroke="hsl(var(--border))" />
           <PolarAngleAxis
             dataKey="dimension"
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+            tick={colorDimensions ? <DimensionTick /> : { fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
           />
           <PolarRadiusAxis
             angle={90}

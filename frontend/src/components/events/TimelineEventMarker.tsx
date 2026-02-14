@@ -34,13 +34,13 @@ export interface TimelineEventMarkerHandle {
 }
 
 // ============================================================================
-// Attendance styling — uses design system status tokens
+// Score threshold colors for composite rating bar
 // ============================================================================
 
-const ATTENDANCE_BAR_COLORS: Record<string, string> = {
-  planned: 'bg-warning',      // Pending/planned state
-  attended: 'bg-success',     // Positive/completed state
-  skipped: 'bg-destructive',  // Negative/skipped state
+function scoreBarColor(score: number): string {
+  if (score >= 75) return 'bg-success'
+  if (score >= 35) return 'bg-amber-500'
+  return 'bg-destructive'
 }
 
 // ============================================================================
@@ -52,7 +52,8 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
   const [expanded, setExpanded] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const score = Math.round(event.scores.composite)
-  const barColor = ATTENDANCE_BAR_COLORS[event.attendance] ?? 'bg-primary'
+  const barColor = scoreBarColor(score)
+  const isSkipped = event.attendance === 'skipped'
 
   const categoryIcon = event.category?.icon
     ? ICON_MAP[event.category.icon]
@@ -72,7 +73,15 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
   }, [focused])
 
   return (
-    <div className={cn('group', className)}>
+    <div className={cn('group relative', className)}>
+      {/* Skipped indicator — red vertical bar on left edge */}
+      {isSkipped && (
+        <div
+          className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-destructive"
+          title="Skipped"
+        />
+      )}
+
       {/* Main row */}
       <button
         ref={buttonRef}
@@ -81,6 +90,7 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
         className={cn(
           'w-full text-left flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+          isSkipped && 'opacity-60',
         )}
         onClick={() => {
           setExpanded(prev => !prev)
@@ -147,6 +157,7 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
           <EventRadarChart
             events={[{ label: event.title, scores: event.scores }]}
             height={240}
+            colorDimensions
             className="max-w-sm"
           />
         </div>
