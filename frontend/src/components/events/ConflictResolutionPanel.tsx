@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react'
-import { AlertTriangle, BarChart3, Check, Clock, MapPin, Plane, SkipForward } from 'lucide-react'
+import { AlertTriangle, BarChart3, Clock, MapPin, Plane, RotateCcw, SkipForward } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -45,12 +45,13 @@ const CONFLICT_TYPE_ICONS: Record<ConflictType, typeof AlertTriangle> = {
 interface ConflictGroupCardProps {
   group: ConflictGroup
   referenceDate?: string
-  onConfirmEvent: (groupId: string, confirmedGuid: string, otherGuids: string[]) => void
+  onSkipEvent: (groupId: string, eventGuid: string) => void
+  onRestoreEvent: (groupId: string, eventGuid: string) => void
   onCompare: (group: ConflictGroup) => void
   resolving: boolean
 }
 
-function ConflictGroupCard({ group, referenceDate, onConfirmEvent, onCompare, resolving }: ConflictGroupCardProps) {
+function ConflictGroupCard({ group, referenceDate, onSkipEvent, onRestoreEvent, onCompare, resolving }: ConflictGroupCardProps) {
   const isResolved = group.status === 'resolved'
 
   // Get unique conflict types in this group
@@ -106,9 +107,9 @@ function ConflictGroupCard({ group, referenceDate, onConfirmEvent, onCompare, re
             event={event}
             referenceDate={referenceDate}
             groupId={group.group_id}
-            otherGuids={group.events.filter(e => e.guid !== event.guid).map(e => e.guid)}
             isResolved={isResolved}
-            onConfirm={onConfirmEvent}
+            onSkip={onSkipEvent}
+            onRestore={onRestoreEvent}
             resolving={resolving}
           />
         ))}
@@ -125,9 +126,9 @@ interface ConflictEventRowProps {
   event: ScoredEvent
   referenceDate?: string
   groupId: string
-  otherGuids: string[]
   isResolved: boolean
-  onConfirm: (groupId: string, confirmedGuid: string, otherGuids: string[]) => void
+  onSkip: (groupId: string, eventGuid: string) => void
+  onRestore: (groupId: string, eventGuid: string) => void
   resolving: boolean
 }
 
@@ -135,9 +136,9 @@ function ConflictEventRow({
   event,
   referenceDate,
   groupId,
-  otherGuids,
   isResolved,
-  onConfirm,
+  onSkip,
+  onRestore,
   resolving,
 }: ConflictEventRowProps) {
   const isSkipped = event.attendance === 'skipped'
@@ -191,18 +192,24 @@ function ConflictEventRow({
           variant="outline"
           size="sm"
           disabled={resolving}
-          onClick={() => onConfirm(groupId, event.guid, otherGuids)}
+          onClick={() => onSkip(groupId, event.guid)}
           className="flex-shrink-0 h-7 px-2 text-xs"
         >
-          <Check className="h-3 w-3 mr-1" />
-          Confirm
+          <SkipForward className="h-3 w-3 mr-1" />
+          Skip
         </Button>
       )}
       {isSkipped && (
-        <span className="flex-shrink-0 text-xs text-muted-foreground flex items-center gap-1">
-          <SkipForward className="h-3 w-3" />
-          Skipped
-        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={resolving}
+          onClick={() => onRestore(groupId, event.guid)}
+          className="flex-shrink-0 h-7 px-2 text-xs text-muted-foreground"
+        >
+          <RotateCcw className="h-3 w-3 mr-1" />
+          Restore
+        </Button>
       )}
     </div>
   )
@@ -231,25 +238,25 @@ export function ConflictResolutionPanel({
   const { resolve, loading } = useResolveConflict({ onSuccess: onResolved })
   const [compareGroup, setCompareGroup] = useState<ConflictGroup | null>(null)
 
-  const handleConfirmEvent = async (
-    groupId: string,
-    confirmedGuid: string,
-    otherGuids: string[],
-  ) => {
+  const handleSkipEvent = async (groupId: string, eventGuid: string) => {
     try {
       await resolve({
         group_id: groupId,
-        decisions: [
-          { event_guid: confirmedGuid, attendance: 'planned' },
-          ...otherGuids.map(guid => ({
-            event_guid: guid,
-            attendance: 'skipped' as const,
-          })),
-        ],
+        decisions: [{ event_guid: eventGuid, attendance: 'skipped' }],
       })
     } catch (err: any) {
-      // Surface error to user via toast
-      toast.error(err.userMessage || 'Failed to resolve conflict')
+      toast.error(err.userMessage || 'Failed to skip event')
+    }
+  }
+
+  const handleRestoreEvent = async (groupId: string, eventGuid: string) => {
+    try {
+      await resolve({
+        group_id: groupId,
+        decisions: [{ event_guid: eventGuid, attendance: 'planned' }],
+      })
+    } catch (err: any) {
+      toast.error(err.userMessage || 'Failed to restore event')
     }
   }
 
@@ -269,7 +276,8 @@ export function ConflictResolutionPanel({
             key={group.group_id}
             group={group}
             referenceDate={referenceDate}
-            onConfirmEvent={handleConfirmEvent}
+            onSkipEvent={handleSkipEvent}
+            onRestoreEvent={handleRestoreEvent}
             onCompare={setCompareGroup}
             resolving={loading}
           />

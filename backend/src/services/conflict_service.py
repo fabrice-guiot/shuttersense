@@ -510,6 +510,9 @@ class ConflictService:
                 parent[px] = py
 
         for edge in edges:
+            # Normalize edge ordering for deterministic conflict identity
+            if edge.event_a_guid > edge.event_b_guid:
+                edge.event_a_guid, edge.event_b_guid = edge.event_b_guid, edge.event_a_guid
             union(edge.event_a_guid, edge.event_b_guid)
 
         # Group edges and events by component root
@@ -535,25 +538,42 @@ class ConflictService:
                     continue
                 group_events.append(self._build_scored_event(event, scores))
 
-            status = self._derive_group_status(group_events)
+            group_edges = component_edges.get(root, [])
+            status = self._derive_group_status(group_events, group_edges)
             groups.append(ConflictGroup(
                 group_id=f"cg_{idx}",
                 status=status,
                 events=group_events,
-                edges=component_edges.get(root, []),
+                edges=group_edges,
             ))
 
         return groups
 
     @staticmethod
-    def _derive_group_status(events: List[ScoredEvent]) -> ConflictGroupStatus:
-        """Derive group resolution status from member events' attendance."""
-        active_count = sum(
-            1 for e in events if e.attendance in ("planned", "attended")
-        )
-        if active_count <= 1:
+    def _derive_group_status(
+        events: List[ScoredEvent], edges: List[ConflictEdge],
+    ) -> ConflictGroupStatus:
+        """Derive group resolution status from edges and member attendance.
+
+        A conflict edge is resolved when at least one of its two events is skipped.
+        - RESOLVED: all edges have at least one skipped event
+        - PARTIALLY_RESOLVED: some edges resolved, some not
+        - UNRESOLVED: no edges have a skipped event
+        """
+        if not edges:
             return ConflictGroupStatus.RESOLVED
-        if active_count < len(events):
+
+        skipped_guids = {e.guid for e in events if e.attendance == "skipped"}
+        unresolved_count = sum(
+            1
+            for e in edges
+            if e.event_a_guid not in skipped_guids
+            and e.event_b_guid not in skipped_guids
+        )
+
+        if unresolved_count == 0:
+            return ConflictGroupStatus.RESOLVED
+        if unresolved_count < len(edges):
             return ConflictGroupStatus.PARTIALLY_RESOLVED
         return ConflictGroupStatus.UNRESOLVED
 

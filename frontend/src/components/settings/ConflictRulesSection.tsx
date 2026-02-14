@@ -91,9 +91,9 @@ const RULES: RuleConfig[] = [
   {
     key: 'consecutive_window_days',
     label: 'Consecutive Window',
-    description: 'Window of days to check for consecutive-day conflicts',
+    description: 'Window of days to check for distance conflicts (0 = same-day only)',
     unit: 'days',
-    min: 1,
+    min: 0,
     max: 14,
     step: 1,
   },

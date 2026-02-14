@@ -202,13 +202,13 @@ describe('ConflictResolutionPanel', () => {
     expect(screen.getByText('Time Overlap')).toBeInTheDocument()
   })
 
-  test('shows Confirm button for each unresolved event', () => {
+  test('shows Skip button for each unresolved event', () => {
     render(<ConflictResolutionPanel groups={[twoEventGroup]} />)
-    const confirmButtons = screen.getAllByRole('button', { name: /Confirm/i })
-    expect(confirmButtons).toHaveLength(2)
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    expect(skipButtons).toHaveLength(2)
   })
 
-  test('Confirm button sends correct resolve payload', async () => {
+  test('Skip button sends single-event skip payload', async () => {
     let capturedPayload: any = null
     server.use(
       http.post('/api/events/conflicts/resolve', async ({ request }) => {
@@ -220,68 +220,86 @@ describe('ConflictResolutionPanel', () => {
     const user = userEvent.setup()
     render(<ConflictResolutionPanel groups={[twoEventGroup]} />)
 
-    // Click "Confirm" on the first event (Morning Workshop)
-    const confirmButtons = screen.getAllByRole('button', { name: /Confirm/i })
-    await user.click(confirmButtons[0])
+    // Click "Skip" on the first event (Morning Workshop)
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    await user.click(skipButtons[0])
 
     await waitFor(() => {
       expect(capturedPayload).not.toBeNull()
     })
 
-    // The confirmed event should be planned, the other skipped
+    // Only the skipped event should be in the payload
     expect(capturedPayload.group_id).toBe('cg_1')
-    expect(capturedPayload.decisions).toEqual(
-      expect.arrayContaining([
-        { event_guid: 'evt_aaa', attendance: 'planned' },
-        { event_guid: 'evt_bbb', attendance: 'skipped' },
-      ])
-    )
+    expect(capturedPayload.decisions).toEqual([
+      { event_guid: 'evt_aaa', attendance: 'skipped' },
+    ])
   })
 
-  test('3-event group: confirming middle event skips both others', async () => {
+  test('3-event group: skipping one event only skips that event', async () => {
     let capturedPayload: any = null
     server.use(
       http.post('/api/events/conflicts/resolve', async ({ request }) => {
         capturedPayload = await request.json()
-        return HttpResponse.json({ success: true, updated_count: 2 })
+        return HttpResponse.json({ success: true, updated_count: 1 })
       })
     )
 
     const user = userEvent.setup()
     render(<ConflictResolutionPanel groups={[threeEventGroup]} />)
 
-    // Click "Confirm" on Event Y (middle event)
-    const confirmButtons = screen.getAllByRole('button', { name: /Confirm/i })
-    // Events are rendered in order: X, Y, Z — so index 1 is Event Y
-    await user.click(confirmButtons[1])
+    // Click "Skip" on Event Y (middle event)
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    await user.click(skipButtons[1])
 
     await waitFor(() => {
       expect(capturedPayload).not.toBeNull()
     })
 
     expect(capturedPayload.group_id).toBe('cg_2')
-    expect(capturedPayload.decisions).toEqual(
-      expect.arrayContaining([
-        { event_guid: 'evt_y', attendance: 'planned' },
-        { event_guid: 'evt_x', attendance: 'skipped' },
-        { event_guid: 'evt_z', attendance: 'skipped' },
-      ])
-    )
+    // Only Event Y should be skipped — others remain unchanged
+    expect(capturedPayload.decisions).toEqual([
+      { event_guid: 'evt_y', attendance: 'skipped' },
+    ])
   })
 
-  test('resolved groups show dimmed styling and "Skipped" label', () => {
+  test('resolved groups show Restore button for skipped events', () => {
     render(<ConflictResolutionPanel groups={[resolvedGroup]} />)
 
     expect(screen.getByText('Kept Event')).toBeInTheDocument()
     expect(screen.getByText('Skipped Event')).toBeInTheDocument()
-    expect(screen.getByText('Skipped')).toBeInTheDocument()
     expect(screen.getByText('Resolved')).toBeInTheDocument()
 
-    // No Confirm buttons for resolved groups
-    expect(screen.queryByRole('button', { name: /Confirm/i })).not.toBeInTheDocument()
+    // Skipped event should have Restore button
+    expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+    // No Skip buttons for resolved groups (non-skipped events don't get Skip)
+    expect(screen.queryByRole('button', { name: /Skip/i })).not.toBeInTheDocument()
   })
 
-  test('calls onResolved callback after successful resolution', async () => {
+  test('Restore button sends planned payload for skipped event', async () => {
+    let capturedPayload: any = null
+    server.use(
+      http.post('/api/events/conflicts/resolve', async ({ request }) => {
+        capturedPayload = await request.json()
+        return HttpResponse.json({ success: true, updated_count: 1 })
+      })
+    )
+
+    const user = userEvent.setup()
+    render(<ConflictResolutionPanel groups={[resolvedGroup]} />)
+
+    const restoreButton = screen.getByRole('button', { name: /Restore/i })
+    await user.click(restoreButton)
+
+    await waitFor(() => {
+      expect(capturedPayload).not.toBeNull()
+    })
+
+    expect(capturedPayload.decisions).toEqual([
+      { event_guid: 'evt_skipped', attendance: 'planned' },
+    ])
+  })
+
+  test('calls onResolved callback after successful skip', async () => {
     server.use(
       http.post('/api/events/conflicts/resolve', () => {
         return HttpResponse.json({ success: true, updated_count: 1 })
@@ -292,8 +310,8 @@ describe('ConflictResolutionPanel', () => {
     const user = userEvent.setup()
     render(<ConflictResolutionPanel groups={[twoEventGroup]} onResolved={onResolved} />)
 
-    const confirmButtons = screen.getAllByRole('button', { name: /Confirm/i })
-    await user.click(confirmButtons[0])
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    await user.click(skipButtons[0])
 
     await waitFor(() => {
       expect(onResolved).toHaveBeenCalledTimes(1)

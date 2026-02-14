@@ -7,8 +7,7 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 5, US3)
  */
 
-import { useState } from 'react'
-import { AlertTriangle, Building2, Check, Clock, MapPin, SkipForward, Users } from 'lucide-react'
+import { Building2, Clock, MapPin, RotateCcw, SkipForward, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -61,17 +60,25 @@ export function RadarComparisonDialog({
   const isResolved = group.status === 'resolved'
   const events = group.events
 
-  const handleConfirm = async (confirmedGuid: string) => {
+  const handleSkip = async (eventGuid: string) => {
     try {
       await resolve({
         group_id: group.group_id,
-        decisions: events.map(e => ({
-          event_guid: e.guid,
-          attendance: e.guid === confirmedGuid ? 'planned' as const : 'skipped' as const,
-        })),
+        decisions: [{ event_guid: eventGuid, attendance: 'skipped' as const }],
       })
     } catch (err: any) {
-      toast.error(err.userMessage || 'Failed to resolve conflict')
+      toast.error(err.userMessage || 'Failed to skip event')
+    }
+  }
+
+  const handleRestore = async (eventGuid: string) => {
+    try {
+      await resolve({
+        group_id: group.group_id,
+        decisions: [{ event_guid: eventGuid, attendance: 'planned' as const }],
+      })
+    } catch (err: any) {
+      toast.error(err.userMessage || 'Failed to restore event')
     }
   }
 
@@ -158,8 +165,8 @@ export function RadarComparisonDialog({
                 color={CHART_COLORS[i % CHART_COLORS.length]}
                 isResolved={isResolved}
                 loading={loading}
-                onConfirm={() => handleConfirm(event.guid)}
-                otherEventCount={events.length - 1}
+                onSkip={() => handleSkip(event.guid)}
+                onRestore={() => handleRestore(event.guid)}
               />
             ))}
           </div>
@@ -179,31 +186,19 @@ function EventDetailCard({
   color,
   isResolved,
   loading,
-  onConfirm,
-  otherEventCount,
+  onSkip,
+  onRestore,
 }: {
   event: ScoredEvent
   referenceDate?: string
   color: string
   isResolved: boolean
   loading: boolean
-  onConfirm: () => void
-  /** Number of other events that will be skipped if this one is confirmed */
-  otherEventCount: number
+  onSkip: () => void
+  onRestore: () => void
 }) {
-  const [pendingConfirm, setPendingConfirm] = useState(false)
   const isSkipped = event.attendance === 'skipped'
   const offset = dayOffsetLabel(event.event_date, referenceDate)
-
-  const handleConfirmClick = () => {
-    // If there are other events that will be skipped and we haven't shown warning yet
-    if (otherEventCount > 0 && !pendingConfirm) {
-      setPendingConfirm(true)
-      return
-    }
-    // User has confirmed or there are no other events to skip
-    onConfirm()
-  }
 
   return (
     <div
@@ -270,32 +265,28 @@ function EventDetailCard({
 
       {/* Action */}
       {!isResolved && !isSkipped && (
-        <div className="space-y-1.5">
-          {pendingConfirm && otherEventCount > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-warning-foreground bg-warning/10 rounded px-2 py-1">
-              <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-              <span>
-                This will skip {otherEventCount} other event{otherEventCount !== 1 ? 's' : ''}
-              </span>
-            </div>
-          )}
-          <Button
-            variant={pendingConfirm ? 'default' : 'outline'}
-            size="sm"
-            disabled={loading}
-            onClick={handleConfirmClick}
-            className="w-full h-7 text-xs"
-          >
-            <Check className="h-3 w-3 mr-1" />
-            {pendingConfirm ? 'Confirm Selection' : 'Confirm'}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={loading}
+          onClick={onSkip}
+          className="w-full h-7 text-xs"
+        >
+          <SkipForward className="h-3 w-3 mr-1" />
+          Skip
+        </Button>
       )}
       {isSkipped && (
-        <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground py-1">
-          <SkipForward className="h-3 w-3" />
-          Skipped
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={loading}
+          onClick={onRestore}
+          className="w-full h-7 text-xs text-muted-foreground"
+        >
+          <RotateCcw className="h-3 w-3 mr-1" />
+          Restore
+        </Button>
       )}
     </div>
   )
