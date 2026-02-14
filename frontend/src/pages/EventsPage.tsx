@@ -39,7 +39,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useCalendar, useEvents, useEventStats, useEventMutations } from '@/hooks/useEvents'
-import { useConflicts, buildConflictLookups } from '@/hooks/useConflicts'
+import { useConflicts } from '@/hooks/useConflicts'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { EventCalendar, EventList, EventForm, EventPerformersSection } from '@/components/events'
 import { ConflictResolutionPanel } from '@/components/events/ConflictResolutionPanel'
@@ -437,18 +437,68 @@ export default function EventsPage() {
     return `${y}-${m}-${day}`
   }
 
-  // Conflict groups for the selected day
+  // Day-scoped conflict groups: filter edges touching the selected day,
+  // collect only referenced events, and recompute status per day.
   const selectedDayConflicts = useMemo(() => {
     if (!selectedDay || !conflictData) return []
     const dateStr = formatDateString(selectedDay.date)
-    return conflictData.conflict_groups.filter(group =>
-      group.events.some(e => e.event_date === dateStr)
-    )
+    const dayGroups: typeof conflictData.conflict_groups = []
+
+    for (const group of conflictData.conflict_groups) {
+      const eventByGuid = new Map(group.events.map(e => [e.guid, e]))
+
+      // Filter edges where at least one event is on the selected day
+      const dayEdges = group.edges.filter(edge => {
+        const a = eventByGuid.get(edge.event_a_guid)
+        const b = eventByGuid.get(edge.event_b_guid)
+        return a?.event_date === dateStr || b?.event_date === dateStr
+      })
+
+      if (dayEdges.length === 0) continue
+
+      // Collect events referenced by day-scoped edges
+      const referencedGuids = new Set<string>()
+      for (const edge of dayEdges) {
+        referencedGuids.add(edge.event_a_guid)
+        referencedGuids.add(edge.event_b_guid)
+      }
+      const dayEvents = group.events.filter(e => referencedGuids.has(e.guid))
+
+      // Recompute status from day-scoped edges (same logic as backend)
+      const skippedGuids = new Set(
+        dayEvents.filter(e => e.attendance === 'skipped').map(e => e.guid),
+      )
+      const unresolvedEdgeCount = dayEdges.filter(
+        e => !skippedGuids.has(e.event_a_guid) && !skippedGuids.has(e.event_b_guid),
+      ).length
+
+      const status: 'resolved' | 'partially_resolved' | 'unresolved' =
+        unresolvedEdgeCount === 0
+          ? 'resolved'
+          : unresolvedEdgeCount < dayEdges.length
+            ? 'partially_resolved'
+            : 'unresolved'
+
+      dayGroups.push({
+        group_id: group.group_id,
+        status,
+        events: dayEvents,
+        edges: dayEdges,
+      })
+    }
+
+    return dayGroups
   }, [selectedDay, conflictData])
 
-  const unresolvedConflictCount = selectedDayConflicts.filter(
-    g => g.status !== 'resolved'
-  ).length
+  // Count unresolved edges across all day-scoped groups (not groups)
+  const unresolvedConflictCount = selectedDayConflicts.reduce((count, g) => {
+    const skippedGuids = new Set(
+      g.events.filter(e => e.attendance === 'skipped').map(e => e.guid),
+    )
+    return count + g.edges.filter(
+      e => !skippedGuids.has(e.event_a_guid) && !skippedGuids.has(e.event_b_guid),
+    ).length
+  }, 0)
 
   // Parse ISO date string (YYYY-MM-DD) as local date (not UTC)
   // This prevents the date from shifting when displayed in timezones west of UTC

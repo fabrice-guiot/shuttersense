@@ -18,7 +18,7 @@ from typing import List, Optional, Dict, Any, Tuple, Callable
 
 from sqlalchemy.orm import Session, joinedload
 
-from backend.src.models import Event, EventPerformer, Configuration, ConfigSource
+from backend.src.models import Event, EventPerformer, EventSeries, Configuration, ConfigSource
 from backend.src.services.event_service import EventService
 from backend.src.services.config_service import ConfigService
 from backend.src.services.guid import GuidService
@@ -331,7 +331,7 @@ class ConflictService:
             joinedload(Event.category),
             joinedload(Event.location),
             joinedload(Event.organizer),
-            joinedload(Event.series),
+            joinedload(Event.series).joinedload(EventSeries.location),
             # Note: event_performers uses lazy="dynamic" and cannot be eagerly loaded
         ).filter(
             Event.team_id == team_id,
@@ -465,12 +465,22 @@ class ConflictService:
         return edges
 
     @staticmethod
+    def _effective_location(event: Event):
+        """Get event's location, falling back to series location if missing."""
+        if event.location is not None:
+            return event.location
+        if event.series and event.series.location is not None:
+            return event.series.location
+        return None
+
+    @staticmethod
     def _get_coordinates(event: Event) -> Optional[Tuple[float, float]]:
-        """Extract (lat, lon) from event's location, or None if unavailable."""
-        if event.location is None:
+        """Extract (lat, lon) from event's effective location, or None if unavailable."""
+        loc = ConflictService._effective_location(event)
+        if loc is None:
             return None
-        lat = event.location.latitude
-        lon = event.location.longitude
+        lat = loc.latitude
+        lon = loc.longitude
         if lat is None or lon is None:
             return None
         return (float(lat), float(lon))
@@ -510,6 +520,9 @@ class ConflictService:
                 parent[px] = py
 
         for edge in edges:
+            # Normalize edge ordering for deterministic conflict identity
+            if edge.event_a_guid > edge.event_b_guid:
+                edge.event_a_guid, edge.event_b_guid = edge.event_b_guid, edge.event_a_guid
             union(edge.event_a_guid, edge.event_b_guid)
 
         # Group edges and events by component root
@@ -535,25 +548,42 @@ class ConflictService:
                     continue
                 group_events.append(self._build_scored_event(event, scores))
 
-            status = self._derive_group_status(group_events)
+            group_edges = component_edges.get(root, [])
+            status = self._derive_group_status(group_events, group_edges)
             groups.append(ConflictGroup(
                 group_id=f"cg_{idx}",
                 status=status,
                 events=group_events,
-                edges=component_edges.get(root, []),
+                edges=group_edges,
             ))
 
         return groups
 
     @staticmethod
-    def _derive_group_status(events: List[ScoredEvent]) -> ConflictGroupStatus:
-        """Derive group resolution status from member events' attendance."""
-        active_count = sum(
-            1 for e in events if e.attendance in ("planned", "attended")
-        )
-        if active_count <= 1:
+    def _derive_group_status(
+        events: List[ScoredEvent], edges: List[ConflictEdge],
+    ) -> ConflictGroupStatus:
+        """Derive group resolution status from edges and member attendance.
+
+        A conflict edge is resolved when at least one of its two events is skipped.
+        - RESOLVED: all edges have at least one skipped event
+        - PARTIALLY_RESOLVED: some edges resolved, some not
+        - UNRESOLVED: no edges have a skipped event
+        """
+        if not edges:
             return ConflictGroupStatus.RESOLVED
-        if active_count < len(events):
+
+        skipped_guids = {e.guid for e in events if e.attendance == "skipped"}
+        unresolved_count = sum(
+            1
+            for e in edges
+            if e.event_a_guid not in skipped_guids
+            and e.event_b_guid not in skipped_guids
+        )
+
+        if unresolved_count == 0:
+            return ConflictGroupStatus.RESOLVED
+        if unresolved_count < len(edges):
             return ConflictGroupStatus.PARTIALLY_RESOLVED
         return ConflictGroupStatus.UNRESOLVED
 
@@ -578,13 +608,15 @@ class ConflictService:
                 color=category.color,
             )
 
+        # Effective location: fall back to series location (same pattern as category)
+        location = self._effective_location(event)
         location_info = None
-        if event.location:
+        if location:
             location_info = LocationInfo(
-                guid=event.location.guid,
-                name=event.location.name,
-                city=event.location.city,
-                country=event.location.country,
+                guid=location.guid,
+                name=location.name,
+                city=location.city,
+                country=location.country,
             )
 
         organizer_info = None
@@ -639,6 +671,7 @@ class ConflictService:
             joinedload(Event.location),
             joinedload(Event.organizer),
             joinedload(Event.category),
+            joinedload(Event.series).joinedload(EventSeries.location),
             # Note: event_performers uses lazy="dynamic" and cannot be eagerly loaded
         ).filter(
             Event.uuid == uuid_value,

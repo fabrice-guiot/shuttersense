@@ -528,31 +528,100 @@ class TestGroupConstruction:
         assert len(groups) == 2
 
     def test_status_unresolved(self):
-        """All events planned → unresolved."""
-        from backend.src.schemas.conflict import ScoredEvent
+        """All edges between non-skipped events → unresolved."""
+        from backend.src.schemas.conflict import ConflictEdge
 
         events = [
-            MagicMock(attendance="planned"),
-            MagicMock(attendance="planned"),
+            MagicMock(guid="evt_a", attendance="planned"),
+            MagicMock(guid="evt_b", attendance="planned"),
         ]
-        status = ConflictService._derive_group_status(events)
+        edges = [
+            ConflictEdge(
+                event_a_guid="evt_a", event_b_guid="evt_b",
+                conflict_type=ConflictType.TIME_OVERLAP, detail="test",
+            ),
+        ]
+        status = ConflictService._derive_group_status(events, edges)
         assert status == ConflictGroupStatus.UNRESOLVED
 
     def test_status_resolved(self):
-        """At most 1 event planned → resolved."""
+        """All edges have at least one skipped event → resolved."""
+        from backend.src.schemas.conflict import ConflictEdge
+
         events = [
-            MagicMock(attendance="planned"),
-            MagicMock(attendance="skipped"),
+            MagicMock(guid="evt_a", attendance="planned"),
+            MagicMock(guid="evt_b", attendance="skipped"),
         ]
-        status = ConflictService._derive_group_status(events)
+        edges = [
+            ConflictEdge(
+                event_a_guid="evt_a", event_b_guid="evt_b",
+                conflict_type=ConflictType.TIME_OVERLAP, detail="test",
+            ),
+        ]
+        status = ConflictService._derive_group_status(events, edges)
         assert status == ConflictGroupStatus.RESOLVED
 
     def test_status_partially_resolved(self):
-        """Some but not all events planned → partially resolved."""
+        """Some edges resolved, some not → partially resolved."""
+        from backend.src.schemas.conflict import ConflictEdge
+
         events = [
-            MagicMock(attendance="planned"),
-            MagicMock(attendance="planned"),
-            MagicMock(attendance="skipped"),
+            MagicMock(guid="evt_a", attendance="planned"),
+            MagicMock(guid="evt_b", attendance="planned"),
+            MagicMock(guid="evt_c", attendance="skipped"),
         ]
-        status = ConflictService._derive_group_status(events)
+        edges = [
+            ConflictEdge(
+                event_a_guid="evt_a", event_b_guid="evt_b",
+                conflict_type=ConflictType.TIME_OVERLAP, detail="test",
+            ),
+            ConflictEdge(
+                event_a_guid="evt_a", event_b_guid="evt_c",
+                conflict_type=ConflictType.DISTANCE, detail="test",
+            ),
+        ]
+        # A-B: both planned → unresolved
+        # A-C: C skipped → resolved
+        status = ConflictService._derive_group_status(events, edges)
         assert status == ConflictGroupStatus.PARTIALLY_RESOLVED
+
+    def test_status_resolved_with_multiple_active_events(self):
+        """Multiple non-skipped events but all edges resolved → resolved.
+
+        Scenario: 5 events, skip 2 events from Series 2. The 3 remaining
+        events (Series 1) have no conflicts between them, so all edges
+        have at least one skipped event.
+        """
+        from backend.src.schemas.conflict import ConflictEdge
+
+        events = [
+            MagicMock(guid="evt_s1_e1", attendance="planned"),
+            MagicMock(guid="evt_s1_e2", attendance="planned"),
+            MagicMock(guid="evt_s1_e3", attendance="planned"),
+            MagicMock(guid="evt_s2_e1", attendance="skipped"),
+            MagicMock(guid="evt_s2_e2", attendance="skipped"),
+        ]
+        # All edges involve at least one Series 2 event (skipped)
+        edges = [
+            ConflictEdge(event_a_guid="evt_s1_e1", event_b_guid="evt_s2_e1",
+                         conflict_type=ConflictType.TRAVEL_BUFFER, detail="test"),
+            ConflictEdge(event_a_guid="evt_s1_e2", event_b_guid="evt_s2_e1",
+                         conflict_type=ConflictType.TRAVEL_BUFFER, detail="test"),
+            ConflictEdge(event_a_guid="evt_s1_e2", event_b_guid="evt_s2_e2",
+                         conflict_type=ConflictType.TRAVEL_BUFFER, detail="test"),
+            ConflictEdge(event_a_guid="evt_s1_e3", event_b_guid="evt_s2_e1",
+                         conflict_type=ConflictType.TIME_OVERLAP, detail="test"),
+            ConflictEdge(event_a_guid="evt_s1_e3", event_b_guid="evt_s2_e1",
+                         conflict_type=ConflictType.DISTANCE, detail="test"),
+            ConflictEdge(event_a_guid="evt_s1_e3", event_b_guid="evt_s2_e2",
+                         conflict_type=ConflictType.TRAVEL_BUFFER, detail="test"),
+        ]
+        # Every edge has at least one skipped event → resolved
+        status = ConflictService._derive_group_status(events, edges)
+        assert status == ConflictGroupStatus.RESOLVED
+
+    def test_status_no_edges(self):
+        """No edges → resolved (edge case)."""
+        events = [MagicMock(guid="evt_a", attendance="planned")]
+        status = ConflictService._derive_group_status(events, [])
+        assert status == ConflictGroupStatus.RESOLVED

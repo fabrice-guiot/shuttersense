@@ -191,15 +191,15 @@ describe('RadarComparisonDialog', () => {
     expect(screen.getByText('3 performers')).toBeInTheDocument()
   })
 
-  test('shows Confirm buttons for unresolved events', () => {
+  test('shows Skip buttons for unresolved events', () => {
     render(
       <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={twoEventGroup} />
     )
-    const confirmButtons = screen.getAllByRole('button', { name: /Confirm/i })
-    expect(confirmButtons).toHaveLength(2)
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    expect(skipButtons).toHaveLength(2)
   })
 
-  test('Confirm button sends resolve payload and closes dialog', async () => {
+  test('Skip button sends single-event skip payload and closes dialog', async () => {
     let capturedPayload: any = null
     server.use(
       http.post('/api/events/conflicts/resolve', async ({ request }) => {
@@ -221,40 +221,59 @@ describe('RadarComparisonDialog', () => {
       />
     )
 
-    // First click shows the confirmation warning (two-step confirmation guard)
-    const confirmButtons = screen.getAllByRole('button', { name: /Confirm/i })
-    await user.click(confirmButtons[0])
-
-    // Warning should now be visible
-    expect(screen.getByText(/This will skip 1 other event/)).toBeInTheDocument()
-
-    // Second click actually confirms the selection
-    const confirmSelectionButton = screen.getByRole('button', { name: /Confirm Selection/i })
-    await user.click(confirmSelectionButton)
+    // Click "Skip" on Morning Workshop — single click, no two-step guard
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    await user.click(skipButtons[0])
 
     await waitFor(() => {
       expect(capturedPayload).not.toBeNull()
     })
 
+    // Only the skipped event should be in the payload
     expect(capturedPayload.group_id).toBe('cg_1')
-    expect(capturedPayload.decisions).toEqual(
-      expect.arrayContaining([
-        { event_guid: 'evt_aaa', attendance: 'planned' },
-        { event_guid: 'evt_bbb', attendance: 'skipped' },
-      ])
-    )
+    expect(capturedPayload.decisions).toEqual([
+      { event_guid: 'evt_aaa', attendance: 'skipped' },
+    ])
 
     await waitFor(() => {
       expect(onResolved).toHaveBeenCalledTimes(1)
     })
   })
 
-  test('resolved group shows no Confirm buttons and displays Skipped', () => {
+  test('resolved group shows Restore button for skipped events', () => {
     render(
       <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={resolvedGroup} />
     )
-    expect(screen.queryByRole('button', { name: /Confirm/i })).not.toBeInTheDocument()
-    expect(screen.getByText('Skipped')).toBeInTheDocument()
+    // No Skip buttons for resolved group
+    expect(screen.queryByRole('button', { name: /Skip/i })).not.toBeInTheDocument()
+    // Skipped event should have Restore button
+    expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+  })
+
+  test('Restore button sends planned payload for skipped event', async () => {
+    let capturedPayload: any = null
+    server.use(
+      http.post('/api/events/conflicts/resolve', async ({ request }) => {
+        capturedPayload = await request.json()
+        return HttpResponse.json({ success: true, updated_count: 1 })
+      })
+    )
+
+    const user = userEvent.setup()
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={resolvedGroup} />
+    )
+
+    const restoreButton = screen.getByRole('button', { name: /Restore/i })
+    await user.click(restoreButton)
+
+    await waitFor(() => {
+      expect(capturedPayload).not.toBeNull()
+    })
+
+    expect(capturedPayload.decisions).toEqual([
+      { event_guid: 'evt_skipped', attendance: 'planned' },
+    ])
   })
 
   test('shows event time ranges on detail cards', () => {

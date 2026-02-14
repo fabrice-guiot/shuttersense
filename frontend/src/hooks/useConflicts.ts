@@ -51,16 +51,30 @@ export function buildConflictLookups(response: ConflictDetectionResponse): {
   const byEvent = new Map<string, EventConflictInfo>()
 
   for (const group of response.conflict_groups) {
-    // Collect all dates this conflict group spans
-    const dates = new Set(group.events.map(e => e.event_date))
-    for (const dateStr of dates) {
-      const existing = byDate.get(dateStr) || { unresolved: 0, resolved: 0 }
-      if (group.status === 'resolved') {
-        existing.resolved++
-      } else {
-        existing.unresolved++
+    // Build guid→event lookup for this group
+    const eventByGuid = new Map(group.events.map(e => [e.guid, e]))
+
+    // Count edges per date (not groups per date) — fixes badge always showing "1"
+    for (const edge of group.edges) {
+      const eventA = eventByGuid.get(edge.event_a_guid)
+      const eventB = eventByGuid.get(edge.event_b_guid)
+      if (!eventA || !eventB) continue
+
+      // An edge is resolved if at least one of its events is skipped
+      const edgeResolved =
+        eventA.attendance === 'skipped' || eventB.attendance === 'skipped'
+
+      // This edge touches dates of both events
+      const dates = new Set([eventA.event_date, eventB.event_date])
+      for (const dateStr of dates) {
+        const existing = byDate.get(dateStr) || { unresolved: 0, resolved: 0 }
+        if (edgeResolved) {
+          existing.resolved++
+        } else {
+          existing.unresolved++
+        }
+        byDate.set(dateStr, existing)
       }
-      byDate.set(dateStr, existing)
     }
 
     // Build per-event conflict info
