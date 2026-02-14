@@ -63,6 +63,7 @@ All documented architectural principles from CLAUDE.md are properly implemented:
 While the codebase is production-ready, several quality gaps create maintainability and reliability risks:
 
 - **Frontend test coverage is uneven**: 78 of 254 source files (30.7%) have test coverage via 84 test files (17 co-located in `src/`, 67 in `tests/`). Hooks are relatively well-covered (18 of ~30 hooks tested), but many components (especially forms, dialogs, and smaller UI pieces) and service files lack tests entirely.
+- **Frontend test file layout is inconsistent**: Tests are split across two locations (`frontend/src/**/__tests__/` and `frontend/tests/`) with no documented convention. Analysis reveals a purely temporal split — all tests prior to Feb 2026 were placed in `tests/`, all tests from Issue #120 onwards are co-located in `src/`. This undocumented convention shift caused two independent reviewers to miscount test coverage. One duplicate test file (`ResultsTable.test.tsx`) exists in both locations with divergent content.
 - **Oversized files increase cognitive load**: 5 backend services exceed 1,800 lines; 3 frontend pages exceed 800 lines. Large files slow code reviews, increase merge conflict frequency, and make onboarding harder.
 - **Inconsistent error handling in the frontend**: Some hooks use `setError()`, others use toast notifications, and some detect error types via fragile string matching.
 - **Code duplication across CLI commands**: The same config-loading boilerplate is repeated 5+ times across agent CLI commands.
@@ -148,6 +149,7 @@ Addressing these gaps now is important because:
 | FE-6 | Duplicate `BetaChip` component definition | Low | `CollectionList.tsx` (line 35), `CollectionForm.tsx` (line 48) |
 | FE-7 | 17+ `useState` hooks in single component | Medium | `AnalyticsPage.tsx` (lines 61-100) |
 | FE-8 | `strict: false` in TypeScript config | Medium | `tsconfig.json` |
+| FE-9 | Split test file layout with no documented convention | Medium | 17 files in `src/**/__tests__/`, 67 in `tests/`; 1 duplicate (`ResultsTable.test.tsx`) |
 
 ### Component Assessment: Agent (Rating: A-)
 
@@ -184,6 +186,7 @@ Addressing these gaps now is important because:
 | ID | Issue | Severity | Files Affected |
 |----|-------|----------|----------------|
 | TS-1 | Frontend test coverage gaps (30.7%, 78/254 files) | Medium | Untested components, forms, dialogs, service files |
+| TS-5 | Inconsistent frontend test file layout (two locations, no documented convention) | Medium | `frontend/src/**/__tests__/` vs `frontend/tests/`; divergent `ResultsTable.test.tsx` |
 | TS-2 | Limited use of `@pytest.mark.parametrize` | Low | Across agent and backend tests |
 | TS-3 | Some tests use implicit assertion messages | Low | Various test files |
 | TS-4 | `@pytest.mark.integration` not consistently applied | Low | Backend integration tests |
@@ -199,6 +202,7 @@ Addressing these gaps now is important because:
 - FR-100.2: All service files in `frontend/src/services/` MUST have test files covering API call success and failure scenarios.
 - FR-100.3: All page components in `frontend/src/pages/` SHOULD have at least smoke tests verifying rendering without errors. (7 of ~20 currently covered.)
 - FR-100.4: Frontend test file coverage MUST reach 50% (minimum 127 of 254 source files).
+- FR-100.5: All frontend test files MUST follow a single, documented convention for test file placement. Co-location (`src/**/__tests__/`) is the RECOMMENDED standard. Existing tests in `frontend/tests/` SHOULD be migrated opportunistically when the corresponding source file is modified.
 
 **FR-200: File Size Reduction**
 - FR-200.1: No backend service file SHALL exceed 800 lines. Files exceeding this limit MUST be decomposed into focused sub-modules.
@@ -249,27 +253,37 @@ The highest-impact improvement. While 78 of 254 source files (30.7%) already hav
 
 **Tasks:**
 
-1. **Close remaining hook coverage gaps** (`frontend/src/hooks/`)
+1. **Consolidate test file layout onto co-located convention**
+   - Document the co-located convention (`src/**/__tests__/*.test.{ts,tsx}`) in `frontend/docs/testing.md`
+   - Resolve the duplicate `ResultsTable.test.tsx`: merge the two divergent test files into a single co-located file at `frontend/src/components/results/__tests__/ResultsTable.test.tsx`, then delete `frontend/tests/components/results/ResultsTable.test.tsx`
+   - All **new** tests MUST be co-located; no new files in `frontend/tests/`
+   - Existing tests in `frontend/tests/` SHOULD be migrated to `src/**/__tests__/` opportunistically when the corresponding source file is being modified (no bulk migration required)
+   - Update `vitest.config.ts` if needed to ensure coverage reporting includes co-located test directories
+
+2. **Close remaining hook coverage gaps** (`frontend/src/hooks/`)
    - Priority targets: untested hooks (e.g., `useEvents.ts`, `useOrganizers.ts`, remaining ~12 hooks)
    - Cover: primary CRUD flows, error handling, debounce behavior, state transitions
    - Use `@testing-library/react` with `renderHook` utility
+   - New test files go in `frontend/src/hooks/__tests__/` (co-located)
 
-2. **Add tests for all service files** (`frontend/src/services/`)
+3. **Add tests for all service files** (`frontend/src/services/`)
    - Priority targets: `api.ts` (interceptors), `collections.ts`, `events.ts`
    - Cover: successful API calls, error transformation, auth redirect on 401
    - Use MSW (Mock Service Worker) for API mocking
+   - New test files go in `frontend/src/services/__tests__/` (co-located)
 
-3. **Add smoke tests for remaining page components** (`frontend/src/pages/`)
+4. **Add smoke tests for remaining page components** (`frontend/src/pages/`)
    - 7 pages already tested (AgentDetail, Agents, Configuration, Dashboard, Directory, Events, Settings)
    - Add tests for remaining ~13 pages
    - Verify each page renders without errors; verify loading and error states
    - Priority targets: `CollectionsPage.tsx`, `PipelineEditorPage.tsx`, `AnalyticsPage.tsx`
+   - New test files go in `frontend/src/pages/__tests__/` (co-located)
 
-4. **Add tests for high-value untested components**
+5. **Add tests for high-value untested components**
    - Priority targets: form components (`CollectionForm`, `EventForm`, `ConnectorForm`), dialog components, and domain-specific components without coverage
    - Focus on components with complex logic or user interaction patterns
 
-**Checkpoint:** Frontend test file coverage reaches 50% (127+ of 254 source files). All hooks and services have test coverage.
+**Checkpoint:** Frontend test file coverage reaches 50% (127+ of 254 source files). All hooks and services have test coverage. Testing convention documented; no new tests placed in `frontend/tests/`.
 
 ---
 
@@ -373,6 +387,7 @@ Incremental strictness improvements and test infrastructure refinements.
 | Metric | Current | Target | Phase |
 |--------|---------|--------|-------|
 | Frontend test file coverage | 30.7% (78/254) | 50% (127/254) | Phase 1 |
+| Frontend test layout convention | Undocumented split (2 locations, 1 duplicate) | Single documented convention; 0 duplicates | Phase 1 |
 | Max backend service file size | 2,459 lines | 800 lines | Phase 2 |
 | Max frontend page file size | 1,278 lines | 600 lines | Phase 2 |
 | Unguarded `console.log` in production | 5+ instances | 0 | Phase 3 |
@@ -449,3 +464,4 @@ All patterns below were confirmed as properly implemented and do NOT require cha
 
 - **2026-02-14 (v1.0)**: Initial code quality assessment and improvement roadmap.
 - **2026-02-14 (v1.1)**: Corrected frontend test coverage metrics. Actual: 254 source files, 84 test files (17 co-located + 67 in `tests/`), 78 unique source files covered = 30.7% file coverage. Updated targets from 40% to 50%, adjusted severity ratings and Phase 1 tasks accordingly.
+- **2026-02-14 (v1.2)**: Added FE-9/TS-5 (split test file layout), FR-100.5 (test convention consolidation), and Phase 1 Task 1 (consolidate onto co-located convention). The undocumented temporal split between `frontend/tests/` (pre-Feb 2026) and `frontend/src/**/__tests__/` (post-Feb 2026) caused two independent reviewers to miscount coverage. One duplicate `ResultsTable.test.tsx` identified.
