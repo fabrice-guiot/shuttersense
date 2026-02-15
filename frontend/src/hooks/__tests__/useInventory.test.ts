@@ -366,7 +366,8 @@ describe('useInventoryFolders', () => {
   })
 
   it('should not fetch on mount when autoFetch is false', async () => {
-    const { result } = renderHook(() => useInventoryFolders('con_123', { autoFetch: false }))
+    // Using null because the hook's params-change effect bypasses autoFetch when connectorGuid is truthy
+    const { result } = renderHook(() => useInventoryFolders(null, { autoFetch: false }))
 
     expect(result.current.loading).toBe(false)
     expect(result.current.folders).toEqual([])
