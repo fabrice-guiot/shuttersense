@@ -46,6 +46,12 @@ class ValidationErrorType(str, Enum):
 # Node and Edge Schemas
 # ============================================================================
 
+class NodePosition(BaseModel):
+    """Canvas position for visual graph editor."""
+    x: float = Field(..., description="Canvas X coordinate")
+    y: float = Field(..., description="Canvas Y coordinate")
+
+
 class PipelineNode(BaseModel):
     """
     Pipeline node definition.
@@ -55,13 +61,15 @@ class PipelineNode(BaseModel):
     id: str = Field(..., min_length=1, max_length=100, description="Unique node identifier")
     type: NodeType = Field(..., description="Node type")
     properties: Dict[str, Any] = Field(default_factory=dict, description="Node properties")
+    position: Optional[NodePosition] = Field(None, description="Canvas position for visual editor")
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "id": "file_raw",
                 "type": "file",
-                "properties": {"extension": ".dng", "optional": False}
+                "properties": {"extension": ".dng", "optional": False},
+                "position": {"x": 150.0, "y": 200.0}
             }
         }
     }
