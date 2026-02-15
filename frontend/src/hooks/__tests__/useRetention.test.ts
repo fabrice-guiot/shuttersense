@@ -13,8 +13,8 @@
 import { describe, test, expect } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { server } from '../../tests/mocks/server'
-import { useRetention } from './useRetention'
+import { server } from '../../../tests/mocks/server'
+import { useRetention } from '../useRetention'
 
 // Helper to wait for hook updates
 const waitForHookUpdate = async () => {
@@ -34,10 +34,6 @@ describe('useRetention', () => {
       await waitFor(() => {
         expect(result.current.loading).toBe(false)
       })
-
-      // Debug: log actual settings
-      console.log('Settings received:', JSON.stringify(result.current.settings))
-      console.log('Error:', result.current.error)
 
       // Should have settings
       expect(result.current.settings).not.toBe(null)
@@ -93,11 +89,6 @@ describe('useRetention', () => {
       await waitFor(() => {
         expect(result.current.loading).toBe(false)
       })
-
-      // Check if there was an error
-      if (result.current.error) {
-        console.error('Fetch error:', result.current.error)
-      }
 
       // Verify the values
       expect(result.current.settings).not.toBe(null)
@@ -173,7 +164,6 @@ describe('useRetention', () => {
     })
 
     test('rejects invalid values via API validation', async () => {
-      // First set up the error handler BEFORE rendering
       server.use(
         http.put('/api/config/retention', async ({ request }) => {
           const data = await request.json() as Record<string, number>
@@ -193,7 +183,6 @@ describe('useRetention', () => {
         expect(result.current.loading).toBe(false)
       })
 
-      // Try to set invalid value (15 is not in the allowed list)
       let errorThrown = false
       try {
         await act(async () => {
@@ -209,7 +198,6 @@ describe('useRetention', () => {
 
   describe('error handling', () => {
     test('clearError clears error state', async () => {
-      // Cause an error
       server.use(
         http.get('/api/config/retention', () => {
           return HttpResponse.json(
@@ -225,7 +213,6 @@ describe('useRetention', () => {
         expect(result.current.error).toBe('Test error')
       })
 
-      // Clear error
       act(() => {
         result.current.clearError()
       })
