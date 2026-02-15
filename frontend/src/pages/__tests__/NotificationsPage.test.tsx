@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import NotificationsPage from '../NotificationsPage'
@@ -69,6 +69,23 @@ vi.mock('@/utils/dateFormat', () => ({
 }))
 
 describe('NotificationsPage', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    // Reset the useNotifications mock to default state before each test
+    const { useNotifications } = await import('@/hooks/useNotifications')
+    vi.mocked(useNotifications).mockReturnValue({
+      notifications: [],
+      total: 0,
+      unreadCount: 0,
+      loading: false,
+      error: null,
+      fetchNotifications: vi.fn(),
+      markAsRead: vi.fn(),
+      markAllAsRead: vi.fn(),
+      refreshUnreadCount: vi.fn(),
+    })
+  })
+
   test('renders without error', () => {
     render(
       <MemoryRouter>

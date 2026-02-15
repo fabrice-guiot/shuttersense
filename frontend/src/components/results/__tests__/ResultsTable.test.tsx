@@ -8,6 +8,7 @@
  * Part of Issue #92: Storage Optimization for Analysis Results.
  */
 
+import type { ReactElement } from 'react'
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -94,7 +95,7 @@ const mockResults: AnalysisResultSummary[] = [
   }
 ]
 
-const renderWithRouter = (ui: React.ReactElement) =>
+const renderWithRouter = (ui: ReactElement) =>
   render(<BrowserRouter>{ui}</BrowserRouter>)
 
 // Default props

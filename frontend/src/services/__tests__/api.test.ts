@@ -73,13 +73,13 @@ describe('API Service', () => {
 
   describe('Response Interceptor - 401 Redirect', () => {
     let errorInterceptor: ReturnType<typeof getResponseErrorInterceptor>
-    let originalHref: string
+    let originalLocationDescriptor: PropertyDescriptor | undefined
 
     beforeEach(() => {
       errorInterceptor = getResponseErrorInterceptor()
 
-      // Save originals
-      originalHref = window.location.href
+      // Save the full location descriptor
+      originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
 
       // Mock window.location
       delete (window as any).location
@@ -95,9 +95,10 @@ describe('API Service', () => {
     })
 
     afterEach(() => {
-      // Restore location
-      delete (window as any).location
-      window.location = { href: originalHref } as any
+      // Restore the full location descriptor
+      if (originalLocationDescriptor) {
+        Object.defineProperty(window, 'location', originalLocationDescriptor)
+      }
     })
 
     test('redirects to login on 401 and stores return URL', () => {
