@@ -3,7 +3,7 @@
 **Issue**: [#217](https://github.com/fabrice-guiot/shuttersense/issues/217)
 **Status**: Draft
 **Created**: 2026-02-15
-**Last Updated**: 2026-02-15 (v1.2)
+**Last Updated**: 2026-02-15 (v1.3)
 **Related Documents**:
 - [Domain Model](../domain-model.md)
 - [Pipeline Validation Spec](../../specs/003-pipeline-validation/spec.md)
@@ -143,7 +143,7 @@ Unifying all analysis tools on the Pipeline definition:
 - **FR-100.3**: `metadata_extensions` MUST be derived from File nodes whose `extension` is in the recognized metadata formats set (`METADATA_EXTENSIONS`, currently `{".xmp"}`). When new metadata formats are introduced (e.g., `.mie`), they are added to this single set — no hardcoded image extension list needs updating.
 - **FR-100.4**: `require_sidecar` MUST be inferred by analyzing Pipeline paths: if a path exists from the Capture node through File nodes where an image extension and a metadata extension appear in connected nodes (siblings — same parent Process or Capture node), then the image extension requires a sidecar. For example, if a Capture node outputs to both a `.cr3` File node and an `.xmp` File node, then `.cr3` requires a sidecar.
 - **FR-100.5**: `processing_suffixes` MUST be derived from all Process nodes in the Pipeline. Each Process node's `method_ids` array provides the suffix codes; the node's `name` property provides the human-readable description. Example: Process node named "HDR Merge" with `method_ids: ["HDR"]` yields `{"HDR": "HDR Merge"}`.
-- **FR-100.6**: `filename_regex` and `camera_id_group` MUST be taken directly from the Capture node's properties.
+- **FR-100.6**: `filename_regex` MUST be taken directly from the Capture node's properties and MUST NOT use a default fallback. The property is required by pipeline validation (`pipeline_service` appends a "missing filename_regex" error when absent), so a missing value indicates a pipeline validation bug and MUST raise an error during extraction. `camera_id_group` MAY default to `1` if not explicitly set, as this is the conventional first capture group.
 - **FR-100.7**: If the Pipeline has no Capture node (invalid pipeline), the extraction MUST fail with a clear error. Tools MUST NOT proceed with an invalid Pipeline.
 
 #### FR-200: PhotoStats — Pipeline Integration
@@ -331,7 +331,17 @@ def extract_tool_config(
 
     capture = config.capture_nodes[0]
     props = _get_node_properties(nodes_json, capture.id)
-    filename_regex = props.get("filename_regex", r"([A-Z0-9]{4})([0-9]{4})")
+
+    # filename_regex is required — pipeline_service validates its presence
+    # when saving a Pipeline (appends "missing filename_regex" error).
+    # No default fallback: a missing value is a Pipeline validation bug
+    # and must surface as a clear error rather than silently degrading.
+    if "filename_regex" not in props:
+        raise ValueError(
+            f"Capture node '{capture.id}' is missing required "
+            "'filename_regex' property"
+        )
+    filename_regex = props["filename_regex"]
     camera_id_group = int(props.get("camera_id_group", 1))
 
     # --- File nodes → extension sets ---
@@ -548,8 +558,14 @@ def _execute_tool(
     location: str,
     team_config: TeamConfigCache,
     pipeline_tool_config: Optional[PipelineToolConfig] = None,
+    http_client: Optional[AgentApiClient] = None,
 ) -> tuple[Dict[str, Any], Optional[str]]:
-    """Execute analysis tool with Pipeline-derived or Config-based parameters."""
+    """Execute analysis tool with Pipeline-derived or Config-based parameters.
+
+    Args:
+        http_client: AgentApiClient for online operations (camera discovery).
+            None when running in offline mode.
+    """
 
     if pipeline_tool_config:
         photo_extensions = pipeline_tool_config.photo_extensions
@@ -569,6 +585,7 @@ def _execute_tool(
         return _run_photo_pairing(
             file_infos, photo_extensions, location,
             pipeline_tool_config=pipeline_tool_config,
+            http_client=http_client,
         )
     elif tool == "pipeline_validation":
         # Pipeline_Validation already derives its config from the Pipeline
@@ -595,8 +612,18 @@ def _run_photo_pairing(
     photo_extensions: set[str],
     location: str,
     pipeline_tool_config: Optional[PipelineToolConfig] = None,
+    http_client: Optional[AgentApiClient] = None,
 ) -> tuple[Dict[str, Any], Optional[str]]:
-    """Run Photo Pairing with Pipeline or Config parameters."""
+    """Run Photo Pairing with Pipeline or Config parameters.
+
+    Args:
+        file_infos: Pre-loaded list of FileInfo objects.
+        photo_extensions: Set of recognized photo file extensions.
+        location: Local filesystem path (for report display).
+        pipeline_tool_config: Pipeline-derived config, or None for fallback.
+        http_client: AgentApiClient for online camera discovery. When None
+            (offline mode), camera discovery falls back to identity mapping.
+    """
 
     photo_files = [f for f in file_infos if f.extension in photo_extensions]
 
@@ -610,8 +637,9 @@ def _run_photo_pairing(
     imagegroups = group_result.get("imagegroups", [])
     invalid_files = group_result.get("invalid_files", [])
 
-    # Camera auto-discovery (if online)
-    camera_names = _discover_cameras(imagegroups)
+    # Camera auto-discovery — passes http_client for online lookup;
+    # falls back to identity mapping when http_client is None (offline)
+    camera_names = _discover_cameras(imagegroups, http_client=http_client)
 
     # Build analytics config from Pipeline or empty dict
     analytics_config = {}
@@ -742,10 +770,15 @@ if pipeline:
             "Falling back to server configuration."
         )
 
+# Build HTTP client for online operations (camera discovery, etc.)
+# http_client is None when running in --offline mode.
+http_client = _build_api_client(config) if not offline else None
+
 # Pass to tool execution
 analysis_data, report_html = _execute_tool(
     tool, file_infos, location, team_config,
     pipeline_tool_config=pipeline_tool_config,
+    http_client=http_client,
 )
 ```
 
@@ -800,8 +833,10 @@ Collection
 9. Create Camera API schemas in `backend/src/schemas/camera.py`
 10. Create Camera API endpoints (`GET /api/cameras`, `GET /api/cameras/{guid}`, `PUT /api/cameras/{guid}`, `DELETE /api/cameras/{guid}`, `GET /api/cameras/stats`)
 11. Create agent-facing `POST /api/agent/v1/cameras/discover` endpoint
-12. Unit tests for `extract_tool_config()` with various Pipeline structures
-13. Unit tests for Camera service (CRUD, discover, idempotency)
+12. Add `discover_cameras(camera_ids: List[str], timeout: int = 5) -> Dict[str, Any]` method to `AgentApiClient` (`agent/src/api_client.py`). The method issues a `POST` to `/api/agent/v1/cameras/discover` with `{"camera_ids": [...]}` and returns the JSON response body. This is the client-side counterpart of the server's `CameraService.discover_cameras()` and is called by `_discover_cameras()` (§7).
+13. Unit tests for `extract_tool_config()` with various Pipeline structures
+14. Unit tests for Camera service (CRUD, discover, idempotency)
+15. Unit tests for `AgentApiClient.discover_cameras()` (mock HTTP, verify request shape and response parsing)
 
 **Checkpoint**: `PipelineToolConfig` correctly extracted from Pipeline definitions. Camera entity exists with CRUD API and agent discovery endpoint.
 
@@ -1020,6 +1055,10 @@ Collection
 
 ## Revision History
 
+- **2026-02-15 (v1.3)**: Review feedback round 2 — 3 fixes
+  - **§6 `_run_photo_pairing` http_client**: Added `http_client: Optional[AgentApiClient]` parameter to `_run_photo_pairing()` and `_execute_tool()`. Updated call site to pass `http_client` through to `_discover_cameras()` so online camera lookup works instead of always falling back to identity mapping. Updated §8 pipeline resolution flow to construct `http_client` and pass it to `_execute_tool()`.
+  - **Phase 1 Task 12 (new)**: Add `discover_cameras()` method to `AgentApiClient` (`agent/src/api_client.py`) — the client-side counterpart of `CameraService.discover_cameras()`. Task 15 added for corresponding unit tests.
+  - **FR-100.6 / §1 filename_regex**: Removed default regex fallback (`r"([A-Z0-9]{4})([0-9]{4})"`) from `extract_tool_config()`. `filename_regex` is now required — a missing property raises `ValueError` instead of silently degrading. This aligns with `pipeline_service` validation which already enforces the property's presence. `camera_id_group` retains its default of `1`.
 - **2026-02-15 (v1.2)**: Review feedback — 7 clarifications and fixes
   - **FR-700.5 (new)**: Optional metadata File nodes (`optional: true`) MUST NOT create hard `require_sidecar` relationships. Updated FR-700.1–FR-700.4 examples and §2 sidecar inference code to exclude optional metadata.
   - **§7 _discover_cameras (new)**: Added full specification with function signature `_discover_cameras(imagegroups, http_client=None, timeout=5)`, camera ID extraction/dedup, HTTP call to discover endpoint, return shape (`Dict[str, str]`), and offline/failure fallback (identity mapping + logged warning).
