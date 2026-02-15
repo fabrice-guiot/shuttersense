@@ -81,7 +81,7 @@ describe('useResolveConflict', () => {
     await act(async () => {
       try {
         await result.current.resolve(mockRequest)
-        expect.fail('Should have thrown')
+        expect.unreachable('Should have thrown')
       } catch (err) {
         // Expected
       }
@@ -99,7 +99,7 @@ describe('useResolveConflict', () => {
     await act(async () => {
       try {
         await result.current.resolve(mockRequest)
-        expect.fail('Should have thrown')
+        expect.unreachable('Should have thrown')
       } catch (err: any) {
         expect(err.userMessage).toBe('Failed to resolve conflict')
       }
@@ -118,7 +118,7 @@ describe('useResolveConflict', () => {
     await act(async () => {
       try {
         await result.current.resolve(mockRequest)
-        expect.fail('Should have thrown')
+        expect.unreachable('Should have thrown')
       } catch (err) {
         // Expected
       }

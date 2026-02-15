@@ -77,13 +77,15 @@ describe('LoginPage', () => {
     })
   })
 
-  test('shows access limited footer text', () => {
+  test('shows access limited footer text', async () => {
     render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText(/Access is limited to pre-approved users/)).toBeDefined()
+    await waitFor(() => {
+      expect(screen.getByText(/Access is limited to pre-approved users/)).toBeDefined()
+    })
   })
 })

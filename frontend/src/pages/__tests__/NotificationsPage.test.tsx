@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { describe, test, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -51,7 +52,7 @@ vi.mock('@/components/ui/responsive-table', () => ({
   ResponsiveTable: ({
     emptyState,
   }: {
-    emptyState?: React.ReactNode
+    emptyState?: ReactNode
     data: unknown[]
     columns: unknown[]
     keyField: string

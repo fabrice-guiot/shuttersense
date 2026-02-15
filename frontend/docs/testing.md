@@ -4,7 +4,7 @@
 
 All new tests MUST be co-located with the source code they test:
 
-```
+```text
 src/<path>/__tests__/<Name>.test.{ts,tsx}
 ```
 

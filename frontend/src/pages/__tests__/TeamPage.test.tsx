@@ -61,7 +61,7 @@ describe('TeamPage', () => {
       screen.getByText(
         'Manage your team members, invite new users, and control access.',
       ),
-    ).toBeDefined()
+    ).toBeInTheDocument()
   })
 
   test('renders invite user button', () => {
@@ -71,7 +71,7 @@ describe('TeamPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Invite User')).toBeDefined()
+    expect(screen.getByText('Invite User')).toBeInTheDocument()
   })
 
   test('renders empty state when no users', () => {
@@ -81,7 +81,7 @@ describe('TeamPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('No team members yet')).toBeDefined()
+    expect(screen.getByText('No team members yet')).toBeInTheDocument()
   })
 
   test('renders user list with users', async () => {
@@ -140,7 +140,7 @@ describe('TeamPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Loading team members...')).toBeDefined()
+    expect(screen.getByText('Loading team members...')).toBeInTheDocument()
   })
 
   test('renders error state', async () => {
@@ -161,6 +161,6 @@ describe('TeamPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Failed to load team members')).toBeDefined()
+    expect(screen.getByText('Failed to load team members')).toBeInTheDocument()
   })
 })

@@ -328,10 +328,9 @@ describe('usePushSubscription', () => {
         await result.current.subscribe()
       })
 
+      expect(notificationService.subscribe).toHaveBeenCalled()
       const subscribeCall = vi.mocked(notificationService.subscribe).mock.calls[0]
-      if (subscribeCall) {
-        expect(subscribeCall[0].device_name).toBe(test.expected)
-      }
+      expect(subscribeCall[0].device_name).toBe(test.expected)
 
       vi.clearAllMocks()
     }

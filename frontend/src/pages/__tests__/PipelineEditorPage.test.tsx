@@ -78,10 +78,10 @@ describe('PipelineEditorPage', () => {
     expect(screen.getByText('Test Pipeline')).toBeDefined()
   })
 
-  test('renders pipeline name in view mode', () => {
+  test('renders pipeline description in view mode', () => {
     renderViewMode()
 
-    expect(screen.getByText('Test Pipeline')).toBeDefined()
+    expect(screen.getByText('A test pipeline')).toBeDefined()
   })
 
   test('renders back button', () => {

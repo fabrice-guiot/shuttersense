@@ -93,7 +93,7 @@ describe('useInventoryConfig', () => {
     await act(async () => {
       try {
         await result.current.setConfig('con_123', mockConfig, 'daily')
-        expect.fail('Should have thrown')
+        expect.unreachable('Should have thrown')
       } catch (err) {
         // Expected
       }
@@ -112,7 +112,7 @@ describe('useInventoryConfig', () => {
     await act(async () => {
       try {
         await result.current.clearConfig('con_invalid')
-        expect.fail('Should have thrown')
+        expect.unreachable('Should have thrown')
       } catch (err) {
         // Expected
       }
@@ -203,7 +203,7 @@ describe('useInventoryValidation', () => {
     await act(async () => {
       try {
         await result.current.validate('con_123')
-        expect.fail('Should have thrown')
+        expect.unreachable('Should have thrown')
       } catch (err) {
         // Expected
       }
@@ -366,7 +366,7 @@ describe('useInventoryFolders', () => {
   })
 
   it('should not fetch on mount when autoFetch is false', async () => {
-    const { result } = renderHook(() => useInventoryFolders(null, { autoFetch: false }))
+    const { result } = renderHook(() => useInventoryFolders('con_123', { autoFetch: false }))
 
     expect(result.current.loading).toBe(false)
     expect(result.current.folders).toEqual([])
@@ -653,7 +653,7 @@ describe('useInventoryImport', () => {
     await act(async () => {
       try {
         await result.current.triggerImport('con_123')
-        expect.fail('Should have thrown')
+        expect.unreachable('Should have thrown')
       } catch (err) {
         // Expected
       }

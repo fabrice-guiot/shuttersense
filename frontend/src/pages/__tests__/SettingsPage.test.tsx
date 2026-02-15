@@ -1,10 +1,12 @@
-import { describe, test, expect, vi } from 'vitest'
+import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import SettingsPage from '../SettingsPage'
 
+const mockUseIsSuperAdmin = vi.fn().mockReturnValue(false)
+
 vi.mock('@/hooks/useAuth', () => ({
-  useIsSuperAdmin: vi.fn().mockReturnValue(false),
+  useIsSuperAdmin: () => mockUseIsSuperAdmin(),
 }))
 
 vi.mock('@/components/settings/ConnectorsTab', () => ({
@@ -32,6 +34,11 @@ vi.mock('@/components/settings/ReleaseManifestsTab', () => ({
 }))
 
 describe('SettingsPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockUseIsSuperAdmin.mockReturnValue(false)
+  })
+
   test('renders base tab labels', () => {
     render(
       <MemoryRouter>
@@ -58,8 +65,7 @@ describe('SettingsPage', () => {
   })
 
   test('shows admin tabs for super admin', async () => {
-    const { useIsSuperAdmin } = await import('@/hooks/useAuth')
-    vi.mocked(useIsSuperAdmin).mockReturnValue(true)
+    mockUseIsSuperAdmin.mockReturnValue(true)
 
     render(
       <MemoryRouter>

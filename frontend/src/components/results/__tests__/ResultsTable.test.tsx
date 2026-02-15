@@ -342,10 +342,9 @@ describe('ResultsTable', () => {
       const nextButton = screen.getAllByRole('button').find(btn =>
         btn.querySelector('svg.lucide-chevron-right')
       )
-      if (nextButton) {
-        await user.click(nextButton)
-        expect(defaultProps.onPageChange).toHaveBeenCalledWith(2)
-      }
+      expect(nextButton).toBeDefined()
+      await user.click(nextButton!)
+      expect(defaultProps.onPageChange).toHaveBeenCalledWith(2)
     })
 
     test('shows rows per page selector', () => {

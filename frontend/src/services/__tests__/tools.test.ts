@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import api from '@/services/api'
 import { validateGuid } from '@/utils/guid'
 import {
@@ -249,6 +249,17 @@ describe('Tools API', () => {
   })
 
   describe('getJobWebSocketUrl', () => {
+    const originalLocation = window.location
+
+    afterEach(() => {
+      // Restore original window.location
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      })
+    })
+
     test('builds WebSocket URL for relative base URL', () => {
       const url = getJobWebSocketUrl('job_01hgw2bbg00000000000000001')
 
@@ -261,6 +272,7 @@ describe('Tools API', () => {
       Object.defineProperty(window, 'location', {
         value: { protocol: 'https:', host: 'example.com' },
         writable: true,
+        configurable: true,
       })
 
       const url = getJobWebSocketUrl('job_01hgw2bbg00000000000000001')
@@ -270,11 +282,23 @@ describe('Tools API', () => {
   })
 
   describe('getGlobalJobsWebSocketUrl', () => {
+    const originalLocation = window.location
+
+    afterEach(() => {
+      // Restore original window.location
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      })
+    })
+
     test('builds WebSocket URL for global jobs channel', () => {
       // Reset window.location to http protocol for this test
       Object.defineProperty(window, 'location', {
         value: { protocol: 'http:', host: 'localhost' },
         writable: true,
+        configurable: true,
       })
 
       const url = getGlobalJobsWebSocketUrl()

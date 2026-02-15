@@ -112,7 +112,7 @@ describe('API Service', () => {
       } as AxiosError<ApiErrorResponse>
 
       // 401 handler returns a never-resolving promise (navigation redirect)
-      errorInterceptor(error)
+      errorInterceptor(error).catch(() => {})
 
       expect(sessionStorage.setItem).toHaveBeenCalledWith('returnUrl', '/collections')
       expect(window.location.href).toBe('/login')
@@ -151,7 +151,7 @@ describe('API Service', () => {
         message: 'Request failed with status code 401',
       } as AxiosError<ApiErrorResponse>
 
-      errorInterceptor(error)
+      errorInterceptor(error).catch(() => {})
 
       expect(sessionStorage.setItem).not.toHaveBeenCalled()
       expect(window.location.href).toBe('/login')
@@ -289,7 +289,7 @@ describe('API Service', () => {
 
       try {
         await errorInterceptor(error)
-        expect.fail('Should have rejected')
+        expect.unreachable('Should have rejected')
       } catch (e: any) {
         expect(e).toHaveProperty('userMessage')
         expect(e.userMessage).toBe('Invalid request')

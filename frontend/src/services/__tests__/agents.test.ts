@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import api from '@/services/api'
 import {
   listAgents,
@@ -506,6 +506,17 @@ describe('Agents Service', () => {
   })
 
   describe('getPoolStatusWebSocketUrl', () => {
+    const originalLocation = window.location
+
+    afterEach(() => {
+      // Restore original window.location
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      })
+    })
+
     test('builds WebSocket URL from relative baseURL', () => {
       // Mock window.location
       Object.defineProperty(window, 'location', {
@@ -514,6 +525,7 @@ describe('Agents Service', () => {
           host: 'app.example.com',
         },
         writable: true,
+        configurable: true,
       })
 
       const url = getPoolStatusWebSocketUrl()
@@ -528,6 +540,7 @@ describe('Agents Service', () => {
           host: 'localhost:3000',
         },
         writable: true,
+        configurable: true,
       })
 
       const url = getPoolStatusWebSocketUrl()

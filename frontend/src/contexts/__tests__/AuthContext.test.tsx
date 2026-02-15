@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import { renderHook } from '@testing-library/react'
 import { AuthProvider, useAuthContext } from '../AuthContext'
@@ -23,13 +23,23 @@ const mockUser: UserInfo = {
 }
 
 describe('AuthContext', () => {
+  const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Prevent actual navigation
     Object.defineProperty(window, 'location', {
       value: { href: '' },
       writable: true,
+      configurable: true,
     })
+  })
+
+  afterEach(() => {
+    // Restore original window.location
+    if (originalLocationDescriptor) {
+      Object.defineProperty(window, 'location', originalLocationDescriptor)
+    }
   })
 
   describe('AuthProvider', () => {

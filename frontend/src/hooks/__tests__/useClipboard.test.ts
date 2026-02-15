@@ -5,18 +5,29 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, waitFor, act } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { useClipboard } from '../useClipboard'
 
 describe('useClipboard', () => {
+  let originalClipboard: Clipboard | undefined
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Suppress console errors in tests
     vi.spyOn(console, 'error').mockImplementation(() => {})
+    // Save original clipboard reference
+    originalClipboard = navigator.clipboard
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    // Restore original clipboard
+    if (originalClipboard !== undefined) {
+      Object.assign(navigator, { clipboard: originalClipboard })
+    } else {
+      // @ts-ignore - restore to undefined if originally undefined
+      delete (navigator as any).clipboard
+    }
   })
 
   it('should copy text to clipboard successfully', async () => {
