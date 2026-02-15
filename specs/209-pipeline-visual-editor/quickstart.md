@@ -76,7 +76,7 @@ cd frontend && npx tsc --noEmit
 ### Phase 3: Flow Analytics
 
 **Start with**:
-1. Agent-side: Extend `pipeline_analyzer.py` to emit `node_stats`/`edge_stats`
+1. Agent-side: Extend `pipeline_analyzer.py` to emit `path_stats`
 2. Backend: Add flow analytics endpoint and schemas
 3. Frontend: `usePipelineAnalytics` hook
 4. Frontend: `AnalyticsEdge` custom edge component
