@@ -43,12 +43,22 @@ export const subscribe = async (
 }
 
 /**
- * Remove a push subscription by endpoint
+ * Remove a push subscription by endpoint (current device)
  */
 export const unsubscribe = async (
   data: PushSubscriptionRemoveRequest
 ): Promise<void> => {
   await api.delete('/notifications/subscribe', { data })
+}
+
+/**
+ * Remove a push subscription by GUID (any device, e.g. lost devices)
+ *
+ * @param guid - Subscription GUID (sub_xxx)
+ */
+export const unsubscribeByGuid = async (guid: string): Promise<void> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'sub'))
+  await api.delete(`/notifications/subscribe/${safeGuid}`)
 }
 
 /**

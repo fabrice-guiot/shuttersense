@@ -11,8 +11,8 @@
  * Issue #114 - PWA with Push Notifications (US2)
  */
 
-import { useCallback } from 'react'
-import { Bell, BellOff, Info, Monitor, Smartphone } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { Bell, BellOff, Info, Monitor, Smartphone, Trash2 } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select'
 import { TimezoneCombobox } from '@/components/ui/timezone-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { formatDate, formatRelativeTime } from '@/utils/dateFormat'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
@@ -123,9 +124,11 @@ export function NotificationPreferences() {
     permissionState,
     isSupported,
     isIosNotInstalled,
+    isCurrentDeviceSubscribed,
     loading: subscriptionLoading,
     subscribe,
     unsubscribe,
+    removeDevice,
   } = usePushSubscription()
 
   const {
@@ -133,6 +136,8 @@ export function NotificationPreferences() {
     loading: preferencesLoading,
     updatePreferences,
   } = useNotificationPreferences()
+
+  const [removingGuid, setRemovingGuid] = useState<string | null>(null)
 
   const loading = subscriptionLoading || preferencesLoading
   const isEnabled = preferences?.enabled ?? false
@@ -154,6 +159,28 @@ export function NotificationPreferences() {
       }
     },
     [subscribe, unsubscribe, updatePreferences]
+  )
+
+  /**
+   * Handle adding this device when notifications are already enabled
+   */
+  const handleAddThisDevice = useCallback(async () => {
+    await subscribe()
+  }, [subscribe])
+
+  /**
+   * Handle removing a specific device by GUID
+   */
+  const handleRemoveDevice = useCallback(
+    async (guid: string) => {
+      setRemovingGuid(guid)
+      try {
+        await removeDevice(guid)
+      } finally {
+        setRemovingGuid(null)
+      }
+    },
+    [removeDevice]
   )
 
   /**
@@ -392,6 +419,36 @@ export function NotificationPreferences() {
                   </div>
                 </div>
 
+                {/* Add this device banner — shown when enabled but current device not subscribed */}
+                {isSupported &&
+                  !isIosNotInstalled &&
+                  permissionState !== 'denied' &&
+                  !isCurrentDeviceSubscribed && (
+                    <Alert className="border-blue-500/30 bg-blue-500/10">
+                      <Info className="h-4 w-4 text-blue-500" />
+                      <AlertDescription className="text-foreground">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="font-medium">
+                              This device is not receiving notifications
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Enable push notifications on this device to receive
+                              alerts here too.
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={handleAddThisDevice}
+                            disabled={loading}
+                          >
+                            Add this device
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                 {/* Device list — when subscriptions exist */}
                 {subscriptions.length > 0 && (
                   <div className="border-t pt-4 space-y-3">
@@ -406,14 +463,26 @@ export function NotificationPreferences() {
                           className="flex items-center gap-3 text-sm"
                         >
                           <DeviceIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">
-                            {sub.device_name || 'Unknown device'}
+                          <span className="flex-1">
+                            <span className="font-medium">
+                              {sub.device_name || 'Unknown device'}
+                            </span>
+                            <span className="ml-2 text-muted-foreground">
+                              {sub.last_used_at
+                                ? `Last used ${formatRelativeTime(sub.last_used_at)}`
+                                : `Added ${formatDate(sub.created_at)}`}
+                            </span>
                           </span>
-                          <span className="text-muted-foreground">
-                            {sub.last_used_at
-                              ? `Last used ${formatRelativeTime(sub.last_used_at)}`
-                              : `Added ${formatDate(sub.created_at)}`}
-                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemoveDevice(sub.guid)}
+                            disabled={loading || removingGuid === sub.guid}
+                            title="Remove this device"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       )
                     })}

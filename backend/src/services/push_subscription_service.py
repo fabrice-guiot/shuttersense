@@ -102,6 +102,45 @@ class PushSubscriptionService:
         )
         return subscription
 
+    def remove_subscription_by_guid(self, user_id: int, team_id: int, guid: str) -> bool:
+        """
+        Remove a push subscription by its GUID.
+
+        Allows users to remove subscriptions from other devices (e.g., lost devices)
+        by referencing the subscription GUID shown in the device list.
+
+        Args:
+            user_id: Owning user's internal ID
+            team_id: Team ID for tenant isolation
+            guid: Subscription GUID (sub_xxx)
+
+        Returns:
+            True if subscription was found and removed
+
+        Raises:
+            NotFoundError: If no subscription matches guid + user + team
+        """
+        subscription = (
+            self.db.query(PushSubscription)
+            .filter(
+                PushSubscription.guid == guid,
+                PushSubscription.user_id == user_id,
+                PushSubscription.team_id == team_id,
+            )
+            .first()
+        )
+
+        if not subscription:
+            raise NotFoundError("PushSubscription", guid)
+
+        self.db.delete(subscription)
+        self.db.commit()
+        logger.info(
+            "Removed push subscription by GUID",
+            extra={"guid": guid, "user_id": user_id},
+        )
+        return True
+
     def remove_subscription(self, user_id: int, team_id: int, endpoint: str) -> bool:
         """
         Remove a push subscription by endpoint for a specific user.

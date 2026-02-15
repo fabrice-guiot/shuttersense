@@ -3,6 +3,7 @@ import api from '@/services/api'
 import {
   subscribe,
   unsubscribe,
+  unsubscribeByGuid,
   getStatus,
   getPreferences,
   updatePreferences,
@@ -75,6 +76,22 @@ describe('Notifications Service', () => {
       await unsubscribe(requestData)
 
       expect(api.delete).toHaveBeenCalledWith('/notifications/subscribe', { data: requestData })
+    })
+  })
+
+  describe('unsubscribeByGuid', () => {
+    test('removes a push subscription by GUID', async () => {
+      const guid = 'sub_01hgw2bbg00000000000000001'
+
+      vi.mocked(api.delete).mockResolvedValue({ data: null })
+
+      await unsubscribeByGuid(guid)
+
+      expect(api.delete).toHaveBeenCalledWith(`/notifications/subscribe/${encodeURIComponent(guid)}`)
+    })
+
+    test('throws error for invalid GUID', async () => {
+      await expect(unsubscribeByGuid('invalid_guid')).rejects.toThrow('Invalid GUID format')
     })
   })
 
