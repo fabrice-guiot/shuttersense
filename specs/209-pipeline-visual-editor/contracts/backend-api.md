@@ -150,7 +150,9 @@ def get_flow_analytics(
        that include each edge (consecutive node pairs in each path)
     4. Derive per-node counts by summing image_count across all paths
        that include each node
-    5. Calculate percentages relative to Capture node record count
+    5. Calculate percentages:
+       - Node percentages: relative to Capture node record count (global view)
+       - Edge percentages: relative to upstream (source) node record count (branching view)
     6. Return structured response with derived nodes[] and edges[]
     """
 ```
