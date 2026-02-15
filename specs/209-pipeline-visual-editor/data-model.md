@@ -234,5 +234,5 @@ Created (v1, inactive, may be valid/invalid)
 
 **No database migration required.** All changes are within existing JSONB columns:
 - `pipelines.nodes_json`: Optional `position` field per node object
-- `analysis_results.results_json`: Optional `node_stats` and `edge_stats` fields (Phase 3)
+- `analysis_results.results_json`: Optional `path_stats` field (Phase 3)
 - Both are backward-compatible: absence of these fields is handled gracefully by the application layer
