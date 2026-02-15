@@ -3,7 +3,7 @@
 **Issue**: [#217](https://github.com/fabrice-guiot/shuttersense/issues/217)
 **Status**: Draft
 **Created**: 2026-02-15
-**Last Updated**: 2026-02-15
+**Last Updated**: 2026-02-15 (v1.2)
 **Related Documents**:
 - [Domain Model](../domain-model.md)
 - [Pipeline Validation Spec](../../specs/003-pipeline-validation/spec.md)
@@ -139,8 +139,8 @@ Unifying all analysis tools on the Pipeline definition:
       require_sidecar: Set[str]     # Inferred from path analysis
       processing_suffixes: Dict[str, str]  # method_id → node display name
   ```
-- **FR-100.2**: `photo_extensions` MUST be derived by collecting the `extension` property from all File nodes whose extension matches known image formats (`.dng`, `.cr3`, `.tiff`, `.jpg`, `.nef`, `.arw`, etc.). The categorization (image vs. metadata) MUST be determined by the File node's position in the graph: File nodes directly downstream of the Capture node (before any Process node) represent raw/image files; File nodes with `.xmp` extension represent metadata.
-- **FR-100.3**: `metadata_extensions` MUST be derived from File nodes whose `extension` is a recognized metadata format (`.xmp` and any future sidecar formats).
+- **FR-100.2**: `photo_extensions` MUST be derived by collecting the `extension` property from all File nodes whose extension is **not** a recognized metadata format. Implementations MUST NOT rely on a hardcoded list of image extensions — any File node extension that is not in the `METADATA_EXTENSIONS` set (currently `{".xmp"}`) is treated as an image extension. This ensures new image formats added to the Pipeline are automatically recognized without code changes. See FR-600.1/FR-600.2 for the complete categorization rules.
+- **FR-100.3**: `metadata_extensions` MUST be derived from File nodes whose `extension` is in the recognized metadata formats set (`METADATA_EXTENSIONS`, currently `{".xmp"}`). When new metadata formats are introduced (e.g., `.mie`), they are added to this single set — no hardcoded image extension list needs updating.
 - **FR-100.4**: `require_sidecar` MUST be inferred by analyzing Pipeline paths: if a path exists from the Capture node through File nodes where an image extension and a metadata extension appear in connected nodes (siblings — same parent Process or Capture node), then the image extension requires a sidecar. For example, if a Capture node outputs to both a `.cr3` File node and an `.xmp` File node, then `.cr3` requires a sidecar.
 - **FR-100.5**: `processing_suffixes` MUST be derived from all Process nodes in the Pipeline. Each Process node's `method_ids` array provides the suffix codes; the node's `name` property provides the human-readable description. Example: Process node named "HDR Merge" with `method_ids: ["HDR"]` yields `{"HDR": "HDR Merge"}`.
 - **FR-100.6**: `filename_regex` and `camera_id_group` MUST be taken directly from the Capture node's properties.
@@ -165,11 +165,11 @@ Unifying all analysis tools on the Pipeline definition:
 
 #### FR-400: Camera Entity & Auto-Discovery
 
-- **FR-400.1**: Create a `Camera` database model with the following fields:
+- **FR-400.1**: Create a `Camera` database model with the following fields. The model MUST use `ExternalIdMixin` (not `GuidMixin`) to match the codebase pattern for GUID generation (prefix `cam_`):
   ```python
-  class Camera(Base, GuidMixin, AuditMixin):
+  class Camera(Base, ExternalIdMixin, AuditMixin):
       __tablename__ = "cameras"
-      # GUID prefix: cam_
+      GUID_PREFIX = "cam"   # → cam_01hgw2bbg...
       team_id: int          # FK(teams.id), not null
       camera_id: str        # 4-char ID from filenames, not null
       status: str           # "temporary" | "confirmed", default "temporary"
@@ -202,18 +202,20 @@ Unifying all analysis tools on the Pipeline definition:
 
 #### FR-600: Extension Categorization from File Nodes
 
-- **FR-600.1**: File nodes MUST be categorized as "image" or "metadata" based on their `extension` property. The categorization rules are:
-  - **Metadata**: `.xmp` (case-insensitive)
-  - **Image**: All other File node extensions (`.dng`, `.cr3`, `.tiff`, `.jpg`, `.nef`, `.arw`, etc.)
-- **FR-600.2**: The categorization MUST NOT rely on a hardcoded list of image extensions. Any File node extension that is not `.xmp` is treated as an image extension. This ensures new formats added to the Pipeline are automatically recognized.
+- **FR-600.1**: File nodes MUST be categorized as "image" or "metadata" based on their `extension` property and the `METADATA_EXTENSIONS` set (currently `{".xmp"}`). The categorization rules are:
+  - **Metadata**: Any extension present in `METADATA_EXTENSIONS` (case-insensitive)
+  - **Image**: Any extension **not** in `METADATA_EXTENSIONS`
+  Implementations MUST NOT use a hardcoded list of image extensions. The image category is defined by exclusion: everything that is not metadata is an image.
+- **FR-600.2**: The categorization MUST NOT rely on a hardcoded list of image extensions. Any File node extension that is not in `METADATA_EXTENSIONS` is treated as an image extension. This ensures new image formats added to the Pipeline (e.g., `.heif`, `.jxl`) are automatically recognized without code changes. Only the `METADATA_EXTENSIONS` set needs to be maintained.
 - **FR-600.3**: File nodes marked as `optional: true` MUST still be included in the extension sets. Optional files are valid extensions — their optionality affects validation, not recognition.
 
 #### FR-700: Sidecar Requirement Inference
 
-- **FR-700.1**: A `require_sidecar` relationship MUST be inferred when an image File node and a metadata File node share a common parent node (connected via edges from the same upstream node).
-- **FR-700.2**: Example: If a Capture node has edges to both a `.cr3` File node and a `.xmp` File node, then `.cr3` is inferred to require a `.xmp` sidecar.
-- **FR-700.3**: If multiple metadata File nodes exist (e.g., `.xmp` and a future `.mie`), each creates a separate sidecar requirement for sibling image File nodes.
-- **FR-700.4**: The inference MUST handle Process nodes as intermediate parents. If a Process node outputs to both `.tiff` and `.xmp` File nodes, then `.tiff` requires a `.xmp` sidecar at that pipeline stage.
+- **FR-700.1**: A `require_sidecar` relationship MUST be inferred when a **non-optional** image File node and a **non-optional** metadata File node share a common parent node (connected via edges from the same upstream node). Only non-optional (i.e., `optional: false` or `optional` not set) metadata File nodes create hard sidecar requirements.
+- **FR-700.2**: Example: If a Capture node has edges to both a `.cr3` File node (non-optional) and a `.xmp` File node (non-optional), then `.cr3` is inferred to require a `.xmp` sidecar. However, if the `.xmp` File node has `optional: true`, no sidecar requirement is inferred for `.cr3`.
+- **FR-700.3**: If multiple non-optional metadata File nodes exist (e.g., `.xmp` and a future `.mie`), each creates a separate sidecar requirement for sibling image File nodes. Optional metadata File nodes are excluded from sidecar inference.
+- **FR-700.4**: The inference MUST handle Process nodes as intermediate parents. If a Process node outputs to both a `.tiff` File node and a non-optional `.xmp` File node, then `.tiff` requires a `.xmp` sidecar at that pipeline stage. If the `.xmp` node is optional, no requirement is created.
+- **FR-700.5**: File nodes with `optional: true` MUST NOT create hard `require_sidecar` relationships for sibling image File nodes. Optional metadata is recognized as a valid extension (per FR-600.3) but its absence does not constitute an orphan or validation error. This ensures that Pipeline authors can mark metadata as "supported but not mandatory" without triggering false orphan reports in PhotoStats. Note: a future enhancement may introduce a soft/warning behavior where optional metadata absence produces a non-blocking warning rather than an error, but v1 treats optional metadata as fully non-binding for sidecar inference.
 
 #### FR-800: Frontend — "Resources" Page Consolidation
 
@@ -254,7 +256,7 @@ The Camera management UI is introduced alongside an existing Pipelines page. Rat
 
 #### NFR-200: Data Integrity
 
-- **NFR-200.1**: Camera auto-creation MUST be idempotent. Concurrent analysis jobs discovering the same camera ID MUST NOT create duplicate Camera records. Use `INSERT ... ON CONFLICT DO NOTHING` or equivalent.
+- **NFR-200.1**: Camera auto-creation MUST be idempotent. Concurrent analysis jobs discovering the same camera ID MUST NOT create duplicate Camera records. The implementation MUST use a DB-agnostic pattern (not PostgreSQL-specific `INSERT ... ON CONFLICT`): perform an explicit check-before-insert within the same transaction using `session.query(Camera).filter_by(team_id=..., camera_id=...)` and create only if not found, or use `session.merge()`. This ensures tests run on SQLite and production on PostgreSQL without dialect-specific SQL. The unique constraint on `(team_id, camera_id)` serves as a safety net for race conditions.
 - **NFR-200.2**: Pipeline-derived extension sets MUST be case-insensitive. `.DNG` and `.dng` are treated as the same extension.
 - **NFR-200.3**: `PipelineToolConfig` extraction MUST be deterministic — the same Pipeline definition always produces the same config.
 
@@ -378,7 +380,9 @@ def _infer_sidecar_requirements(
     Infer which image extensions require a sidecar file.
 
     Rule: If a parent node (Capture or Process) has edges to both an image
-    File node and a metadata File node, the image extension requires a sidecar.
+    File node and a NON-OPTIONAL metadata File node, the image extension
+    requires a sidecar. Optional metadata File nodes (optional: true) do
+    NOT create sidecar requirements — their absence is not an error.
     """
     # Build parent → children map
     children_by_parent: Dict[str, list] = {}
@@ -399,12 +403,14 @@ def _infer_sidecar_requirements(
             if n and n.get("type") == "file"
         ]
 
-        has_metadata = any(
+        # Only non-optional metadata File nodes create sidecar requirements
+        has_required_metadata = any(
             n["properties"].get("extension", "").lower() in metadata_exts
+            and not n["properties"].get("optional", False)
             for n in child_file_nodes
         )
 
-        if has_metadata:
+        if has_required_metadata:
             for n in child_file_nodes:
                 ext = n["properties"].get("extension", "").lower()
                 if ext in photo_exts:
@@ -450,9 +456,16 @@ class Camera(Base, ExternalIdMixin, AuditMixin):
     team = relationship("Team", back_populates="cameras")
 ```
 
-### 4. Camera Discovery Endpoint (Agent-Facing)
+**Reciprocal relationship on Team model** (`backend/src/models/team.py` — existing file, add relationship):
 
-**File**: `backend/src/api/agent/camera_routes.py` (new)
+```python
+# Add to Team model
+cameras = relationship("Camera", back_populates="team")
+```
+
+### 4. Camera Discovery Endpoint & Service (Agent-Facing)
+
+**Endpoint** (`backend/src/api/agent/camera_routes.py` — new):
 
 ```python
 @router.post("/cameras/discover")
@@ -472,6 +485,56 @@ async def discover_cameras(
         user_id=agent.system_user_id,
     )
     return CameraDiscoverResponse(cameras=cameras)
+```
+
+**Service** (`backend/src/services/camera_service.py` — discover method, DB-agnostic):
+
+```python
+def discover_cameras(
+    self,
+    camera_ids: List[str],
+    team_id: int,
+    user_id: Optional[int] = None,
+) -> List[Camera]:
+    """
+    Idempotent camera discovery: create records for new IDs, skip existing.
+
+    Uses DB-agnostic check-before-insert (no INSERT ON CONFLICT) so tests
+    run on SQLite and production on PostgreSQL without dialect-specific SQL.
+    """
+    results: List[Camera] = []
+    for camera_id in camera_ids:
+        existing = (
+            self.db.query(Camera)
+            .filter_by(team_id=team_id, camera_id=camera_id)
+            .first()
+        )
+        if existing:
+            results.append(existing)
+        else:
+            try:
+                camera = Camera(
+                    team_id=team_id,
+                    camera_id=camera_id,
+                    status="temporary",
+                    display_name=camera_id,
+                    created_by_user_id=user_id,
+                    updated_by_user_id=user_id,
+                )
+                self.db.add(camera)
+                self.db.flush()  # Triggers unique constraint check
+                results.append(camera)
+            except IntegrityError:
+                # Race condition: another request created it concurrently
+                self.db.rollback()
+                existing = (
+                    self.db.query(Camera)
+                    .filter_by(team_id=team_id, camera_id=camera_id)
+                    .first()
+                )
+                if existing:
+                    results.append(existing)
+    return results
 ```
 
 ### 5. Modified Tool Execution Flow
@@ -508,6 +571,12 @@ def _execute_tool(
             pipeline_tool_config=pipeline_tool_config,
         )
     elif tool == "pipeline_validation":
+        # Pipeline_Validation already derives its config from the Pipeline
+        # definition internally via build_pipeline_config(). It does NOT use
+        # PipelineToolConfig because it requires the full PipelineConfig graph
+        # structure (nodes, edges, paths) rather than the simplified extraction.
+        # The photo_extensions and metadata_extensions passed here are used
+        # only for file filtering before the pipeline graph is applied.
         return _run_pipeline_validation(
             file_infos, photo_extensions, metadata_extensions,
             team_config, location
@@ -515,6 +584,8 @@ def _execute_tool(
     else:
         raise ValueError(f"Unknown tool: {tool}")
 ```
+
+**Design note on Pipeline_Validation**: `_run_pipeline_validation()` invokes `build_pipeline_config()` directly on `team_config.default_pipeline.nodes` and `team_config.default_pipeline.edges` to obtain the full `PipelineConfig` graph structure. This is intentionally different from how PhotoStats and Photo_Pairing consume the Pipeline: those tools use the simplified `PipelineToolConfig` extraction (extensions, regex, suffixes) while Pipeline_Validation needs the complete graph for path traversal and validation. The `photo_extensions` and `metadata_extensions` parameters forwarded to Pipeline_Validation are used only for initial file filtering (which files to analyze), and these are already derived from `PipelineToolConfig` when a Pipeline is available, ensuring consistency across all three tools at the file-selection level.
 
 ### 6. Photo_Pairing with Pipeline-Driven Parsing
 
@@ -540,7 +611,7 @@ def _run_photo_pairing(
     invalid_files = group_result.get("invalid_files", [])
 
     # Camera auto-discovery (if online)
-    camera_names = _discover_cameras(imagegroups)  # Returns {camera_id: display_name}
+    camera_names = _discover_cameras(imagegroups)
 
     # Build analytics config from Pipeline or empty dict
     analytics_config = {}
@@ -555,7 +626,100 @@ def _run_photo_pairing(
     # ... (rest of reporting unchanged)
 ```
 
-### 7. Pipeline Resolution in Agent Run Flow
+### 7. Camera Auto-Discovery Function
+
+**File**: `agent/cli/run.py` (new function)
+
+```python
+import logging
+from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+def _discover_cameras(
+    imagegroups: List[dict],
+    http_client: Optional[AgentApiClient] = None,
+    timeout: int = 5,
+) -> Dict[str, str]:
+    """
+    Discover and register camera IDs found during analysis.
+
+    Extracts unique camera IDs from imagegroups, calls the server's
+    discovery endpoint to register new cameras and resolve display names.
+
+    Args:
+        imagegroups: List of imagegroup dicts from build_imagegroups(),
+            each containing a "camera_id" field.
+        http_client: Optional AgentApiClient instance. When None (offline
+            mode or unconfigured), skips the server call and returns
+            identity-mapped fallback.
+        timeout: HTTP request timeout in seconds.
+
+    Returns:
+        Dict mapping each discovered camera_id to its display_name.
+        Example: {"AB3D": "Canon EOS R5", "XYZW": "XYZW"}
+
+    Offline/failure behavior:
+        On network error, timeout, non-200 response, or when http_client
+        is None, returns a fallback dict mapping each camera_id to itself
+        (identity mapping) and logs a warning. This ensures analysis
+        never fails due to camera discovery issues.
+    """
+    # Extract and deduplicate camera IDs from imagegroups
+    camera_ids: set[str] = set()
+    for group in imagegroups:
+        cid = group.get("camera_id")
+        if cid:
+            camera_ids.add(cid)
+
+    if not camera_ids:
+        return {}
+
+    unique_ids = sorted(camera_ids)  # Sort for deterministic requests
+
+    # Fallback: identity mapping (camera_id → camera_id)
+    fallback = {cid: cid for cid in unique_ids}
+
+    if http_client is None:
+        logger.info(
+            "Camera discovery skipped (no HTTP client): %d camera IDs",
+            len(unique_ids),
+        )
+        return fallback
+
+    try:
+        # POST /api/agent/v1/cameras/discover
+        # Request body: {"camera_ids": ["AB3D", "XYZW"]}
+        # Response body: {"cameras": [{"camera_id": "AB3D", "display_name": "Canon EOS R5"}, ...]}
+        response = http_client.discover_cameras(
+            camera_ids=unique_ids,
+            timeout=timeout,
+        )
+        # Build mapping from response
+        result: Dict[str, str] = {}
+        for cam in response.get("cameras", []):
+            cid = cam.get("camera_id", "")
+            name = cam.get("display_name") or cid  # Fallback to ID if name is null
+            result[cid] = name
+        # Ensure all requested IDs are present (server may omit on error)
+        for cid in unique_ids:
+            if cid not in result:
+                result[cid] = cid
+        return result
+
+    except Exception as e:
+        logger.warning(
+            "Camera discovery failed (%s): %d camera IDs will use raw IDs. "
+            "Error: %s",
+            type(e).__name__,
+            len(unique_ids),
+            e,
+        )
+        return fallback
+```
+
+### 8. Pipeline Resolution in Agent Run Flow
 
 ```python
 # In the run command, after resolving team_config:
@@ -630,13 +794,14 @@ Collection
 3. Implement Process node suffix extraction
 4. Implement sidecar requirement inference from Pipeline paths
 5. Create `Camera` model in `backend/src/models/camera.py`
-6. Create Alembic migration for `cameras` table with unique constraint on `(team_id, camera_id)`
-7. Create `CameraService` in `backend/src/services/camera_service.py` with CRUD operations and `discover_cameras()` method
-8. Create Camera API schemas in `backend/src/schemas/camera.py`
-9. Create Camera API endpoints (`GET /api/cameras`, `GET /api/cameras/{guid}`, `PUT /api/cameras/{guid}`, `DELETE /api/cameras/{guid}`, `GET /api/cameras/stats`)
-10. Create agent-facing `POST /api/agent/v1/cameras/discover` endpoint
-11. Unit tests for `extract_tool_config()` with various Pipeline structures
-12. Unit tests for Camera service (CRUD, discover, idempotency)
+6. Add reciprocal `cameras` relationship to the `Team` model (`backend/src/models/team.py`)
+7. Create Alembic migration for `cameras` table with unique constraint on `(team_id, camera_id)`
+8. Create `CameraService` in `backend/src/services/camera_service.py` with CRUD operations and `discover_cameras()` method
+9. Create Camera API schemas in `backend/src/schemas/camera.py`
+10. Create Camera API endpoints (`GET /api/cameras`, `GET /api/cameras/{guid}`, `PUT /api/cameras/{guid}`, `DELETE /api/cameras/{guid}`, `GET /api/cameras/stats`)
+11. Create agent-facing `POST /api/agent/v1/cameras/discover` endpoint
+12. Unit tests for `extract_tool_config()` with various Pipeline structures
+13. Unit tests for Camera service (CRUD, discover, idempotency)
 
 **Checkpoint**: `PipelineToolConfig` correctly extracted from Pipeline definitions. Camera entity exists with CRUD API and agent discovery endpoint.
 
@@ -699,7 +864,8 @@ Collection
 
 1. Create `ResourcesPage` component at `frontend/src/pages/ResourcesPage.tsx` with URL-synced tabs (`useSearchParams`), following the `DirectoryPage.tsx` pattern
 2. Refactor existing `PipelinesPage` into a `PipelinesTab` component (preserve all Pipeline functionality: list, CRUD, activate, validate graph, import/export, KPI stats)
-3. Replace the `/pipelines` route with `/resources` in `App.tsx`; add redirect from `/pipelines` to `/resources?tab=pipelines`
+3a. Add the new `/resources` route in `App.tsx` pointing to `<ResourcesPage />` with `pageTitle: 'Resources'`, `pageIcon: Box`, and `pageHelp` text
+3b. Convert the existing `/pipelines` route in `App.tsx` to a redirect to `/resources?tab=pipelines` for backward compatibility (bookmarks, shared links). Both the new route (3a) and the redirect (3b) MUST coexist in the route configuration.
 4. Update `Sidebar.tsx`: replace "Pipelines" menu entry with "Resources" (`Box` icon, `/resources` href)
 5. Create `CamerasTab` component with Camera list table (columns: Camera ID, Display Name, Make, Model, Status, Modified)
 6. Add Camera edit dialog for confirming temporary cameras (status → confirmed, add make/model/serial/notes)
@@ -766,7 +932,7 @@ Collection
 
 - **Impact**: Medium — Duplicate Camera records for the same camera_id.
 - **Probability**: Low — Unique constraint on `(team_id, camera_id)` prevents duplicates at the DB level.
-- **Mitigation**: Use `INSERT ... ON CONFLICT (team_id, camera_id) DO NOTHING` for idempotent creation. The discover endpoint handles conflicts gracefully.
+- **Mitigation**: Use a DB-agnostic check-before-insert within the same transaction (see NFR-200.1). The unique constraint acts as a safety net: if a race condition causes a duplicate insert attempt, the `IntegrityError` is caught and the existing record is returned. The discover endpoint handles conflicts gracefully without dialect-specific SQL.
 
 ### Risk 5: No Pipeline Available (New/Unconfigured Teams)
 
@@ -854,6 +1020,15 @@ Collection
 
 ## Revision History
 
+- **2026-02-15 (v1.2)**: Review feedback — 7 clarifications and fixes
+  - **FR-700.5 (new)**: Optional metadata File nodes (`optional: true`) MUST NOT create hard `require_sidecar` relationships. Updated FR-700.1–FR-700.4 examples and §2 sidecar inference code to exclude optional metadata.
+  - **§7 _discover_cameras (new)**: Added full specification with function signature `_discover_cameras(imagegroups, http_client=None, timeout=5)`, camera ID extraction/dedup, HTTP call to discover endpoint, return shape (`Dict[str, str]`), and offline/failure fallback (identity mapping + logged warning).
+  - **Phase 1 Task 6 (new)**: Add reciprocal `cameras` relationship to Team model (`backend/src/models/team.py`). Updated §3 Camera model code with reciprocal relationship note.
+  - **Phase 5 Task 3 split**: Split into Task 3a (add `/resources` route in `App.tsx`) and Task 3b (convert `/pipelines` to redirect to `/resources?tab=pipelines`), clarifying both must coexist.
+  - **FR-400.1 mixin fix**: Changed Camera model declaration from `GuidMixin` to `ExternalIdMixin` to match codebase pattern. Added `GUID_PREFIX = "cam"`.
+  - **FR-100.2 / FR-600.1–600.2 alignment**: Removed hardcoded image extension list from FR-100.2. Both sections now consistently state that any non-`METADATA_EXTENSIONS` extension is an image extension. Implementations MUST NOT rely on hardcoded image format lists.
+  - **NFR-200.1 / Risk 4 / §4 DB-agnostic**: Replaced PostgreSQL-specific `INSERT ... ON CONFLICT` with DB-agnostic check-before-insert pattern using `session.query().filter_by()` + `IntegrityError` catch. Added full `discover_cameras()` service method implementation.
+  - **§5 pipeline_validation clarification**: Added inline comment and design note explaining that Pipeline_Validation intentionally does NOT use `PipelineToolConfig` — it invokes `build_pipeline_config()` directly for the full graph structure. The shared `photo_extensions`/`metadata_extensions` ensure file-selection consistency.
 - **2026-02-15 (v1.1)**: Added "Resources" page consolidation (FR-800)
   - New FR-800 section: Camera and Pipelines consolidated under a tabbed "Resources" page, replacing the standalone Pipelines menu entry
   - Follows the existing `DirectoryPage.tsx` tab pattern (URL-synced tabs via `useSearchParams`)
