@@ -215,6 +215,35 @@ Unifying all analysis tools on the Pipeline definition:
 - **FR-700.3**: If multiple metadata File nodes exist (e.g., `.xmp` and a future `.mie`), each creates a separate sidecar requirement for sibling image File nodes.
 - **FR-700.4**: The inference MUST handle Process nodes as intermediate parents. If a Process node outputs to both `.tiff` and `.xmp` File nodes, then `.tiff` requires a `.xmp` sidecar at that pipeline stage.
 
+#### FR-800: Frontend — "Resources" Page Consolidation
+
+The Camera management UI is introduced alongside an existing Pipelines page. Rather than adding a new top-level menu entry for Cameras, both are consolidated under a single **"Resources"** page with tabs — following the same pattern as the existing "Directory" page (which hosts Locations, Organizers, and Performers as tabs).
+
+- **FR-800.1**: Create a new `ResourcesPage` component at `frontend/src/pages/ResourcesPage.tsx` using the tab pattern from `DirectoryPage.tsx` (URL-synced tabs via `useSearchParams`).
+- **FR-800.2**: The Resources page MUST have two initial tabs:
+  - **Cameras** (`?tab=cameras`) — Camera list with CRUD, status filtering, and auto-discovered camera management.
+  - **Pipelines** (`?tab=pipelines`) — The existing `PipelinesPage` content refactored into a `PipelinesTab` component.
+- **FR-800.3**: The sidebar menu entry MUST replace the current "Pipelines" entry:
+  - **id**: `resources`
+  - **icon**: `Box` (from lucide-react — represents equipment/resources; distinct from existing icons)
+  - **label**: "Resources"
+  - **href**: `/resources`
+- **FR-800.4**: The route configuration in `App.tsx` MUST replace the `/pipelines` route:
+  ```typescript
+  {
+    path: '/resources',
+    element: <ResourcesPage />,
+    pageTitle: 'Resources',
+    pageIcon: Box,
+    pageHelp: 'Manage cameras, pipelines, and other equipment resources',
+  }
+  ```
+- **FR-800.5**: The old `/pipelines` route MUST redirect to `/resources?tab=pipelines` for backward compatibility (bookmarks, shared links).
+- **FR-800.6**: The default tab when navigating to `/resources` (no `?tab` param) MUST be `cameras`.
+- **FR-800.7**: The existing `PipelinesPage` component MUST be refactored into a `PipelinesTab` component. All Pipeline functionality (list, create, edit, delete, activate, validate, import/export) MUST be preserved in the tab form. The KPI stats (total pipelines, active count, default pipeline) MUST continue to be set in the TopHeader when the Pipelines tab is active.
+- **FR-800.8**: When the Cameras tab is active, the TopHeader KPI stats MUST show Camera-specific stats (total cameras, confirmed count, temporary count) from the `GET /api/cameras/stats` endpoint.
+- **FR-800.9**: Each tab MUST manage its own action buttons following the existing tabbed page pattern: tabs + action buttons on the same row, with responsive stacking on mobile.
+
 ### Non-Functional Requirements
 
 #### NFR-100: Performance
@@ -664,20 +693,24 @@ Collection
 
 ---
 
-### Phase 5: Frontend — Camera Management UI
+### Phase 5: Frontend — "Resources" Page & Camera Management UI
 
 **Tasks:**
 
-1. Create Camera list page or tab (within Equipment/Settings section)
-2. Display Camera table with columns: Camera ID, Display Name, Make, Model, Status, Modified
-3. Add Camera edit dialog for confirming temporary cameras (status → confirmed, add make/model/serial)
-4. Add Camera stats to TopHeader KPI area
-5. Create `useCameras` hook and Camera API service
-6. Add Camera TypeScript contracts in `frontend/src/contracts/api/camera-api.ts`
-7. Wire Camera names into Photo_Pairing results display (reports show resolved names)
-8. Component tests for Camera list and edit dialog
+1. Create `ResourcesPage` component at `frontend/src/pages/ResourcesPage.tsx` with URL-synced tabs (`useSearchParams`), following the `DirectoryPage.tsx` pattern
+2. Refactor existing `PipelinesPage` into a `PipelinesTab` component (preserve all Pipeline functionality: list, CRUD, activate, validate graph, import/export, KPI stats)
+3. Replace the `/pipelines` route with `/resources` in `App.tsx`; add redirect from `/pipelines` to `/resources?tab=pipelines`
+4. Update `Sidebar.tsx`: replace "Pipelines" menu entry with "Resources" (`Box` icon, `/resources` href)
+5. Create `CamerasTab` component with Camera list table (columns: Camera ID, Display Name, Make, Model, Status, Modified)
+6. Add Camera edit dialog for confirming temporary cameras (status → confirmed, add make/model/serial/notes)
+7. Add Camera status filter (All / Temporary / Confirmed)
+8. Wire TopHeader KPI stats per-tab: Camera stats when Cameras tab is active, Pipeline stats when Pipelines tab is active
+9. Create `useCameras` hook and Camera API service
+10. Add Camera TypeScript contracts in `frontend/src/contracts/api/camera-api.ts`
+11. Wire Camera names into Photo_Pairing results display (reports show resolved names)
+12. Component tests for ResourcesPage, CamerasTab, PipelinesTab, and Camera edit dialog
 
-**Checkpoint**: Users can view, edit, and confirm auto-discovered cameras. Photo_Pairing reports display camera names.
+**Checkpoint**: "Resources" menu entry replaces "Pipelines". Cameras tab shows auto-discovered cameras with edit/confirm flow. Pipelines tab preserves all existing functionality. `/pipelines` redirects to `/resources?tab=pipelines`.
 
 ---
 
@@ -753,7 +786,7 @@ Collection
 
 | Entity | Change Type | Details |
 |--------|-------------|---------|
-| Camera | **New** | New model, migration, service, API endpoints, frontend UI |
+| Camera | **New** | New model, migration, service, API endpoints, frontend tab |
 | Collection | Unchanged | Existing `pipeline_id` / `pipeline_version` fields are sufficient |
 | Pipeline | Unchanged | No schema changes; existing node properties are sufficient |
 | PipelineConfig | Extended | `PipelineToolConfig` is a new extraction layer, not a model change |
@@ -761,6 +794,10 @@ Collection
 | PhotoStats Analyzer | Modified | Accepts Pipeline-derived extensions |
 | Photo_Pairing Analyzer | Modified | Accepts Pipeline regex, suffixes, and camera names |
 | FilenameParser | Unchanged | Retained as fallback utility |
+| PipelinesPage | **Refactored** | Extracted into `PipelinesTab`; hosted within new `ResourcesPage` |
+| ResourcesPage | **New** | New tabbed page replacing Pipelines in sidebar; hosts Cameras and Pipelines tabs |
+| Sidebar | Modified | "Pipelines" entry replaced by "Resources" (`Box` icon, `/resources` href) |
+| App.tsx routes | Modified | `/pipelines` route replaced by `/resources`; redirect added for backward compat |
 
 ---
 
@@ -804,17 +841,27 @@ Collection
 - **Camera EXIF enrichment**: Extract camera make, model, and serial number from EXIF metadata during analysis and update Camera records automatically.
 - **Camera merge UI**: Allow merging multiple Camera records that represent the same physical camera (e.g., after firmware update changes the camera ID).
 - **Pipeline diff for tools**: Show what changes in analysis behavior when switching a Collection's Pipeline assignment.
+- **Processing Software tab**: Add a third tab to the Resources page for tracking processing software (Lightroom, Capture One, etc.) referenced by Pipeline Process nodes.
 
 ### v2.0
 - **Config table cleanup**: Once all teams have Pipelines, deprecate the tool-related fields in `configurations` table.
 - **Per-collection extension override**: Allow Collections to override Pipeline-derived extensions for edge cases.
 - **Camera health analysis**: Actuation tracking and maintenance predictions using the Camera entity (as described in domain model Phase 9).
+- **Lenses tab**: Add a Lenses tab to the Resources page for tracking lens equipment, linked to Camera bodies.
 - **Tool configuration preview**: Show what parameters each tool will use before running analysis, based on the resolved Pipeline.
 
 ---
 
 ## Revision History
 
+- **2026-02-15 (v1.1)**: Added "Resources" page consolidation (FR-800)
+  - New FR-800 section: Camera and Pipelines consolidated under a tabbed "Resources" page, replacing the standalone Pipelines menu entry
+  - Follows the existing `DirectoryPage.tsx` tab pattern (URL-synced tabs via `useSearchParams`)
+  - Sidebar: "Pipelines" entry replaced by "Resources" with `Box` icon
+  - `/pipelines` redirect to `/resources?tab=pipelines` for backward compatibility
+  - Rewrote Phase 5 with Resources page creation, PipelinesPage → PipelinesTab refactor, and CamerasTab
+  - Updated Affected Entities with PipelinesPage refactor, ResourcesPage, Sidebar, and App.tsx route changes
+  - Added Processing Software tab (v1.1) and Lenses tab (v2.0) to Future Enhancements
 - **2026-02-15 (v1.0)**: Initial draft
   - Defined Pipeline-to-tool configuration extraction via `PipelineToolConfig`
   - Specified integration of Pipeline-derived extensions, regex, and suffixes into PhotoStats and Photo_Pairing
