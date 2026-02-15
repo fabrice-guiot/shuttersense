@@ -31,6 +31,8 @@ Analysis tools are executed through the ShutterSense agent binary (`shuttersense
 - Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Dialog, Tailwind CSS 4.x, Lucide React (frontend) (136-agent-setup-wizard)
 - Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend) (182-calendar-conflict-viz)
 - PostgreSQL (existing `configurations` table for new settings — no new tables or migrations for schema changes) (182-calendar-conflict-viz)
+- Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend); **NEW**: `@xyflow/react`, `@dagrejs/dagre` (209-pipeline-visual-editor)
+- PostgreSQL JSONB (`nodes_json`, `edges_json`) — no DB migration required; position data is added as an optional field within existing JSONB objects (209-pipeline-visual-editor)
 
 ### Backend
 - **Python 3.11+** - Required for ExceptionGroup, tomllib, and modern type hinting
@@ -621,9 +623,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
+- 209-pipeline-visual-editor: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend); **NEW**: `@xyflow/react`, `@dagrejs/dagre`
 - 182-calendar-conflict-viz: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend)
 - 136-agent-setup-wizard: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Dialog, Tailwind CSS 4.x, Lucide React (frontend)
-- 120-audit-trail-visibility: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Popover, Tailwind CSS 4.x (frontend)
 
 ### Issue #107: Cloud Storage Bucket Inventory Import (2026-01)
 
