@@ -2533,3 +2533,50 @@ class TestEventPresetFiltering:
         data = response.json()
         # Default: next 30 days from today → e0, e1, e2, e3
         assert len(data) == 4
+
+    @pytest.mark.usefixtures("preset_events")
+    def test_logistics_preset_with_date_range_applies_both_filters(self, test_client):
+        """Regression: logistics preset with date range must combine date window AND logistics filter.
+
+        Previously, when end_date was provided the logistics filters (ticket_required,
+        ticket_status, etc.) were skipped because the date window and logistics filters
+        were in a single if/elif chain. The date window branch would match first and the
+        logistics branch would never execute.
+        """
+        today = date.today()
+        wide_start = today.isoformat()
+        wide_end = (today + timedelta(days=365)).isoformat()
+
+        # needs_tickets with a wide date range: should still only return events
+        # where ticket_required=True AND ticket_status != 'ready'
+        response = test_client.get(
+            f"/api/events?preset=needs_tickets&start_date={wide_start}&end_date={wide_end}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        titles = [e["title"] for e in data]
+        # e0 (not_purchased) and e5 (purchased, not ready) should match
+        assert "Needs Ticket Event" in titles
+        assert "Far Future Needs Ticket" in titles
+        # e3 (ticket_status=ready) must NOT appear despite being in date range
+        assert "All Good Event" not in titles
+        # e4 (no ticket_required) must NOT appear
+        assert "Far Future Event" not in titles
+
+        # needs_pto with date range: only e1
+        response = test_client.get(
+            f"/api/events?preset=needs_pto&start_date={wide_start}&end_date={wide_end}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "Needs PTO Event"
+
+        # needs_travel with date range: only e2
+        response = test_client.get(
+            f"/api/events?preset=needs_travel&start_date={wide_start}&end_date={wide_end}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "Needs Travel Event"

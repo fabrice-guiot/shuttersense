@@ -480,7 +480,10 @@ class EventService:
         elif preset == "upcoming_30d":
             # Fallback: original 30-day window when no explicit end_date
             query = query.filter(Event.event_date <= today + timedelta(days=30))
-        elif preset == "needs_tickets":
+        # Logistics presets without explicit end_date: no upper date bound
+
+        # Apply logistics-specific filters (independent of date window)
+        if preset == "needs_tickets":
             effective_ticket_required = case(
                 (Event.ticket_required.isnot(None), Event.ticket_required),
                 else_=EventSeries.ticket_required,
