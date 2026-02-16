@@ -122,8 +122,8 @@ class PushSubscriptionService:
         """
         try:
             sub_uuid = PushSubscription.parse_guid(guid)
-        except ValueError:
-            raise NotFoundError("PushSubscription", guid)
+        except ValueError as ve:
+            raise NotFoundError("PushSubscription", guid) from ve
 
         subscription = (
             self.db.query(PushSubscription)
