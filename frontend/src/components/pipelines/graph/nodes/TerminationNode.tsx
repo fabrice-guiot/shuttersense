@@ -10,18 +10,18 @@ type TerminationNodeType = Node<PipelineNodeData, 'termination'>
 const TerminationNode = memo(({ data }: NodeProps<TerminationNodeType>) => (
   <div
     className={cn(
-      'w-48 rounded-lg border-2 bg-card px-3 py-2 shadow-sm ring-2 ring-offset-1 ring-offset-card',
+      'w-48 min-h-16 rounded-lg border-2 bg-card px-3 py-2 shadow-sm ring-2 ring-offset-1 ring-offset-card',
       data.hasError
         ? 'border-destructive ring-destructive/30'
         : 'border-success ring-success/30',
     )}
   >
     <Handle type="target" position={Position.Top} />
-    <div className="flex items-center gap-2">
-      <Archive className="h-4 w-4 text-success" />
-      <span className="text-sm font-medium">{data.nodeId}</span>
+    <div className="flex items-center gap-2 min-w-0">
+      <Archive className="h-4 w-4 text-success shrink-0" />
+      <span className="text-sm font-medium truncate">{data.nodeId}</span>
       {data.analyticsCount != null && (
-        <Badge variant="secondary" className="ml-auto text-xs">
+        <Badge variant="secondary" className="ml-auto text-xs shrink-0">
           {data.analyticsCount.toLocaleString()}
         </Badge>
       )}

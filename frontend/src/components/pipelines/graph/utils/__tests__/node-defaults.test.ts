@@ -47,13 +47,13 @@ describe('getNodeConfig', () => {
   it('returns correct config for pairing node', () => {
     const config = getNodeConfig('pairing')
     expect(config.colorClass).toContain('info')
-    expect(config.defaultWidth).toBe(176) // w-44
+    expect(config.defaultWidth).toBe(208) // w-52
   })
 
   it('returns correct config for branching node', () => {
     const config = getNodeConfig('branching')
     expect(config.colorClass).toContain('warning')
-    expect(config.defaultWidth).toBe(176)
+    expect(config.defaultWidth).toBe(208) // w-52
   })
 
   it('returns correct config for termination node', () => {

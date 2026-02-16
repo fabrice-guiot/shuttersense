@@ -1,6 +1,36 @@
 @import "tailwindcss";
 @import '@xyflow/react/dist/style.css';
 
+/* React Flow theme overrides — bridge app theme tokens to xy-flow CSS variables */
+:root {
+  --xy-minimap-background-color: hsl(var(--card));
+  --xy-minimap-mask-background-color: hsl(var(--background) / 0.6);
+  --xy-minimap-node-background-color: hsl(var(--muted-foreground));
+  --xy-minimap-node-stroke-color: hsl(var(--border));
+
+  --xy-background-color: hsl(var(--background));
+  --xy-background-pattern-dots-color: hsl(var(--muted-foreground) / 0.4);
+
+  --xy-node-border-radius-default: var(--radius);
+  --xy-edge-stroke: hsl(var(--muted-foreground));
+}
+
+.react-flow__controls-button {
+  background: hsl(var(--card));
+  border-color: hsl(var(--border));
+  fill: hsl(var(--foreground));
+  color: hsl(var(--foreground));
+}
+
+.react-flow__controls-button:hover {
+  background: hsl(var(--accent));
+}
+
+.react-flow__controls-button svg {
+  fill: hsl(var(--foreground));
+}
+
+
 @layer base {
   :root {
     /* Background colors */

@@ -10,15 +10,15 @@ type CaptureNodeType = Node<PipelineNodeData, 'capture'>
 const CaptureNode = memo(({ data }: NodeProps<CaptureNodeType>) => (
   <div
     className={cn(
-      'w-56 rounded-lg border-2 bg-card px-4 py-3 shadow-sm',
+      'w-56 min-h-20 rounded-lg border-2 bg-card px-4 py-3 shadow-sm',
       data.hasError ? 'border-destructive' : 'border-primary',
     )}
   >
-    <div className="flex items-center gap-2">
-      <Camera className="h-5 w-5 text-primary" />
-      <span className="text-sm font-semibold">{data.nodeId}</span>
+    <div className="flex items-center gap-2 min-w-0">
+      <Camera className="h-5 w-5 text-primary shrink-0" />
+      <span className="text-sm font-semibold truncate">{data.nodeId}</span>
       {data.analyticsCount != null && (
-        <Badge variant="secondary" className="ml-auto text-xs">
+        <Badge variant="secondary" className="ml-auto text-xs shrink-0">
           {data.analyticsCount.toLocaleString()}
         </Badge>
       )}

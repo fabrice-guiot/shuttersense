@@ -15,6 +15,7 @@ import type {
   PipelineFlowAnalyticsResponse,
 } from '@/contracts/api/pipelines-api'
 import { nodeTypes } from './nodes'
+import MiniMapNode from './nodes/MiniMapNode'
 import { edgeTypes } from './edges'
 import { toReactFlowNodes, toReactFlowEdges, hasPositions } from './utils/graph-transforms'
 import { applyDagreLayout } from './utils/dagre-layout'
@@ -90,8 +91,9 @@ export function PipelineGraphView({
         fitView
         minZoom={0.1}
         maxZoom={2}
+        proOptions={{ hideAttribution: true }}
       >
-        <MiniMap />
+        <MiniMap nodeComponent={MiniMapNode} />
         <Controls />
         <Background variant={BackgroundVariant.Dots} gap={16} />
       </ReactFlow>

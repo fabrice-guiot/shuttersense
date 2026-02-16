@@ -44,15 +44,15 @@ const NODE_CONFIGS: Record<NodeType, NodeConfig> = {
     icon: Merge,
     colorClass: 'border-info text-info',
     shapeClass: 'rounded-md',
-    defaultWidth: 176, // w-44
-    defaultHeight: 64,
+    defaultWidth: 208, // w-52
+    defaultHeight: 80, // h-20
   },
   branching: {
     icon: GitBranch,
     colorClass: 'border-warning text-warning',
     shapeClass: 'rounded-md',
-    defaultWidth: 176,
-    defaultHeight: 64,
+    defaultWidth: 208, // w-52
+    defaultHeight: 80, // h-20
   },
   termination: {
     icon: Archive,
