@@ -35,6 +35,8 @@ interface UsePushSubscriptionReturn {
   isSupported: boolean
   /** Whether on iOS but not in standalone PWA mode */
   isIosNotInstalled: boolean
+  /** Whether the current device has an active push subscription */
+  isCurrentDeviceSubscribed: boolean
   /** Loading state for any async operation */
   loading: boolean
   /** Error message from the last failed operation */
@@ -43,6 +45,8 @@ interface UsePushSubscriptionReturn {
   subscribe: () => Promise<void>
   /** Unsubscribe this device from push notifications */
   unsubscribe: () => Promise<void>
+  /** Remove a specific device subscription by GUID (e.g., lost devices) */
+  removeDevice: (guid: string) => Promise<void>
   /** Refresh subscription status from the server */
   refreshStatus: () => Promise<void>
 }
@@ -110,6 +114,7 @@ export const usePushSubscription = (
     PushSubscriptionResponse[]
   >([])
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [isCurrentDeviceSubscribed, setIsCurrentDeviceSubscribed] = useState(false)
   const [permissionState, setPermissionState] = useState<PermissionState>(
     getPermissionState
   )
@@ -133,6 +138,25 @@ export const usePushSubscription = (
   }, [])
 
   /**
+   * Check whether the current device/browser has an active PushManager subscription
+   * whose endpoint matches one of the server-side subscriptions.
+   */
+  const checkCurrentDeviceSubscribed = useCallback(
+    async (serverSubscriptions: PushSubscriptionResponse[]): Promise<boolean> => {
+      if (!isSupported) return false
+      try {
+        const registration = await navigator.serviceWorker.ready
+        const pushSub = await registration.pushManager.getSubscription()
+        if (!pushSub) return false
+        return serverSubscriptions.some((s) => s.endpoint === pushSub.endpoint)
+      } catch {
+        return false
+      }
+    },
+    [isSupported]
+  )
+
+  /**
    * Fetch subscription status from the server
    */
   const refreshStatus = useCallback(async () => {
@@ -144,6 +168,10 @@ export const usePushSubscription = (
       if (mountedRef.current) {
         setSubscriptions(status.subscriptions)
         setNotificationsEnabled(status.notifications_enabled)
+        const deviceSubscribed = await checkCurrentDeviceSubscribed(status.subscriptions)
+        if (mountedRef.current) {
+          setIsCurrentDeviceSubscribed(deviceSubscribed)
+        }
       }
     } catch (err: unknown) {
       if (mountedRef.current) {
@@ -157,7 +185,7 @@ export const usePushSubscription = (
         setLoading(false)
       }
     }
-  }, [])
+  }, [checkCurrentDeviceSubscribed])
 
   /**
    * Subscribe this device for push notifications
@@ -246,6 +274,40 @@ export const usePushSubscription = (
       }
     }
   }, [isSupported, refreshStatus])
+
+  /**
+   * Remove a specific device subscription by GUID.
+   *
+   * Used to unregister devices the user no longer has access to
+   * (e.g., lost or decommissioned devices).
+   */
+  const removeDevice = useCallback(
+    async (guid: string) => {
+      setLoading(true)
+      setError(null)
+      try {
+        await notificationService.unsubscribeByGuid(guid)
+        await refreshStatus()
+        toast.success('Device removed')
+      } catch (err: unknown) {
+        if (mountedRef.current) {
+          const errorMessage =
+            (err as { userMessage?: string }).userMessage ||
+            (err as Error).message ||
+            'Failed to remove device'
+          setError(errorMessage)
+          toast.error('Failed to remove device', {
+            description: errorMessage,
+          })
+        }
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false)
+        }
+      }
+    },
+    [refreshStatus]
+  )
 
   /**
    * Unsubscribe this device from push notifications
@@ -347,10 +409,12 @@ export const usePushSubscription = (
     permissionState,
     isSupported,
     isIosNotInstalled,
+    isCurrentDeviceSubscribed,
     loading,
     error,
     subscribe,
     unsubscribe,
+    removeDevice,
     refreshStatus,
   }
 }

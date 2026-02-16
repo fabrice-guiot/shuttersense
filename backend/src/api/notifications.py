@@ -189,6 +189,38 @@ async def remove_push_subscription(
         )
 
 
+@router.delete(
+    "/subscribe/{guid}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a push subscription by GUID",
+)
+@limiter.limit("10/minute")
+async def remove_push_subscription_by_guid(
+    request: Request,
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    service: PushSubscriptionService = Depends(get_push_subscription_service),
+):
+    """
+    Remove a push subscription by its GUID.
+
+    Allows users to remove subscriptions from devices they no longer have access to
+    (e.g., lost or decommissioned devices) by referencing the subscription GUID
+    shown in the device list.
+    """
+    try:
+        service.remove_subscription_by_guid(
+            user_id=ctx.user_id,
+            team_id=ctx.team_id,
+            guid=guid,
+        )
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subscription not found",
+        )
+
+
 @router.get(
     "/status",
     response_model=SubscriptionStatusResponse,
