@@ -120,10 +120,15 @@ class PushSubscriptionService:
         Raises:
             NotFoundError: If no subscription matches guid + user + team
         """
+        try:
+            sub_uuid = PushSubscription.parse_guid(guid)
+        except ValueError:
+            raise NotFoundError("PushSubscription", guid)
+
         subscription = (
             self.db.query(PushSubscription)
             .filter(
-                PushSubscription.guid == guid,
+                PushSubscription.uuid == sub_uuid,
                 PushSubscription.user_id == user_id,
                 PushSubscription.team_id == team_id,
             )
