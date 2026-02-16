@@ -15,7 +15,6 @@ import {
   Save,
   ArrowLeft,
   AlertTriangle,
-  Beaker,
   Pencil,
   CheckCircle,
   XCircle,
@@ -53,6 +52,8 @@ import { NODE_TYPE_DEFINITIONS } from '@/contracts/api/pipelines-api'
 import { GuidBadge } from '@/components/GuidBadge'
 import { AuditTrailSection } from '@/components/audit'
 import { cn } from '@/lib/utils'
+import { PipelineGraphView } from '@/components/pipelines/graph/PipelineGraphView'
+import { PropertyPanel } from '@/components/pipelines/graph/PropertyPanel'
 
 // ============================================================================
 // Helper Functions
@@ -655,6 +656,10 @@ export const PipelineEditorPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
 
+  // Graph view selection state
+  const [selectedNode, setSelectedNode] = useState<PipelineNode | null>(null)
+  const [selectedEdge, setSelectedEdge] = useState<PipelineEdge | null>(null)
+
   // Track which node indices have their types locked
   // New nodes start unlocked, loaded pipeline nodes start locked
   const [lockedNodeIndices, setLockedNodeIndices] = useState<Set<number>>(new Set())
@@ -846,6 +851,24 @@ export const PipelineEditorPage: React.FC = () => {
     }
   }
 
+  // Graph click handlers for view mode
+  const handleGraphNodeClick = useCallback((nodeId: string) => {
+    const node = pipeline?.nodes.find((n) => n.id === nodeId) ?? null
+    setSelectedNode(node)
+    setSelectedEdge(null)
+  }, [pipeline])
+
+  const handleGraphEdgeClick = useCallback((edgeId: string) => {
+    const edge = pipeline?.edges.find((e) => `${e.from}-${e.to}` === edgeId) ?? null
+    setSelectedEdge(edge)
+    setSelectedNode(null)
+  }, [pipeline])
+
+  const handleClosePropertyPanel = useCallback(() => {
+    setSelectedNode(null)
+    setSelectedEdge(null)
+  }, [])
+
   // Determine page title
   const pageTitle = isNew
     ? 'Create Pipeline'
@@ -884,14 +907,6 @@ export const PipelineEditorPage: React.FC = () => {
             </AlertDescription>
           </Alert>
         )}
-
-        {/* Future graph visualization placeholder */}
-        <Alert className="mb-4 border-blue-500/50 bg-blue-500/10">
-          <Beaker className="h-4 w-4 text-blue-500" />
-          <AlertDescription className="text-blue-600 dark:text-blue-400">
-            <strong>Coming Soon:</strong> Visual pipeline graph will be displayed here in a future release.
-          </AlertDescription>
-        </Alert>
 
         <div className="space-y-6">
           {/* Pipeline Header */}
@@ -998,45 +1013,27 @@ export const PipelineEditorPage: React.FC = () => {
             </div>
           )}
 
-          {/* Nodes */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Nodes ({pipeline.nodes.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {pipeline.nodes.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No nodes defined.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {pipeline.nodes.map((node, index) => (
-                    <NodeViewer key={index} node={node} index={index} />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Edges */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Edges ({pipeline.edges.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {pipeline.edges.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No edges defined.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {pipeline.edges.map((edge, index) => (
-                    <EdgeViewer key={index} edge={edge} index={index} />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Pipeline Graph + Property Panel */}
+          <div className="flex h-[600px] border rounded-lg overflow-hidden bg-background">
+            <div className="flex-1 min-w-0">
+              <PipelineGraphView
+                nodes={pipeline.nodes}
+                edges={pipeline.edges}
+                validationErrors={pipeline.is_valid ? null : pipeline.validation_errors}
+                onNodeClick={handleGraphNodeClick}
+                onEdgeClick={handleGraphEdgeClick}
+              />
+            </div>
+            {(selectedNode || selectedEdge) && (
+              <PropertyPanel
+                node={selectedNode}
+                edge={selectedEdge}
+                nodes={pipeline.nodes}
+                mode="view"
+                onClose={handleClosePropertyPanel}
+              />
+            )}
+          </div>
 
           {/* Actions */}
           <div className="flex items-center justify-between py-4">
@@ -1061,15 +1058,6 @@ export const PipelineEditorPage: React.FC = () => {
   // ============================================================================
   return (
     <MainLayout pageTitle={pageTitle} pageIcon={GitBranch}>
-      {/* Beta indicator */}
-      <Alert className="mb-4 border-amber-500/50 bg-amber-500/10">
-        <Beaker className="h-4 w-4 text-amber-500" />
-        <AlertDescription className="text-amber-600 dark:text-amber-400">
-          <strong>Beta Feature:</strong> Pipeline editor is currently in beta.
-          The visual graph editor will be available in a future release.
-        </AlertDescription>
-      </Alert>
-
       {/* Error Alert */}
       {error && (
         <Alert variant="destructive" className="mb-4">

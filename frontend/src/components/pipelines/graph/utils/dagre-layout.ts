@@ -68,11 +68,11 @@ export function findBackEdges(
  * 3. Returning positioned nodes — back-edges are drawn by React Flow using
  *    the existing node positions without further adjustment
  */
-export function applyDagreLayout(
-  nodes: Node[],
+export function applyDagreLayout<T extends Node = Node>(
+  nodes: T[],
   edges: Edge[],
   options?: LayoutOptions,
-): Node[] {
+): T[] {
   if (nodes.length === 0) return []
 
   const direction = options?.direction ?? 'TB'
@@ -119,6 +119,6 @@ export function applyDagreLayout(
         x: pos.x - width / 2,
         y: pos.y - height / 2,
       },
-    }
+    } as T
   })
 }

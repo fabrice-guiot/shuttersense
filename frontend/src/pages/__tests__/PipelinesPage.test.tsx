@@ -69,14 +69,14 @@ describe('PipelinesPage', () => {
     expect(screen.getByTestId('pipeline-list')).toBeDefined()
   })
 
-  test('renders beta feature indicator', () => {
+  test('does not show beta banner', () => {
     render(
       <MemoryRouter>
         <PipelinesPage />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Beta Feature:', { exact: false })).toBeDefined()
+    expect(screen.queryByText('Beta Feature:', { exact: false })).toBeNull()
   })
 
   test('renders pipeline list with create button', () => {
