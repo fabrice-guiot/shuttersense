@@ -1209,16 +1209,22 @@ class JobCoordinatorService:
         self._update_collection_stats_from_results(job, completion_data)
 
         # Auto-discover cameras from analysis results (Issue #217)
+        # Prefer 'cameras' dict (raw camera_id → metadata), fall back to
+        # 'camera_usage' keys for older results that lack the cameras field.
         if completion_data.results:
-            camera_usage = completion_data.results.get("camera_usage")
-            if camera_usage and isinstance(camera_usage, dict):
+            cameras_dict = completion_data.results.get("cameras")
+            if not cameras_dict or not isinstance(cameras_dict, dict):
+                camera_usage = completion_data.results.get("camera_usage")
+                if camera_usage and isinstance(camera_usage, dict):
+                    cameras_dict = {k: {} for k in camera_usage}
+            if cameras_dict:
                 try:
                     from backend.src.services.camera_service import CameraService
                     camera_service = CameraService(db=self.db)
-                    camera_ids = list(camera_usage.keys())
                     camera_service.discover_cameras(
                         team_id=team_id,
-                        camera_ids=camera_ids,
+                        camera_ids=list(cameras_dict.keys()),
+                        camera_metadata=cameras_dict,
                     )
                 except Exception as e:
                     logger.warning(
@@ -1441,14 +1447,19 @@ class JobCoordinatorService:
 
         # Auto-discover cameras from copied results (Issue #217)
         if source_result.results_json:
-            camera_usage = source_result.results_json.get("camera_usage")
-            if camera_usage and isinstance(camera_usage, dict):
+            cameras_dict = source_result.results_json.get("cameras")
+            if not cameras_dict or not isinstance(cameras_dict, dict):
+                camera_usage = source_result.results_json.get("camera_usage")
+                if camera_usage and isinstance(camera_usage, dict):
+                    cameras_dict = {k: {} for k in camera_usage}
+            if cameras_dict:
                 try:
                     from backend.src.services.camera_service import CameraService
                     camera_service = CameraService(db=self.db)
                     camera_service.discover_cameras(
                         team_id=team_id,
-                        camera_ids=list(camera_usage.keys()),
+                        camera_ids=list(cameras_dict.keys()),
+                        camera_metadata=cameras_dict,
                     )
                 except Exception as e:
                     logger.warning("Camera auto-discovery from no-change results failed: %s", e)

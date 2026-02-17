@@ -278,17 +278,35 @@ def calculate_analytics(
         """Resolve method ID to description."""
         return processing_methods_config.get(method, method)
 
+    def get_camera_metadata(cam_id: str) -> Dict[str, Any]:
+        """Extract metadata for a camera ID from camera_mappings."""
+        raw_info = camera_mappings.get(cam_id)
+        if not raw_info:
+            return {}
+        info = raw_info
+        while isinstance(info, list) and info:
+            info = info[0]
+        if isinstance(info, dict):
+            return {k: v for k, v in info.items() if v}
+        return {}
+
     # Count images per camera (using resolved names)
     camera_usage = defaultdict(int)
     method_usage = defaultdict(int)
+    cameras_seen: Dict[str, Dict[str, Any]] = {}
     total_images = 0
     total_files = 0
 
     for group in imagegroups:
-        camera_name = get_camera_name(group['camera_id'])
+        cam_id = group['camera_id']
+        camera_name = get_camera_name(cam_id)
         num_images = len(group['separate_images'])
         camera_usage[camera_name] += num_images
         total_images += num_images
+
+        # Collect raw camera ID → metadata for server-side discovery
+        if cam_id not in cameras_seen:
+            cameras_seen[cam_id] = get_camera_metadata(cam_id)
 
         # Count files and method usage
         for sep_img in group['separate_images'].values():
@@ -299,6 +317,7 @@ def calculate_analytics(
 
     return {
         'camera_usage': dict(camera_usage),
+        'cameras': cameras_seen,
         'method_usage': dict(method_usage),
         'image_count': total_images,
         'group_count': len(imagegroups),

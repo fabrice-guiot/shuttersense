@@ -85,21 +85,21 @@ export function CameraList({ cameras, loading, onEdit, onDelete }: CameraListPro
     {
       header: 'Display Name',
       cell: (camera) => camera.display_name || (
-        <span className="text-muted-foreground">\u2014</span>
+        <span className="text-muted-foreground">{'\u2014'}</span>
       ),
       cardRole: 'subtitle',
     },
     {
       header: 'Make',
       cell: (camera) => camera.make || (
-        <span className="text-muted-foreground">\u2014</span>
+        <span className="text-muted-foreground">{'\u2014'}</span>
       ),
       cardRole: 'detail',
     },
     {
       header: 'Model',
       cell: (camera) => camera.model || (
-        <span className="text-muted-foreground">\u2014</span>
+        <span className="text-muted-foreground">{'\u2014'}</span>
       ),
       cardRole: 'detail',
     },
@@ -107,7 +107,7 @@ export function CameraList({ cameras, loading, onEdit, onDelete }: CameraListPro
       header: 'Status',
       cell: (camera) => (
         <Badge variant={camera.status === 'confirmed' ? 'default' : 'secondary'}>
-          {camera.status === 'confirmed' ? 'Confirmed' : 'Temporary'}
+          {camera.status === 'confirmed' ? 'Owned' : 'Temporary'}
         </Badge>
       ),
       cardRole: 'badge',

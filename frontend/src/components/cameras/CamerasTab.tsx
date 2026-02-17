@@ -76,7 +76,7 @@ export function CamerasTab() {
     if (stats) {
       setStats([
         { label: 'Total Cameras', value: stats.total_cameras },
-        { label: 'Confirmed', value: stats.confirmed_count },
+        { label: 'Owned', value: stats.confirmed_count },
         { label: 'Temporary', value: stats.temporary_count },
       ])
     }
@@ -150,7 +150,7 @@ export function CamerasTab() {
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="temporary">Temporary</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="confirmed">Owned</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handleSearch}>

@@ -120,7 +120,7 @@ export function CameraEditDialog({ camera, open, onOpenChange, onSubmit }: Camer
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="temporary">Temporary</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="confirmed">Owned</SelectItem>
                 </SelectContent>
               </Select>
             </div>

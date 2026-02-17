@@ -20,7 +20,7 @@ import {
   User,
   Bot,
   Bell,
-  Box,
+  ToolCase,
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
@@ -112,7 +112,7 @@ const routes: RouteConfig[] = [
     path: '/resources',
     element: <ResourcesPage />,
     pageTitle: 'Resources',
-    pageIcon: Box,
+    pageIcon: ToolCase,
     pageHelp: 'Manage cameras discovered by agents and photo processing pipelines',
   },
   {

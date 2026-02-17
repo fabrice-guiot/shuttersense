@@ -10,6 +10,7 @@ discovered during analysis or manually created by users.
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -24,7 +25,7 @@ def upgrade() -> None:
     op.create_table(
         'cameras',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('uuid', sa.LargeBinary(length=16), nullable=False),
+        sa.Column('uuid', postgresql.UUID(as_uuid=True).with_variant(sa.LargeBinary(16), 'sqlite'), nullable=False),
         sa.Column('team_id', sa.Integer(), nullable=False),
         sa.Column('camera_id', sa.String(length=10), nullable=False),
         sa.Column('status', sa.String(length=20), nullable=False, server_default='temporary'),

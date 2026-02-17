@@ -12,7 +12,7 @@ Design:
 - DB-agnostic: no INSERT ON CONFLICT (works with SQLite tests)
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -292,6 +292,7 @@ class CameraService:
         team_id: int,
         camera_ids: List[str],
         user_id: Optional[int] = None,
+        camera_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> CameraDiscoverResponse:
         """
         Discover cameras: idempotent batch create.
@@ -304,12 +305,16 @@ class CameraService:
             team_id: Team ID for tenant isolation
             camera_ids: List of camera IDs to discover
             user_id: Optional user ID for audit
+            camera_metadata: Optional mapping of camera_id to metadata dict
+                with keys like 'name', 'make', 'model', 'serial_number'
 
         Returns:
             All cameras (existing + newly created) for the submitted IDs
         """
         if not camera_ids:
             return CameraDiscoverResponse(cameras=[])
+
+        metadata = camera_metadata or {}
 
         # Deduplicate
         unique_ids = list(dict.fromkeys(camera_ids))
@@ -327,6 +332,9 @@ class CameraService:
                 results.append(self._to_discover_item(existing))
                 continue
 
+            # Extract metadata for this camera (from camera_mappings config)
+            cam_meta = metadata.get(cam_id, {})
+
             # Try to create with SAVEPOINT for concurrent safety
             try:
                 nested = self.db.begin_nested()
@@ -334,7 +342,10 @@ class CameraService:
                     team_id=team_id,
                     camera_id=cam_id,
                     status="temporary",
-                    display_name=None,
+                    display_name=cam_meta.get("name"),
+                    make=cam_meta.get("make"),
+                    model=cam_meta.get("model"),
+                    serial_number=cam_meta.get("serial_number"),
                     created_by_user_id=user_id,
                     updated_by_user_id=user_id,
                 )

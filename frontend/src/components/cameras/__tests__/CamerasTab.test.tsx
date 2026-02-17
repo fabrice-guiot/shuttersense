@@ -113,7 +113,7 @@ describe('CamerasTab', () => {
 
     // ResponsiveTable renders both desktop table and mobile cards
     await waitFor(() => {
-      expect(screen.getAllByText('Confirmed').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('Owned').length).toBeGreaterThanOrEqual(1)
     })
 
     expect(screen.getAllByText('Temporary').length).toBeGreaterThanOrEqual(1)
@@ -140,7 +140,7 @@ describe('CamerasTab', () => {
     await waitFor(() => {
       expect(mockSetStats).toHaveBeenCalledWith([
         { label: 'Total Cameras', value: 2 },
-        { label: 'Confirmed', value: 1 },
+        { label: 'Owned', value: 1 },
         { label: 'Temporary', value: 1 },
       ])
     })
