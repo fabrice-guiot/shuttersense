@@ -75,10 +75,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Extend `build_imagegroups()` in `agent/src/analysis/photo_pairing_analyzer.py` to accept optional `filename_regex: str` and `camera_id_group: int` parameters — use regex when provided, fall back to `FilenameParser` when None
-- [ ] T023 [US2] Modify `_run_photo_pairing()` in `agent/cli/run.py` to accept `pipeline_tool_config` and `http_client` parameters, pass `filename_regex` and `camera_id_group` to `build_imagegroups()`, pass `processing_suffixes` to `calculate_analytics()`
-- [ ] T024 [US2] Wire `PipelineToolConfig` into Photo_Pairing execution path in `_execute_tool()` in `agent/cli/run.py` — pass `pipeline_tool_config` and `http_client` to `_run_photo_pairing()`
-- [ ] T025 [US2] Unit tests for regex-based filename parsing in `agent/tests/unit/test_photo_pairing_pipeline.py` — custom regex patterns, camera_id_group=1 and =2, fallback to FilenameParser when no regex, processing suffix resolution from Pipeline, all-numeric suffix detection unchanged, verify Pipeline-derived photo_extensions used for file filtering (FR-011)
+- [x] T022 [US2] Extend `build_imagegroups()` in `agent/src/analysis/photo_pairing_analyzer.py` to accept optional `filename_regex: str` and `camera_id_group: int` parameters — use regex when provided, fall back to `FilenameParser` when None
+- [x] T023 [US2] Modify `_run_photo_pairing()` in `agent/cli/run.py` to accept `pipeline_tool_config` and `http_client` parameters, pass `filename_regex` and `camera_id_group` to `build_imagegroups()`, pass `processing_suffixes` to `calculate_analytics()`
+- [x] T024 [US2] Wire `PipelineToolConfig` into Photo_Pairing execution path in `_execute_tool()` in `agent/cli/run.py` — pass `pipeline_tool_config` and `http_client` to `_run_photo_pairing()`
+- [x] T025 [US2] Unit tests for regex-based filename parsing in `agent/tests/unit/test_photo_pairing_pipeline.py` — custom regex patterns, camera_id_group=1 and =2, fallback to FilenameParser when no regex, processing suffix resolution from Pipeline, all-numeric suffix detection unchanged, verify Pipeline-derived photo_extensions used for file filtering (FR-011)
 
 **Checkpoint**: Photo_Pairing uses Pipeline regex for parsing and Pipeline Process names for method resolution. All US2 tests pass.
 
