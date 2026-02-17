@@ -17,7 +17,9 @@ const ProcessNode = memo(({ data }: NodeProps<ProcessNodeType>) => (
     <Handle type="target" position={Position.Top} />
     <div className="flex items-center gap-2 min-w-0">
       <Settings className="h-4 w-4 text-purple-500 shrink-0" />
-      <span className="text-sm font-medium truncate">{data.nodeId}</span>
+      <span className="text-sm font-medium truncate">
+        {(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}
+      </span>
       {data.analyticsCount != null && (
         <Badge variant="secondary" className="ml-auto text-xs shrink-0">
           {data.analyticsCount.toLocaleString()}

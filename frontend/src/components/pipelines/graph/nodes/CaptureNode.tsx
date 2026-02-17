@@ -16,7 +16,9 @@ const CaptureNode = memo(({ data }: NodeProps<CaptureNodeType>) => (
   >
     <div className="flex items-center gap-2 min-w-0">
       <Camera className="h-5 w-5 text-primary shrink-0" />
-      <span className="text-sm font-semibold truncate">{data.nodeId}</span>
+      <span className="text-sm font-semibold truncate">
+        {(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}
+      </span>
       {data.analyticsCount != null && (
         <Badge variant="secondary" className="ml-auto text-xs shrink-0">
           {data.analyticsCount.toLocaleString()}

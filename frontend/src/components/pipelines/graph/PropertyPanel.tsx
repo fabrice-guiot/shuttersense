@@ -162,6 +162,12 @@ function NodeProperties({
             <span className="text-xs text-muted-foreground">ID</span>
             <p className="font-mono text-sm">{node.id}</p>
           </div>
+          {typeof node.properties.name === 'string' && node.properties.name && (
+            <div>
+              <span className="text-xs text-muted-foreground">Name</span>
+              <p className="text-sm">{node.properties.name}</p>
+            </div>
+          )}
           <div>
             <span className="text-xs text-muted-foreground">Type</span>
             <div className="flex items-center gap-2">
@@ -211,6 +217,18 @@ function NodeProperties({
           onKeyDown={(e) => e.key === 'Enter' && handleIdBlur()}
           className="h-8 text-sm font-mono"
         />
+      </div>
+
+      {/* Display Name */}
+      <div className="space-y-1">
+        <Label className="text-xs">Display Name</Label>
+        <Input
+          value={typeof node.properties.name === 'string' ? node.properties.name : ''}
+          onChange={(e) => handlePropertyChange('name', e.target.value || undefined)}
+          placeholder={node.id}
+          className="h-8 text-sm"
+        />
+        <p className="text-[11px] text-muted-foreground">Optional label shown on graph (uses Node ID if empty)</p>
       </div>
 
       {/* Type badge */}

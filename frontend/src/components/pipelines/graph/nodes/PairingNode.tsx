@@ -22,7 +22,9 @@ const PairingNode = memo(({ data }: NodeProps<PairingNodeType>) => (
     </svg>
     <div className="relative z-10 flex items-center justify-center gap-2 h-full px-6">
       <Merge className="h-4 w-4 text-info shrink-0" />
-      <span className="text-sm font-medium truncate">{data.nodeId}</span>
+      <span className="text-sm font-medium truncate">
+        {(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}
+      </span>
       {data.analyticsCount != null && (
         <Badge variant="secondary" className="ml-auto text-xs shrink-0">
           {data.analyticsCount.toLocaleString()}
