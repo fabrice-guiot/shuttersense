@@ -234,6 +234,7 @@ agent/dist/build/
 agent/dist/spec/
 
 # Frontend-specific
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/dev-dist/
