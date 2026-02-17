@@ -324,7 +324,7 @@ npm test
 
 # Agent tests (activate agent venv first)
 source agent/.venv/bin/activate
-python -m pytest tests/ -v
+python -m pytest agent/tests/ -v
 ```
 
 ## Troubleshooting

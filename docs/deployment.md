@@ -157,8 +157,10 @@ Agents run alongside the server (or on remote machines) to execute analysis jobs
 ### Install Agent
 
 ```bash
-# Option A: From source
+# Option A: From source (use a dedicated venv, not the backend's)
 cd agent
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 
 # Option B: Pre-built binary

@@ -247,10 +247,10 @@ Unsigned Windows executables may trigger antivirus warnings. For production, sig
 If the agent fails with SSL certificate errors (e.g., `match_hostname` failures), the Python used for the build may have an OpenSSL mismatch. Verify the build Python has consistent OpenSSL headers and runtime:
 
 ```bash
-python3 -c "import ssl; print(ssl.OPENSSL_VERSION, ssl._OPENSSL_API_VERSION)"
+python3 -c "import ssl; print('Compile-time:', ssl.OPENSSL_VERSION_INFO); print('Runtime:', ssl.OPENSSL_VERSION)"
 ```
 
-The `_OPENSSL_API_VERSION` major version should match the `OPENSSL_VERSION` major version (e.g., both 3.x). A mismatch (API says 1.1.1 but runtime says 3.x) means Python was compiled against wrong headers — rebuild Python.
+The `OPENSSL_VERSION_INFO` major version (compile-time) should match the `OPENSSL_VERSION` major version (runtime). For example, both should be 3.x. A mismatch (compile-time says 1.1.1 but runtime says 3.x) means Python was compiled against wrong headers — rebuild Python.
 
 ## Release Checklist
 

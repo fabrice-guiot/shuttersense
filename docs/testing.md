@@ -318,8 +318,8 @@ venv/bin/python -m pytest backend/tests/ \
 ### Agent
 
 ```bash
-# From project root, using the venv
-venv/bin/python -m pytest agent/tests/ \
+# From project root, using the agent venv
+agent/.venv/bin/python -m pytest agent/tests/ \
   --cov=agent/src --cov=agent/cli \
   --cov-report=term-missing
 ```
@@ -334,7 +334,7 @@ venv/bin/python -m pytest agent/tests/ \
 venv/bin/python -m pytest backend/tests/ -v
 
 # Agent
-venv/bin/python -m pytest agent/tests/ -v
+agent/.venv/bin/python -m pytest agent/tests/ -v
 ```
 
 ---
