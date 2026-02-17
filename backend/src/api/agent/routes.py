@@ -1038,13 +1038,13 @@ async def get_job_config(
         collection_path = job.collection.location
 
     # Get pipeline data if applicable
-    # If job has no pipeline assigned, use the default pipeline for pipeline_validation tool
+    # If job has no pipeline assigned, resolve the team's default pipeline (Issue #217)
     pipeline_guid = None
     pipeline_data = None
     pipeline = job.pipeline
 
     # Resolve default pipeline if job has no explicit pipeline
-    if not pipeline and job.tool == "pipeline_validation":
+    if not pipeline:
         from backend.src.models.pipeline import Pipeline
         pipeline = db.query(Pipeline).filter(
             Pipeline.team_id == ctx.team_id,
