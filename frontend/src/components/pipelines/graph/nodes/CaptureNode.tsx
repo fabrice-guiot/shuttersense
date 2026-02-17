@@ -13,6 +13,7 @@ const CaptureNode = memo(({ data }: NodeProps<CaptureNodeType>) => (
       'w-56 min-h-20 rounded-lg border-2 bg-card px-4 py-3 shadow-sm',
       data.hasError ? 'border-destructive' : 'border-primary',
     )}
+    aria-label={`Capture node: ${(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}`}
   >
     <div className="flex items-center gap-2 min-w-0">
       <Camera className="h-5 w-5 text-primary shrink-0" />

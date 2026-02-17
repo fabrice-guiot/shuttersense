@@ -7,7 +7,7 @@ import type { PipelineNodeData } from '@/contracts/api/pipelines-api'
 type PairingNodeType = Node<PipelineNodeData, 'pairing'>
 
 const PairingNode = memo(({ data }: NodeProps<PairingNodeType>) => (
-  <div className="relative w-52 h-20">
+  <div className="relative w-52 h-20" aria-label={`Pairing node: ${(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}`}>
     <svg
       className="absolute inset-0 w-full h-full"
       viewBox="0 0 100 100"

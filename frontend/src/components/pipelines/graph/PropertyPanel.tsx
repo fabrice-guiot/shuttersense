@@ -6,6 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -50,6 +56,7 @@ interface PropertyPanelProps {
   edge: PipelineEdge | null
   nodes?: PipelineNode[]
   mode: 'view' | 'edit'
+  mobile?: boolean
   onUpdateProperties?: (nodeId: string, properties: Record<string, unknown>) => void
   onUpdateNodeId?: (oldId: string, newId: string) => void
   onDeleteNode?: (nodeId: string) => void
@@ -57,7 +64,7 @@ interface PropertyPanelProps {
   onClose: () => void
 }
 
-export function PropertyPanel({
+function PropertyPanelContent({
   node,
   edge,
   nodes,
@@ -67,11 +74,9 @@ export function PropertyPanel({
   onDeleteNode,
   onDeleteEdge,
   onClose,
-}: PropertyPanelProps) {
-  if (!node && !edge) return null
-
+}: Omit<PropertyPanelProps, 'mobile'>) {
   return (
-    <div className="w-80 border-l bg-card flex flex-col h-full" data-testid="property-panel">
+    <>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="text-sm font-semibold">
@@ -122,6 +127,32 @@ export function PropertyPanel({
           )}
         </div>
       )}
+    </>
+  )
+}
+
+export function PropertyPanel(props: PropertyPanelProps) {
+  const { node, edge, mobile, onClose } = props
+  const isOpen = !!(node || edge)
+
+  if (!isOpen) return null
+
+  if (mobile) {
+    return (
+      <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+        <SheetContent side="bottom" className="h-[60vh] flex flex-col p-0 rounded-t-xl">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{node ? 'Node Properties' : 'Edge Info'}</SheetTitle>
+          </SheetHeader>
+          <PropertyPanelContent {...props} />
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  return (
+    <div className="w-80 border-l bg-card flex flex-col h-full" data-testid="property-panel">
+      <PropertyPanelContent {...props} />
     </div>
   )
 }

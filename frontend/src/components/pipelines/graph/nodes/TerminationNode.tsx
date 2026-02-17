@@ -15,6 +15,7 @@ const TerminationNode = memo(({ data }: NodeProps<TerminationNodeType>) => (
         ? 'border-destructive ring-destructive/30'
         : 'border-success ring-success/30',
     )}
+    aria-label={`Termination node: ${(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}`}
   >
     <Handle type="target" position={Position.Top} />
     <div className="flex items-center gap-2 min-w-0">

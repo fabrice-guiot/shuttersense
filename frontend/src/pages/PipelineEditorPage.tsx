@@ -50,6 +50,7 @@ import { PipelineGraphView } from '@/components/pipelines/graph/PipelineGraphVie
 import { PropertyPanel } from '@/components/pipelines/graph/PropertyPanel'
 import { PipelineGraphEditor, type PipelineGraphEditorHandle } from '@/components/pipelines/graph/PipelineGraphEditor'
 import { usePipelineAnalytics } from '@/hooks/usePipelineAnalytics'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ReactFlowProvider } from '@xyflow/react'
 
 // ============================================================================
@@ -95,6 +96,9 @@ export const PipelineEditorPage: React.FC = () => {
   const showFlow = !!resultGuid && !!analytics
   // Analytics were requested but the result has no path_stats data
   const analyticsUnavailable = !!resultGuid && !analyticsLoading && !analyticsEnabled && !analyticsError
+
+  // Responsive breakpoints
+  const isMobile = !useMediaQuery('(min-width: 768px)')
 
   // Determine if viewing a historical version
   const isHistoricalVersion = currentVersion !== null && latestVersion !== null && currentVersion < latestVersion
@@ -427,7 +431,7 @@ export const PipelineEditorPage: React.FC = () => {
           )}
 
           {/* Pipeline Graph + Property Panel */}
-          <div className="flex h-[600px] border rounded-lg overflow-hidden bg-background">
+          <div className="flex h-[400px] md:h-[600px] border rounded-lg overflow-hidden bg-background">
             <div className="relative flex-1 min-w-0">
               <PipelineGraphView
                 nodes={pipeline.nodes}
@@ -439,7 +443,7 @@ export const PipelineEditorPage: React.FC = () => {
                 showFlow={showFlow}
               />
             </div>
-            {(selectedNode || selectedEdge) && (
+            {!isMobile && (selectedNode || selectedEdge) && (
               <PropertyPanel
                 node={selectedNode}
                 edge={selectedEdge}
@@ -449,6 +453,17 @@ export const PipelineEditorPage: React.FC = () => {
               />
             )}
           </div>
+          {/* Mobile bottom sheet for property panel */}
+          {isMobile && (
+            <PropertyPanel
+              node={selectedNode}
+              edge={selectedEdge}
+              nodes={pipeline.nodes}
+              mode="view"
+              mobile
+              onClose={handleClosePropertyPanel}
+            />
+          )}
 
           {/* Actions */}
           <div className="flex items-center justify-between py-4">
@@ -457,7 +472,7 @@ export const PipelineEditorPage: React.FC = () => {
               Back to Pipelines
             </Button>
             {!isHistoricalVersion && (
-              <Button onClick={() => navigate(`/pipelines/${id}/edit`)}>
+              <Button className="hidden md:inline-flex" onClick={() => navigate(`/pipelines/${id}/edit`)}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit Pipeline
               </Button>
@@ -471,6 +486,33 @@ export const PipelineEditorPage: React.FC = () => {
   // ============================================================================
   // EDIT/CREATE MODE
   // ============================================================================
+
+  // On mobile, redirect edit to read-only view with an informational message
+  if (isMobile && isEditMode && !isNew && pipeline) {
+    return (
+      <MainLayout pageTitle={pipeline.name} pageIcon={GitBranch}>
+        <div className="space-y-4">
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Pipeline editing requires a desktop browser. Showing read-only view.
+            </AlertDescription>
+          </Alert>
+          <div className="h-[400px] border rounded-lg overflow-hidden bg-background">
+            <PipelineGraphView
+              nodes={pipeline.nodes}
+              edges={pipeline.edges}
+              validationErrors={pipeline.is_valid ? null : pipeline.validation_errors}
+            />
+          </div>
+          <Button variant="outline" onClick={() => navigate(`/pipelines/${id}`)}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Pipeline
+          </Button>
+        </div>
+      </MainLayout>
+    )
+  }
 
   // Initial graph data for the editor
   const initialNodes = pipeline?.nodes ?? []

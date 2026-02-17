@@ -7,7 +7,7 @@ import type { PipelineNodeData } from '@/contracts/api/pipelines-api'
 type BranchingNodeType = Node<PipelineNodeData, 'branching'>
 
 const BranchingNode = memo(({ data }: NodeProps<BranchingNodeType>) => (
-  <div className="relative w-52 h-20">
+  <div className="relative w-52 h-20" aria-label={`Branching node: ${(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}`}>
     <svg
       className="absolute inset-0 w-full h-full"
       viewBox="0 0 100 100"

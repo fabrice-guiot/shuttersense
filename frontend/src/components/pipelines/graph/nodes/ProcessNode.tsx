@@ -13,6 +13,7 @@ const ProcessNode = memo(({ data }: NodeProps<ProcessNodeType>) => (
       'w-48 min-h-16 rounded-md border-2 bg-card px-3 py-2 shadow-sm',
       data.hasError ? 'border-destructive' : 'border-purple-500/60',
     )}
+    aria-label={`Process node: ${(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}`}
   >
     <Handle type="target" position={Position.Top} />
     <div className="flex items-center gap-2 min-w-0">
