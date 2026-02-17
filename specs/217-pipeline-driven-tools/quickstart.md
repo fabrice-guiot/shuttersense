@@ -76,7 +76,7 @@ cd frontend && npx vitest run
 
 ## Implementation Order
 
-```
+```text
 Phase 1: PipelineToolConfig extraction + Camera entity + API
     ↓
 Phase 2: PhotoStats Pipeline integration
