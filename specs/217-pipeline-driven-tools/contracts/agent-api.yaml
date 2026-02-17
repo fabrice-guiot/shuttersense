@@ -1,0 +1,65 @@
+# Agent-Facing Camera Discovery API Contract
+# Used by agents during analysis to register newly discovered cameras
+# Authentication: Agent bearer token (get_authenticated_agent)
+
+paths:
+  /api/agent/v1/cameras/discover:
+    post:
+      summary: Discover cameras
+      description: |
+        Idempotent camera discovery: accepts a batch of camera IDs found during
+        analysis. Creates Camera records with status "temporary" for any IDs not
+        already registered. Returns all Camera records (existing + newly created)
+        for the submitted IDs.
+      security:
+        - AgentBearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CameraDiscoverRequest' }
+      responses:
+        200:
+          description: All cameras for the submitted IDs (existing and newly created)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CameraDiscoverResponse' }
+        401:
+          description: Agent not authenticated
+        422:
+          description: Validation error (empty camera_ids, etc.)
+
+components:
+  schemas:
+    CameraDiscoverRequest:
+      type: object
+      required: [camera_ids]
+      properties:
+        camera_ids:
+          type: array
+          items: { type: string }
+          minItems: 0
+          maxItems: 50
+          description: Unique camera IDs discovered during analysis
+          example: ["AB3D", "XYZW", "QR5T"]
+
+    CameraDiscoverResponse:
+      type: object
+      required: [cameras]
+      properties:
+        cameras:
+          type: array
+          items: { $ref: '#/components/schemas/CameraDiscoverItem' }
+
+    CameraDiscoverItem:
+      type: object
+      required: [guid, camera_id, status, display_name]
+      properties:
+        guid: { type: string, example: "cam_01hgw2bbg0000000000000001" }
+        camera_id: { type: string, example: "AB3D" }
+        status: { type: string, enum: [temporary, confirmed] }
+        display_name: { type: string, nullable: true, example: "Canon EOS R5" }
+      description: |
+        Minimal camera info needed by the agent for name resolution.
+        - Existing cameras return their current display_name.
+        - Newly created cameras have display_name = camera_id.
