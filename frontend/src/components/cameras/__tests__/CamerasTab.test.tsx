@@ -10,6 +10,7 @@ import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { CamerasTab } from '../CamerasTab'
+import type { CameraStatus } from '@/contracts/api/camera-api'
 
 const mockSetStats = vi.fn()
 
@@ -18,7 +19,7 @@ const CAMERA_DATA = {
     {
       guid: 'cam_01hgw2bbg00000000000000001',
       camera_id: 'AB3D',
-      status: 'confirmed',
+      status: 'confirmed' as CameraStatus,
       display_name: 'Canon EOS R5',
       make: 'Canon',
       model: 'EOS R5',
@@ -32,7 +33,7 @@ const CAMERA_DATA = {
     {
       guid: 'cam_01hgw2bbg00000000000000002',
       camera_id: 'XY5Z',
-      status: 'temporary',
+      status: 'temporary' as CameraStatus,
       display_name: null,
       make: 'Sony',
       model: 'A7R',
