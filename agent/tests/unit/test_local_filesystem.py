@@ -419,10 +419,10 @@ class TestBoundAgentLocalCollection:
         original_run_photostats = executor._run_photostats
         used_path = None
 
-        async def track_path(path, config, connector=None, cached_file_info=None):
+        async def track_path(path, config, connector=None, cached_file_info=None, **kwargs):
             nonlocal used_path
             used_path = path
-            return await original_run_photostats(path, config, connector, cached_file_info)
+            return await original_run_photostats(path, config, connector, cached_file_info, **kwargs)
 
         executor._run_photostats = track_path
 
