@@ -109,6 +109,15 @@ export const PipelineEditorPage: React.FC = () => {
   const [changeSummary, setChangeSummary] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
+
+  // Warn before navigating away with unsaved changes
+  useEffect(() => {
+    if (!isDirty) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault() }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
 
   // Graph editor ref
   const editorRef = useRef<PipelineGraphEditorHandle>(null)
@@ -627,7 +636,7 @@ export const PipelineEditorPage: React.FC = () => {
               ref={editorRef}
               initialNodes={initialNodes}
               initialEdges={initialEdges}
-              onDirtyChange={() => {}}
+              onDirtyChange={setIsDirty}
             />
           </ReactFlowProvider>
         </div>

@@ -282,8 +282,8 @@ class TestDetermineImagePath:
             result = _determine_image_path(si, vr, paths_by_term, path_cache)
 
         assert result == path_a_ids
-        # Cache should be populated
-        assert ((), "", "Done") in path_cache
+        # Cache should be populated (key includes expected files signature)
+        assert ((), "", "Done", ("ab3d0001.dng",)) in path_cache
 
 
 # =============================================================================

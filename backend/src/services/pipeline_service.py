@@ -23,7 +23,7 @@ from typing import List, Optional, Dict, Any, Tuple
 import re
 import yaml
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 
 from backend.src.models import Pipeline, PipelineHistory, AnalysisResult
@@ -1002,14 +1002,18 @@ class PipelineService:
         # Find the analysis result
         if result_guid:
             result_uuid = GuidService.parse_identifier(result_guid, expected_prefix="res")
-            result = self.db.query(AnalysisResult).filter(
+            result = self.db.query(AnalysisResult).options(
+                joinedload(AnalysisResult.collection)
+            ).filter(
                 AnalysisResult.uuid == result_uuid,
                 AnalysisResult.pipeline_id == pipeline.id,
                 AnalysisResult.team_id == team_id,
             ).first()
         else:
             # Most recent completed pipeline_validation with path_stats
-            result = self.db.query(AnalysisResult).filter(
+            result = self.db.query(AnalysisResult).options(
+                joinedload(AnalysisResult.collection)
+            ).filter(
                 AnalysisResult.pipeline_id == pipeline.id,
                 AnalysisResult.team_id == team_id,
                 AnalysisResult.tool == "pipeline_validation",

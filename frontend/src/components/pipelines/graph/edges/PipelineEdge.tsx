@@ -188,7 +188,7 @@ export function getHandles(config: EdgeConfig, points: Point[]): HandleDescripto
 /**
  * Build an SVG path string from axis-aligned waypoints with rounded corners.
  */
-function roundedOrthogonalPath(points: Point[], radius: number = BORDER_RADIUS): string {
+export function roundedOrthogonalPath(points: Point[], radius: number = BORDER_RADIUS): string {
   if (points.length < 2) return ''
 
   let d = `M ${points[0].x},${points[0].y}`

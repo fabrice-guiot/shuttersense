@@ -146,8 +146,8 @@ export const PipelineGraphEditor = forwardRef<PipelineGraphEditorHandle, Pipelin
         if (!bounds || !reactFlowInstance.current) return
 
         const position = reactFlowInstance.current.screenToFlowPosition({
-          x: event.clientX - bounds.left,
-          y: event.clientY - bounds.top,
+          x: event.clientX,
+          y: event.clientY,
         })
 
         graph.addNode(type, position)

@@ -1,52 +1,11 @@
 import { useMemo } from 'react'
 import { BaseEdge, type EdgeProps } from '@xyflow/react'
-import { computeEdgeConfig } from './PipelineEdge'
+import { computeEdgeConfig, roundedOrthogonalPath } from './PipelineEdge'
 
 const MIN_STROKE_WIDTH = 2
 const MAX_STROKE_WIDTH = 10
-const BORDER_RADIUS = 5
 
 type Point = { x: number; y: number }
-
-function buildRoundedPath(points: Point[]): string {
-  if (points.length < 2) return ''
-  if (points.length === 2) {
-    return `M ${points[0].x},${points[0].y} L ${points[1].x},${points[1].y}`
-  }
-
-  let d = `M ${points[0].x},${points[0].y}`
-  for (let i = 1; i < points.length - 1; i++) {
-    const prev = points[i - 1]
-    const curr = points[i]
-    const next = points[i + 1]
-
-    const dxIn = curr.x - prev.x
-    const dyIn = curr.y - prev.y
-    const lenIn = Math.sqrt(dxIn * dxIn + dyIn * dyIn)
-    const dxOut = next.x - curr.x
-    const dyOut = next.y - curr.y
-    const lenOut = Math.sqrt(dxOut * dxOut + dyOut * dyOut)
-
-    const r = Math.min(BORDER_RADIUS, lenIn / 2, lenOut / 2)
-
-    const uxIn = lenIn > 0 ? dxIn / lenIn : 0
-    const uyIn = lenIn > 0 ? dyIn / lenIn : 0
-    const uxOut = lenOut > 0 ? dxOut / lenOut : 0
-    const uyOut = lenOut > 0 ? dyOut / lenOut : 0
-
-    const startX = curr.x - uxIn * r
-    const startY = curr.y - uyIn * r
-    const endX = curr.x + uxOut * r
-    const endY = curr.y + uyOut * r
-
-    d += ` L ${startX},${startY}`
-    d += ` Q ${curr.x},${curr.y} ${endX},${endY}`
-  }
-
-  const last = points[points.length - 1]
-  d += ` L ${last.x},${last.y}`
-  return d
-}
 
 function AnalyticsEdge({
   id,
@@ -67,7 +26,7 @@ function AnalyticsEdge({
     const { points } = computeEdgeConfig(
       sourceX, sourceY, targetX, targetY, waypoints,
     )
-    const d = buildRoundedPath(points)
+    const d = roundedOrthogonalPath(points)
 
     // Compute label position at the midpoint of the path
     const midIdx = Math.floor(points.length / 2)

@@ -165,18 +165,21 @@ def _determine_image_path(
     if len(term_paths) == 1:
         return term_paths[0][0]  # node_ids tuple
 
-    # Multiple paths — check cache first
-    cache_key = (tuple(sorted(specific_image.properties)), specific_image.suffix, term_type)
+    # Multiple paths — check cache first (include expected files signature)
+    base = f"{specific_image.camera_id}{specific_image.counter}"
+    match_expected_set = {f.lower() for f in best_match.expected_files}
+    cache_key = (
+        tuple(sorted(specific_image.properties)),
+        specific_image.suffix,
+        term_type,
+        tuple(sorted(match_expected_set)),
+    )
     if cache_key in path_cache:
         return path_cache[cache_key]
 
-    # Match by comparing expected files against each candidate path
-    base = f"{specific_image.camera_id}{specific_image.counter}"
-    match_expected_set = set(f.lower() for f in best_match.expected_files)
-
     for node_ids, path_data in term_paths:
         path_expected = generate_expected_files(path_data, base, specific_image.suffix)
-        path_expected_set = set(f.lower() for f in path_expected)
+        path_expected_set = {f.lower() for f in path_expected}
         if path_expected_set == match_expected_set:
             path_cache[cache_key] = node_ids
             return node_ids

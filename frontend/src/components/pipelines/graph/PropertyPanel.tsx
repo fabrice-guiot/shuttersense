@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, ArrowRight, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -170,6 +170,10 @@ function NodeProperties({
 }) {
   const typeDef = NODE_TYPE_DEFINITIONS.find((d) => d.type === node.type)
   const [editingId, setEditingId] = useState(node.id)
+
+  useEffect(() => {
+    setEditingId(node.id)
+  }, [node.id])
 
   const handlePropertyChange = (key: string, value: unknown) => {
     onUpdateProperties?.(node.id, { ...node.properties, [key]: value })

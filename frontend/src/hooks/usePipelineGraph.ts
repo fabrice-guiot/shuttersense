@@ -410,7 +410,7 @@ export function usePipelineGraph(): UsePipelineGraphReturn {
       nodesInEdges.add(e.source)
       nodesInEdges.add(e.target)
     })
-    const orphaned = typedNodes.filter((n) => !nodesInEdges.has(n.id))
+    const orphaned = typedNodes.filter((n) => !nodesInEdges.has(n.id) && n.type !== 'termination')
     if (orphaned.length > 0 && typedNodes.length > 1) {
       hints.push(`Orphaned nodes: ${orphaned.map((n) => n.id).join(', ')}`)
     }
