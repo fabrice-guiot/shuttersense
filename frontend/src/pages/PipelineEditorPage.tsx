@@ -233,13 +233,13 @@ export const PipelineEditorPage: React.FC = () => {
           {/* Pipeline Header */}
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <h2 className="text-2xl font-bold text-foreground">{pipeline.name}</h2>
                   {pipeline.description && (
                     <p className="text-muted-foreground mt-1">{pipeline.description}</p>
                   )}
-                  <div className="flex items-center gap-2 mt-3">
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
                     {pipeline.guid && (
                       <GuidBadge guid={pipeline.guid} />
                     )}
@@ -296,7 +296,7 @@ export const PipelineEditorPage: React.FC = () => {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Button
                     variant="outline"
                     onClick={() => pipelineId && currentVersion && downloadYaml(pipelineId, currentVersion)}
@@ -306,7 +306,7 @@ export const PipelineEditorPage: React.FC = () => {
                     {downloading ? 'Exporting...' : `Export YAML${isHistoricalVersion ? ` (v${currentVersion})` : ''}`}
                   </Button>
                   {!isHistoricalVersion && (
-                    <Button onClick={() => navigate(`/pipelines/${id}/edit`)}>
+                    <Button className="hidden md:inline-flex" onClick={() => navigate(`/pipelines/${id}/edit`)}>
                       <Pencil className="h-4 w-4 mr-2" />
                       Edit Pipeline
                     </Button>
