@@ -8,7 +8,7 @@ Provides data validation and serialization for:
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,7 @@ class CameraResponse(BaseModel):
     """Full camera details for API responses."""
     guid: str = Field(..., description="External identifier (cam_xxx)")
     camera_id: str = Field(..., description="Short alphanumeric ID from filenames")
-    status: str = Field(..., description="Camera status: temporary or confirmed")
+    status: Literal["temporary", "confirmed"] = Field(..., description="Camera status: temporary or confirmed")
     display_name: Optional[str] = Field(None, description="User-assigned friendly name")
     make: Optional[str] = Field(None, description="Camera manufacturer")
     model: Optional[str] = Field(None, description="Camera model name")
@@ -53,12 +53,12 @@ class CameraListResponse(BaseModel):
 
 class CameraUpdateRequest(BaseModel):
     """Request to update camera details."""
-    status: Optional[str] = Field(None, description="Camera status: temporary or confirmed")
+    status: Optional[Literal["temporary", "confirmed"]] = Field(None, description="Camera status: temporary or confirmed")
     display_name: Optional[str] = Field(None, max_length=100, description="Friendly name")
     make: Optional[str] = Field(None, max_length=100, description="Camera manufacturer")
     model: Optional[str] = Field(None, max_length=100, description="Camera model name")
     serial_number: Optional[str] = Field(None, max_length=100, description="Serial number")
-    notes: Optional[str] = Field(None, description="Free-form notes")
+    notes: Optional[str] = Field(None, max_length=1000, description="Free-form notes")
 
 
 # ============================================================================
@@ -89,8 +89,9 @@ class CameraDiscoverItem(BaseModel):
     """Minimal camera info returned from discovery."""
     guid: str = Field(..., description="External identifier (cam_xxx)")
     camera_id: str = Field(..., description="Short alphanumeric ID")
-    status: str = Field(..., description="Camera status: temporary or confirmed")
+    status: Literal["temporary", "confirmed"] = Field(..., description="Camera status: temporary or confirmed")
     display_name: Optional[str] = Field(None, description="Display name for reports")
+    audit: Optional[AuditInfo] = None
 
     model_config = {
         "from_attributes": True,
@@ -110,7 +111,7 @@ class CameraListQueryParams(BaseModel):
     """Query parameters for listing cameras."""
     limit: int = Field(50, ge=1, le=200, description="Page size")
     offset: int = Field(0, ge=0, description="Page offset")
-    status: Optional[str] = Field(None, description="Filter by status: temporary or confirmed")
+    status: Optional[Literal["temporary", "confirmed"]] = Field(None, description="Filter by status: temporary or confirmed")
     search: Optional[str] = Field(None, description="Search by camera_id, display_name, make, or model")
 
 

@@ -312,6 +312,25 @@ class TestExtractToolConfigErrors:
         with pytest.raises(ValueError, match="no Capture node"):
             extract_tool_config([], [])
 
+    def test_no_file_nodes_raises_error(self):
+        """Pipeline with Capture but no File nodes raises ValueError (FR-014)."""
+        nodes = [_capture_node()]
+        edges = []
+
+        with pytest.raises(ValueError, match="no File nodes"):
+            extract_tool_config(nodes, edges)
+
+    def test_camera_id_group_out_of_range_defaults_to_1(self):
+        """camera_id_group outside {1, 2} defaults to 1."""
+        nodes = [
+            _capture_node(camera_id_group="5"),
+            _file_node("file_cr3", ".cr3"),
+        ]
+        edges = [_edge("capture_1", "file_cr3")]
+
+        config = extract_tool_config(nodes, edges)
+        assert config.camera_id_group == 1
+
 
 # ============================================================================
 # Test: Sidecar inference (T003)

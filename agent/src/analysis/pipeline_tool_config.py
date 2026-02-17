@@ -95,8 +95,15 @@ def extract_tool_config(
         camera_id_group = int(camera_id_group_raw)
     except (ValueError, TypeError):
         camera_id_group = 1
+    if camera_id_group not in (1, 2):
+        camera_id_group = 1
 
     # --- File nodes: photo and metadata extensions (FR-002, FR-003, FR-024) ---
+    if not pipeline_config.file_nodes:
+        raise ValueError(
+            "Pipeline has no File nodes. "
+            "Cannot derive photo/metadata extensions for tool configuration."
+        )
     photo_extensions: Set[str] = set()
     metadata_extensions: Set[str] = set()
 

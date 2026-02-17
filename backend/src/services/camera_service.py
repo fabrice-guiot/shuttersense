@@ -293,6 +293,7 @@ class CameraService:
         camera_ids: List[str],
         user_id: Optional[int] = None,
         camera_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
+        commit: bool = True,
     ) -> CameraDiscoverResponse:
         """
         Discover cameras: idempotent batch create.
@@ -307,6 +308,9 @@ class CameraService:
             user_id: Optional user ID for audit
             camera_metadata: Optional mapping of camera_id to metadata dict
                 with keys like 'name', 'make', 'model', 'serial_number'
+            commit: Whether to commit the transaction (default True).
+                Pass False when called within an outer transaction to
+                preserve atomicity.
 
         Returns:
             All cameras (existing + newly created) for the submitted IDs
@@ -368,7 +372,8 @@ class CameraService:
                 logger.warning(f"Failed to create camera '{cam_id}', skipping")
                 continue
 
-        self.db.commit()
+        if commit:
+            self.db.commit()
 
         return CameraDiscoverResponse(cameras=results)
 
@@ -424,4 +429,5 @@ class CameraService:
             camera_id=camera.camera_id,
             status=camera.status,
             display_name=camera.display_name,
+            audit=camera.audit,
         )

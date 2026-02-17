@@ -1222,6 +1222,7 @@ class JobCoordinatorService:
                         team_id=team_id,
                         camera_ids=list(cameras_dict.keys()),
                         camera_metadata=cameras_dict,
+                        commit=False,
                     )
                 except Exception as e:
                     logger.warning(
@@ -1453,6 +1454,7 @@ class JobCoordinatorService:
                         team_id=team_id,
                         camera_ids=list(cameras_dict.keys()),
                         camera_metadata=cameras_dict,
+                        commit=False,
                     )
                 except Exception as e:
                     logger.warning("Camera auto-discovery from no-change results failed: %s", e)

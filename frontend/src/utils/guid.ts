@@ -28,6 +28,7 @@
  *   - art: AgentRegistrationToken (one-time registration tokens)
  *   - sub: PushSubscription (push notification subscriptions)
  *   - ntf: Notification (notification history)
+ *   - cam: Camera (physical camera equipment)
  *   In-memory entities (transient):
  *   - job: Job
  *   - imp: Import

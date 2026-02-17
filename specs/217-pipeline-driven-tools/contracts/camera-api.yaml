@@ -90,8 +90,11 @@ paths:
           required: true
           schema: { type: string, pattern: '^cam_[a-z0-9]{26}$' }
       responses:
-        204:
+        200:
           description: Camera deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CameraDeleteResponse' }
         404:
           description: Camera not found
 
@@ -125,7 +128,14 @@ components:
         make: { type: string, maxLength: 100 }
         model: { type: string, maxLength: 100 }
         serial_number: { type: string, maxLength: 100 }
-        notes: { type: string }
+        notes: { type: string, maxLength: 1000 }
+
+    CameraDeleteResponse:
+      type: object
+      required: [message, deleted_guid]
+      properties:
+        message: { type: string }
+        deleted_guid: { type: string, example: "cam_01hgw2bbg0000000000000001" }
 
     CameraStatsResponse:
       type: object

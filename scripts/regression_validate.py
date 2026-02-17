@@ -239,6 +239,7 @@ def validate_phase(phase: str, expect_name_changes: bool) -> bool:
             if baseline is None:
                 print(f"  {tool}: NO BASELINE - skipped")
                 structural_fail += 1
+                all_ok = False
                 continue
             if current is None:
                 print(f"  {tool}: NO SNAPSHOT - run failed silently")

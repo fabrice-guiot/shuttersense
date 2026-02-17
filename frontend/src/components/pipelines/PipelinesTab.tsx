@@ -10,6 +10,18 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog'
 import { useHeaderStats } from '@/contexts/HeaderStatsContext'
 import { PipelineList } from '@/components/pipelines/PipelineList'
 import { usePipelines, usePipelineStats, usePipelineExport, usePipelineImport } from '@/hooks/usePipelines'
@@ -254,16 +266,20 @@ export const PipelinesTab: React.FC = () => {
 
       {/* Error Alert */}
       {actionError && (
-        <div className="mb-4 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-          <span>{actionError}</span>
-          <button
-            onClick={() => setActionError(null)}
-            className="ml-auto text-red-500 hover:text-red-700"
-          >
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>{actionError}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActionError(null)}
+              className="ml-4 h-auto px-2 py-1"
+            >
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Pipeline List */}
@@ -284,174 +300,130 @@ export const PipelinesTab: React.FC = () => {
         onValidateGraph={handleValidateGraph}
       />
 
-      {/* Delete Confirmation Modal */}
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Delete Pipeline
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Are you sure you want to delete <strong>{confirmDelete.name}</strong>?
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Pipeline</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{confirmDelete?.name}</strong>?
               This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
-                disabled={actionLoading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                disabled={actionLoading}
-              >
-                {actionLoading ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={actionLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {actionLoading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {/* Activate Confirmation Modal */}
-      {confirmActivate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Activate Pipeline
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Activating <strong>{confirmActivate.name}</strong> will mark it as
+      {/* Activate Confirmation Dialog */}
+      <AlertDialog open={!!confirmActivate} onOpenChange={(open) => !open && setConfirmActivate(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Activate Pipeline</AlertDialogTitle>
+            <AlertDialogDescription>
+              Activating <strong>{confirmActivate?.name}</strong> will mark it as
               ready for use. To use this pipeline for tool execution, set it as the
               default pipeline after activation.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmActivate(null)}
-                className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
-                disabled={actionLoading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleActivateConfirm}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                disabled={actionLoading}
-              >
-                {actionLoading ? 'Activating...' : 'Activate'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleActivateConfirm} disabled={actionLoading}>
+              {actionLoading ? 'Activating...' : 'Activate'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {/* Deactivate Confirmation Modal */}
-      {confirmDeactivate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Deactivate Pipeline
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Deactivating <strong>{confirmDeactivate.name}</strong> will mark it as
+      {/* Deactivate Confirmation Dialog */}
+      <AlertDialog open={!!confirmDeactivate} onOpenChange={(open) => !open && setConfirmDeactivate(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate Pipeline</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deactivating <strong>{confirmDeactivate?.name}</strong> will mark it as
               not ready for use.
-              {confirmDeactivate.is_default && (
+              {confirmDeactivate?.is_default && (
                 <span className="block mt-2 text-warning">
                   <strong>Note:</strong> This pipeline is currently the default.
                   Deactivating it will also remove the default status.
                 </span>
               )}
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmDeactivate(null)}
-                className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
-                disabled={actionLoading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeactivateConfirm}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-                disabled={actionLoading}
-              >
-                {actionLoading ? 'Deactivating...' : 'Deactivate'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeactivateConfirm}
+              disabled={actionLoading}
+              className="bg-warning text-warning-foreground hover:bg-warning/90"
+            >
+              {actionLoading ? 'Deactivating...' : 'Deactivate'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {/* Set Default Confirmation Modal */}
-      {confirmSetDefault && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Set as Default Pipeline
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Setting <strong>{confirmSetDefault.name}</strong> as default will
+      {/* Set Default Confirmation Dialog */}
+      <AlertDialog open={!!confirmSetDefault} onOpenChange={(open) => !open && setConfirmSetDefault(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Set as Default Pipeline</AlertDialogTitle>
+            <AlertDialogDescription>
+              Setting <strong>{confirmSetDefault?.name}</strong> as default will
               use it for all pipeline validation tool runs.
-              {stats?.default_pipeline_name && stats.default_pipeline_guid !== confirmSetDefault.guid && (
+              {stats?.default_pipeline_name && stats.default_pipeline_guid !== confirmSetDefault?.guid && (
                 <span className="block mt-2 text-warning">
-                  <strong>Note:</strong> The current default pipeline "{stats.default_pipeline_name}"
+                  <strong>Note:</strong> The current default pipeline &quot;{stats.default_pipeline_name}&quot;
                   will lose its default status.
                 </span>
               )}
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmSetDefault(null)}
-                className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
-                disabled={actionLoading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSetDefaultConfirm}
-                className="px-4 py-2 bg-warning text-warning-foreground rounded-lg hover:bg-warning/90"
-                disabled={actionLoading}
-              >
-                {actionLoading ? 'Setting...' : 'Set as Default'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSetDefaultConfirm}
+              disabled={actionLoading}
+              className="bg-warning text-warning-foreground hover:bg-warning/90"
+            >
+              {actionLoading ? 'Setting...' : 'Set as Default'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {/* Unset Default Confirmation Modal */}
-      {confirmUnsetDefault && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Remove Default Status
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Removing default status from <strong>{confirmUnsetDefault.name}</strong> will
+      {/* Unset Default Confirmation Dialog */}
+      <AlertDialog open={!!confirmUnsetDefault} onOpenChange={(open) => !open && setConfirmUnsetDefault(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Default Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removing default status from <strong>{confirmUnsetDefault?.name}</strong> will
               leave no default pipeline. Pipeline validation tool will not run without
               a default pipeline configured.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmUnsetDefault(null)}
-                className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
-                disabled={actionLoading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUnsetDefaultConfirm}
-                className="px-4 py-2 bg-warning text-warning-foreground rounded-lg hover:bg-warning/90"
-                disabled={actionLoading}
-              >
-                {actionLoading ? 'Removing...' : 'Remove Default'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleUnsetDefaultConfirm}
+              disabled={actionLoading}
+              className="bg-warning text-warning-foreground hover:bg-warning/90"
+            >
+              {actionLoading ? 'Removing...' : 'Remove Default'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </>
   )
