@@ -149,10 +149,10 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T047 [P] Verify extension case-insensitivity across all tools — `.DNG` and `.dng` treated as same in `extract_tool_config()` and downstream consumers
-- [ ] T048 [P] Verify `PipelineToolConfig` extraction is deterministic — same Pipeline always produces same config (sorted sets, stable dict ordering)
-- [ ] T049 [P] Verify backward compatibility — run existing analysis tests to confirm Config-based execution unchanged when no Pipeline available
-- [ ] T050 Run quickstart.md validation — execute all verification commands from `specs/217-pipeline-driven-tools/quickstart.md`
+- [x] T047 [P] Verify extension case-insensitivity across all tools — `.DNG` and `.dng` treated as same in `extract_tool_config()` and downstream consumers
+- [x] T048 [P] Verify `PipelineToolConfig` extraction is deterministic — same Pipeline always produces same config (sorted sets, stable dict ordering)
+- [x] T049 [P] Verify backward compatibility — run existing analysis tests to confirm Config-based execution unchanged when no Pipeline available
+- [x] T050 Run quickstart.md validation — execute all verification commands from `specs/217-pipeline-driven-tools/quickstart.md`
 
 ---
 
