@@ -165,6 +165,75 @@ def pipeline_with_no_path_stats(test_db_session, test_team):
     return pipeline, result
 
 
+@pytest.fixture
+def pipeline_with_pairing_node(test_db_session, test_team):
+    """Create a pipeline with a pairing node that merges two branches.
+
+    Graph structure:
+        cap (capture) -> raw (file .cr3) -> pair (pairing) -> done (termination)
+        cap (capture) -> xmp (file .xmp) ↗
+
+    Edges: cap->raw, cap->xmp, raw->pair, xmp->pair, pair->done
+
+    Path stats (merged by pipeline_analyzer for pairing):
+        [cap, raw, xmp, pair, done] with 80 images
+
+    Expected node counts: cap=80, raw=80, xmp=80, pair=80, done=80
+    Expected edge counts: cap->raw=80, cap->xmp=80, raw->pair=80, xmp->pair=80, pair->done=80
+    """
+    pipeline = Pipeline(
+        name="Pairing Flow Pipeline",
+        nodes_json=[
+            {"id": "cap", "type": "capture", "properties": {
+                "sample_filename": "AB3D0001",
+                "filename_regex": "([A-Z0-9]{4})([0-9]{4})",
+                "camera_id_group": "1",
+            }},
+            {"id": "raw", "type": "file", "properties": {"extension": ".cr3"}},
+            {"id": "xmp", "type": "file", "properties": {"extension": ".xmp"}},
+            {"id": "pair", "type": "pairing", "properties": {"pairing_type": "sidecar"}},
+            {"id": "done", "type": "termination", "properties": {}},
+        ],
+        edges_json=[
+            {"from": "cap", "to": "raw"},
+            {"from": "cap", "to": "xmp"},
+            {"from": "raw", "to": "pair"},
+            {"from": "xmp", "to": "pair"},
+            {"from": "pair", "to": "done"},
+        ],
+        version=1,
+        is_active=True,
+        is_valid=True,
+        team_id=test_team.id,
+    )
+    test_db_session.add(pipeline)
+    test_db_session.flush()
+
+    now = datetime.utcnow()
+    result = AnalysisResult(
+        pipeline_id=pipeline.id,
+        pipeline_version=1,
+        tool="pipeline_validation",
+        status=ResultStatus.COMPLETED,
+        started_at=now - timedelta(seconds=10),
+        completed_at=now,
+        duration_seconds=10.0,
+        results_json={
+            "path_stats": [
+                # Merged path: both branches combined by merge_two_paths()
+                {"path": ["cap", "raw", "xmp", "pair", "done"], "image_count": 80},
+            ],
+            "status_counts": {"consistent": 80},
+        },
+        team_id=test_team.id,
+    )
+    test_db_session.add(result)
+    test_db_session.commit()
+    test_db_session.refresh(pipeline)
+    test_db_session.refresh(result)
+    return pipeline, result
+
+
 # ============================================================================
 # Service-level tests
 # ============================================================================
@@ -267,6 +336,41 @@ class TestGetFlowAnalytics:
         assert edge_pct[("A", "B")] == 100.0
         assert edge_pct[("B", "C")] == pytest.approx(66.67, abs=0.01)
         assert edge_pct[("B", "D")] == pytest.approx(33.33, abs=0.01)
+
+    def test_pairing_node_all_edges_counted(
+        self, pipeline_service, pipeline_with_pairing_node, test_team
+    ):
+        """Pairing node: both input branches must show flow.
+
+        Pipeline: cap → raw → pair → done
+                  cap → xmp ↗
+
+        Merged path: [cap, raw, xmp, pair, done] × 80 images
+        All 5 edges should show 80 records (100%).
+        """
+        pipeline, _ = pipeline_with_pairing_node
+        response = pipeline_service.get_flow_analytics(
+            pipeline_guid=pipeline.guid,
+            team_id=test_team.id,
+        )
+
+        assert response.total_records == 80
+
+        node_map = {n.node_id: n.record_count for n in response.nodes}
+        assert node_map["cap"] == 80
+        assert node_map["raw"] == 80
+        assert node_map["xmp"] == 80
+        assert node_map["pair"] == 80
+        assert node_map["done"] == 80
+
+        edge_map = {(e.from_node, e.to_node): e.record_count for e in response.edges}
+        assert edge_map[("cap", "raw")] == 80
+        assert edge_map[("cap", "xmp")] == 80
+        assert edge_map[("raw", "pair")] == 80
+        assert edge_map[("xmp", "pair")] == 80
+        assert edge_map[("pair", "done")] == 80
+        # Exactly 5 edges, no phantom edges like raw→xmp
+        assert len(edge_map) == 5
 
 
 # ============================================================================

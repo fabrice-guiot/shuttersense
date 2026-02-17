@@ -1024,18 +1024,27 @@ class PipelineService:
         if not path_stats:
             raise NotFoundError("AnalysisResult with path_stats", pipeline_guid)
 
-        # Derive per-node and per-edge counts from path_stats
+        # Derive per-node and per-edge counts from path_stats.
+        # Use the pipeline's actual edges to determine connectivity rather than
+        # consecutive path positions — merged pairing paths are not in strict
+        # topological order, so consecutive pairs can produce phantom edges.
+        pipeline_edges = {
+            (e["from"], e["to"]) for e in (pipeline.edges_json or [])
+        }
+
         node_counts: Dict[str, int] = {}
         edge_counts: Dict[str, int] = {}  # "from->to" → count
 
         for entry in path_stats:
             path_nodes = entry.get("path", [])
             count = entry.get("image_count", 0)
-            for node_id in set(path_nodes):
+            path_node_set = set(path_nodes)
+            for node_id in path_node_set:
                 node_counts[node_id] = node_counts.get(node_id, 0) + count
-            for i in range(len(path_nodes) - 1):
-                edge_key = f"{path_nodes[i]}->{path_nodes[i + 1]}"
-                edge_counts[edge_key] = edge_counts.get(edge_key, 0) + count
+            for from_node, to_node in pipeline_edges:
+                if from_node in path_node_set and to_node in path_node_set:
+                    edge_key = f"{from_node}->{to_node}"
+                    edge_counts[edge_key] = edge_counts.get(edge_key, 0) + count
 
         total_records = sum(entry.get("image_count", 0) for entry in path_stats)
 
