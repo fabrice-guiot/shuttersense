@@ -356,8 +356,6 @@ class CameraService:
                 self.db.add(camera)
                 self.db.flush()
                 nested.commit()
-                results.append(self._to_discover_item(camera))
-                logger.info(f"Discovered new camera '{cam_id}' for team {team_id}")
             except IntegrityError:
                 nested.rollback()
                 # Concurrent insert — camera was created between our check and insert
@@ -367,10 +365,14 @@ class CameraService:
                 ).first()
                 if existing:
                     results.append(self._to_discover_item(existing))
+                continue
             except Exception:
                 nested.rollback()
                 logger.warning(f"Failed to create camera '{cam_id}', skipping")
                 continue
+
+            results.append(self._to_discover_item(camera))
+            logger.info(f"Discovered new camera '{cam_id}' for team {team_id}")
 
         if commit:
             self.db.commit()

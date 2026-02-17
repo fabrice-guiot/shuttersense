@@ -183,7 +183,7 @@ def capture_baseline() -> bool:
                 # Verify snapshot was created
                 snap = load_snapshot(baseline_dir, tool, col)
                 if snap is None:
-                    print(f"    FAIL: Snapshot file not created")
+                    print("    FAIL: Snapshot file not created")
                     all_ok = False
                 else:
                     files = snap.get("total_files") or snap.get("files_scanned") or "?"
