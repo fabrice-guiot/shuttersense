@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import {
   ReactFlow,
   MiniMap,
@@ -78,6 +79,8 @@ export function PipelineGraphView({
     [onNodeClick],
   )
 
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+
   const handleEdgeClick = useCallback(
     (_event: React.MouseEvent, edge: { id: string }) => {
       onEdgeClick?.(edge.id)
@@ -102,7 +105,7 @@ export function PipelineGraphView({
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
       >
-        <MiniMap nodeComponent={MiniMapNode} />
+        {isDesktop && <MiniMap nodeComponent={MiniMapNode} />}
         <Controls />
         <Background variant={BackgroundVariant.Dots} gap={16} />
       </ReactFlow>
