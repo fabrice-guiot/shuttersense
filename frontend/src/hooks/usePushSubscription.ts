@@ -94,13 +94,18 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 /**
  * Detect the browser name from user agent data or UA string
  */
+interface NavigatorUAData {
+  brands?: { brand: string }[]
+  platform?: string
+}
+
 function detectBrowserName(): string {
   // Prefer navigator.userAgentData (Chromium-based browsers)
-  const uaData = (navigator as { userAgentData?: { brands?: { brand: string }[] } }).userAgentData
+  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
   if (uaData?.brands) {
     // Pick the first "real" brand (skip "Not A;Brand" / "Chromium" filler entries)
     const real = uaData.brands.find(
-      (b) => !/not.a/i.test(b.brand) && b.brand !== 'Chromium'
+      (b) => !/not[\s._\-;)\/]?a/i.test(b.brand) && b.brand !== 'Chromium'
     )
     if (real) return real.brand
   }
@@ -119,15 +124,30 @@ function detectBrowserName(): string {
  * Detect a friendly device name from the user agent in "{browser} on {platform}" format
  */
 function detectDeviceName(): string {
-  const ua = navigator.userAgent
-  let platform: string
-  if (/iPhone/i.test(ua)) platform = 'iPhone'
-  else if (/iPad/i.test(ua)) platform = 'iPad'
-  else if (/Android/i.test(ua)) platform = 'Android'
-  else if (/Macintosh/i.test(ua)) platform = 'Mac'
-  else if (/Windows/i.test(ua)) platform = 'Windows'
-  else if (/Linux/i.test(ua)) platform = 'Linux'
-  else platform = 'Unknown'
+  // Prefer navigator.userAgentData.platform when available
+  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
+  let platform: string | undefined
+  if (uaData?.platform) {
+    // Normalize common platform values
+    const p = uaData.platform
+    if (/macos/i.test(p)) platform = 'Mac'
+    else if (/windows/i.test(p)) platform = 'Windows'
+    else if (/android/i.test(p)) platform = 'Android'
+    else if (/linux/i.test(p)) platform = 'Linux'
+    else platform = p
+  }
+
+  // Fallback: parse the UA string
+  if (!platform) {
+    const ua = navigator.userAgent
+    if (/iPhone/i.test(ua)) platform = 'iPhone'
+    else if (/iPad/i.test(ua)) platform = 'iPad'
+    else if (/Android/i.test(ua)) platform = 'Android'
+    else if (/Macintosh/i.test(ua)) platform = 'Mac'
+    else if (/Windows/i.test(ua)) platform = 'Windows'
+    else if (/Linux/i.test(ua)) platform = 'Linux'
+    else platform = 'Unknown'
+  }
 
   const browser = detectBrowserName()
   return `${browser} on ${platform}`
@@ -158,6 +178,10 @@ export const usePushSubscription = (
 
   const isIosNotInstalled = isIos() && !isStandalone()
   const isCurrentDeviceSubscribed = currentDeviceEndpoint !== null
+
+  // Ref for subscriptions to avoid removeDevice callback recreation on every status refresh
+  const subscriptionsRef = useRef(subscriptions)
+  subscriptionsRef.current = subscriptions
 
   // Track if component is still mounted (must set true on mount for StrictMode remount)
   const mountedRef = useRef(true)
@@ -319,7 +343,7 @@ export const usePushSubscription = (
       setError(null)
       try {
         // If removing the current device, unsubscribe PushManager first
-        const target = subscriptions.find((s) => s.guid === guid)
+        const target = subscriptionsRef.current.find((s) => s.guid === guid)
         if (target && currentDeviceEndpoint && target.endpoint === currentDeviceEndpoint) {
           try {
             const registration = await navigator.serviceWorker.ready
@@ -352,7 +376,7 @@ export const usePushSubscription = (
         }
       }
     },
-    [subscriptions, currentDeviceEndpoint, refreshStatus]
+    [currentDeviceEndpoint, refreshStatus]
   )
 
   /**

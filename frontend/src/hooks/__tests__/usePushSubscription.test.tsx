@@ -336,6 +336,97 @@ describe('usePushSubscription', () => {
     }
   })
 
+  it('should set currentDeviceEndpoint when local subscription matches server', async () => {
+    // Make mock PushManager endpoint match the server subscription endpoint
+    mockPushSubscription.endpoint = 'https://fcm.googleapis.com/fcm/send/abc123'
+
+    const { result } = renderHook(() => usePushSubscription())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.currentDeviceEndpoint).toBe(
+      'https://fcm.googleapis.com/fcm/send/abc123'
+    )
+    expect(result.current.isCurrentDeviceSubscribed).toBe(true)
+  })
+
+  it('should have null currentDeviceEndpoint when endpoints do not match', async () => {
+    // Ensure PushManager endpoint differs from server subscription (abc123)
+    mockPushSubscription.endpoint = 'https://fcm.googleapis.com/fcm/send/xyz789'
+
+    const { result } = renderHook(() => usePushSubscription())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.currentDeviceEndpoint).toBeNull()
+    expect(result.current.isCurrentDeviceSubscribed).toBe(false)
+  })
+
+  it('should unsubscribe PushManager when removing current device', async () => {
+    // Make endpoints match so this device IS the current device
+    mockPushSubscription.endpoint = 'https://fcm.googleapis.com/fcm/send/abc123'
+    vi.mocked(notificationService.unsubscribeByGuid).mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => usePushSubscription())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.removeDevice('psub_01hgw2bbg00000000000000001')
+    })
+
+    expect(mockPushSubscription.unsubscribe).toHaveBeenCalled()
+    expect(notificationService.unsubscribeByGuid).toHaveBeenCalledWith(
+      'psub_01hgw2bbg00000000000000001'
+    )
+  })
+
+  it('should NOT unsubscribe PushManager when removing a different device', async () => {
+    // Ensure PushManager endpoint differs from server subscription
+    mockPushSubscription.endpoint = 'https://fcm.googleapis.com/fcm/send/xyz789'
+    vi.mocked(notificationService.unsubscribeByGuid).mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => usePushSubscription())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.removeDevice('psub_01hgw2bbg00000000000000001')
+    })
+
+    expect(mockPushSubscription.unsubscribe).not.toHaveBeenCalled()
+    expect(notificationService.unsubscribeByGuid).toHaveBeenCalledWith(
+      'psub_01hgw2bbg00000000000000001'
+    )
+  })
+
+  it('should prefer navigator.userAgentData for browser detection', async () => {
+    Object.defineProperty(navigator, 'userAgentData', {
+      writable: true,
+      configurable: true,
+      value: {
+        brands: [
+          { brand: 'Not A;Brand', version: '99' },
+          { brand: 'Chromium', version: '120' },
+          { brand: 'Google Chrome', version: '120' },
+        ],
+        platform: 'macOS',
+      },
+    })
+
+    const { result } = renderHook(() => usePushSubscription(false))
+
+    await act(async () => {
+      await result.current.subscribe()
+    })
+
+    const call = vi.mocked(notificationService.subscribe).mock.calls[0]
+    expect(call[0].device_name).toBe('Google Chrome on Mac')
+
+    // Clean up
+    Object.defineProperty(navigator, 'userAgentData', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    })
+  })
+
   it('should get permission state', async () => {
     const { result } = renderHook(() => usePushSubscription(false))
 
