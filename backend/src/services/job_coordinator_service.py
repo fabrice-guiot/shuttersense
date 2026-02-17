@@ -1209,15 +1209,12 @@ class JobCoordinatorService:
         self._update_collection_stats_from_results(job, completion_data)
 
         # Auto-discover cameras from analysis results (Issue #217)
-        # Prefer 'cameras' dict (raw camera_id → metadata), fall back to
-        # 'camera_usage' keys for older results that lack the cameras field.
+        # Only use the 'cameras' dict which maps raw camera_id → metadata.
+        # Do NOT fall back to 'camera_usage' — its keys are resolved display
+        # names (e.g. "Canon EOS R5"), not raw camera IDs.
         if completion_data.results:
             cameras_dict = completion_data.results.get("cameras")
-            if not cameras_dict or not isinstance(cameras_dict, dict):
-                camera_usage = completion_data.results.get("camera_usage")
-                if camera_usage and isinstance(camera_usage, dict):
-                    cameras_dict = {k: {} for k in camera_usage}
-            if cameras_dict:
+            if cameras_dict and isinstance(cameras_dict, dict):
                 try:
                     from backend.src.services.camera_service import CameraService
                     camera_service = CameraService(db=self.db)
@@ -1448,11 +1445,7 @@ class JobCoordinatorService:
         # Auto-discover cameras from copied results (Issue #217)
         if source_result.results_json:
             cameras_dict = source_result.results_json.get("cameras")
-            if not cameras_dict or not isinstance(cameras_dict, dict):
-                camera_usage = source_result.results_json.get("camera_usage")
-                if camera_usage and isinstance(camera_usage, dict):
-                    cameras_dict = {k: {} for k in camera_usage}
-            if cameras_dict:
+            if cameras_dict and isinstance(cameras_dict, dict):
                 try:
                     from backend.src.services.camera_service import CameraService
                     camera_service = CameraService(db=self.db)

@@ -363,6 +363,10 @@ class CameraService:
                 ).first()
                 if existing:
                     results.append(self._to_discover_item(existing))
+            except Exception:
+                nested.rollback()
+                logger.warning(f"Failed to create camera '{cam_id}', skipping")
+                continue
 
         self.db.commit()
 
