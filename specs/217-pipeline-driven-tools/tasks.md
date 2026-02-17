@@ -92,9 +92,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] Implement `_discover_cameras()` function in `agent/cli/run.py` — extract unique camera IDs from imagegroups, call `http_client.discover_cameras()`, build camera_id→display_name mapping, handle offline (None client) and network errors with identity mapping fallback and warning log
-- [ ] T027 [US3] Integrate Camera discovery into `_run_photo_pairing()` in `agent/cli/run.py` — call `_discover_cameras()` after `build_imagegroups()`, pass resolved camera names to `calculate_analytics()` via config dict
-- [ ] T028 [US3] Unit tests for Camera auto-discovery in `agent/tests/unit/test_camera_discovery.py` — online discovery (mock HTTP), offline fallback (None client), network error fallback, empty camera list, duplicate camera IDs deduplication
+- [x] T026 [US3] Implement `_discover_cameras()` function in `agent/cli/run.py` — extract unique camera IDs from imagegroups, call `http_client.discover_cameras()`, build camera_id→display_name mapping, handle offline (None client) and network errors with identity mapping fallback and warning log
+- [x] T027 [US3] Integrate Camera discovery into `_run_photo_pairing()` in `agent/cli/run.py` — call `_discover_cameras()` after `build_imagegroups()`, pass resolved camera names to `calculate_analytics()` via config dict
+- [x] T028 [US3] Unit tests for Camera auto-discovery in `agent/tests/unit/test_camera_discovery.py` — online discovery (mock HTTP), offline fallback (None client), network error fallback, empty camera list, duplicate camera IDs deduplication
 
 **Checkpoint**: Camera auto-discovery creates records for new cameras during online analysis and falls back gracefully offline. All US3 tests pass.
 
