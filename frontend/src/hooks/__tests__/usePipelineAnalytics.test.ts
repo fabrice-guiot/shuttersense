@@ -32,6 +32,11 @@ const sampleAnalytics: PipelineFlowAnalyticsResponse = {
   pipeline_version: 3,
   result_guid: 'res_abc456',
   result_created_at: '2026-02-15T10:30:00Z',
+  result_status: 'COMPLETED',
+  collection_guid: 'col_test789',
+  collection_name: 'Test Collection',
+  completed_at: '2026-02-15T10:35:00Z',
+  files_scanned: 1204,
   total_records: 500,
   nodes: [
     { node_id: 'capture', record_count: 500, percentage: 100 },

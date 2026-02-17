@@ -411,6 +411,11 @@ class PipelineFlowAnalyticsResponse(BaseModel):
     pipeline_version: int = Field(..., description="Pipeline version at time of analysis")
     result_guid: str = Field(..., description="Analysis result GUID (res_xxx)")
     result_created_at: datetime = Field(..., description="When the analysis result was created")
+    result_status: str = Field(..., description="Result status (COMPLETED, NO_CHANGE, etc.)")
+    collection_guid: str = Field(..., description="Collection GUID (col_xxx)")
+    collection_name: str = Field(..., description="Collection name")
+    completed_at: Optional[datetime] = Field(None, description="When the analysis finished")
+    files_scanned: Optional[int] = Field(None, description="Number of files processed")
     total_records: int = Field(..., ge=0, description="Total image records analyzed")
     nodes: List[NodeFlowStats] = Field(..., description="Per-node flow statistics")
     edges: List[EdgeFlowStats] = Field(..., description="Per-edge flow statistics")
@@ -422,6 +427,11 @@ class PipelineFlowAnalyticsResponse(BaseModel):
                 "pipeline_version": 3,
                 "result_guid": "res_01hgw2bbg0000000000000010",
                 "result_created_at": "2024-01-15T14:45:00Z",
+                "result_status": "COMPLETED",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "collection_name": "My Photos",
+                "completed_at": "2024-01-15T14:50:00Z",
+                "files_scanned": 1204,
                 "total_records": 150,
                 "nodes": [
                     {"node_id": "capture_1", "record_count": 150, "percentage": 100.0},

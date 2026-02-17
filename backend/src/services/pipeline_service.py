@@ -1031,7 +1031,7 @@ class PipelineService:
         for entry in path_stats:
             path_nodes = entry.get("path", [])
             count = entry.get("image_count", 0)
-            for node_id in path_nodes:
+            for node_id in set(path_nodes):
                 node_counts[node_id] = node_counts.get(node_id, 0) + count
             for i in range(len(path_nodes) - 1):
                 edge_key = f"{path_nodes[i]}->{path_nodes[i + 1]}"
@@ -1070,6 +1070,11 @@ class PipelineService:
             pipeline_version=result.pipeline_version or pipeline.version,
             result_guid=result.guid,
             result_created_at=result.created_at,
+            result_status=result.status.value if hasattr(result.status, 'value') else str(result.status),
+            collection_guid=result.collection.guid if result.collection else "",
+            collection_name=result.collection.name if result.collection else "Unknown",
+            completed_at=result.completed_at,
+            files_scanned=result.files_scanned,
             total_records=total_records,
             nodes=nodes,
             edges=edges,

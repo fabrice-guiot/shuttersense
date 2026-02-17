@@ -146,11 +146,13 @@ def get_flow_analytics(
             result_guid=result_guid,
         )
     except ValueError as e:
+        logger.error("flow-analytics ValueError for pipeline=%s result=%s: %s", guid, result_guid, e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except NotFoundError:
+    except NotFoundError as e:
+        logger.warning("flow-analytics NotFound for pipeline=%s result=%s: %s", guid, result_guid, e)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pipeline or analysis results not found: {guid}"

@@ -19,6 +19,7 @@ import {
   Zap,
   Download,
   History,
+  BarChart3,
 } from 'lucide-react'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { usePipeline, usePipelines, usePipelineExport } from '@/hooks/usePipelines'
@@ -28,6 +29,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import {
   Select,
   SelectContent,
@@ -310,6 +312,53 @@ export const PipelineEditorPage: React.FC = () => {
 
               {/* Audit Trail (Issue #120) */}
               <AuditTrailSection audit={pipeline.audit} />
+
+              {/* Flow Analytics Context (shown when navigated from a result) */}
+              {showFlow && analytics && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                      Flow Analytics
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Collection: </span>
+                        <span className="font-medium">{analytics.collection_name || 'Unknown'}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Status: </span>
+                        <span className="font-medium">
+                          {analytics.result_status === 'COMPLETED' ? '● Completed' :
+                           analytics.result_status === 'NO_CHANGE' ? '● No Change' :
+                           analytics.result_status}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Analyzed: </span>
+                        <span className="font-medium">
+                          {analytics.completed_at
+                            ? new Date(analytics.completed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                            : new Date(analytics.result_created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="flex gap-4">
+                        <span>
+                          <span className="text-muted-foreground">Records: </span>
+                          <span className="font-medium">{analytics.total_records.toLocaleString()}</span>
+                        </span>
+                        {analytics.files_scanned != null && (
+                          <span>
+                            <span className="text-muted-foreground">Files: </span>
+                            <span className="font-medium">{analytics.files_scanned.toLocaleString()}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -328,29 +377,6 @@ export const PipelineEditorPage: React.FC = () => {
             </div>
           )}
 
-          {/* Flow analytics info bar (shown when navigated from a result) */}
-          {showFlow && analytics && (
-            <div className="flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-2 text-sm">
-              <span className="text-muted-foreground">
-                Showing flow analytics from result{' '}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">{resultGuid}</code>
-                {analytics.total_records != null && (
-                  <> &mdash; {analytics.total_records.toLocaleString()} records</>
-                )}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-auto px-2 py-1 text-xs"
-                onClick={() => {
-                  searchParams.delete('result')
-                  setSearchParams(searchParams)
-                }}
-              >
-                Dismiss
-              </Button>
-            </div>
-          )}
           {analyticsLoading && resultGuid && (
             <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2 text-sm text-muted-foreground">
               <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-primary" />

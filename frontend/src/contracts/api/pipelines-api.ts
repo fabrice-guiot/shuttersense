@@ -209,6 +209,11 @@ export interface PipelineFlowAnalyticsResponse {
   pipeline_version: number
   result_guid: string
   result_created_at: string
+  result_status: string
+  collection_guid: string
+  collection_name: string
+  completed_at: string | null
+  files_scanned: number | null
   total_records: number
   nodes: NodeFlowStats[]
   edges: EdgeFlowStats[]
