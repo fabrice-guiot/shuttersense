@@ -58,11 +58,25 @@ from src.config_resolver import resolve_team_config
     type=click.Path(),
     help="Save HTML report to this path.",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force re-analysis even if no changes detected.",
+)
+@click.option(
+    "--snapshot",
+    default=None,
+    type=click.Path(),
+    help="Save analysis_data JSON to this directory for regression comparison.",
+)
 def run(
     collection_guid: str,
     tool: str,
     offline: bool,
     output: Optional[str],
+    force: bool,
+    snapshot: Optional[str],
 ) -> None:
     """Run an analysis tool against a Collection.
 
@@ -167,7 +181,7 @@ def run(
         sys.exit(1)
 
     # --- Step 6: Online no-change check ---
-    if not offline:
+    if not offline and not force:
         previous = _fetch_previous_result(config, collection_guid, tool)
         if previous and previous.get("input_state_hash") == input_state_hash:
             click.echo("No changes detected since last analysis.")
@@ -218,6 +232,19 @@ def run(
         output_path = Path(output)
         output_path.write_text(report_html, encoding="utf-8")
         click.echo(f"  Report saved:  {output_path}")
+
+    # --- Step 8b: Save analysis snapshot if requested ---
+    if snapshot:
+        import json
+
+        snapshot_dir = Path(snapshot)
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        snapshot_path = snapshot_dir / f"{tool}_{collection_guid}.json"
+        snapshot_path.write_text(
+            json.dumps(analysis_data, sort_keys=True, indent=2, default=str),
+            encoding="utf-8",
+        )
+        click.echo(f"  Snapshot saved: {snapshot_path}")
 
     # --- Step 9: Upload or store result ---
     if offline:
