@@ -1025,10 +1025,16 @@ class PipelineService:
             raise NotFoundError("AnalysisResult with path_stats", pipeline_guid)
 
         # Derive per-node and per-edge counts from path_stats.
-        # Use the pipeline's actual edges to determine connectivity rather than
-        # consecutive path positions — merged pairing paths are not in strict
-        # topological order, so consecutive pairs can produce phantom edges.
-        pipeline_edges = {
+        #
+        # Consecutive path pairs encode branching decisions correctly (which
+        # branch was taken), but merge_two_paths() linearises parallel branches
+        # for pairing nodes, creating phantom consecutive pairs that don't
+        # correspond to real pipeline edges.  Strategy:
+        #  1. Count consecutive pairs that are real pipeline edges (branching OK).
+        #  2. When a consecutive pair is NOT a real edge (phantom from merge),
+        #     resolve it to the actual edges it replaced by looking for pipeline
+        #     edges FROM src to later path nodes and TO dst from earlier ones.
+        pipeline_edge_set = {
             (e["from"], e["to"]) for e in (pipeline.edges_json or [])
         }
 
@@ -1041,10 +1047,28 @@ class PipelineService:
             path_node_set = set(path_nodes)
             for node_id in path_node_set:
                 node_counts[node_id] = node_counts.get(node_id, 0) + count
-            for from_node, to_node in pipeline_edges:
-                if from_node in path_node_set and to_node in path_node_set:
-                    edge_key = f"{from_node}->{to_node}"
-                    edge_counts[edge_key] = edge_counts.get(edge_key, 0) + count
+
+            counted: set = set()  # edges already counted for this path entry
+            node_pos = {node: idx for idx, node in enumerate(path_nodes)}
+
+            for i in range(len(path_nodes) - 1):
+                src, dst = path_nodes[i], path_nodes[i + 1]
+                if (src, dst) in pipeline_edge_set:
+                    if (src, dst) not in counted:
+                        edge_key = f"{src}->{dst}"
+                        edge_counts[edge_key] = edge_counts.get(edge_key, 0) + count
+                        counted.add((src, dst))
+                else:
+                    # Phantom pair from merge linearisation — resolve to real edges
+                    for from_n, to_n in pipeline_edge_set:
+                        if (from_n, to_n) in counted:
+                            continue
+                        if from_n == src and to_n in node_pos and node_pos[to_n] > i:
+                            edge_counts[f"{from_n}->{to_n}"] = edge_counts.get(f"{from_n}->{to_n}", 0) + count
+                            counted.add((from_n, to_n))
+                        elif to_n == dst and from_n in node_pos and node_pos[from_n] < i + 1:
+                            edge_counts[f"{from_n}->{to_n}"] = edge_counts.get(f"{from_n}->{to_n}", 0) + count
+                            counted.add((from_n, to_n))
 
         total_records = sum(entry.get("image_count", 0) for entry in path_stats)
 

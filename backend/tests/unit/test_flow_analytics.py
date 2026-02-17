@@ -234,6 +234,71 @@ def pipeline_with_pairing_node(test_db_session, test_team):
     return pipeline, result
 
 
+@pytest.fixture
+def pipeline_with_branch_and_shortcut(test_db_session, test_team):
+    """Pipeline where a branch has a shortcut edge that must NOT be counted
+    when images took the long route.
+
+    Graph structure:
+        A (capture) -> B (file) -> C (file) -> D (termination)
+        A (capture) -> D (termination)  [shortcut]
+
+    Path stats:
+        [A, B, C, D] with 60 images  (took the long route)
+
+    Expected edges: A->B=60, B->C=60, C->D=60
+    A->D must NOT appear (images went through B->C->D, not the shortcut).
+    """
+    pipeline = Pipeline(
+        name="Branch Shortcut Pipeline",
+        nodes_json=[
+            {"id": "A", "type": "capture", "properties": {
+                "sample_filename": "AB3D0001",
+                "filename_regex": "([A-Z0-9]{4})([0-9]{4})",
+                "camera_id_group": "1",
+            }},
+            {"id": "B", "type": "file", "properties": {"extension": ".cr3"}},
+            {"id": "C", "type": "file", "properties": {"extension": ".xmp"}},
+            {"id": "D", "type": "termination", "properties": {}},
+        ],
+        edges_json=[
+            {"from": "A", "to": "B"},
+            {"from": "A", "to": "D"},
+            {"from": "B", "to": "C"},
+            {"from": "C", "to": "D"},
+        ],
+        version=1,
+        is_active=True,
+        is_valid=True,
+        team_id=test_team.id,
+    )
+    test_db_session.add(pipeline)
+    test_db_session.flush()
+
+    now = datetime.utcnow()
+    result = AnalysisResult(
+        pipeline_id=pipeline.id,
+        pipeline_version=1,
+        tool="pipeline_validation",
+        status=ResultStatus.COMPLETED,
+        started_at=now - timedelta(seconds=5),
+        completed_at=now,
+        duration_seconds=5.0,
+        results_json={
+            "path_stats": [
+                {"path": ["A", "B", "C", "D"], "image_count": 60},
+            ],
+            "status_counts": {"consistent": 60},
+        },
+        team_id=test_team.id,
+    )
+    test_db_session.add(result)
+    test_db_session.commit()
+    test_db_session.refresh(pipeline)
+    test_db_session.refresh(result)
+    return pipeline, result
+
+
 # ============================================================================
 # Service-level tests
 # ============================================================================
@@ -371,6 +436,32 @@ class TestGetFlowAnalytics:
         assert edge_map[("pair", "done")] == 80
         # Exactly 5 edges, no phantom edges like raw→xmp
         assert len(edge_map) == 5
+
+    def test_branch_shortcut_not_counted(
+        self, pipeline_service, pipeline_with_branch_and_shortcut, test_team
+    ):
+        """Branching: shortcut edge must NOT be counted when images took the long route.
+
+        Pipeline: A → B → C → D
+                  A → D (shortcut)
+
+        Path [A, B, C, D] × 60 images  →  A→D must NOT appear.
+        """
+        pipeline, _ = pipeline_with_branch_and_shortcut
+        response = pipeline_service.get_flow_analytics(
+            pipeline_guid=pipeline.guid,
+            team_id=test_team.id,
+        )
+
+        assert response.total_records == 60
+
+        edge_map = {(e.from_node, e.to_node): e.record_count for e in response.edges}
+        assert edge_map[("A", "B")] == 60
+        assert edge_map[("B", "C")] == 60
+        assert edge_map[("C", "D")] == 60
+        # Shortcut A→D must NOT be counted — images went through B→C→D
+        assert ("A", "D") not in edge_map
+        assert len(edge_map) == 3
 
 
 # ============================================================================
