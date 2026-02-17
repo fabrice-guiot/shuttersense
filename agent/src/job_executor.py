@@ -1273,6 +1273,7 @@ class JobExecutor:
                 'by_termination': validation_result.get('by_termination', {}),
                 'invalid_files_count': validation_result['invalid_files_count'],
                 'scan_time': time.time() - start_time,
+                'path_stats': validation_result.get('path_stats', []),
             }
 
             # Generate report (same template for local and remote)
@@ -2502,8 +2503,6 @@ class JobExecutor:
         Raises:
             ValueError: If connector type is unsupported or credentials unavailable
         """
-        from src.remote import S3Adapter, GCSAdapter, SMBAdapter
-
         connector_type = connector.get("type")
         credential_location = connector.get("credential_location")
         connector_guid = connector.get("guid")
@@ -2531,12 +2530,16 @@ class JobExecutor:
                 f"Unsupported credential location: {credential_location}"
             )
 
-        # Create appropriate adapter
+        # Import and create only the needed adapter to avoid requiring
+        # all cloud SDK dependencies (boto3, google-cloud-storage, smbprotocol)
         if connector_type == "s3":
+            from src.remote import S3Adapter
             return S3Adapter(credentials)
         elif connector_type == "gcs":
+            from src.remote import GCSAdapter
             return GCSAdapter(credentials)
         elif connector_type == "smb":
+            from src.remote import SMBAdapter
             return SMBAdapter(credentials)
         else:
             raise ValueError(f"Unsupported connector type: {connector_type}")

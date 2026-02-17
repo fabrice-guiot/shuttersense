@@ -181,7 +181,9 @@ class InputStateComputer:
             "pipeline",  # Pipeline rules affect validation
         ]
 
-        return {k: config[k] for k in relevant_keys if k in config}
+        result = {k: config[k] for k in relevant_keys if k in config}
+        result["_hash_version"] = 2  # v2: results now include path_stats
+        return result
 
     def compute_input_state_hash(
         self,
