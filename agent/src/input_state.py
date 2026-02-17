@@ -179,6 +179,7 @@ class InputStateComputer:
             "cameras",
             "processing_methods",
             "pipeline",  # Pipeline rules affect validation
+            "pipeline_tool_config",  # Pipeline-derived tool config (Issue #217)
         ]
 
         result = {k: config[k] for k in relevant_keys if k in config}

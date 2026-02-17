@@ -136,10 +136,10 @@
 
 ### Implementation for User Story 5
 
-- [ ] T043 [US5] Implement `_resolve_collection_pipeline()` in `agent/cli/run.py` — resolve Collection.pipeline_id → specific Pipeline, then team default, then None for Config fallback; handle fetching Collection-specific pipeline from server or cache
-- [ ] T044 [US5] Update `_prepare_analysis()` in `agent/cli/run.py` to include Pipeline data in `input_state_hash` computation when `PipelineToolConfig` is available (ensures hash changes when Pipeline changes)
-- [ ] T045 [US5] Handle offline mode Pipeline caching — ensure `TeamConfigCache` includes Collection-assigned pipeline data when fetched from server, and `_resolve_collection_pipeline()` can use cached data when offline
-- [ ] T046 [US5] Unit tests for Pipeline resolution in `agent/tests/unit/test_pipeline_resolution.py` — collection-specific pipeline, team default fallback, Config fallback, invalid pipeline warning + fallback, offline with cached pipeline, input_state_hash includes pipeline data
+- [x] T043 [US5] Implement `_resolve_collection_pipeline()` in `agent/cli/run.py` — resolve Collection.pipeline_id → specific Pipeline, then team default, then None for Config fallback; handle fetching Collection-specific pipeline from server or cache
+- [x] T044 [US5] Update `_prepare_analysis()` in `agent/cli/run.py` to include Pipeline data in `input_state_hash` computation when `PipelineToolConfig` is available (ensures hash changes when Pipeline changes)
+- [x] T045 [US5] Handle offline mode Pipeline caching — ensure `TeamConfigCache` includes Collection-assigned pipeline data when fetched from server, and `_resolve_collection_pipeline()` can use cached data when offline
+- [x] T046 [US5] Unit tests for Pipeline resolution in `agent/tests/unit/test_pipeline_resolution.py` — collection-specific pipeline, team default fallback, Config fallback, invalid pipeline warning + fallback, offline with cached pipeline, input_state_hash includes pipeline data
 
 **Checkpoint**: Pipeline resolution chain works for all scenarios. Offline mode uses cached Pipeline. Invalid Pipeline falls back gracefully. All US5 tests pass.
 
