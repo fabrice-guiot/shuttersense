@@ -84,11 +84,15 @@ export const PipelineEditorPage: React.FC = () => {
   const {
     analytics,
     loading: analyticsLoading,
+    enabled: analyticsEnabled,
+    error: analyticsError,
   } = usePipelineAnalytics(
     isViewMode && resultGuid ? pipelineId : null,
     resultGuid,
   )
   const showFlow = !!resultGuid && !!analytics
+  // Analytics were requested but the result has no path_stats data
+  const analyticsUnavailable = !!resultGuid && !analyticsLoading && !analyticsEnabled && !analyticsError
 
   // Determine if viewing a historical version
   const isHistoricalVersion = currentVersion !== null && latestVersion !== null && currentVersion < latestVersion
@@ -352,6 +356,48 @@ export const PipelineEditorPage: React.FC = () => {
               <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-primary" />
               Loading flow analytics...
             </div>
+          )}
+          {analyticsUnavailable && (
+            <Alert className="border-amber-500/50 bg-amber-500/10">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <AlertDescription className="flex items-center justify-between text-amber-600 dark:text-amber-400">
+                <span>
+                  No flow analytics available for result{' '}
+                  <code className="rounded bg-amber-100 dark:bg-amber-900 px-1 py-0.5 text-xs font-mono">{resultGuid}</code>
+                  {' '}&mdash; the result does not contain path statistics.
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto px-2 py-1 text-xs shrink-0"
+                  onClick={() => {
+                    searchParams.delete('result')
+                    setSearchParams(searchParams)
+                  }}
+                >
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {analyticsError && resultGuid && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>Failed to load flow analytics: {analyticsError}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto px-2 py-1 text-xs shrink-0"
+                  onClick={() => {
+                    searchParams.delete('result')
+                    setSearchParams(searchParams)
+                  }}
+                >
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Pipeline Graph + Property Panel */}

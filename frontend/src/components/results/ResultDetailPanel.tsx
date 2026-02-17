@@ -719,11 +719,11 @@ export function ResultDetailPanel({
             </Button>
           )}
 
-          {/* View Flow on Graph — only for collection-validation pipeline results (not display_graph) */}
+          {/* View Flow on Graph — only when result has path_stats (collection validation mode) */}
           {result.tool === 'pipeline_validation' &&
             result.pipeline_guid &&
-            result.status === 'COMPLETED' &&
-            !(result.results as unknown as Record<string, unknown>)?.['total_paths'] && (
+            (result.status === 'COMPLETED' || result.status === 'NO_CHANGE') &&
+            Array.isArray((result.results as unknown as Record<string, unknown>)?.['path_stats']) && (
             <Button
               variant="outline"
               className="w-full"
