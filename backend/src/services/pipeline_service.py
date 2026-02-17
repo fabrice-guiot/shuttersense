@@ -1033,7 +1033,15 @@ class PipelineService:
         for edge in edges:
             from_node = edge.get("from") or edge.get("from_node", "")
             to_node = edge.get("to") or edge.get("to_node", "")
-            result.append({"from": from_node, "to": to_node})
+            entry: Dict[str, Any] = {"from": from_node, "to": to_node}
+            waypoints = edge.get("waypoints")
+            if waypoints:
+                entry["waypoints"] = waypoints
+            else:
+                offset = edge.get("offset")
+                if offset is not None and offset != 0:
+                    entry["offset"] = offset
+            result.append(entry)
         return result
 
     def _to_response(self, pipeline: Pipeline) -> PipelineResponse:
@@ -1058,7 +1066,12 @@ class PipelineService:
 
         # Convert edges to schema format
         edges = [
-            PipelineEdge(from_node=e["from"], to_node=e["to"])
+            PipelineEdge(
+                from_node=e["from"],
+                to_node=e["to"],
+                offset=e.get("offset"),
+                waypoints=e.get("waypoints"),
+            )
             for e in pipeline.edges_json
         ]
 

@@ -67,6 +67,19 @@ vi.mock('@/components/pipelines/graph/PropertyPanel', () => ({
   PropertyPanel: () => <div data-testid="property-panel" />,
 }))
 
+vi.mock('@/components/pipelines/graph/PipelineGraphEditor', async () => {
+  const React = await import('react')
+  const PipelineGraphEditor = React.forwardRef((_props: any, _ref: any) => (
+    <div data-testid="pipeline-graph-editor" />
+  ))
+  PipelineGraphEditor.displayName = 'PipelineGraphEditor'
+  return { PipelineGraphEditor, default: PipelineGraphEditor }
+})
+
+vi.mock('@xyflow/react', () => ({
+  ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
 function renderViewMode() {
   return render(
     <MemoryRouter initialEntries={['/pipelines/pip_01hgw2bbg00000000000000001']}>
@@ -129,8 +142,10 @@ describe('PipelineEditorPage', () => {
   test('renders new pipeline form', () => {
     renderNewMode()
 
-    // In new mode, shows create form with Pipeline Details card
-    expect(screen.getByText('Pipeline Details')).toBeDefined()
+    // In new mode, shows graph editor with name input and Create button
+    expect(screen.getByLabelText(/name/i)).toBeDefined()
+    expect(screen.getByText('Create')).toBeDefined()
+    expect(screen.getByTestId('pipeline-graph-editor')).toBeDefined()
   })
 
   test('does not show beta banner in edit mode', () => {

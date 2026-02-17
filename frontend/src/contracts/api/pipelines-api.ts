@@ -59,6 +59,10 @@ export interface PipelineEdge {
   from: string
   /** Target node ID */
   to: string
+  /** @deprecated Use waypoints instead */
+  offset?: number
+  /** Interior bend points for orthogonal edge routing */
+  waypoints?: Array<{ x: number; y: number }>
 }
 
 export interface ValidationError {

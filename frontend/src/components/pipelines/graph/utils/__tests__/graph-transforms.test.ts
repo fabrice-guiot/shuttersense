@@ -103,6 +103,32 @@ describe('toReactFlowEdges', () => {
     const rfEdges = toReactFlowEdges(sampleEdges)
     expect(rfEdges[0].markerEnd).toBeDefined()
   })
+
+  it('defaults offset to 0 in edge data when absent', () => {
+    const rfEdges = toReactFlowEdges(sampleEdges)
+    expect(rfEdges[0].data?.offset).toBe(0)
+  })
+
+  it('reads offset from API edge into data', () => {
+    const edgesWithOffset: PipelineEdge[] = [
+      { from: 'a', to: 'b', offset: 42 },
+    ]
+    const rfEdges = toReactFlowEdges(edgesWithOffset)
+    expect(rfEdges[0].data?.offset).toBe(42)
+  })
+
+  it('reads waypoints from API edge into data', () => {
+    const edgesWithWaypoints: PipelineEdge[] = [
+      { from: 'a', to: 'b', waypoints: [{ x: 100, y: 50 }, { x: 200, y: 50 }] },
+    ]
+    const rfEdges = toReactFlowEdges(edgesWithWaypoints)
+    expect(rfEdges[0].data?.waypoints).toEqual([{ x: 100, y: 50 }, { x: 200, y: 50 }])
+  })
+
+  it('sets waypoints to undefined in data when absent', () => {
+    const rfEdges = toReactFlowEdges(sampleEdges)
+    expect(rfEdges[0].data?.waypoints).toBeUndefined()
+  })
 })
 
 describe('toApiNodes', () => {
@@ -126,6 +152,52 @@ describe('toApiEdges', () => {
     expect(apiEdges).toHaveLength(4)
     expect(apiEdges[0]).toEqual({ from: 'capture_1', to: 'file_raw' })
   })
+
+  it('omits offset when zero', () => {
+    const rfEdges = toReactFlowEdges(sampleEdges)
+    const apiEdges = toApiEdges(rfEdges)
+    expect(apiEdges[0]).not.toHaveProperty('offset')
+  })
+
+  it('drops legacy offset when converting back to API (offset is deprecated)', () => {
+    const edgesWithOffset: PipelineEdge[] = [
+      { from: 'a', to: 'b', offset: -30 },
+    ]
+    const rfEdges = toReactFlowEdges(edgesWithOffset)
+    const apiEdges = toApiEdges(rfEdges)
+    // Legacy offset is no longer preserved — edges are normalized via computeEdgeConfig
+    expect(apiEdges[0]).toEqual({ from: 'a', to: 'b' })
+    expect(apiEdges[0]).not.toHaveProperty('offset')
+  })
+
+  it('preserves non-empty waypoints in round-trip', () => {
+    const wp = [{ x: 100, y: 50 }, { x: 200, y: 50 }]
+    const edgesWithWaypoints: PipelineEdge[] = [
+      { from: 'a', to: 'b', waypoints: wp },
+    ]
+    const rfEdges = toReactFlowEdges(edgesWithWaypoints)
+    const apiEdges = toApiEdges(rfEdges)
+    expect(apiEdges[0]).toEqual({ from: 'a', to: 'b', waypoints: wp })
+  })
+
+  it('omits waypoints when empty array', () => {
+    const edgesEmptyWp: PipelineEdge[] = [
+      { from: 'a', to: 'b', waypoints: [] },
+    ]
+    const rfEdges = toReactFlowEdges(edgesEmptyWp)
+    const apiEdges = toApiEdges(rfEdges)
+    expect(apiEdges[0]).not.toHaveProperty('waypoints')
+  })
+
+  it('omits offset when waypoints are present', () => {
+    const edgesWithBoth: PipelineEdge[] = [
+      { from: 'a', to: 'b', offset: 42, waypoints: [{ x: 100, y: 50 }, { x: 200, y: 50 }] },
+    ]
+    const rfEdges = toReactFlowEdges(edgesWithBoth)
+    const apiEdges = toApiEdges(rfEdges)
+    expect(apiEdges[0]).toHaveProperty('waypoints')
+    expect(apiEdges[0]).not.toHaveProperty('offset')
+  })
 })
 
 describe('hasPositions', () => {
@@ -143,5 +215,76 @@ describe('hasPositions', () => {
 
   it('returns false for empty array', () => {
     expect(hasPositions([])).toBe(false)
+  })
+})
+
+describe('toApiEdges normalization', () => {
+  // Helper: create RF nodes with positions and dimensions for normalization tests
+  function makeRfNodes() {
+    return toReactFlowNodes([
+      { id: 'a', type: 'capture', properties: {}, position: { x: 0, y: 0 } },
+      { id: 'b', type: 'file', properties: {}, position: { x: 0, y: 200 } },
+      { id: 'c', type: 'file', properties: {}, position: { x: 200, y: 200 } },
+    ])
+  }
+
+  it('clears waypoints for 1-seg edge (co-aligned nodes)', () => {
+    // Use same-type nodes at same X for true co-alignment
+    const coAlignedNodes = toReactFlowNodes([
+      { id: 'a', type: 'file', properties: {}, position: { x: 0, y: 0 } },
+      { id: 'b', type: 'file', properties: {}, position: { x: 0, y: 200 } },
+    ])
+    // Stale waypoints that should be cleared (nodes are co-aligned)
+    const rfEdges = toReactFlowEdges([
+      { from: 'a', to: 'b', waypoints: [{ x: 96, y: 80 }, { x: 96, y: 80 }] },
+    ])
+    const apiEdges = toApiEdges(rfEdges, coAlignedNodes)
+    expect(apiEdges[0]).not.toHaveProperty('waypoints')
+  })
+
+  it('preserves adjusted waypoints for 3-seg edge', () => {
+    const nodes = makeRfNodes()
+    // a → c: different X positions → 3-seg
+    // a (capture: w=224) → sourceX=112, sourceY=80
+    // c (file: w=192) at x=200 → targetX=296, targetY=200
+    const rfEdges = toReactFlowEdges([
+      { from: 'a', to: 'c', waypoints: [{ x: 112, y: 120 }, { x: 296, y: 120 }] },
+    ])
+    const apiEdges = toApiEdges(rfEdges, nodes)
+    expect(apiEdges[0].waypoints).toBeDefined()
+    expect(apiEdges[0].waypoints).toHaveLength(2)
+    // Y value should be preserved from stored waypoints
+    expect(apiEdges[0].waypoints![0].y).toBe(120)
+  })
+
+  it('preserves waypoints for 5-seg edge', () => {
+    const nodes = makeRfNodes()
+    // 4 waypoints that produce a valid 5-seg
+    const wp = [
+      { x: 112, y: 50 },
+      { x: 300, y: 50 },
+      { x: 300, y: 150 },
+      { x: 296, y: 150 },
+    ]
+    const rfEdges = toReactFlowEdges([
+      { from: 'a', to: 'c', waypoints: wp },
+    ])
+    const apiEdges = toApiEdges(rfEdges, nodes)
+    expect(apiEdges[0].waypoints).toBeDefined()
+    expect(apiEdges[0].waypoints).toHaveLength(4)
+  })
+
+  it('falls back to passthrough when nodes not provided', () => {
+    const wp = [{ x: 100, y: 50 }, { x: 200, y: 50 }]
+    const rfEdges = toReactFlowEdges([{ from: 'a', to: 'b', waypoints: wp }])
+    const apiEdges = toApiEdges(rfEdges) // no nodes
+    expect(apiEdges[0].waypoints).toEqual(wp)
+  })
+
+  it('omits offset field (legacy) even when present in RF edge', () => {
+    const nodes = makeRfNodes()
+    const rfEdges = toReactFlowEdges([{ from: 'a', to: 'b', offset: 42 }])
+    const apiEdges = toApiEdges(rfEdges, nodes)
+    expect(apiEdges[0]).not.toHaveProperty('offset')
   })
 })

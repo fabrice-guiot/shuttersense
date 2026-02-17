@@ -7,6 +7,7 @@ import type {
   PipelineFlowAnalyticsResponse,
 } from '@/contracts/api/pipelines-api'
 import { getNodeConfig } from './node-defaults'
+import { computeEdgeConfig } from '../edges/PipelineEdge'
 
 /**
  * Convert API pipeline nodes to React Flow nodes.
@@ -52,6 +53,10 @@ export function toReactFlowEdges(
       target: edge.to,
       type: 'pipelineEdge',
       markerEnd: { type: MarkerType.ArrowClosed },
+      data: {
+        offset: edge.offset ?? 0,
+        waypoints: edge.waypoints,
+      },
     }
 
     if (analytics) {
@@ -60,6 +65,7 @@ export function toReactFlowEdges(
       )
       if (edgeStats) {
         rfEdge.data = {
+          ...rfEdge.data,
           record_count: edgeStats.record_count,
           percentage: edgeStats.percentage,
           maxCount: Math.max(...analytics.edges.map((e) => e.record_count)),
@@ -84,13 +90,59 @@ export function toApiNodes(rfNodes: Node<PipelineNodeData>[]): PipelineNode[] {
 }
 
 /**
- * Convert React Flow edges back to API pipeline edges.
+ * Compute handle positions for a node (source handle = bottom center, target handle = top center).
  */
-export function toApiEdges(rfEdges: Edge[]): PipelineEdge[] {
-  return rfEdges.map((edge) => ({
-    from: edge.source,
-    to: edge.target,
-  }))
+function getHandlePositions(node: Node<PipelineNodeData>) {
+  const config = getNodeConfig(node.data.type)
+  const w = node.measured?.width ?? node.width ?? config.defaultWidth
+  const h = node.measured?.height ?? node.height ?? config.defaultHeight
+  return {
+    sourceX: node.position.x + w / 2,
+    sourceY: node.position.y + h,
+    targetX: node.position.x + w / 2,
+    targetY: node.position.y,
+  }
+}
+
+/**
+ * Convert React Flow edges back to API pipeline edges.
+ * Accepts nodes to normalize waypoints: runs computeEdgeConfig to produce
+ * effective waypoints (clearing stale data for 1-seg edges).
+ */
+export function toApiEdges(rfEdges: Edge[], rfNodes?: Node<PipelineNodeData>[]): PipelineEdge[] {
+  const nodeMap = new Map<string, Node<PipelineNodeData>>()
+  if (rfNodes) {
+    for (const n of rfNodes) nodeMap.set(n.id, n)
+  }
+
+  return rfEdges.map((edge) => {
+    const apiEdge: PipelineEdge = {
+      from: edge.source,
+      to: edge.target,
+    }
+
+    const storedWp = edge.data?.waypoints as Array<{ x: number; y: number }> | undefined
+    const sourceNode = nodeMap.get(edge.source)
+    const targetNode = nodeMap.get(edge.target)
+
+    if (sourceNode && targetNode) {
+      const src = getHandlePositions(sourceNode)
+      const tgt = getHandlePositions(targetNode)
+      const result = computeEdgeConfig(
+        src.sourceX, src.sourceY, tgt.targetX, tgt.targetY, storedWp,
+      )
+      if (result.effectiveWaypoints && result.effectiveWaypoints.length > 0) {
+        apiEdge.waypoints = result.effectiveWaypoints
+      }
+    } else {
+      // Fallback: no node data available, pass waypoints through
+      if (storedWp && storedWp.length > 0) {
+        apiEdge.waypoints = storedWp
+      }
+    }
+
+    return apiEdge
+  })
 }
 
 /**

@@ -75,6 +75,12 @@ class PipelineNode(BaseModel):
     }
 
 
+class EdgeWaypoint(BaseModel):
+    """Interior bend point for orthogonal edge routing."""
+    x: float = Field(..., description="X coordinate")
+    y: float = Field(..., description="Y coordinate")
+
+
 class PipelineEdge(BaseModel):
     """
     Pipeline edge definition.
@@ -83,6 +89,8 @@ class PipelineEdge(BaseModel):
     """
     from_node: str = Field(..., alias="from", min_length=1, description="Source node ID")
     to_node: str = Field(..., alias="to", min_length=1, description="Target node ID")
+    offset: Optional[float] = Field(None, description="Deprecated: use waypoints instead")
+    waypoints: Optional[List[EdgeWaypoint]] = Field(None, description="Interior bend points for orthogonal edge routing")
 
     model_config = {
         "populate_by_name": True,
