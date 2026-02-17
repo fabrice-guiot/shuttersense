@@ -198,9 +198,16 @@ def _parse_with_regex(
     remainder = stem[match.end():]
     properties = []
     if remainder:
-        # Split on '-' and filter empty strings
-        parts = remainder.split('-')
-        properties = [p for p in parts if p]
+        # Strip leading delimiter (remainder typically starts with '-')
+        stripped = remainder.lstrip('-')
+        if not stripped:
+            # Remainder is only delimiters (trailing dash) — malformed
+            return None
+        parts = stripped.split('-')
+        if any(p == '' for p in parts):
+            # Double-dash or trailing dash produced empty property — malformed
+            return None
+        properties = parts
 
     return {
         'camera_id': camera_id,
