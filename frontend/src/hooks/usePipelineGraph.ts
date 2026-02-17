@@ -224,6 +224,15 @@ export function usePipelineGraph(): UsePipelineGraphReturn {
   // Update node ID
   const updateNodeId = useCallback((oldId: string, newId: string) => {
     if (oldId === newId || !newId.trim()) return
+
+    // Prevent duplicate IDs
+    let idExists = false
+    setNodes((prev) => {
+      idExists = prev.some((n) => n.id === newId)
+      return prev
+    })
+    if (idExists) return
+
     pushUndo()
 
     setNodes((prev) =>
@@ -422,6 +431,18 @@ export function usePipelineGraph(): UsePipelineGraphReturn {
         hints.push(`Pairing node "${pNode.id}" must have exactly 2 inputs (has ${inputCount})`)
       }
     })
+
+    // Check duplicate node IDs
+    const idCounts = new Map<string, number>()
+    typedNodes.forEach((n) => {
+      const nid = n.data.nodeId
+      idCounts.set(nid, (idCounts.get(nid) ?? 0) + 1)
+    })
+    for (const [nid, count] of idCounts) {
+      if (count > 1) {
+        hints.push(`Duplicate node ID: "${nid}" appears ${count} times`)
+      }
+    }
 
     return hints
   }, [nodes, edges])

@@ -133,15 +133,16 @@ def _determine_image_path(
     """
     Determine which pipeline path an image followed based on validation results.
 
-    Uses a cache keyed by (properties, suffix, termination_type) so that images
-    with identical characteristics resolve to the same path without re-computing
-    expected files (optimization — 99% of groups follow the same few paths).
+    Uses a cache keyed by (properties, suffix, termination_type, expected_files)
+    so that images with identical characteristics resolve to the same path
+    without re-computing expected files (optimization — 99% of groups follow
+    the same few paths).
 
     Args:
         specific_image: The validated SpecificImage
         validation_result: Full validation result with termination matches
         paths_by_term: Pre-enumerated paths grouped by termination type
-        path_cache: Cache mapping (properties, suffix, term_type) → path node IDs
+        path_cache: Cache mapping (properties, suffix, term_type, expected_files) → path node IDs
 
     Returns:
         Tuple of node IDs for the matched path, or None if no match

@@ -220,7 +220,7 @@ class TestDetermineImagePath:
         assert result is None
 
     def test_cache_hit_avoids_recomputation(self):
-        """Cached results are returned directly for identical (properties, suffix, term_type)."""
+        """Cached results are returned directly for identical (properties, suffix, term_type, expected_files)."""
         si = _make_specific_image(properties=["HDR"])
         term = _make_term_match(termination_type="Done", expected_files=["AB3D0001.dng"])
         vr = _make_validation_result(si, termination_matches=[term])
@@ -230,8 +230,8 @@ class TestDetermineImagePath:
         paths_by_term = {
             "Done": [(path_a, BRANCH_PATH_A), (path_b, BRANCH_PATH_B)]
         }
-        # Pre-populate cache
-        cache_key = (("HDR",), "", "Done")
+        # Pre-populate cache (must match the 4-part key the code builds)
+        cache_key = (("HDR",), "", "Done", ("ab3d0001.dng",))
         path_cache = {cache_key: path_a}
 
         result = _determine_image_path(si, vr, paths_by_term, path_cache)
