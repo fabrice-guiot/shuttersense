@@ -110,11 +110,13 @@ The Linux build should be performed on the target distribution for best compatib
 
 ### Windows Build
 
-```powershell
+> **Note:** The build script requires a Bash interpreter. Run these commands in **Git Bash** or **WSL**.
+
+```bash
 cd agent
-.venv\Scripts\activate
+source .venv/Scripts/activate
 pip install -e ".[build]"
-.\packaging\build_windows.sh
+./packaging/build_windows.sh
 ```
 
 Output: `agent/dist/<version>/shuttersense-agent-windows-amd64.exe`
@@ -247,10 +249,14 @@ Unsigned Windows executables may trigger antivirus warnings. For production, sig
 If the agent fails with SSL certificate errors (e.g., `match_hostname` failures), the Python used for the build may have an OpenSSL mismatch. Verify the build Python has consistent OpenSSL headers and runtime:
 
 ```bash
-python3 -c "import ssl; print('Compile-time:', ssl.OPENSSL_VERSION_INFO); print('Runtime:', ssl.OPENSSL_VERSION)"
+python3 -c "
+import ssl
+print('Runtime (loaded library):', ssl.OPENSSL_VERSION, ssl.OPENSSL_VERSION_INFO)
+print('Compile-time (build headers):', ssl._OPENSSL_API_VERSION)
+"
 ```
 
-The `OPENSSL_VERSION_INFO` major version (compile-time) should match the `OPENSSL_VERSION` major version (runtime). For example, both should be 3.x. A mismatch (compile-time says 1.1.1 but runtime says 3.x) means Python was compiled against wrong headers — rebuild Python.
+The compile-time tuple (`_OPENSSL_API_VERSION`) major version should match the runtime major version (`OPENSSL_VERSION_INFO[0]`). For example, both should be `3`. A mismatch — compile-time `(1, 1, 1, ...)` vs. runtime `(3, ...)` — means Python was built against OpenSSL 1.x headers but dynamically linked to OpenSSL 3.x at runtime. Rebuild Python against the correct OpenSSL headers.
 
 ## Release Checklist
 
