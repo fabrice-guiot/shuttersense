@@ -134,6 +134,37 @@ class TestUnsubscribeEndpoint:
 
 
 # ============================================================================
+# Test: DELETE /subscribe/{guid}
+# ============================================================================
+
+
+class TestUnsubscribeByGuidEndpoint:
+    """Tests for DELETE /api/notifications/subscribe/{guid}."""
+
+    def test_removes_subscription_by_guid(self, test_client, create_subscription):
+        """Should remove subscription and return 204."""
+        sub = create_subscription()
+        response = test_client.delete(
+            f"/api/notifications/subscribe/{sub.guid}"
+        )
+        assert response.status_code == 204
+
+    def test_returns_404_for_unknown_guid(self, test_client):
+        """Should return 404 when GUID doesn't match any subscription."""
+        response = test_client.delete(
+            "/api/notifications/subscribe/sub_00000000000000000000000000"
+        )
+        assert response.status_code == 404
+
+    def test_returns_404_for_invalid_guid(self, test_client):
+        """Should return 404 for malformed GUID."""
+        response = test_client.delete(
+            "/api/notifications/subscribe/not-a-guid"
+        )
+        assert response.status_code == 404
+
+
+# ============================================================================
 # Test: GET /status
 # ============================================================================
 

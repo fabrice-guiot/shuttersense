@@ -186,7 +186,7 @@ describe('usePushSubscription', () => {
       endpoint: 'https://fcm.googleapis.com/fcm/send/xyz789',
       p256dh_key: expect.any(String),
       auth_key: expect.any(String),
-      device_name: 'Mac',
+      device_name: 'Browser on Mac',
     })
     expect(notificationService.getStatus).toHaveBeenCalled() // Refetch status
   })
@@ -307,12 +307,12 @@ describe('usePushSubscription', () => {
 
   it('should detect device name from user agent', async () => {
     const deviceTests = [
-      { ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)', expected: 'iPhone' },
-      { ua: 'Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X)', expected: 'iPad' },
-      { ua: 'Mozilla/5.0 (Linux; Android 10)', expected: 'Android' },
-      { ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', expected: 'Mac' },
-      { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', expected: 'Windows' },
-      { ua: 'Mozilla/5.0 (X11; Linux x86_64)', expected: 'Linux' },
+      { ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1 Mobile Safari/604.1', expected: 'Safari on iPhone' },
+      { ua: 'Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/605.1 Safari/604.1', expected: 'Safari on iPad' },
+      { ua: 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36', expected: 'Chrome on Android' },
+      { ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0 Safari/537.36', expected: 'Chrome on Mac' },
+      { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0', expected: 'Firefox on Windows' },
+      { ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36', expected: 'Chrome on Linux' },
     ]
 
     for (const test of deviceTests) {
