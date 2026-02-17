@@ -63,7 +63,7 @@ describe('usePipelineAnalytics', () => {
     renderHook(() => usePipelineAnalytics('pip_test123'))
 
     await waitFor(() => {
-      expect(mockGetFlowAnalytics).toHaveBeenCalledWith('pip_test123')
+      expect(mockGetFlowAnalytics).toHaveBeenCalledWith('pip_test123', undefined)
     })
   })
 
@@ -125,27 +125,17 @@ describe('usePipelineAnalytics', () => {
   })
 
   // ========================================================================
-  // 5. showFlow defaults to false and setShowFlow updates state
+  // 5. Passes resultGuid to getFlowAnalytics when provided
   // ========================================================================
 
-  it('showFlow defaults to false and setShowFlow updates state', async () => {
+  it('passes resultGuid to getFlowAnalytics when provided', async () => {
     mockGetFlowAnalytics.mockResolvedValue(sampleAnalytics)
 
-    const { result } = renderHook(() => usePipelineAnalytics('pip_test123'))
+    renderHook(() => usePipelineAnalytics('pip_test123', 'res_abc456'))
 
-    expect(result.current.showFlow).toBe(false)
-
-    act(() => {
-      result.current.setShowFlow(true)
+    await waitFor(() => {
+      expect(mockGetFlowAnalytics).toHaveBeenCalledWith('pip_test123', 'res_abc456')
     })
-
-    expect(result.current.showFlow).toBe(true)
-
-    act(() => {
-      result.current.setShowFlow(false)
-    })
-
-    expect(result.current.showFlow).toBe(false)
   })
 
   // ========================================================================

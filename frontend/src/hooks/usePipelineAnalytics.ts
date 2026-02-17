@@ -9,20 +9,17 @@ interface UsePipelineAnalyticsReturn {
   error: string | null
   /** True when analytics data is available (false when no results exist) */
   enabled: boolean
-  /** Toggle flow overlay visibility */
-  showFlow: boolean
-  setShowFlow: (show: boolean) => void
   refetch: () => void
 }
 
 export function usePipelineAnalytics(
   pipelineGuid: string | null,
+  resultGuid?: string | null,
 ): UsePipelineAnalyticsReturn {
   const [analytics, setAnalytics] = useState<PipelineFlowAnalyticsResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [enabled, setEnabled] = useState(false)
-  const [showFlow, setShowFlow] = useState(false)
 
   const fetchAnalytics = useCallback(async () => {
     if (!pipelineGuid) return
@@ -30,7 +27,7 @@ export function usePipelineAnalytics(
     setLoading(true)
     setError(null)
     try {
-      const data = await getFlowAnalytics(pipelineGuid)
+      const data = await getFlowAnalytics(pipelineGuid, resultGuid ?? undefined)
       setAnalytics(data)
       setEnabled(true)
     } catch (err) {
@@ -45,7 +42,7 @@ export function usePipelineAnalytics(
     } finally {
       setLoading(false)
     }
-  }, [pipelineGuid])
+  }, [pipelineGuid, resultGuid])
 
   useEffect(() => {
     fetchAnalytics()
@@ -56,8 +53,6 @@ export function usePipelineAnalytics(
     loading,
     error,
     enabled,
-    showFlow,
-    setShowFlow,
     refetch: fetchAnalytics,
   }
 }

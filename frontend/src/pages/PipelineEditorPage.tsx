@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom'
 import {
   GitBranch,
   Save,
@@ -47,7 +47,6 @@ import { AuditTrailSection } from '@/components/audit'
 import { PipelineGraphView } from '@/components/pipelines/graph/PipelineGraphView'
 import { PropertyPanel } from '@/components/pipelines/graph/PropertyPanel'
 import { PipelineGraphEditor, type PipelineGraphEditorHandle } from '@/components/pipelines/graph/PipelineGraphEditor'
-import { AnalyticsOverlay } from '@/components/pipelines/graph/AnalyticsOverlay'
 import { usePipelineAnalytics } from '@/hooks/usePipelineAnalytics'
 import { ReactFlowProvider } from '@xyflow/react'
 
@@ -78,12 +77,18 @@ export const PipelineEditorPage: React.FC = () => {
   } = usePipeline(pipelineId)
   const { createPipeline, updatePipeline, loading: saving } = usePipelines({ autoFetch: false })
   const { downloadYaml, downloading } = usePipelineExport()
+
+  // Flow analytics: only loaded when navigating from a result detail (?result=res_xxx)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const resultGuid = searchParams.get('result')
   const {
     analytics,
-    enabled: analyticsEnabled,
-    showFlow,
-    setShowFlow,
-  } = usePipelineAnalytics(isViewMode ? pipelineId : null)
+    loading: analyticsLoading,
+  } = usePipelineAnalytics(
+    isViewMode && resultGuid ? pipelineId : null,
+    resultGuid,
+  )
+  const showFlow = !!resultGuid && !!analytics
 
   // Determine if viewing a historical version
   const isHistoricalVersion = currentVersion !== null && latestVersion !== null && currentVersion < latestVersion
@@ -319,6 +324,36 @@ export const PipelineEditorPage: React.FC = () => {
             </div>
           )}
 
+          {/* Flow analytics info bar (shown when navigated from a result) */}
+          {showFlow && analytics && (
+            <div className="flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-2 text-sm">
+              <span className="text-muted-foreground">
+                Showing flow analytics from result{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">{resultGuid}</code>
+                {analytics.total_records != null && (
+                  <> &mdash; {analytics.total_records.toLocaleString()} records</>
+                )}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto px-2 py-1 text-xs"
+                onClick={() => {
+                  searchParams.delete('result')
+                  setSearchParams(searchParams)
+                }}
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
+          {analyticsLoading && resultGuid && (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2 text-sm text-muted-foreground">
+              <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-primary" />
+              Loading flow analytics...
+            </div>
+          )}
+
           {/* Pipeline Graph + Property Panel */}
           <div className="flex h-[600px] border rounded-lg overflow-hidden bg-background">
             <div className="relative flex-1 min-w-0">
@@ -330,12 +365,6 @@ export const PipelineEditorPage: React.FC = () => {
                 onEdgeClick={handleGraphEdgeClick}
                 analytics={showFlow ? analytics : undefined}
                 showFlow={showFlow}
-              />
-              <AnalyticsOverlay
-                enabled={analyticsEnabled}
-                showFlow={showFlow}
-                onShowFlowChange={setShowFlow}
-                totalRecords={analytics?.total_records}
               />
             </div>
             {(selectedNode || selectedEdge) && (

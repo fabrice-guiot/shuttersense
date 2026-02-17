@@ -14,7 +14,8 @@ import {
   Camera,
   FolderOpen,
   AlertTriangle,
-  Equal
+  Equal,
+  GitBranch,
 } from 'lucide-react'
 import {
   Dialog,
@@ -35,6 +36,7 @@ import type {
 } from '@/contracts/api/results-api'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/utils/dateFormat'
+import { useNavigate } from 'react-router-dom'
 
 // ============================================================================
 // Types
@@ -576,6 +578,8 @@ export function ResultDetailPanel({
   onOpenChange,
   onDownloadReport
 }: ResultDetailPanelProps) {
+  const navigate = useNavigate()
+
   if (!result) return null
 
   const statusConfig = STATUS_CONFIG[result.status]
@@ -712,6 +716,24 @@ export function ResultDetailPanel({
             >
               <Download className="mr-2 h-4 w-4" />
               Download HTML Report
+            </Button>
+          )}
+
+          {/* View Flow on Graph — only for collection-validation pipeline results (not display_graph) */}
+          {result.tool === 'pipeline_validation' &&
+            result.pipeline_guid &&
+            result.status === 'COMPLETED' &&
+            !(result.results as unknown as Record<string, unknown>)?.['total_paths'] && (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                onOpenChange(false)
+                navigate(`/pipelines/${result.pipeline_guid}?result=${result.guid}`)
+              }}
+            >
+              <GitBranch className="mr-2 h-4 w-4" />
+              View Flow on Graph
             </Button>
           )}
         </div>
