@@ -25,9 +25,9 @@
 
 **Purpose**: Project initialization — create the Camera entity and PipelineToolConfig extraction that all stories depend on.
 
-- [ ] T001 Create `PipelineToolConfig` dataclass and `METADATA_EXTENSIONS` constant in `agent/src/analysis/pipeline_tool_config.py`
-- [ ] T002 Implement `extract_tool_config(nodes_json, edges_json)` in `agent/src/analysis/pipeline_tool_config.py` — extract filename_regex, camera_id_group, photo/metadata extensions, processing_suffixes from Pipeline nodes using `build_pipeline_config()`
-- [ ] T003 Implement `_infer_sidecar_requirements()` helper in `agent/src/analysis/pipeline_tool_config.py` — infer require_sidecar from sibling File nodes (non-optional metadata + image under same parent)
+- [x] T001 Create `PipelineToolConfig` dataclass and `METADATA_EXTENSIONS` constant in `agent/src/analysis/pipeline_tool_config.py`
+- [x] T002 Implement `extract_tool_config(nodes_json, edges_json)` in `agent/src/analysis/pipeline_tool_config.py` — extract filename_regex, camera_id_group, photo/metadata extensions, processing_suffixes from Pipeline nodes using `build_pipeline_config()`
+- [x] T003 Implement `_infer_sidecar_requirements()` helper in `agent/src/analysis/pipeline_tool_config.py` — infer require_sidecar from sibling File nodes (non-optional metadata + image under same parent)
 - [ ] T004 [P] Create `Camera` model in `backend/src/models/camera.py` using `GuidMixin` + `AuditMixin` with GUID prefix `cam_`, unique constraint `(team_id, camera_id)`
 - [ ] T005 [P] Add reciprocal `cameras` relationship to `Team` model in `backend/src/models/team.py`
 - [ ] T006 Create Alembic migration for `cameras` table in `backend/alembic/versions/`
@@ -36,15 +36,15 @@
 - [ ] T009 [P] Create user-facing Camera API endpoints in `backend/src/api/cameras.py` — `GET /api/cameras`, `GET /api/cameras/stats`, `GET /api/cameras/{guid}`, `PUT /api/cameras/{guid}`, `DELETE /api/cameras/{guid}` with TenantContext
 - [ ] T010 [P] Create agent-facing Camera discovery endpoint in `backend/src/api/agent/camera_routes.py` — `POST /api/agent/v1/cameras/discover` with agent authentication
 - [ ] T011 Register Camera API routers in `backend/src/api/__init__.py` (user-facing) and `backend/src/api/agent/__init__.py` (agent-facing)
-- [ ] T012 [P] Add `discover_cameras(camera_ids, timeout)` method to `AgentApiClient` in `agent/src/api_client.py` — POST to `/api/agent/v1/cameras/discover`
+- [x] T012 [P] Add `discover_cameras(camera_ids, timeout)` method to `AgentApiClient` in `agent/src/api_client.py` — POST to `/api/agent/v1/cameras/discover`
 
 ### Setup Tests
 
-- [ ] T013 [P] Unit tests for `extract_tool_config()` in `agent/tests/unit/test_pipeline_tool_config.py` — linear pipeline, branching, multi-file, missing capture node error, sidecar inference with optional/non-optional metadata, extension case-insensitivity, deterministic output, multiple Capture nodes (uses first), File node without extension property (skipped)
+- [x] T013 [P] Unit tests for `extract_tool_config()` in `agent/tests/unit/test_pipeline_tool_config.py` — linear pipeline, branching, multi-file, missing capture node error, sidecar inference with optional/non-optional metadata, extension case-insensitivity, deterministic output, multiple Capture nodes (uses first), File node without extension property (skipped)
 - [ ] T014 [P] Unit tests for `CameraService` in `backend/tests/unit/test_camera_service.py` — CRUD, discover (idempotent creation, skip existing), concurrent discover (IntegrityError handling), cross-team isolation, stats
 - [ ] T015 [P] Unit tests for Camera API endpoints in `backend/tests/unit/test_camera_api.py` — list (paginated, filtered), get by GUID, update, delete, stats, 404 for unknown/cross-team
 - [ ] T016 [P] Unit tests for agent-facing discover endpoint in `backend/tests/unit/test_camera_discover_api.py` — batch discover, idempotent, empty list
-- [ ] T017 [P] Unit tests for `AgentApiClient.discover_cameras()` in `agent/tests/unit/test_api_client_discover.py` — mock HTTP, verify request shape and response parsing
+- [x] T017 [P] Unit tests for `AgentApiClient.discover_cameras()` in `agent/tests/unit/test_api_client_discover.py` — mock HTTP, verify request shape and response parsing
 
 **Checkpoint**: `PipelineToolConfig` extraction works for all Pipeline structures. Camera entity exists with full CRUD API and agent discovery endpoint. All setup tests pass.
 
