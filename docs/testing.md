@@ -318,8 +318,8 @@ venv/bin/python -m pytest backend/tests/ \
 ### Agent
 
 ```bash
-# From project root, using the venv
-venv/bin/python -m pytest agent/tests/ \
+# From project root, using the agent venv
+agent/.venv/bin/python -m pytest agent/tests/ \
   --cov=agent/src --cov=agent/cli \
   --cov-report=term-missing
 ```
@@ -334,7 +334,7 @@ venv/bin/python -m pytest agent/tests/ \
 venv/bin/python -m pytest backend/tests/ -v
 
 # Agent
-venv/bin/python -m pytest agent/tests/ -v
+agent/.venv/bin/python -m pytest agent/tests/ -v
 ```
 
 ---
@@ -346,13 +346,13 @@ Tests run automatically on push/PR via `.github/workflows/test.yml`:
 | Job | OS | Python/Node | Scope |
 |-----|------|-----------|-------|
 | `frontend-test` | ubuntu-latest | Node 20 | `npm test -- --run` |
-| `backend-web-test` | ubuntu-latest | Python 3.11, 3.12 | `backend/tests/unit/` |
-| `agent-test` | ubuntu, macOS, Windows | Python 3.11, 3.12 | `agent/tests/` |
+| `backend-web-test` | ubuntu-latest | Python 3.12, 3.13 | `backend/tests/unit/` |
+| `agent-test` | ubuntu, macOS, Windows | Python 3.12, 3.13 | `agent/tests/` |
 
 Coverage reports are uploaded to [Codecov](https://codecov.io/) from:
 - Frontend: all OS/Node combinations
-- Backend: Python 3.11 only
-- Agent: Ubuntu + Python 3.11 only
+- Backend: Python 3.12 only
+- Agent: Ubuntu + Python 3.12 only
 
 ---
 

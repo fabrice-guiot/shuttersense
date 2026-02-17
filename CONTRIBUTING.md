@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ShutterSense! This guide covers t
 
 ### Prerequisites
 
-- **Python 3.11+** (backend and agent)
+- **Python 3.12+** (backend and agent)
 - **Node.js 18+** (frontend)
 - **PostgreSQL 12+** (backend database)
 - **Git**

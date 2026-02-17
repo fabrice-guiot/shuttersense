@@ -1,18 +1,20 @@
 # Installation
 
-This guide covers installing the ShutterSense web application and agent.
+This guide covers installing the ShutterSense web application and agent for local development.
+
+> **Important:** The backend and agent have separate dependencies and MUST use separate virtual environments. Installing agent dependencies into the backend venv (or vice versa) will cause issues — the agent is distributed as a standalone binary and must only depend on its own declared packages.
 
 ## Requirements
 
 ### Web Application
-- Python 3.11 or higher (backend)
+- Python 3.12 or higher (backend)
 - Node.js 18+ and npm (frontend)
 - PostgreSQL 12+ (database)
 - Git (for cloning the repository)
 
 ### Agent
-- Python 3.11 or higher (for building from source)
-- Or: pre-built binary for your platform (macOS, Linux, Windows)
+- Pre-built binary for your platform (macOS, Linux, Windows) — no Python required
+- Or: Python 3.12+ for building from source or development
 
 ## Web Application Setup
 
@@ -26,11 +28,11 @@ cd shuttersense
 ### 2. Backend Setup
 
 ```bash
-# Create virtual environment
+# Create backend virtual environment (at repo root)
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
+# Install backend dependencies
 pip install -r backend/requirements.txt
 
 # Set required environment variables
@@ -41,13 +43,13 @@ export SHUSAI_DB_URL="postgresql://user:password@localhost:5432/shuttersense"
 createdb shuttersense  # Or use your PostgreSQL admin tool
 cd backend && alembic upgrade head && cd ..
 
-# Start the backend server (venv must be activated)
+# Start the backend server
 python3 web_server.py --reload
 ```
 
-> **Note:** Always activate the virtual environment (`source venv/bin/activate`)
+> **Note:** Always activate the backend virtual environment (`source venv/bin/activate`)
 > before running `web_server.py`. The script must use the Python interpreter
-> that has the project dependencies installed.
+> that has the backend dependencies installed.
 
 The API will be available at:
 - API: http://localhost:8000/api
@@ -74,19 +76,30 @@ The frontend will be available at http://localhost:3000
 
 The agent executes photo analysis jobs on your machine. Without an agent, jobs cannot be processed.
 
-### Option A: Pre-built Binary
+### Option A: Pre-built Binary (Recommended)
 
-Download the latest agent binary for your platform from the releases page, then proceed to [Register the Agent](#register-the-agent).
+Download the latest agent binary for your platform from the releases page, then proceed to [Register the Agent](#register-the-agent). No Python installation required.
 
-### Option B: Build from Source
+### Option B: Run from Source (Development)
+
+> **Important:** Do NOT install the agent into the backend's `venv/`. The agent has its own `pyproject.toml` and must use a separate virtual environment.
 
 ```bash
 cd agent
-pip install -e ".[build]"
-./packaging/build_macos.sh  # or build_linux.sh, build_windows.sh
+
+# Create a dedicated agent virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install agent and dev dependencies
+pip install -e ".[dev]"
 ```
 
-The binary will be in `./dist/<platform>/shuttersense-agent`.
+The agent CLI is now available as `shuttersense-agent` while the agent venv is activated.
+
+### Option C: Build a Binary from Source
+
+See the [Agent Build Guide](agent-build.md) for instructions on creating standalone binaries with PyInstaller.
 
 ### Register the Agent
 
@@ -116,6 +129,20 @@ shuttersense-agent run <collection-guid> --tool photostats
 ```
 
 See [Agent Installation Guide](agent-installation.md) for detailed agent setup instructions.
+
+## Virtual Environment Layout
+
+After setup, the repository should have two separate venvs:
+
+```
+shuttersense/
+├── venv/              # Backend venv (backend/requirements.txt)
+├── agent/
+│   └── .venv/         # Agent venv (agent/pyproject.toml)
+└── frontend/          # Node.js (npm)
+```
+
+Do not mix these environments. Each has its own `activate` script.
 
 ## Environment Variables
 
@@ -282,28 +309,28 @@ shuttersense-agent --version
 shuttersense-agent self-test
 ```
 
-## Development Installation
+## Development Testing
 
-For contributing or running tests:
+Backend and agent tests use separate virtual environments:
 
 ```bash
-# Backend tests (run from repo root)
+# Backend tests (activate backend venv first)
+source venv/bin/activate
 PYTHONPATH=. python -m pytest backend/tests/ -v
 
 # Frontend tests
 cd frontend
 npm test
 
-# Agent tests
-cd agent
-pip install -e ".[dev]"
-python -m pytest tests/ -v
+# Agent tests (activate agent venv first)
+source agent/.venv/bin/activate
+python -m pytest agent/tests/ -v
 ```
 
 ## Troubleshooting
 
 ### Python Version
-Ensure you have Python 3.11+:
+Ensure you have Python 3.12+:
 ```bash
 python --version
 ```
@@ -323,5 +350,6 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 ## Next Steps
 
 - **Agent Users**: See the [Agent Installation Guide](agent-installation.md) for detailed agent setup
+- **Agent Developers**: See the [Agent Build Guide](agent-build.md) for building binaries
 - **Web Application**: See [backend/README.md](../backend/README.md) for detailed backend setup
 - **Configuration**: See the [Configuration Guide](configuration.md) for file type settings

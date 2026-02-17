@@ -6,9 +6,11 @@ This guide documents how to build the ShutterSense Agent binary for distribution
 
 The ShutterSense Agent is a lightweight binary that runs on user machines to execute photo analysis jobs. It connects to the ShutterSense server, claims jobs, executes them locally, and reports results back.
 
+The agent is packaged with PyInstaller into a standalone executable that bundles its own Python runtime. End users do not need Python installed.
+
 ## Prerequisites
 
-- Python 3.11 or higher
+- Python 3.12 or higher
 - pip package manager
 - Git (for version detection)
 
@@ -33,34 +35,44 @@ agent/
 │   ├── credential_store.py # Encrypted local credential storage
 │   └── remote/            # Remote storage adapters (S3, GCS, SMB)
 ├── packaging/             # Build scripts
+│   ├── build_all.sh       # Auto-detects platform and builds
 │   ├── build_macos.sh
 │   ├── build_linux.sh
 │   └── build_windows.sh
 ├── tests/                 # Test suite
-└── pyproject.toml         # Package configuration
+├── .venv/                 # Agent virtual environment (NOT checked in)
+└── pyproject.toml         # Package configuration and dependencies
 ```
 
 ## Development Setup
 
-### 1. Clone and Install
+> **Important:** The agent MUST use its own virtual environment, separate from the backend's `venv/`. The agent is distributed as a standalone binary — its dependencies must match what PyInstaller bundles, not what the backend server uses. Mixing environments masks missing dependencies that will cause failures in the deployed binary.
+
+### 1. Create an Isolated Agent venv
 
 ```bash
 cd agent
+
+# Create a dedicated virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install agent with dev dependencies
 pip install -e ".[dev]"
 ```
-
-This installs the agent in editable mode with development dependencies.
 
 ### 2. Run Tests
 
 ```bash
 cd agent
+source .venv/bin/activate
 pytest
 ```
 
 ### 3. Run in Development Mode
 
 ```bash
+source agent/.venv/bin/activate
 shuttersense-agent --help
 shuttersense-agent register --server http://localhost:8000 --token art_xxx --name "Dev Agent"
 shuttersense-agent start
@@ -68,38 +80,46 @@ shuttersense-agent start
 
 ## Building Standalone Binaries
 
-The agent uses PyInstaller to create standalone executables that don't require Python to be installed on the target machine.
+The agent uses PyInstaller to create standalone executables that don't require Python to be installed on the target machine. The build Python and its SSL libraries are bundled into the binary.
+
+> **Note:** The build scripts use the active Python interpreter. Make sure `python3` points to the correct version (3.12+) before building. The build Python becomes the runtime bundled into the binary.
 
 ### macOS Build
 
 ```bash
 cd agent
+source .venv/bin/activate
+pip install -e ".[build]"
 ./packaging/build_macos.sh
 ```
 
-Output: `agent/dist/macos/shuttersense-agent`
-
-This creates a universal binary that works on both Intel and Apple Silicon Macs.
+Output: `agent/dist/<version>/shuttersense-agent-darwin-<arch>`
 
 ### Linux Build
 
 ```bash
 cd agent
+source .venv/bin/activate
+pip install -e ".[build]"
 ./packaging/build_linux.sh
 ```
 
-Output: `agent/dist/linux/shuttersense-agent`
+Output: `agent/dist/<version>/shuttersense-agent-linux-<arch>`
 
 The Linux build should be performed on the target distribution for best compatibility (e.g., Ubuntu 22.04 for general compatibility).
 
 ### Windows Build
 
-```powershell
+> **Note:** The build script requires a Bash interpreter. Run these commands in **Git Bash** or **WSL**.
+
+```bash
 cd agent
-.\packaging\build_windows.sh
+source .venv/Scripts/activate
+pip install -e ".[build]"
+./packaging/build_windows.sh
 ```
 
-Output: `agent/dist/windows/shuttersense-agent.exe`
+Output: `agent/dist/<version>/shuttersense-agent-windows-amd64.exe`
 
 ## Build Artifacts
 
@@ -125,10 +145,10 @@ The build scripts automatically calculate and save checksums:
 
 ```bash
 # macOS/Linux
-shasum -a 256 dist/macos/shuttersense-agent
+shasum -a 256 dist/<version>/shuttersense-agent-darwin-arm64
 
 # Windows (PowerShell)
-Get-FileHash dist\windows\shuttersense-agent.exe -Algorithm SHA256
+Get-FileHash dist\<version>\shuttersense-agent-windows-amd64.exe -Algorithm SHA256
 ```
 
 ## Version Management
@@ -142,7 +162,7 @@ Version is embedded at build time via `hatch-vcs` in `pyproject.toml`.
 
 ## Dependencies
 
-### Runtime Dependencies
+### Runtime Dependencies (bundled into binary)
 
 | Package | Purpose |
 |---------|---------|
@@ -154,6 +174,9 @@ Version is embedded at build time via `hatch-vcs` in `pyproject.toml`.
 | click | CLI framework |
 | PyYAML | Configuration file parsing |
 | platformdirs | Platform-specific paths |
+| boto3 | AWS S3 storage adapter |
+| google-cloud-storage | GCS storage adapter |
+| smbprotocol | SMB/CIFS storage adapter |
 
 ### Build Dependencies
 
@@ -169,10 +192,10 @@ After building, verify the binary works:
 
 ```bash
 # Check version
-./dist/macos/shuttersense-agent --version
+./dist/<version>/shuttersense-agent-darwin-arm64 --version
 
 # Verify it runs (will fail without registration, but confirms binary works)
-./dist/macos/shuttersense-agent start
+./dist/<version>/shuttersense-agent-darwin-arm64 self-test
 # Expected: Error about missing registration
 ```
 
@@ -181,16 +204,19 @@ After building, verify the binary works:
 For automated builds in CI:
 
 ```bash
-# Install build dependencies
-pip install pyinstaller
+cd agent
+
+# Create isolated build environment
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[build]"
 
 # Build for current platform
-cd agent
-./packaging/build_$(uname -s | tr '[:upper:]' '[:lower:]').sh
+./packaging/build_all.sh
 
 # Upload artifacts
-# - Binary: dist/<platform>/shuttersense-agent
-# - Checksum: dist/<platform>/shuttersense-agent.sha256
+# - Binary: dist/<version>/shuttersense-agent-<platform>
+# - Checksum: dist/<version>/shuttersense-agent-<platform>.sha256
 ```
 
 ## Troubleshooting
@@ -211,12 +237,26 @@ The binary includes the Python runtime and all dependencies. Typical sizes:
 For distribution outside the App Store, sign the binary:
 
 ```bash
-codesign --sign "Developer ID Application: Your Name" dist/macos/shuttersense-agent
+codesign --sign "Developer ID Application: Your Name" dist/<version>/shuttersense-agent-darwin-arm64
 ```
 
 ### Windows Defender False Positives
 
 Unsigned Windows executables may trigger antivirus warnings. For production, sign with a code signing certificate.
+
+### SSL/TLS Certificate Errors
+
+If the agent fails with SSL certificate errors (e.g., `match_hostname` failures), the Python used for the build may have an OpenSSL mismatch. Verify the build Python has consistent OpenSSL headers and runtime:
+
+```bash
+python3 -c "
+import ssl
+print('Runtime (loaded library):', ssl.OPENSSL_VERSION, ssl.OPENSSL_VERSION_INFO)
+print('Compile-time (build headers):', ssl._OPENSSL_API_VERSION)
+"
+```
+
+The compile-time tuple (`_OPENSSL_API_VERSION`) major version should match the runtime major version (`OPENSSL_VERSION_INFO[0]`). For example, both should be `3`. A mismatch — compile-time `(1, 1, 1, ...)` vs. runtime `(3, ...)` — means Python was built against OpenSSL 1.x headers but dynamically linked to OpenSSL 3.x at runtime. Rebuild Python against the correct OpenSSL headers.
 
 ## Release Checklist
 

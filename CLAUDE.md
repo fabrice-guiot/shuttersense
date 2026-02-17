@@ -22,29 +22,29 @@ Analysis tools are executed through the ShutterSense agent binary (`shuttersense
 - **Frontend** (React/TypeScript) - Modern, accessible UI with real-time progress updates
 
 ## Active Technologies
-- Python 3.11+ (agent and backend), TypeScript 5.9.3 (frontend - minimal changes) + Click 8.1+ (agent CLI), FastAPI (backend API), httpx (agent HTTP client), Pydantic v2 (data validation), platformdirs (config paths) (108-remove-cli-direct-usage)
+- Python 3.12+ (agent and backend), TypeScript 5.9.3 (frontend - minimal changes) + Click 8.1+ (agent CLI), FastAPI (backend API), httpx (agent HTTP client), Pydantic v2 (data validation), platformdirs (config paths) (108-remove-cli-direct-usage)
 - PostgreSQL 12+ (server), JSON files (agent local cache), SQLAlchemy 2.0+ (ORM) (108-remove-cli-direct-usage)
 - TypeScript 5.9.3, React 18.3.1 + shadcn/ui (Table, Tabs, Select, Badge), Tailwind CSS 4.x, Radix UI primitives, class-variance-authority, Lucide React icons (123-mobile-responsive-tables-tabs)
 - N/A (frontend-only, no backend changes) (123-mobile-responsive-tables-tabs)
-- Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Popover, Tailwind CSS 4.x (frontend) (120-audit-trail-visibility)
+- Python 3.12+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Popover, Tailwind CSS 4.x (frontend) (120-audit-trail-visibility)
 - PostgreSQL 12+ (production), SQLite (tests) — Alembic migrations with dialect-aware code (120-audit-trail-visibility)
-- Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Dialog, Tailwind CSS 4.x, Lucide React (frontend) (136-agent-setup-wizard)
-- Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend) (182-calendar-conflict-viz)
+- Python 3.12+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); React 18.3.1, shadcn/ui, Radix UI Dialog, Tailwind CSS 4.x, Lucide React (frontend) (136-agent-setup-wizard)
+- Python 3.12+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend) (182-calendar-conflict-viz)
 - PostgreSQL (existing `configurations` table for new settings — no new tables or migrations for schema changes) (182-calendar-conflict-viz)
-- Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend); **NEW**: `@xyflow/react`, `@dagrejs/dagre` (209-pipeline-visual-editor)
+- Python 3.12+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend); **NEW**: `@xyflow/react`, `@dagrejs/dagre` (209-pipeline-visual-editor)
 - PostgreSQL JSONB (`nodes_json`, `edges_json`) — no DB migration required; position data is added as an optional field within existing JSONB objects (209-pipeline-visual-editor)
-- Python 3.11+ (agent and backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); Click, httpx (agent); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend) (217-pipeline-driven-tools)
+- Python 3.12+ (agent and backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); Click, httpx (agent); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend) (217-pipeline-driven-tools)
 - PostgreSQL 12+ (production), SQLite (tests) — new `cameras` table with `(team_id, camera_id)` unique constraint (217-pipeline-driven-tools)
 
 ### Backend
-- **Python 3.11+** - Required for ExceptionGroup, tomllib, and modern type hinting
+- **Python 3.12+** - Required for tomllib, modern type hinting, and improved performance
 - **FastAPI** - Web framework with OpenAPI docs
 - **SQLAlchemy 2.0+** - ORM with async support
 - **Pydantic v2** - Data validation and serialization
 - **PostgreSQL 12+** - Primary database with JSONB columns (SQLite for tests)
 
 ### Agent
-- **Python 3.11+** - Lightweight distributed agent binary
+- **Python 3.12+** - Lightweight distributed agent binary
 - **httpx** - Async HTTP client for REST API communication
 - **websockets** - Real-time progress streaming
 - **Pydantic v2** - Data validation and settings management
@@ -247,7 +247,7 @@ black .
 
 ## Code Style
 
-- **Python 3.11+**: Follow PEP 8 conventions
+- **Python 3.12+**: Follow PEP 8 conventions
 - **Docstrings**: All functions should have clear docstrings with Args/Returns
 - **Type hints**: Use where beneficial for clarity
 - **Testing**: Write tests alongside implementation (flexible TDD)
@@ -625,9 +625,9 @@ prop_type = FilenameParser.detect_property_type('HDR')  # 'processing_method'
 ```
 
 ## Recent Changes
-- 217-pipeline-driven-tools: Added Python 3.11+ (agent and backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); Click, httpx (agent); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend)
-- 209-pipeline-visual-editor: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend); **NEW**: `@xyflow/react`, `@dagrejs/dagre`
-- 182-calendar-conflict-viz: Added Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend)
+- 217-pipeline-driven-tools: Added Python 3.12+ (agent and backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); Click, httpx (agent); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend)
+- 209-pipeline-visual-editor: Added Python 3.12+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend); **NEW**: `@xyflow/react`, `@dagrejs/dagre`
+- 182-calendar-conflict-viz: Added Python 3.12+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, Recharts 2.15.0, shadcn/ui, Radix UI (frontend)
 
 ### Issue #107: Cloud Storage Bucket Inventory Import (2026-01)
 
