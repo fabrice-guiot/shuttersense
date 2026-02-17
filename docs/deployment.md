@@ -4,7 +4,7 @@ This guide covers deploying ShutterSense in a production environment.
 
 ## Prerequisites
 
-- **Python 3.11+** - Backend and agent runtime
+- **Python 3.12+** - Backend and agent runtime
 - **Node.js 18+** - Frontend build tooling
 - **PostgreSQL 12+** - Primary database
 - **Git** - Source code access

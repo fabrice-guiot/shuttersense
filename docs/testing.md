@@ -346,13 +346,13 @@ Tests run automatically on push/PR via `.github/workflows/test.yml`:
 | Job | OS | Python/Node | Scope |
 |-----|------|-----------|-------|
 | `frontend-test` | ubuntu-latest | Node 20 | `npm test -- --run` |
-| `backend-web-test` | ubuntu-latest | Python 3.11, 3.12 | `backend/tests/unit/` |
-| `agent-test` | ubuntu, macOS, Windows | Python 3.11, 3.12 | `agent/tests/` |
+| `backend-web-test` | ubuntu-latest | Python 3.12, 3.13 | `backend/tests/unit/` |
+| `agent-test` | ubuntu, macOS, Windows | Python 3.12, 3.13 | `agent/tests/` |
 
 Coverage reports are uploaded to [Codecov](https://codecov.io/) from:
 - Frontend: all OS/Node combinations
-- Backend: Python 3.11 only
-- Agent: Ubuntu + Python 3.11 only
+- Backend: Python 3.12 only
+- Agent: Ubuntu + Python 3.12 only
 
 ---
 
