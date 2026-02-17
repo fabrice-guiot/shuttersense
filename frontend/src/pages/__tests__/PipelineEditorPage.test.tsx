@@ -10,10 +10,18 @@ vi.mock('@/hooks/usePipelines', () => ({
       name: 'Test Pipeline',
       description: 'A test pipeline',
       is_active: true,
+      is_valid: true,
       version: 1,
-      nodes: [],
-      edges: [],
-      validation: { is_valid: true, errors: [], warnings: [] },
+      nodes: [
+        { id: 'capture_1', type: 'capture', properties: { sample_filename: 'AB3D0001', filename_regex: '([A-Z0-9]{4})([0-9]{4})', camera_id_group: '1' } },
+        { id: 'file_raw', type: 'file', properties: { extension: '.dng' } },
+        { id: 'done', type: 'termination', properties: { termination_type: 'Black Box Archive' } },
+      ],
+      edges: [
+        { from: 'capture_1', to: 'file_raw' },
+        { from: 'file_raw', to: 'done' },
+      ],
+      validation_errors: [],
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-15T00:00:00Z',
       audit: null,
@@ -34,8 +42,8 @@ vi.mock('@/hooks/usePipelines', () => ({
     deletePipeline: vi.fn(),
   }),
   usePipelineExport: vi.fn().mockReturnValue({
-    exportPipeline: vi.fn(),
-    loading: false,
+    downloadYaml: vi.fn(),
+    downloading: false,
   }),
 }))
 
@@ -49,6 +57,27 @@ vi.mock('@/components/audit', () => ({
 
 vi.mock('@/components/layout/MainLayout', () => ({
   MainLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/components/pipelines/graph/PipelineGraphView', () => ({
+  PipelineGraphView: () => <div data-testid="pipeline-graph-view" />,
+}))
+
+vi.mock('@/components/pipelines/graph/PropertyPanel', () => ({
+  PropertyPanel: () => <div data-testid="property-panel" />,
+}))
+
+vi.mock('@/components/pipelines/graph/PipelineGraphEditor', async () => {
+  const React = await import('react')
+  const PipelineGraphEditor = React.forwardRef((_props: any, _ref: any) => (
+    <div data-testid="pipeline-graph-editor" />
+  ))
+  PipelineGraphEditor.displayName = 'PipelineGraphEditor'
+  return { PipelineGraphEditor, default: PipelineGraphEditor }
+})
+
+vi.mock('@xyflow/react', () => ({
+  ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 function renderViewMode() {
@@ -78,6 +107,19 @@ describe('PipelineEditorPage', () => {
     expect(screen.getByText('Test Pipeline')).toBeDefined()
   })
 
+  test('renders pipeline graph view in view mode', () => {
+    renderViewMode()
+
+    expect(screen.getByTestId('pipeline-graph-view')).toBeDefined()
+  })
+
+  test('does not show beta banner in view mode', () => {
+    renderViewMode()
+
+    expect(screen.queryByText('Coming Soon:', { exact: false })).toBeNull()
+    expect(screen.queryByText('Beta Feature:', { exact: false })).toBeNull()
+  })
+
   test('renders pipeline description in view mode', () => {
     renderViewMode()
 
@@ -100,8 +142,16 @@ describe('PipelineEditorPage', () => {
   test('renders new pipeline form', () => {
     renderNewMode()
 
-    // In new mode, shows create form with Pipeline Details card
-    expect(screen.getByText('Pipeline Details')).toBeDefined()
+    // In new mode, shows graph editor with name input and Create button
+    expect(screen.getByLabelText(/name/i)).toBeDefined()
+    expect(screen.getByText('Create')).toBeDefined()
+    expect(screen.getByTestId('pipeline-graph-editor')).toBeDefined()
+  })
+
+  test('does not show beta banner in edit mode', () => {
+    renderNewMode()
+
+    expect(screen.queryByText('Beta Feature:', { exact: false })).toBeNull()
   })
 
   test('shows loading state', async () => {

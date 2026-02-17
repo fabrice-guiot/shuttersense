@@ -1,0 +1,42 @@
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
+import { FileText } from 'lucide-react'
+import { memo } from 'react'
+import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import type { PipelineNodeData } from '@/contracts/api/pipelines-api'
+
+type FileNodeType = Node<PipelineNodeData, 'file'>
+
+const FileNode = memo(({ data }: NodeProps<FileNodeType>) => (
+  <div
+    className={cn(
+      'w-48 min-h-16 rounded-md border-2 bg-card px-3 py-2 shadow-sm',
+      data.hasError ? 'border-destructive' : 'border-muted-foreground/40',
+    )}
+    aria-label={`File node: ${(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}`}
+  >
+    <Handle type="target" position={Position.Top} />
+    <div className="flex items-center gap-2 min-w-0">
+      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+      <span className="text-sm font-medium truncate">
+        {(typeof data.properties.name === 'string' && data.properties.name) || data.nodeId}
+      </span>
+      {data.analyticsCount != null && (
+        <Badge variant="secondary" className="ml-auto text-xs shrink-0">
+          {data.analyticsCount.toLocaleString()}
+        </Badge>
+      )}
+    </div>
+    {data.properties.extension && (
+      <div className="mt-1 text-xs text-muted-foreground">
+        {String(data.properties.extension)}
+        {data.properties.optional === true && ' (optional)'}
+      </div>
+    )}
+    <Handle type="source" position={Position.Bottom} />
+  </div>
+))
+
+FileNode.displayName = 'FileNode'
+
+export default FileNode

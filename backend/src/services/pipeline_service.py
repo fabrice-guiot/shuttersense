@@ -23,14 +23,15 @@ from typing import List, Optional, Dict, Any, Tuple
 import re
 import yaml
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 
-from backend.src.models import Pipeline, PipelineHistory
+from backend.src.models import Pipeline, PipelineHistory, AnalysisResult
 from backend.src.schemas.pipelines import (
     PipelineSummary, PipelineResponse, ValidationResult, ValidationError,
     ValidationErrorType, FilenamePreviewResponse, ExpectedFile,
-    PipelineHistoryEntry, PipelineStatsResponse, PipelineNode, PipelineEdge
+    PipelineHistoryEntry, PipelineStatsResponse, PipelineNode, PipelineEdge,
+    PipelineFlowAnalyticsResponse, NodeFlowStats, EdgeFlowStats,
 )
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError as ServiceValidationError
 from backend.src.services.guid import GuidService
@@ -969,6 +970,154 @@ class PipelineService:
         )
 
     # =========================================================================
+    # Flow Analytics
+    # =========================================================================
+
+    def get_flow_analytics(
+        self,
+        pipeline_guid: str,
+        team_id: int,
+        result_guid: Optional[str] = None,
+    ) -> PipelineFlowAnalyticsResponse:
+        """
+        Get flow analytics for a pipeline derived from path_stats in analysis results.
+
+        Finds the most recent completed pipeline_validation result that contains
+        path_stats, then derives per-node and per-edge counts.
+
+        Args:
+            pipeline_guid: Pipeline GUID (pip_xxx)
+            team_id: Team ID for tenant isolation
+            result_guid: Optional specific result GUID to use (res_xxx)
+
+        Returns:
+            Flow analytics with per-node and per-edge statistics
+
+        Raises:
+            ValueError: If GUID format is invalid
+            NotFoundError: If pipeline not found, or no results with path_stats exist
+        """
+        pipeline = self._get_pipeline_by_guid(pipeline_guid, team_id=team_id)
+
+        # Find the analysis result
+        if result_guid:
+            result_uuid = GuidService.parse_identifier(result_guid, expected_prefix="res")
+            result = self.db.query(AnalysisResult).options(
+                joinedload(AnalysisResult.collection)
+            ).filter(
+                AnalysisResult.uuid == result_uuid,
+                AnalysisResult.pipeline_id == pipeline.id,
+                AnalysisResult.team_id == team_id,
+            ).first()
+        else:
+            # Most recent completed pipeline_validation with path_stats
+            result = self.db.query(AnalysisResult).options(
+                joinedload(AnalysisResult.collection)
+            ).filter(
+                AnalysisResult.pipeline_id == pipeline.id,
+                AnalysisResult.team_id == team_id,
+                AnalysisResult.tool == "pipeline_validation",
+                AnalysisResult.status == "COMPLETED",
+            ).order_by(desc(AnalysisResult.created_at)).first()
+
+        if not result:
+            raise NotFoundError("AnalysisResult", pipeline_guid)
+
+        results_json = result.results_json or {}
+        path_stats = results_json.get("path_stats")
+        if not path_stats:
+            raise NotFoundError("AnalysisResult with path_stats", pipeline_guid)
+
+        # Derive per-node and per-edge counts from path_stats.
+        #
+        # Consecutive path pairs encode branching decisions correctly (which
+        # branch was taken), but merge_two_paths() linearises parallel branches
+        # for pairing nodes, creating phantom consecutive pairs that don't
+        # correspond to real pipeline edges.  Strategy:
+        #  1. Count consecutive pairs that are real pipeline edges (branching OK).
+        #  2. When a consecutive pair is NOT a real edge (phantom from merge),
+        #     resolve it to the actual edges it replaced by looking for pipeline
+        #     edges FROM src to later path nodes and TO dst from earlier ones.
+        pipeline_edge_set = {
+            (e["from"], e["to"]) for e in (pipeline.edges_json or [])
+        }
+
+        node_counts: Dict[str, int] = {}
+        edge_counts: Dict[str, int] = {}  # "from->to" → count
+
+        for entry in path_stats:
+            path_nodes = entry.get("path", [])
+            count = entry.get("image_count", 0)
+            path_node_set = set(path_nodes)
+            for node_id in path_node_set:
+                node_counts[node_id] = node_counts.get(node_id, 0) + count
+
+            counted: set = set()  # edges already counted for this path entry
+            node_pos = {node: idx for idx, node in enumerate(path_nodes)}
+
+            for i in range(len(path_nodes) - 1):
+                src, dst = path_nodes[i], path_nodes[i + 1]
+                if (src, dst) in pipeline_edge_set:
+                    if (src, dst) not in counted:
+                        edge_key = f"{src}->{dst}"
+                        edge_counts[edge_key] = edge_counts.get(edge_key, 0) + count
+                        counted.add((src, dst))
+                else:
+                    # Phantom pair from merge linearisation — resolve to real edges
+                    for from_n, to_n in pipeline_edge_set:
+                        if (from_n, to_n) in counted:
+                            continue
+                        if from_n == src and to_n in node_pos and node_pos[to_n] > i:
+                            edge_counts[f"{from_n}->{to_n}"] = edge_counts.get(f"{from_n}->{to_n}", 0) + count
+                            counted.add((from_n, to_n))
+                        elif to_n == dst and from_n in node_pos and node_pos[from_n] < i + 1:
+                            edge_counts[f"{from_n}->{to_n}"] = edge_counts.get(f"{from_n}->{to_n}", 0) + count
+                            counted.add((from_n, to_n))
+
+        total_records = sum(entry.get("image_count", 0) for entry in path_stats)
+
+        # Find capture node total for node percentage calculation
+        capture_total = total_records  # default fallback
+
+        # Build node stats with percentages relative to capture node total
+        nodes = []
+        for node_id, count in node_counts.items():
+            pct = (count / capture_total * 100.0) if capture_total > 0 else 0.0
+            nodes.append(NodeFlowStats(
+                node_id=node_id,
+                record_count=count,
+                percentage=round(pct, 2),
+            ))
+
+        # Build edge stats with percentages relative to source node total
+        edges = []
+        for edge_key, count in edge_counts.items():
+            from_node, to_node = edge_key.split("->")
+            source_total = node_counts.get(from_node, 0)
+            pct = (count / source_total * 100.0) if source_total > 0 else 0.0
+            edges.append(EdgeFlowStats(
+                from_node=from_node,
+                to_node=to_node,
+                record_count=count,
+                percentage=round(pct, 2),
+            ))
+
+        return PipelineFlowAnalyticsResponse(
+            pipeline_guid=pipeline.guid,
+            pipeline_version=result.pipeline_version or pipeline.version,
+            result_guid=result.guid,
+            result_created_at=result.created_at,
+            result_status=result.status.value if hasattr(result.status, 'value') else str(result.status),
+            collection_guid=result.collection.guid if result.collection else "",
+            collection_name=result.collection.name if result.collection else "Unknown",
+            completed_at=result.completed_at,
+            files_scanned=result.files_scanned,
+            total_records=total_records,
+            nodes=nodes,
+            edges=edges,
+        )
+
+    # =========================================================================
     # Helper Methods
     # =========================================================================
 
@@ -1033,7 +1182,15 @@ class PipelineService:
         for edge in edges:
             from_node = edge.get("from") or edge.get("from_node", "")
             to_node = edge.get("to") or edge.get("to_node", "")
-            result.append({"from": from_node, "to": to_node})
+            entry: Dict[str, Any] = {"from": from_node, "to": to_node}
+            waypoints = edge.get("waypoints")
+            if waypoints:
+                entry["waypoints"] = waypoints
+            else:
+                offset = edge.get("offset")
+                if offset is not None and offset != 0:
+                    entry["offset"] = offset
+            result.append(entry)
         return result
 
     def _to_response(self, pipeline: Pipeline) -> PipelineResponse:
@@ -1058,7 +1215,12 @@ class PipelineService:
 
         # Convert edges to schema format
         edges = [
-            PipelineEdge(from_node=e["from"], to_node=e["to"])
+            PipelineEdge(
+                from_node=e["from"],
+                to_node=e["to"],
+                offset=e.get("offset"),
+                waypoints=e.get("waypoints"),
+            )
             for e in pipeline.edges_json
         ]
 

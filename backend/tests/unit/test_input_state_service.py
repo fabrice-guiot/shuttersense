@@ -368,6 +368,7 @@ class TestAgentBackendConsistency:
         # (sorted JSON of filtered keys)
         import json
         relevant = {k: config[k] for k in service.RELEVANT_CONFIG_KEYS if k in config}
+        relevant["_hash_version"] = 2  # Must match _extract_relevant_config
         expected = json.dumps(relevant, sort_keys=True, separators=(",", ":"))
         import hashlib
         expected_hash = hashlib.sha256(expected.encode("utf-8")).hexdigest()

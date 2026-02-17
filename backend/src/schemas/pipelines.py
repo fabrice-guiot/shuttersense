@@ -46,6 +46,12 @@ class ValidationErrorType(str, Enum):
 # Node and Edge Schemas
 # ============================================================================
 
+class NodePosition(BaseModel):
+    """Canvas position for visual graph editor."""
+    x: float = Field(..., description="Canvas X coordinate")
+    y: float = Field(..., description="Canvas Y coordinate")
+
+
 class PipelineNode(BaseModel):
     """
     Pipeline node definition.
@@ -55,16 +61,24 @@ class PipelineNode(BaseModel):
     id: str = Field(..., min_length=1, max_length=100, description="Unique node identifier")
     type: NodeType = Field(..., description="Node type")
     properties: Dict[str, Any] = Field(default_factory=dict, description="Node properties")
+    position: Optional[NodePosition] = Field(None, description="Canvas position for visual editor")
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "id": "file_raw",
                 "type": "file",
-                "properties": {"extension": ".dng", "optional": False}
+                "properties": {"extension": ".dng", "optional": False},
+                "position": {"x": 150.0, "y": 200.0}
             }
         }
     }
+
+
+class EdgeWaypoint(BaseModel):
+    """Interior bend point for orthogonal edge routing."""
+    x: float = Field(..., description="X coordinate")
+    y: float = Field(..., description="Y coordinate")
 
 
 class PipelineEdge(BaseModel):
@@ -75,6 +89,8 @@ class PipelineEdge(BaseModel):
     """
     from_node: str = Field(..., alias="from", min_length=1, description="Source node ID")
     to_node: str = Field(..., alias="to", min_length=1, description="Target node ID")
+    offset: Optional[float] = Field(None, description="Deprecated: use waypoints instead")
+    waypoints: Optional[List[EdgeWaypoint]] = Field(None, description="Interior bend points for orthogonal edge routing")
 
     model_config = {
         "populate_by_name": True,
@@ -369,6 +385,61 @@ class PipelineStatsResponse(BaseModel):
                 "active_pipeline_count": 3,
                 "default_pipeline_guid": "pip_01hgw2bbg0000000000000001",
                 "default_pipeline_name": "Standard RAW Workflow"
+            }
+        }
+    }
+
+
+class NodeFlowStats(BaseModel):
+    """Per-node flow statistics from pipeline validation results."""
+    node_id: str = Field(..., description="Pipeline node ID")
+    record_count: int = Field(..., ge=0, description="Number of records that passed through this node")
+    percentage: float = Field(..., ge=0, le=100, description="Percentage relative to capture node total")
+
+
+class EdgeFlowStats(BaseModel):
+    """Per-edge flow statistics from pipeline validation results."""
+    from_node: str = Field(..., description="Source node ID")
+    to_node: str = Field(..., description="Target node ID")
+    record_count: int = Field(..., ge=0, description="Number of records that traversed this edge")
+    percentage: float = Field(..., ge=0, le=100, description="Percentage relative to source node total")
+
+
+class PipelineFlowAnalyticsResponse(BaseModel):
+    """Response for flow analytics overlay data."""
+    pipeline_guid: str = Field(..., description="Pipeline GUID (pip_xxx)")
+    pipeline_version: int = Field(..., description="Pipeline version at time of analysis")
+    result_guid: str = Field(..., description="Analysis result GUID (res_xxx)")
+    result_created_at: datetime = Field(..., description="When the analysis result was created")
+    result_status: str = Field(..., description="Result status (COMPLETED, NO_CHANGE, etc.)")
+    collection_guid: str = Field(..., description="Collection GUID (col_xxx)")
+    collection_name: str = Field(..., description="Collection name")
+    completed_at: Optional[datetime] = Field(None, description="When the analysis finished")
+    files_scanned: Optional[int] = Field(None, description="Number of files processed")
+    total_records: int = Field(..., ge=0, description="Total image records analyzed")
+    nodes: List[NodeFlowStats] = Field(..., description="Per-node flow statistics")
+    edges: List[EdgeFlowStats] = Field(..., description="Per-edge flow statistics")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "pipeline_guid": "pip_01hgw2bbg0000000000000002",
+                "pipeline_version": 3,
+                "result_guid": "res_01hgw2bbg0000000000000010",
+                "result_created_at": "2024-01-15T14:45:00Z",
+                "result_status": "COMPLETED",
+                "collection_guid": "col_01hgw2bbg0000000000000001",
+                "collection_name": "My Photos",
+                "completed_at": "2024-01-15T14:50:00Z",
+                "files_scanned": 1204,
+                "total_records": 150,
+                "nodes": [
+                    {"node_id": "capture_1", "record_count": 150, "percentage": 100.0},
+                    {"node_id": "file_raw", "record_count": 150, "percentage": 100.0},
+                ],
+                "edges": [
+                    {"from_node": "capture_1", "to_node": "file_raw", "record_count": 150, "percentage": 100.0},
+                ],
             }
         }
     }

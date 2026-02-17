@@ -27,6 +27,9 @@ from utils.pipeline_processor import (
     ValidationStatus,
     PipelineConfig,
     validate_specific_image,
+    generate_expected_files,
+    enumerate_paths_with_pairing,
+    enumerate_all_paths,
 )
 
 
@@ -121,6 +124,73 @@ def add_metadata_files(
                 image_lookup[base].files.sort()
 
 
+def _determine_image_path(
+    specific_image: SpecificImage,
+    validation_result: ValidationResult,
+    paths_by_term: Dict[str, List[tuple]],
+    path_cache: Dict[tuple, tuple],
+) -> Optional[tuple]:
+    """
+    Determine which pipeline path an image followed based on validation results.
+
+    Uses a cache keyed by (properties, suffix, termination_type, expected_files)
+    so that images with identical characteristics resolve to the same path
+    without re-computing expected files (optimization — 99% of groups follow
+    the same few paths).
+
+    Args:
+        specific_image: The validated SpecificImage
+        validation_result: Full validation result with termination matches
+        paths_by_term: Pre-enumerated paths grouped by termination type
+        path_cache: Cache mapping (properties, suffix, term_type, expected_files) → path node IDs
+
+    Returns:
+        Tuple of node IDs for the matched path, or None if no match
+    """
+    if not validation_result.termination_matches:
+        return None
+
+    # Find best termination match: best status, then most expected files
+    best_match = min(
+        validation_result.termination_matches,
+        key=lambda m: (m.status, -len(m.expected_files)),
+    )
+
+    term_type = best_match.termination_type
+    term_paths = paths_by_term.get(term_type, [])
+
+    if not term_paths:
+        return None
+
+    # Single path for this termination — no ambiguity
+    if len(term_paths) == 1:
+        return term_paths[0][0]  # node_ids tuple
+
+    # Multiple paths — check cache first (include expected files signature)
+    base = f"{specific_image.camera_id}{specific_image.counter}"
+    match_expected_set = {f.lower() for f in best_match.expected_files}
+    cache_key = (
+        tuple(sorted(specific_image.properties)),
+        specific_image.suffix,
+        term_type,
+        tuple(sorted(match_expected_set)),
+    )
+    if cache_key in path_cache:
+        return path_cache[cache_key]
+
+    for node_ids, path_data in term_paths:
+        path_expected = generate_expected_files(path_data, base, specific_image.suffix)
+        path_expected_set = {f.lower() for f in path_expected}
+        if path_expected_set == match_expected_set:
+            path_cache[cache_key] = node_ids
+            return node_ids
+
+    # Fallback: use first path for this termination
+    result = term_paths[0][0]
+    path_cache[cache_key] = result
+    return result
+
+
 def run_pipeline_validation(
     files: List[FileInfo],
     pipeline_config: PipelineConfig,
@@ -165,11 +235,35 @@ def run_pipeline_validation(
     # Step 3: Add metadata files
     add_metadata_files(specific_images, files, metadata_exts)
 
-    # Step 4: Run validation with progress reporting
+    # Step 4: Pre-enumerate pipeline paths for path_stats tracking
+    try:
+        all_paths = enumerate_paths_with_pairing(pipeline_config)
+    except NotImplementedError:
+        all_paths = enumerate_all_paths(pipeline_config)
+
+    # Build lookup: termination_type → list of (path_node_ids, path_data)
+    paths_by_term: Dict[str, List[tuple]] = {}
+    for path in all_paths:
+        if not path:
+            continue
+        last_node = path[-1]
+        if last_node.get('type') != 'Termination' or last_node.get('truncated', False):
+            continue
+        term_type = last_node.get('term_type', 'Unknown')
+        node_ids = tuple(n['id'] for n in path if n.get('id'))
+        if term_type not in paths_by_term:
+            paths_by_term[term_type] = []
+        paths_by_term[term_type].append((node_ids, path))
+
+    # Path stats tracking
+    path_counts: Dict[tuple, int] = {}
+    path_cache: Dict[tuple, tuple] = {}
+
+    # Step 5: Run validation with progress reporting
     validation_results = []
     total_images = len(specific_images)
 
-    # Step 5: Aggregate results by overall status (as we go)
+    # Step 6: Aggregate results by overall status (as we go)
     status_counts = {
         'consistent': 0,
         'consistent_with_warning': 0,
@@ -177,7 +271,7 @@ def run_pipeline_validation(
         'inconsistent': 0,
     }
 
-    # Step 6: Collect per-termination statistics (for Trends tab)
+    # Step 7: Collect per-termination statistics (for Trends tab)
     termination_stats: Dict[str, Dict[str, int]] = {}
 
     # Validate each image with progress reporting
@@ -216,6 +310,13 @@ def run_pipeline_validation(
             elif match_status == ValidationStatus.INCONSISTENT:
                 termination_stats[term_type]["INCONSISTENT"] += 1
 
+        # Track path for path_stats
+        matched_path = _determine_image_path(
+            specific_image, vr, paths_by_term, path_cache
+        )
+        if matched_path:
+            path_counts[matched_path] = path_counts.get(matched_path, 0) + 1
+
         # Report progress (every 2% or every 50 images, like backend)
         if progress_callback:
             issues_so_far = status_counts['partial'] + status_counts['inconsistent']
@@ -230,6 +331,12 @@ def run_pipeline_validation(
             "INCONSISTENT": counts.get("INCONSISTENT", 0)
         }
 
+    # Build path_stats output
+    path_stats = [
+        {"path": list(path_ids), "image_count": count}
+        for path_ids, count in path_counts.items()
+    ]
+
     return {
         'total_images': len(specific_images),
         'total_groups': len(imagegroups),
@@ -238,4 +345,5 @@ def run_pipeline_validation(
         'validation_results': validation_results,
         'invalid_files_count': len(invalid_files),
         'invalid_files': invalid_files,
+        'path_stats': path_stats,
     }

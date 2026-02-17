@@ -21,6 +21,12 @@ export type ValidationErrorType =
   | 'missing_required_node'
   | 'invalid_property'
 
+/** Canvas position for visual graph editor */
+export interface NodePosition {
+  x: number
+  y: number
+}
+
 export interface PipelineNode {
   /** Unique node identifier within pipeline */
   id: string
@@ -28,6 +34,24 @@ export interface PipelineNode {
   type: NodeType
   /** Type-specific properties */
   properties: Record<string, unknown>
+  /** Optional canvas position for visual editor */
+  position?: NodePosition
+}
+
+/** Data payload for custom React Flow node components */
+export interface PipelineNodeData extends Record<string, unknown> {
+  /** The pipeline node ID (e.g., "file_raw") */
+  nodeId: string
+  /** Node type */
+  type: NodeType
+  /** Type-specific properties */
+  properties: Record<string, unknown>
+  /** Whether this node has a validation error */
+  hasError?: boolean
+  /** Whether this node is currently selected */
+  isSelected?: boolean
+  /** Phase 3: record count from flow analytics */
+  analyticsCount?: number
 }
 
 export interface PipelineEdge {
@@ -35,6 +59,10 @@ export interface PipelineEdge {
   from: string
   /** Target node ID */
   to: string
+  /** @deprecated Use waypoints instead */
+  offset?: number
+  /** Interior bend points for orthogonal edge routing */
+  waypoints?: Array<{ x: number; y: number }>
 }
 
 export interface ValidationError {
@@ -154,6 +182,41 @@ export interface PipelineStatsResponse {
 export interface PipelineDeleteResponse {
   message: string
   deleted_guid: string
+}
+
+// ============================================================================
+// Flow Analytics Types (Phase 3)
+// ============================================================================
+
+/** Per-node flow statistics from pipeline validation results */
+export interface NodeFlowStats {
+  node_id: string
+  record_count: number
+  percentage: number
+}
+
+/** Per-edge flow statistics from pipeline validation results */
+export interface EdgeFlowStats {
+  from_node: string
+  to_node: string
+  record_count: number
+  percentage: number
+}
+
+/** Response from GET /api/pipelines/{guid}/flow-analytics */
+export interface PipelineFlowAnalyticsResponse {
+  pipeline_guid: string
+  pipeline_version: number
+  result_guid: string
+  result_created_at: string
+  result_status: string
+  collection_guid: string
+  collection_name: string
+  completed_at: string | null
+  files_scanned: number | null
+  total_records: number
+  nodes: NodeFlowStats[]
+  edges: EdgeFlowStats[]
 }
 
 // ============================================================================

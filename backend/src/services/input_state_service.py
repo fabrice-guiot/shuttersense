@@ -104,7 +104,9 @@ class InputStateService:
 
         Must stay in sync with agent/src/input_state.py _extract_relevant_config.
         """
-        return {k: config[k] for k in self.RELEVANT_CONFIG_KEYS if k in config}
+        result = {k: config[k] for k in self.RELEVANT_CONFIG_KEYS if k in config}
+        result["_hash_version"] = 2  # v2: results now include path_stats
+        return result
 
     def compute_configuration_hash(
         self,
