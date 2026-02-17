@@ -142,9 +142,9 @@
 
 ### Implementation
 
-- [ ] T049 [US6] Add responsive breakpoint handling to `PipelineGraphView.tsx` and `PipelineEditorPage.tsx`. Use a `useMediaQuery` or `window.matchMedia` hook to detect screen width. On screens <768px: ensure graph is read-only (already default in view mode), enable touch pan/zoom via React Flow's built-in touch support. On screens >=768px and <1024px: PropertyPanel collapses by default with a toggle button. On screens >=1024px: two-panel layout (default)
-- [ ] T050 [US6] Add mobile PropertyPanel variant to `PropertyPanel.tsx`. On screens <768px, render as a bottom sheet overlay (slide-up panel from bottom of screen) instead of a side panel. Use existing Radix UI Dialog/Sheet component from shadcn/ui. Triggered by tapping a node in the graph. Dismiss by swiping down or tapping outside
-- [ ] T051 [US6] Hide or disable edit controls on mobile in `PipelineEditorPage.tsx`. On screens <768px: hide the "Edit Pipeline" button with `hidden md:inline-flex` class. If user navigates directly to `/pipelines/{id}/edit` on mobile, show an informational message: "Pipeline editing requires a desktop browser" and display the read-only graph view instead
+- [x] T049 [US6] Add responsive breakpoint handling to `PipelineGraphView.tsx` and `PipelineEditorPage.tsx`. Use a `useMediaQuery` or `window.matchMedia` hook to detect screen width. On screens <768px: ensure graph is read-only (already default in view mode), enable touch pan/zoom via React Flow's built-in touch support. On screens >=768px and <1024px: PropertyPanel collapses by default with a toggle button. On screens >=1024px: two-panel layout (default)
+- [x] T050 [US6] Add mobile PropertyPanel variant to `PropertyPanel.tsx`. On screens <768px, render as a bottom sheet overlay (slide-up panel from bottom of screen) instead of a side panel. Use existing Radix UI Dialog/Sheet component from shadcn/ui. Triggered by tapping a node in the graph. Dismiss by swiping down or tapping outside
+- [x] T051 [US6] Hide or disable edit controls on mobile in `PipelineEditorPage.tsx`. On screens <768px: hide the "Edit Pipeline" button with `hidden md:inline-flex` class. If user navigates directly to `/pipelines/{id}/edit` on mobile, show an informational message: "Pipeline editing requires a desktop browser" and display the read-only graph view instead
 
 **Checkpoint**: Pipeline graphs are viewable on mobile and tablet devices with touch gesture support. Editing is desktop-only.
 
@@ -154,9 +154,9 @@
 
 **Purpose**: Performance optimization, accessibility, and final validation
 
-- [ ] T052 Verify all custom node components in `frontend/src/components/pipelines/graph/nodes/` are wrapped in `React.memo()`. Verify all callback props passed to `<ReactFlow>` use `useCallback()`. Verify analytics edge thickness calculations are memoized with `useMemo()`. Profile with React DevTools to confirm no unnecessary re-renders during pan/zoom
-- [ ] T053 Keyboard accessibility audit for the graph editor. Verify: Tab navigates between nodes and edges (React Flow built-in), Delete/Backspace removes selected items, Ctrl+Z/Ctrl+Shift+Z triggers undo/redo, Enter or Space on a node opens PropertyPanel, Escape closes PropertyPanel. Add `aria-label` attributes to custom nodes describing their type and ID. Verify screen reader announcements for node/edge operations
-- [ ] T054 Run all quickstart.md validation steps: backend schema tests (`venv/bin/python -m pytest backend/tests/unit/test_pipeline_schemas.py backend/tests/unit/test_flow_analytics.py -v`), frontend type check (`cd frontend && npx tsc --noEmit`), frontend unit tests (`cd frontend && npx vitest run --reporter=verbose`). Manually verify all phases against their checkpoint criteria
+- [x] T052 Verify all custom node components in `frontend/src/components/pipelines/graph/nodes/` are wrapped in `React.memo()`. Verify all callback props passed to `<ReactFlow>` use `useCallback()`. Verify analytics edge thickness calculations are memoized with `useMemo()`. Profile with React DevTools to confirm no unnecessary re-renders during pan/zoom
+- [x] T053 Keyboard accessibility audit for the graph editor. Verify: Tab navigates between nodes and edges (React Flow built-in), Delete/Backspace removes selected items, Ctrl+Z/Ctrl+Shift+Z triggers undo/redo, Enter or Space on a node opens PropertyPanel, Escape closes PropertyPanel. Add `aria-label` attributes to custom nodes describing their type and ID. Verify screen reader announcements for node/edge operations
+- [x] T054 Run all quickstart.md validation steps: backend schema tests (`venv/bin/python -m pytest backend/tests/unit/test_pipeline_schemas.py backend/tests/unit/test_flow_analytics.py -v`), frontend type check (`cd frontend && npx tsc --noEmit`), frontend unit tests (`cd frontend && npx vitest run --reporter=verbose`). Manually verify all phases against their checkpoint criteria
 
 ---
 
