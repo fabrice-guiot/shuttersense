@@ -32,14 +32,14 @@ Physical camera equipment tracked per team. Auto-discovered during analysis or m
 
 **GUID**: Prefix `cam_` → e.g., `cam_01hgw2bbg0000000000000001`
 
-**Mixins**: `ExternalIdMixin` (GUID), `AuditMixin` (created_by/updated_by)
+**Mixins**: `GuidMixin` (GUID), `AuditMixin` (created_by/updated_by)
 
 **Relationships**:
 - `Camera.team` → `Team` (many-to-one)
 - `Team.cameras` → `Camera[]` (one-to-many, reciprocal)
 
 **Status transitions**:
-```
+```text
 [auto-discover] → temporary
 [user edit]     → confirmed
 [user edit]     → temporary (can revert)
@@ -97,7 +97,7 @@ Already has `default_pipeline: Optional[CachedPipeline]` with `nodes` and `edges
 
 ## Entity Relationship Diagram
 
-```
+```text
 Team (1) ──── (*) Camera
   │                 │
   │                 └── cam_ GUID
@@ -120,29 +120,41 @@ Team (1) ──── (*) Camera
 
 ### Alembic Migration: `add_cameras_table`
 
-```sql
-CREATE TABLE cameras (
-    id SERIAL PRIMARY KEY,
-    uuid UUID NOT NULL UNIQUE,
-    team_id INTEGER NOT NULL REFERENCES teams(id),
-    camera_id VARCHAR(10) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'temporary',
-    display_name VARCHAR(100),
-    make VARCHAR(100),
-    model VARCHAR(100),
-    serial_number VARCHAR(100),
-    notes TEXT,
-    metadata_json JSONB,
-    created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_cameras_team_camera_id UNIQUE (team_id, camera_id)
-);
+```python
+# Alembic migration — DB-agnostic (works on both PostgreSQL and SQLite)
+def upgrade():
+    op.create_table(
+        'cameras',
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('uuid', UUIDType(), nullable=False),  # UUIDType from guid.py
+        sa.Column('team_id', sa.Integer(), nullable=False),
+        sa.Column('camera_id', sa.String(10), nullable=False),
+        sa.Column('status', sa.String(20), nullable=False, server_default='temporary'),
+        sa.Column('display_name', sa.String(100), nullable=True),
+        sa.Column('make', sa.String(100), nullable=True),
+        sa.Column('model', sa.String(100), nullable=True),
+        sa.Column('serial_number', sa.String(100), nullable=True),
+        sa.Column('notes', sa.Text(), nullable=True),
+        sa.Column('metadata_json', sa.JSON(), nullable=True),
+        sa.Column('created_by_user_id', sa.Integer(), nullable=True),
+        sa.Column('updated_by_user_id', sa.Integer(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.PrimaryKeyConstraint('id'),
+        sa.ForeignKeyConstraint(['team_id'], ['teams.id']),
+        sa.ForeignKeyConstraint(['created_by_user_id'], ['users.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['updated_by_user_id'], ['users.id'], ondelete='SET NULL'),
+        sa.UniqueConstraint('uuid'),
+        sa.UniqueConstraint('team_id', 'camera_id', name='uq_cameras_team_camera_id'),
+    )
+    op.create_index('ix_cameras_uuid', 'cameras', ['uuid'])
+    op.create_index('ix_cameras_team_id', 'cameras', ['team_id'])
+    op.create_index('ix_cameras_status', 'cameras', ['status'])
 
-CREATE INDEX ix_cameras_uuid ON cameras(uuid);
-CREATE INDEX ix_cameras_team_id ON cameras(team_id);
-CREATE INDEX ix_cameras_status ON cameras(status);
+def downgrade():
+    op.drop_table('cameras')
 ```
+
+> **Note**: Uses `sa.JSON()` (maps to JSONB on PostgreSQL, TEXT on SQLite), `UUIDType()` (from the existing `guid.py` pattern, handles PostgreSQL UUID vs SQLite LargeBinary), and `sa.func.now()` (dialect-aware) to ensure cross-dialect compatibility. See existing migrations for the established pattern.
 
 **Reversible**: `DROP TABLE cameras` (no FK references from other tables).

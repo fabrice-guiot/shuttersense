@@ -49,7 +49,7 @@ cd frontend && npx vitest run
 ### Backend (Camera entity + API)
 
 4. **`backend/src/models/camera.py`** (NEW)
-   - `Camera` model with `ExternalIdMixin` + `AuditMixin`
+   - `Camera` model with `GuidMixin` + `AuditMixin`
    - GUID prefix `cam_`
 
 5. **`backend/src/services/camera_service.py`** (NEW)

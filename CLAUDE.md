@@ -34,7 +34,7 @@ Analysis tools are executed through the ShutterSense agent binary (`shuttersense
 - Python 3.11+ (backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2 (backend); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend); **NEW**: `@xyflow/react`, `@dagrejs/dagre` (209-pipeline-visual-editor)
 - PostgreSQL JSONB (`nodes_json`, `edges_json`) — no DB migration required; position data is added as an optional field within existing JSONB objects (209-pipeline-visual-editor)
 - Python 3.11+ (agent and backend), TypeScript 5.9.3 (frontend) + FastAPI, SQLAlchemy 2.0+, Pydantic v2, Alembic (backend); Click, httpx (agent); React 18.3.1, shadcn/ui, Tailwind CSS 4.x, Lucide React (frontend) (217-pipeline-driven-tools)
-- PostgreSQL 12+ (production), SQLite (tests) — new `cameras` table with `(team_id, camera_id)` unique constrain (217-pipeline-driven-tools)
+- PostgreSQL 12+ (production), SQLite (tests) — new `cameras` table with `(team_id, camera_id)` unique constraint (217-pipeline-driven-tools)
 
 ### Backend
 - **Python 3.11+** - Required for ExceptionGroup, tomllib, and modern type hinting

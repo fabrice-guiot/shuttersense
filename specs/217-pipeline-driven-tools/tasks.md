@@ -28,7 +28,7 @@
 - [ ] T001 Create `PipelineToolConfig` dataclass and `METADATA_EXTENSIONS` constant in `agent/src/analysis/pipeline_tool_config.py`
 - [ ] T002 Implement `extract_tool_config(nodes_json, edges_json)` in `agent/src/analysis/pipeline_tool_config.py` — extract filename_regex, camera_id_group, photo/metadata extensions, processing_suffixes from Pipeline nodes using `build_pipeline_config()`
 - [ ] T003 Implement `_infer_sidecar_requirements()` helper in `agent/src/analysis/pipeline_tool_config.py` — infer require_sidecar from sibling File nodes (non-optional metadata + image under same parent)
-- [ ] T004 [P] Create `Camera` model in `backend/src/models/camera.py` using `ExternalIdMixin` + `AuditMixin` with GUID prefix `cam_`, unique constraint `(team_id, camera_id)`
+- [ ] T004 [P] Create `Camera` model in `backend/src/models/camera.py` using `GuidMixin` + `AuditMixin` with GUID prefix `cam_`, unique constraint `(team_id, camera_id)`
 - [ ] T005 [P] Add reciprocal `cameras` relationship to `Team` model in `backend/src/models/team.py`
 - [ ] T006 Create Alembic migration for `cameras` table in `backend/alembic/versions/`
 - [ ] T007 [P] Create Camera Pydantic schemas in `backend/src/schemas/camera.py` — `CameraResponse`, `CameraUpdateRequest`, `CameraStatsResponse`, `CameraDiscoverRequest`, `CameraDiscoverResponse`
@@ -170,7 +170,7 @@
 
 ### User Story Dependencies
 
-```
+```text
 Setup (Phase 1)
   ├── US1 (Phase 2): PipelineToolConfig → PhotoStats
   │     └── US2 (Phase 3): Pipeline regex → Photo_Pairing

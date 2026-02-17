@@ -104,24 +104,22 @@ Each imagegroup: `{"group_id", "camera_id", "counter", "separate_images": {...}}
 
 ---
 
-### R4: ExternalIdMixin vs GuidMixin Pattern
+### R4: GUID Mixin for Camera Entity
 
 **Question**: Which mixin should Camera use for GUID generation?
 
-**Decision**: Use `ExternalIdMixin` with `GUID_PREFIX = "cam"`, matching the PRD specification.
+**Decision**: Use `GuidMixin` with `GUID_PREFIX = "cam"`, consistent with all existing entities.
 
 **Findings**:
 
-Looking at the codebase, `GuidMixin` (from `backend/src/models/mixins/guid.py`) provides:
+`GuidMixin` (from `backend/src/models/mixins/guid.py`) provides:
 - `uuid` column (UUIDv7)
 - `guid` property (computed: `{prefix}_{crockford_base32(uuid)}`)
 - `GUID_PREFIX` class variable
 
-`ExternalIdMixin` (from `backend/src/models/mixins/external_id.py`) provides the same interface but with a different internal implementation. The PRD explicitly states `ExternalIdMixin`.
+All existing entities in the codebase (Pipeline, Collection, Connector, Agent, etc.) use `GuidMixin`. The mixins `__init__.py` exports `["GuidMixin", "AuditMixin"]`. The PRD references `ExternalIdMixin` but that class does not exist in the codebase — it appears to be an inaccuracy in the PRD documentation.
 
-Existing entities use `GuidMixin` (Pipeline, Collection, etc.). The `ExternalIdMixin` pattern appears to be newer.
-
-**Rationale**: Follow PRD recommendation. Both produce the same GUID format externally.
+**Rationale**: Use the established `GuidMixin` pattern that all other entities use. The Camera entity will follow the same proven convention.
 
 ---
 
@@ -212,7 +210,7 @@ List endpoint supports: pagination (`limit`, `offset`), filtering (`status`), se
 
 **Findings**:
 
-Pattern from PRD:
+Pattern (using savepoints to avoid rolling back the entire transaction):
 ```python
 for camera_id in camera_ids:
     existing = self.db.query(Camera).filter_by(team_id=team_id, camera_id=camera_id).first()
@@ -220,23 +218,24 @@ for camera_id in camera_ids:
         results.append(existing)
     else:
         try:
+            savepoint = self.db.begin_nested()  # SAVEPOINT — only rolls back this insert on conflict
             camera = Camera(team_id=team_id, camera_id=camera_id, status="temporary", ...)
             self.db.add(camera)
             self.db.flush()
             results.append(camera)
         except IntegrityError:
-            self.db.rollback()
-            existing = self.db.query(Camera).filter_by(...).first()
+            savepoint.rollback()  # Only rolls back the failing insert, not the whole transaction
+            existing = self.db.query(Camera).filter_by(team_id=team_id, camera_id=camera_id).first()
             results.append(existing)
 ```
 
-This avoids PostgreSQL-specific `INSERT ... ON CONFLICT` which doesn't work on SQLite. The unique constraint `(team_id, camera_id)` provides the safety net.
+This uses a DB-agnostic check-before-insert with a savepoint safety net. The unique constraint `(team_id, camera_id)` catches race conditions, and `begin_nested()` ensures only the conflicting insert is rolled back (not previously flushed cameras in the batch).
 
 **Rationale**: Tests run on SQLite, production on PostgreSQL. DB-agnostic pattern ensures both work identically.
 
 **Alternatives considered**:
-- `INSERT ... ON CONFLICT DO NOTHING` → Rejected: PostgreSQL-specific, breaks SQLite tests
-- `session.merge()` → Rejected: requires natural key mapping, more complex than check-before-insert
+- `INSERT ... ON CONFLICT DO NOTHING` → Rejected: While SQLite has supported `ON CONFLICT` since 3.24.0, SQLAlchemy's `insert().on_conflict_do_nothing()` has cross-dialect portability concerns (different implementations per backend). Check-before-insert is simpler and fully portable.
+- `session.merge()` → Rejected: requires natural key mapping, more complex than check-before-insert, and merges by primary key rather than business key `(team_id, camera_id)`
 
 ---
 

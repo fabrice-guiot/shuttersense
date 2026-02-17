@@ -28,7 +28,7 @@ Migrate PhotoStats and Photo_Pairing from Config-based to Pipeline-based configu
 - [x] **Agent-Only Tool Execution (I)**: Tools execute through `shuttersense-agent run`. No standalone scripts added. New `PipelineToolConfig` extraction lives in `agent/src/analysis/`. Offline mode supported with cached Pipeline data.
 - [x] **Testing & Quality (II)**: Tests planned for all layers — `extract_tool_config()` unit tests, Camera service CRUD/discover tests, API endpoint tests, frontend hook/component tests. pytest (backend/agent) and Vitest (frontend).
 - [x] **User-Centric Design (III)**: Existing HTML report generation unchanged. Camera names and processing method names enhance report readability. Clear fallback warnings when Pipeline unavailable. Structured logging for Pipeline extraction and Camera discovery.
-- [x] **Global Unique Identifiers (IV)**: Camera entity uses `ExternalIdMixin` with prefix `cam_`. All API endpoints use GUIDs. Frontend contracts include `guid` field.
+- [x] **Global Unique Identifiers (IV)**: Camera entity uses `GuidMixin` with prefix `cam_`. All API endpoints use GUIDs. Frontend contracts include `guid` field.
 - [x] **Multi-Tenancy (V)**: Camera scoped by `team_id`. All endpoints use `TenantContext`. Cross-team access returns 404. Agent discovery uses `agent.team_id`.
 - [x] **Agent-Only Execution (VI)**: Camera discovery happens during agent analysis execution. Server provides discovery endpoint but never executes tools. Pipeline resolution occurs in agent run flow.
 - [x] **Audit Trail (VII)**: Camera model uses `AuditMixin`. All API response schemas include `audit: Optional[AuditInfo]`. Frontend Camera list includes "Modified" column with `AuditTrailPopover`. Camera service sets `created_by_user_id`/`updated_by_user_id`.

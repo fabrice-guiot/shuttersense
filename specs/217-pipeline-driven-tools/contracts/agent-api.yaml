@@ -27,7 +27,7 @@ paths:
         401:
           description: Agent not authenticated
         422:
-          description: Validation error (empty camera_ids, etc.)
+          description: Validation error (e.g., camera_ids exceeds max batch size of 50, invalid types)
 
 components:
   schemas:
