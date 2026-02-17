@@ -19,6 +19,7 @@ import type {
   FilenamePreviewRequest,
   FilenamePreviewResponse,
   PipelineHistoryEntry,
+  PipelineFlowAnalyticsResponse,
 } from '@/contracts/api/pipelines-api'
 
 /**
@@ -155,6 +156,24 @@ export const getPipelineVersion = async (guid: string, version: number): Promise
  */
 export const getPipelineStats = async (): Promise<PipelineStatsResponse> => {
   const response = await api.get<PipelineStatsResponse>('/pipelines/stats')
+  return response.data
+}
+
+/**
+ * Get flow analytics for a pipeline
+ * @param guid - External ID (pip_xxx format)
+ * @param resultGuid - Optional specific analysis result GUID (res_xxx)
+ */
+export const getFlowAnalytics = async (
+  guid: string,
+  resultGuid?: string,
+): Promise<PipelineFlowAnalyticsResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'pip'))
+  const params = resultGuid ? { result_guid: resultGuid } : undefined
+  const response = await api.get<PipelineFlowAnalyticsResponse>(
+    `/pipelines/${safeGuid}/flow-analytics`,
+    { params },
+  )
   return response.data
 }
 

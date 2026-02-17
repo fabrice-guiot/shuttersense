@@ -26,11 +26,12 @@ import yaml
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
-from backend.src.models import Pipeline, PipelineHistory
+from backend.src.models import Pipeline, PipelineHistory, AnalysisResult
 from backend.src.schemas.pipelines import (
     PipelineSummary, PipelineResponse, ValidationResult, ValidationError,
     ValidationErrorType, FilenamePreviewResponse, ExpectedFile,
-    PipelineHistoryEntry, PipelineStatsResponse, PipelineNode, PipelineEdge
+    PipelineHistoryEntry, PipelineStatsResponse, PipelineNode, PipelineEdge,
+    PipelineFlowAnalyticsResponse, NodeFlowStats, EdgeFlowStats,
 )
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError as ServiceValidationError
 from backend.src.services.guid import GuidService
@@ -966,6 +967,112 @@ class PipelineService:
             active_pipeline_count=active_count,
             default_pipeline_guid=default.guid if default else None,
             default_pipeline_name=default.name if default else None
+        )
+
+    # =========================================================================
+    # Flow Analytics
+    # =========================================================================
+
+    def get_flow_analytics(
+        self,
+        pipeline_guid: str,
+        team_id: int,
+        result_guid: Optional[str] = None,
+    ) -> PipelineFlowAnalyticsResponse:
+        """
+        Get flow analytics for a pipeline derived from path_stats in analysis results.
+
+        Finds the most recent completed pipeline_validation result that contains
+        path_stats, then derives per-node and per-edge counts.
+
+        Args:
+            pipeline_guid: Pipeline GUID (pip_xxx)
+            team_id: Team ID for tenant isolation
+            result_guid: Optional specific result GUID to use (res_xxx)
+
+        Returns:
+            Flow analytics with per-node and per-edge statistics
+
+        Raises:
+            ValueError: If GUID format is invalid
+            NotFoundError: If pipeline not found, or no results with path_stats exist
+        """
+        pipeline = self._get_pipeline_by_guid(pipeline_guid, team_id=team_id)
+
+        # Find the analysis result
+        if result_guid:
+            result_uuid = GuidService.parse_identifier(result_guid, expected_prefix="res")
+            result = self.db.query(AnalysisResult).filter(
+                AnalysisResult.uuid == result_uuid,
+                AnalysisResult.pipeline_id == pipeline.id,
+                AnalysisResult.team_id == team_id,
+            ).first()
+        else:
+            # Most recent completed pipeline_validation with path_stats
+            result = self.db.query(AnalysisResult).filter(
+                AnalysisResult.pipeline_id == pipeline.id,
+                AnalysisResult.team_id == team_id,
+                AnalysisResult.tool == "pipeline_validation",
+                AnalysisResult.status == "COMPLETED",
+            ).order_by(desc(AnalysisResult.created_at)).first()
+
+        if not result:
+            raise NotFoundError("AnalysisResult", pipeline_guid)
+
+        results_json = result.results_json or {}
+        path_stats = results_json.get("path_stats")
+        if not path_stats:
+            raise NotFoundError("AnalysisResult with path_stats", pipeline_guid)
+
+        # Derive per-node and per-edge counts from path_stats
+        node_counts: Dict[str, int] = {}
+        edge_counts: Dict[str, int] = {}  # "from->to" → count
+
+        for entry in path_stats:
+            path_nodes = entry.get("path", [])
+            count = entry.get("image_count", 0)
+            for node_id in path_nodes:
+                node_counts[node_id] = node_counts.get(node_id, 0) + count
+            for i in range(len(path_nodes) - 1):
+                edge_key = f"{path_nodes[i]}->{path_nodes[i + 1]}"
+                edge_counts[edge_key] = edge_counts.get(edge_key, 0) + count
+
+        total_records = sum(entry.get("image_count", 0) for entry in path_stats)
+
+        # Find capture node total for node percentage calculation
+        capture_total = total_records  # default fallback
+
+        # Build node stats with percentages relative to capture node total
+        nodes = []
+        for node_id, count in node_counts.items():
+            pct = (count / capture_total * 100.0) if capture_total > 0 else 0.0
+            nodes.append(NodeFlowStats(
+                node_id=node_id,
+                record_count=count,
+                percentage=round(pct, 2),
+            ))
+
+        # Build edge stats with percentages relative to source node total
+        edges = []
+        for edge_key, count in edge_counts.items():
+            from_node, to_node = edge_key.split("->")
+            source_total = node_counts.get(from_node, 0)
+            pct = (count / source_total * 100.0) if source_total > 0 else 0.0
+            edges.append(EdgeFlowStats(
+                from_node=from_node,
+                to_node=to_node,
+                record_count=count,
+                percentage=round(pct, 2),
+            ))
+
+        return PipelineFlowAnalyticsResponse(
+            pipeline_guid=pipeline.guid,
+            pipeline_version=result.pipeline_version or pipeline.version,
+            result_guid=result.guid,
+            result_created_at=result.created_at,
+            total_records=total_records,
+            nodes=nodes,
+            edges=edges,
         )
 
     # =========================================================================

@@ -25,7 +25,8 @@ from backend.src.db.database import get_db
 from backend.src.schemas.pipelines import (
     PipelineCreateRequest, PipelineUpdateRequest, PipelineSummary, PipelineResponse,
     PipelineListResponse, ValidationResult, FilenamePreviewResponse,
-    PipelineHistoryEntry, PipelineStatsResponse, DeleteResponse
+    PipelineHistoryEntry, PipelineStatsResponse, DeleteResponse,
+    PipelineFlowAnalyticsResponse,
 )
 from backend.src.services.pipeline_service import PipelineService
 from backend.src.services.exceptions import NotFoundError, ConflictError, ValidationError
@@ -103,6 +104,57 @@ def get_stats(
         Statistics including total, valid count, active count, and default pipeline
     """
     return service.get_stats(team_id=ctx.team_id)
+
+
+# ============================================================================
+# Flow Analytics Endpoint
+# ============================================================================
+
+@router.get(
+    "/{guid}/flow-analytics",
+    response_model=PipelineFlowAnalyticsResponse,
+    summary="Get flow analytics for a pipeline"
+)
+def get_flow_analytics(
+    guid: str,
+    result_guid: Optional[str] = Query(None, description="Specific analysis result GUID (res_xxx)"),
+    ctx: TenantContext = Depends(require_auth),
+    service: PipelineService = Depends(get_pipeline_service)
+) -> PipelineFlowAnalyticsResponse:
+    """
+    Get flow analytics derived from pipeline validation results.
+
+    Returns per-node and per-edge record counts and percentages for
+    visualizing flow through the pipeline graph.
+
+    Args:
+        guid: Pipeline GUID (pip_xxx format)
+        result_guid: Optional specific result GUID to use
+        ctx: Tenant context with team_id
+
+    Returns:
+        Flow analytics with node and edge statistics
+
+    Raises:
+        400: Invalid GUID format
+        404: Pipeline not found or no results with path_stats exist
+    """
+    try:
+        return service.get_flow_analytics(
+            pipeline_guid=guid,
+            team_id=ctx.team_id,
+            result_guid=result_guid,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except NotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pipeline or analysis results not found: {guid}"
+        )
 
 
 # ============================================================================

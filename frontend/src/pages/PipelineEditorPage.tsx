@@ -47,6 +47,8 @@ import { AuditTrailSection } from '@/components/audit'
 import { PipelineGraphView } from '@/components/pipelines/graph/PipelineGraphView'
 import { PropertyPanel } from '@/components/pipelines/graph/PropertyPanel'
 import { PipelineGraphEditor, type PipelineGraphEditorHandle } from '@/components/pipelines/graph/PipelineGraphEditor'
+import { AnalyticsOverlay } from '@/components/pipelines/graph/AnalyticsOverlay'
+import { usePipelineAnalytics } from '@/hooks/usePipelineAnalytics'
 import { ReactFlowProvider } from '@xyflow/react'
 
 // ============================================================================
@@ -76,6 +78,12 @@ export const PipelineEditorPage: React.FC = () => {
   } = usePipeline(pipelineId)
   const { createPipeline, updatePipeline, loading: saving } = usePipelines({ autoFetch: false })
   const { downloadYaml, downloading } = usePipelineExport()
+  const {
+    analytics,
+    enabled: analyticsEnabled,
+    showFlow,
+    setShowFlow,
+  } = usePipelineAnalytics(isViewMode ? pipelineId : null)
 
   // Determine if viewing a historical version
   const isHistoricalVersion = currentVersion !== null && latestVersion !== null && currentVersion < latestVersion
@@ -313,13 +321,21 @@ export const PipelineEditorPage: React.FC = () => {
 
           {/* Pipeline Graph + Property Panel */}
           <div className="flex h-[600px] border rounded-lg overflow-hidden bg-background">
-            <div className="flex-1 min-w-0">
+            <div className="relative flex-1 min-w-0">
               <PipelineGraphView
                 nodes={pipeline.nodes}
                 edges={pipeline.edges}
                 validationErrors={pipeline.is_valid ? null : pipeline.validation_errors}
                 onNodeClick={handleGraphNodeClick}
                 onEdgeClick={handleGraphEdgeClick}
+                analytics={showFlow ? analytics : undefined}
+                showFlow={showFlow}
+              />
+              <AnalyticsOverlay
+                enabled={analyticsEnabled}
+                showFlow={showFlow}
+                onShowFlowChange={setShowFlow}
+                totalRecords={analytics?.total_records}
               />
             </div>
             {(selectedNode || selectedEdge) && (

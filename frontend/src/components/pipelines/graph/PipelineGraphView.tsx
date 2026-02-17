@@ -37,18 +37,27 @@ export function PipelineGraphView({
   onNodeClick,
   onEdgeClick,
   analytics,
+  showFlow,
 }: PipelineGraphViewProps) {
   const { initialNodes, initialEdges } = useMemo(() => {
     let rfNodes = toReactFlowNodes(apiNodes, validationErrors)
-    const rfEdges = toReactFlowEdges(apiEdges, analytics)
+    let rfEdges = toReactFlowEdges(apiEdges, analytics)
 
     // Apply auto-layout if no saved positions
     if (!hasPositions(apiNodes)) {
       rfNodes = applyDagreLayout(rfNodes, rfEdges)
     }
 
+    // Switch edge type to analyticsEdge when showing flow data
+    if (showFlow && analytics) {
+      rfEdges = rfEdges.map((e) => ({
+        ...e,
+        type: 'analyticsEdge',
+      }))
+    }
+
     return { initialNodes: rfNodes, initialEdges: rfEdges }
-  }, [apiNodes, apiEdges, validationErrors, analytics])
+  }, [apiNodes, apiEdges, validationErrors, analytics, showFlow])
 
   const [nodes, setNodes] = useNodesState(initialNodes)
   const [edges, setEdges] = useEdgesState(initialEdges)

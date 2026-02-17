@@ -390,6 +390,51 @@ class PipelineStatsResponse(BaseModel):
     }
 
 
+class NodeFlowStats(BaseModel):
+    """Per-node flow statistics from pipeline validation results."""
+    node_id: str = Field(..., description="Pipeline node ID")
+    record_count: int = Field(..., ge=0, description="Number of records that passed through this node")
+    percentage: float = Field(..., ge=0, le=100, description="Percentage relative to capture node total")
+
+
+class EdgeFlowStats(BaseModel):
+    """Per-edge flow statistics from pipeline validation results."""
+    from_node: str = Field(..., description="Source node ID")
+    to_node: str = Field(..., description="Target node ID")
+    record_count: int = Field(..., ge=0, description="Number of records that traversed this edge")
+    percentage: float = Field(..., ge=0, le=100, description="Percentage relative to source node total")
+
+
+class PipelineFlowAnalyticsResponse(BaseModel):
+    """Response for flow analytics overlay data."""
+    pipeline_guid: str = Field(..., description="Pipeline GUID (pip_xxx)")
+    pipeline_version: int = Field(..., description="Pipeline version at time of analysis")
+    result_guid: str = Field(..., description="Analysis result GUID (res_xxx)")
+    result_created_at: datetime = Field(..., description="When the analysis result was created")
+    total_records: int = Field(..., ge=0, description="Total image records analyzed")
+    nodes: List[NodeFlowStats] = Field(..., description="Per-node flow statistics")
+    edges: List[EdgeFlowStats] = Field(..., description="Per-edge flow statistics")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "pipeline_guid": "pip_01hgw2bbg0000000000000002",
+                "pipeline_version": 3,
+                "result_guid": "res_01hgw2bbg0000000000000010",
+                "result_created_at": "2024-01-15T14:45:00Z",
+                "total_records": 150,
+                "nodes": [
+                    {"node_id": "capture_1", "record_count": 150, "percentage": 100.0},
+                    {"node_id": "file_raw", "record_count": 150, "percentage": 100.0},
+                ],
+                "edges": [
+                    {"from_node": "capture_1", "to_node": "file_raw", "record_count": 150, "percentage": 100.0},
+                ],
+            }
+        }
+    }
+
+
 class DeleteResponse(BaseModel):
     """
     Response after deleting a pipeline.
