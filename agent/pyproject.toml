@@ -41,6 +41,10 @@ dependencies = [
     "platformdirs>=3.0",
     # Parquet format support for S3/GCS inventory import
     "pyarrow>=14.0.0",
+    # Remote storage adapters
+    "boto3>=1.35.0",
+    "google-cloud-storage>=2.10.0",
+    "smbprotocol>=1.10.0",
 ]
 
 [project.optional-dependencies]

@@ -29,9 +29,9 @@ from src.remote.local_adapter import LocalAdapter
 # Lazy imports for cloud adapters to avoid requiring boto3/google-cloud-storage/smbprotocol
 # when they're not needed (e.g., in tests that only use local filesystem)
 _lazy_imports = {
-    "S3Adapter": "src.remote.s3_adapter",
-    "GCSAdapter": "src.remote.gcs_adapter",
-    "SMBAdapter": "src.remote.smb_adapter",
+    "S3Adapter": ("src.remote.s3_adapter", "pip install shuttersense-agent[s3]"),
+    "GCSAdapter": ("src.remote.gcs_adapter", "pip install shuttersense-agent[gcs]"),
+    "SMBAdapter": ("src.remote.smb_adapter", "pip install shuttersense-agent[smb]"),
 }
 
 
@@ -39,7 +39,14 @@ def __getattr__(name: str):
     """Lazily import cloud adapters when accessed."""
     if name in _lazy_imports:
         import importlib
-        module = importlib.import_module(_lazy_imports[name])
+        module_path, install_hint = _lazy_imports[name]
+        try:
+            module = importlib.import_module(module_path)
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                f"{name} requires additional dependencies. "
+                f"Install them with: {install_hint}"
+            ) from e
         return getattr(module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
