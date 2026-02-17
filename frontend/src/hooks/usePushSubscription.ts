@@ -37,6 +37,8 @@ interface UsePushSubscriptionReturn {
   isIosNotInstalled: boolean
   /** Whether the current device has an active push subscription */
   isCurrentDeviceSubscribed: boolean
+  /** Push endpoint of the current device, or null if not subscribed */
+  currentDeviceEndpoint: string | null
   /** Loading state for any async operation */
   loading: boolean
   /** Error message from the last failed operation */
@@ -90,17 +92,65 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 /**
- * Detect a friendly device name from the user agent
+ * Detect the browser name from user agent data or UA string
+ */
+interface NavigatorUAData {
+  brands?: { brand: string }[]
+  platform?: string
+}
+
+function detectBrowserName(): string {
+  // Prefer navigator.userAgentData (Chromium-based browsers)
+  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
+  if (uaData?.brands) {
+    // Pick the first "real" brand (skip "Not A;Brand" / "Chromium" filler entries)
+    const real = uaData.brands.find(
+      (b) => !/not[\s._\-;)\/]?a/i.test(b.brand) && b.brand !== 'Chromium'
+    )
+    if (real) return real.brand
+  }
+
+  // Fallback: parse the UA string
+  const ua = navigator.userAgent
+  if (/Edg\//i.test(ua)) return 'Edge'
+  if (/OPR\//i.test(ua) || /Opera/i.test(ua)) return 'Opera'
+  if (/Firefox\//i.test(ua)) return 'Firefox'
+  if (/CriOS/i.test(ua) || /Chrome\//i.test(ua)) return 'Chrome'
+  if (/Safari\//i.test(ua)) return 'Safari'
+  return 'Browser'
+}
+
+/**
+ * Detect a friendly device name from the user agent in "{browser} on {platform}" format
  */
 function detectDeviceName(): string {
-  const ua = navigator.userAgent
-  if (/iPhone/i.test(ua)) return 'iPhone'
-  if (/iPad/i.test(ua)) return 'iPad'
-  if (/Android/i.test(ua)) return 'Android'
-  if (/Macintosh/i.test(ua)) return 'Mac'
-  if (/Windows/i.test(ua)) return 'Windows'
-  if (/Linux/i.test(ua)) return 'Linux'
-  return 'Browser'
+  // Prefer navigator.userAgentData.platform when available
+  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
+  let platform: string | undefined
+  if (uaData?.platform) {
+    // Normalize common platform values
+    const p = uaData.platform
+    if (/macos/i.test(p)) platform = 'Mac'
+    else if (/windows/i.test(p)) platform = 'Windows'
+    else if (/android/i.test(p)) platform = 'Android'
+    else if (/linux/i.test(p)) platform = 'Linux'
+    else platform = p
+  }
+
+  // Fallback: parse the UA string
+  if (!platform) {
+    const ua = navigator.userAgent
+    if (/iPhone/i.test(ua)) platform = 'iPhone'
+    else if (/iPad/i.test(ua)) platform = 'iPad'
+    else if (/Android/i.test(ua)) platform = 'Android'
+    else if (/Macintosh/i.test(ua)) platform = 'Mac'
+    else if (/Windows/i.test(ua)) platform = 'Windows'
+    else if (/Linux/i.test(ua)) platform = 'Linux'
+    else platform = 'Unknown'
+  }
+
+  const browser = detectBrowserName()
+  return `${browser} on ${platform}`
 }
 
 // ============================================================================
@@ -114,7 +164,7 @@ export const usePushSubscription = (
     PushSubscriptionResponse[]
   >([])
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
-  const [isCurrentDeviceSubscribed, setIsCurrentDeviceSubscribed] = useState(false)
+  const [currentDeviceEndpoint, setCurrentDeviceEndpoint] = useState<string | null>(null)
   const [permissionState, setPermissionState] = useState<PermissionState>(
     getPermissionState
   )
@@ -127,6 +177,11 @@ export const usePushSubscription = (
     'PushManager' in window
 
   const isIosNotInstalled = isIos() && !isStandalone()
+  const isCurrentDeviceSubscribed = currentDeviceEndpoint !== null
+
+  // Ref for subscriptions to avoid removeDevice callback recreation on every status refresh
+  const subscriptionsRef = useRef(subscriptions)
+  subscriptionsRef.current = subscriptions
 
   // Track if component is still mounted (must set true on mount for StrictMode remount)
   const mountedRef = useRef(true)
@@ -138,19 +193,20 @@ export const usePushSubscription = (
   }, [])
 
   /**
-   * Check whether the current device/browser has an active PushManager subscription
-   * whose endpoint matches one of the server-side subscriptions.
+   * Resolve the current device's push endpoint if it matches a server-side subscription.
+   * Returns the endpoint string or null.
    */
-  const checkCurrentDeviceSubscribed = useCallback(
-    async (serverSubscriptions: PushSubscriptionResponse[]): Promise<boolean> => {
-      if (!isSupported) return false
+  const resolveCurrentDeviceEndpoint = useCallback(
+    async (serverSubscriptions: PushSubscriptionResponse[]): Promise<string | null> => {
+      if (!isSupported) return null
       try {
         const registration = await navigator.serviceWorker.ready
         const pushSub = await registration.pushManager.getSubscription()
-        if (!pushSub) return false
-        return serverSubscriptions.some((s) => s.endpoint === pushSub.endpoint)
+        if (!pushSub) return null
+        const match = serverSubscriptions.some((s) => s.endpoint === pushSub.endpoint)
+        return match ? pushSub.endpoint : null
       } catch {
-        return false
+        return null
       }
     },
     [isSupported]
@@ -168,9 +224,9 @@ export const usePushSubscription = (
       if (mountedRef.current) {
         setSubscriptions(status.subscriptions)
         setNotificationsEnabled(status.notifications_enabled)
-        const deviceSubscribed = await checkCurrentDeviceSubscribed(status.subscriptions)
+        const endpoint = await resolveCurrentDeviceEndpoint(status.subscriptions)
         if (mountedRef.current) {
-          setIsCurrentDeviceSubscribed(deviceSubscribed)
+          setCurrentDeviceEndpoint(endpoint)
         }
       }
     } catch (err: unknown) {
@@ -185,7 +241,7 @@ export const usePushSubscription = (
         setLoading(false)
       }
     }
-  }, [checkCurrentDeviceSubscribed])
+  }, [resolveCurrentDeviceEndpoint])
 
   /**
    * Subscribe this device for push notifications
@@ -278,14 +334,28 @@ export const usePushSubscription = (
   /**
    * Remove a specific device subscription by GUID.
    *
-   * Used to unregister devices the user no longer has access to
-   * (e.g., lost or decommissioned devices).
+   * If the target device is the current browser, also unsubscribes the
+   * PushManager so the browser stops receiving pushes immediately.
    */
   const removeDevice = useCallback(
     async (guid: string) => {
       setLoading(true)
       setError(null)
       try {
+        // If removing the current device, unsubscribe PushManager first
+        const target = subscriptionsRef.current.find((s) => s.guid === guid)
+        if (target && currentDeviceEndpoint && target.endpoint === currentDeviceEndpoint) {
+          try {
+            const registration = await navigator.serviceWorker.ready
+            const pushSub = await registration.pushManager.getSubscription()
+            if (pushSub) {
+              await pushSub.unsubscribe()
+            }
+          } catch {
+            // PushManager failure is non-fatal — server removal still proceeds
+          }
+        }
+
         await notificationService.unsubscribeByGuid(guid)
         await refreshStatus()
         toast.success('Device removed')
@@ -306,7 +376,7 @@ export const usePushSubscription = (
         }
       }
     },
-    [refreshStatus]
+    [currentDeviceEndpoint, refreshStatus]
   )
 
   /**
@@ -410,6 +480,7 @@ export const usePushSubscription = (
     isSupported,
     isIosNotInstalled,
     isCurrentDeviceSubscribed,
+    currentDeviceEndpoint,
     loading,
     error,
     subscribe,

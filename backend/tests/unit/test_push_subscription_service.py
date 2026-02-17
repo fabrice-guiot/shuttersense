@@ -219,6 +219,116 @@ class TestListSubscriptions:
 
 
 # ============================================================================
+# Test: remove_subscription_by_guid
+# ============================================================================
+
+
+class TestRemoveSubscriptionByGuid:
+    """Tests for PushSubscriptionService.remove_subscription_by_guid."""
+
+    def test_removes_subscription_by_guid(
+        self, push_service, test_team, test_user
+    ):
+        """Should remove a subscription when GUID, user, and team match."""
+        sub = push_service.create_subscription(
+            team_id=test_team.id,
+            user_id=test_user.id,
+            endpoint="https://push.example.com/guid-remove",
+            p256dh_key="key",
+            auth_key="auth",
+        )
+        result = push_service.remove_subscription_by_guid(
+            user_id=test_user.id,
+            team_id=test_team.id,
+            guid=sub.guid,
+        )
+        assert result is True
+
+        # Verify it's actually deleted
+        remaining = push_service.list_subscriptions(
+            user_id=test_user.id, team_id=test_team.id
+        )
+        assert len(remaining) == 0
+
+    def test_raises_not_found_for_nonexistent_uuid(
+        self, push_service, test_team, test_user
+    ):
+        """Should raise NotFoundError when GUID doesn't match any subscription."""
+        with pytest.raises(NotFoundError):
+            push_service.remove_subscription_by_guid(
+                user_id=test_user.id,
+                team_id=test_team.id,
+                guid="sub_00000000000000000000000000",
+            )
+
+    def test_raises_not_found_for_invalid_guid_format(
+        self, push_service, test_team, test_user
+    ):
+        """Should raise NotFoundError for a completely invalid GUID string."""
+        with pytest.raises(NotFoundError):
+            push_service.remove_subscription_by_guid(
+                user_id=test_user.id,
+                team_id=test_team.id,
+                guid="not-a-valid-guid",
+            )
+
+    def test_raises_not_found_for_wrong_prefix(
+        self, push_service, test_team, test_user
+    ):
+        """Should raise NotFoundError when GUID has the wrong entity prefix."""
+        with pytest.raises(NotFoundError):
+            push_service.remove_subscription_by_guid(
+                user_id=test_user.id,
+                team_id=test_team.id,
+                guid="col_00000000000000000000000000",
+            )
+
+    def test_cross_team_isolation(
+        self, push_service, test_db_session, test_team, test_user
+    ):
+        """Should not remove a subscription owned by a different team."""
+        from backend.src.models.team import Team
+        from backend.src.models.user import User, UserStatus
+
+        # Create subscription for test_user/test_team
+        sub = push_service.create_subscription(
+            team_id=test_team.id,
+            user_id=test_user.id,
+            endpoint="https://push.example.com/cross-team",
+            p256dh_key="key",
+            auth_key="auth",
+        )
+
+        # Create another team + user
+        other_team = Team(name="Other Team", slug="other-team-guid", is_active=True)
+        test_db_session.add(other_team)
+        test_db_session.commit()
+
+        other_user = User(
+            team_id=other_team.id,
+            email="other@guid-test.com",
+            display_name="Other",
+            status=UserStatus.ACTIVE,
+        )
+        test_db_session.add(other_user)
+        test_db_session.commit()
+
+        # Try to remove from the other team — should raise NotFoundError
+        with pytest.raises(NotFoundError):
+            push_service.remove_subscription_by_guid(
+                user_id=other_user.id,
+                team_id=other_team.id,
+                guid=sub.guid,
+            )
+
+        # Original subscription should still exist
+        subs = push_service.list_subscriptions(
+            user_id=test_user.id, team_id=test_team.id
+        )
+        assert len(subs) == 1
+
+
+# ============================================================================
 # Test: cleanup_expired
 # ============================================================================
 

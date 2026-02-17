@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select'
 import { TimezoneCombobox } from '@/components/ui/timezone-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatDate, formatRelativeTime } from '@/utils/dateFormat'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
@@ -125,6 +126,7 @@ export function NotificationPreferences() {
     isSupported,
     isIosNotInstalled,
     isCurrentDeviceSubscribed,
+    currentDeviceEndpoint,
     loading: subscriptionLoading,
     subscribe,
     unsubscribe,
@@ -467,6 +469,11 @@ export function NotificationPreferences() {
                             <span className="font-medium">
                               {sub.device_name || 'Unknown device'}
                             </span>
+                            {currentDeviceEndpoint && sub.endpoint === currentDeviceEndpoint && (
+                              <Badge variant="secondary" className="ml-2 text-xs">
+                                this device
+                              </Badge>
+                            )}
                             <span className="ml-2 text-muted-foreground">
                               {sub.last_used_at
                                 ? `Last used ${formatRelativeTime(sub.last_used_at)}`

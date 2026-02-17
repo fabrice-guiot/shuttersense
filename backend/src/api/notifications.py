@@ -182,11 +182,11 @@ async def remove_push_subscription(
             team_id=ctx.team_id,
             endpoint=body.endpoint,
         )
-    except NotFoundError:
+    except NotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Subscription not found",
-        )
+        ) from err
 
 
 @router.delete(
@@ -214,11 +214,11 @@ async def remove_push_subscription_by_guid(
             team_id=ctx.team_id,
             guid=guid,
         )
-    except NotFoundError:
+    except NotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Subscription not found",
-        )
+        ) from err
 
 
 @router.get(
@@ -460,11 +460,11 @@ async def mark_notification_read(
     try:
         notification = service.mark_as_read(guid=guid, team_id=ctx.team_id)
         return NotificationResponse.model_validate(notification)
-    except NotFoundError:
+    except NotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notification not found",
-        )
+        ) from err
 
 
 # ============================================================================
