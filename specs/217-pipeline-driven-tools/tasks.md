@@ -108,21 +108,21 @@
 
 ### Implementation for User Story 4
 
-- [ ] T029 [P] [US4] Create Camera TypeScript contracts in `frontend/src/contracts/api/camera-api.ts` — `CameraResponse`, `CameraUpdateRequest`, `CameraStatsResponse`, `CameraDiscoverRequest`, `CameraDiscoverResponse`, `CameraListQueryParams`
-- [ ] T030 [P] [US4] Create Camera API service in `frontend/src/services/cameras.ts` — `listCameras()`, `getCamera()`, `updateCamera()`, `deleteCamera()`, `getCameraStats()`
-- [ ] T031 [US4] Create `useCameras` hook and `useCameraStats` hook in `frontend/src/hooks/useCameras.ts` — following `usePipelines` pattern with autoFetch, CRUD callbacks, stats
-- [ ] T032 [P] [US4] Create `CameraList` component in `frontend/src/components/cameras/CameraList.tsx` — table with columns Camera ID, Display Name, Make, Model, Status (badge), Modified (AuditTrailPopover), edit/delete actions
-- [ ] T033 [P] [US4] Create `CameraEditDialog` component in `frontend/src/components/cameras/CameraEditDialog.tsx` — Dialog for updating camera details (status, display_name, make, model, serial_number, notes)
-- [ ] T034 [US4] Create `CamerasTab` component in `frontend/src/components/cameras/CamerasTab.tsx` — Camera list with search, status filter (All/Temporary/Confirmed), edit dialog, pagination, TopHeader stats via `useCameraStats`
-- [ ] T035 [US4] Refactor `PipelinesPage` into `PipelinesTab` component in `frontend/src/components/pipelines/PipelinesTab.tsx` — extract page body into tab component, preserve all Pipeline functionality (list, CRUD, activate, validate, import/export, modals), manage own TopHeader stats
-- [ ] T036 [US4] Create `ResourcesPage` in `frontend/src/pages/ResourcesPage.tsx` — URL-synced tabs (Cameras default, Pipelines) using `useSearchParams`, following `DirectoryPage.tsx` pattern
-- [ ] T037 [US4] Update route configuration in `frontend/src/App.tsx` — add `/resources` route with `pageTitle: 'Resources'`, `pageIcon: Box`, `pageHelp`; add exact-match `/pipelines` redirect to `/resources?tab=pipelines` (keep existing `/pipelines/new`, `/pipelines/{guid}`, `/pipelines/{guid}/edit` routes unchanged)
-- [ ] T038 [US4] Update sidebar menu in `frontend/src/components/layout/Sidebar.tsx` — replace "Pipelines" entry with "Resources" (`Box` icon, `/resources` href)
-- [ ] T039 [US4] Frontend tests for Camera hooks in `frontend/src/hooks/__tests__/useCameras.test.tsx` — fetch, CRUD, stats, error handling
+- [x] T029 [P] [US4] Create Camera TypeScript contracts in `frontend/src/contracts/api/camera-api.ts` — `CameraResponse`, `CameraUpdateRequest`, `CameraStatsResponse`, `CameraDiscoverRequest`, `CameraDiscoverResponse`, `CameraListQueryParams`
+- [x] T030 [P] [US4] Create Camera API service in `frontend/src/services/cameras.ts` — `listCameras()`, `getCamera()`, `updateCamera()`, `deleteCamera()`, `getCameraStats()`
+- [x] T031 [US4] Create `useCameras` hook and `useCameraStats` hook in `frontend/src/hooks/useCameras.ts` — following `usePipelines` pattern with autoFetch, CRUD callbacks, stats
+- [x] T032 [P] [US4] Create `CameraList` component in `frontend/src/components/cameras/CameraList.tsx` — table with columns Camera ID, Display Name, Make, Model, Status (badge), Modified (AuditTrailPopover), edit/delete actions
+- [x] T033 [P] [US4] Create `CameraEditDialog` component in `frontend/src/components/cameras/CameraEditDialog.tsx` — Dialog for updating camera details (status, display_name, make, model, serial_number, notes)
+- [x] T034 [US4] Create `CamerasTab` component in `frontend/src/components/cameras/CamerasTab.tsx` — Camera list with search, status filter (All/Temporary/Confirmed), edit dialog, pagination, TopHeader stats via `useCameraStats`
+- [x] T035 [US4] Refactor `PipelinesPage` into `PipelinesTab` component in `frontend/src/components/pipelines/PipelinesTab.tsx` — extract page body into tab component, preserve all Pipeline functionality (list, CRUD, activate, validate, import/export, modals), manage own TopHeader stats
+- [x] T036 [US4] Create `ResourcesPage` in `frontend/src/pages/ResourcesPage.tsx` — URL-synced tabs (Cameras default, Pipelines) using `useSearchParams`, following `DirectoryPage.tsx` pattern
+- [x] T037 [US4] Update route configuration in `frontend/src/App.tsx` — add `/resources` route with `pageTitle: 'Resources'`, `pageIcon: Box`, `pageHelp`; add exact-match `/pipelines` redirect to `/resources?tab=pipelines` (keep existing `/pipelines/new`, `/pipelines/{guid}`, `/pipelines/{guid}/edit` routes unchanged)
+- [x] T038 [US4] Update sidebar menu in `frontend/src/components/layout/Sidebar.tsx` — replace "Pipelines" entry with "Resources" (`Box` icon, `/resources` href)
+- [x] T039 [US4] Frontend tests for Camera hooks in `frontend/src/hooks/__tests__/useCameras.test.tsx` — fetch, CRUD, stats, error handling
 
-- [ ] T040 [P] [US4] Component tests for `ResourcesPage` in `frontend/src/pages/__tests__/ResourcesPage.test.tsx` — tab rendering, URL-synced tab switching via searchParams, default tab is Cameras, exact-match `/pipelines` redirect
-- [ ] T041 [P] [US4] Component tests for `CamerasTab` in `frontend/src/components/cameras/__tests__/CamerasTab.test.tsx` — list renders with correct columns (Camera ID, Display Name, Make, Model, Status badge, Modified), status filter (All/Temporary/Confirmed), edit dialog opens and submits, delete confirmation, per-tab KPI stats in TopHeader
-- [ ] T042 [P] [US4] Regression tests for `PipelinesTab` in `frontend/src/components/pipelines/__tests__/PipelinesTab.test.tsx` — list rendering, CRUD actions, activate/deactivate, set/unset default, validate, import/export, confirmation modals, per-tab KPI stats — all preserved after refactoring from PipelinesPage
+- [x] T040 [P] [US4] Component tests for `ResourcesPage` in `frontend/src/pages/__tests__/ResourcesPage.test.tsx` — tab rendering, URL-synced tab switching via searchParams, default tab is Cameras, exact-match `/pipelines` redirect
+- [x] T041 [P] [US4] Component tests for `CamerasTab` in `frontend/src/components/cameras/__tests__/CamerasTab.test.tsx` — list renders with correct columns (Camera ID, Display Name, Make, Model, Status badge, Modified), status filter (All/Temporary/Confirmed), edit dialog opens and submits, delete confirmation, per-tab KPI stats in TopHeader
+- [x] T042 [P] [US4] Regression tests for `PipelinesTab` in `frontend/src/components/pipelines/__tests__/PipelinesTab.test.tsx` — list rendering, CRUD actions, activate/deactivate, set/unset default, validate, import/export, confirmation modals, per-tab KPI stats — all preserved after refactoring from PipelinesPage
 
 **Checkpoint**: Resources page renders with Cameras and Pipelines tabs. Camera CRUD works. Pipeline functionality preserved. `/pipelines` redirects correctly. All US4 tests pass.
 

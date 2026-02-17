@@ -8,7 +8,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import {
   LayoutGrid,
-  Workflow,
+  Box,
   FolderOpen,
   Settings,
   X,
@@ -62,7 +62,7 @@ const MENU_ITEMS: Omit<MenuItem, 'active'>[] = [
   { id: 'dashboard', icon: LayoutGrid, label: 'Dashboard', href: '/' },
   { id: 'events', icon: Calendar, label: 'Events', href: '/events' },
   { id: 'collections', icon: FolderOpen, label: 'Collections', href: '/collections' },
-  { id: 'pipelines', icon: Workflow, label: 'Pipelines', href: '/pipelines' },
+  { id: 'resources', icon: Box, label: 'Resources', href: '/resources' },
   { id: 'analytics', icon: ChartNoAxesCombined, label: 'Analytics', href: '/analytics' },
   { id: 'directory', icon: BookOpen, label: 'Directory', href: '/directory' },
   { id: 'settings', icon: Settings, label: 'Settings', href: '/settings' },
