@@ -1208,6 +1208,28 @@ class JobCoordinatorService:
         # Update collection statistics from tool results
         self._update_collection_stats_from_results(job, completion_data)
 
+        # Auto-discover cameras from analysis results (Issue #217)
+        # Only use the 'cameras' dict which maps raw camera_id → metadata.
+        # Do NOT fall back to 'camera_usage' — its keys are resolved display
+        # names (e.g. "Canon EOS R5"), not raw camera IDs.
+        if completion_data.results:
+            cameras_dict = completion_data.results.get("cameras")
+            if cameras_dict and isinstance(cameras_dict, dict):
+                try:
+                    from backend.src.services.camera_service import CameraService
+                    camera_service = CameraService(db=self.db)
+                    camera_service.discover_cameras(
+                        team_id=team_id,
+                        camera_ids=list(cameras_dict.keys()),
+                        camera_metadata=cameras_dict,
+                        commit=False,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Camera auto-discovery from results failed: %s", e,
+                        extra={"job_guid": job.guid},
+                    )
+
         # Complete the job
         job.complete(result_id=result.id)
         if user_id is not None:
@@ -1420,6 +1442,22 @@ class JobCoordinatorService:
 
         self.db.add(result)
         self.db.flush()
+
+        # Auto-discover cameras from copied results (Issue #217)
+        if source_result.results_json:
+            cameras_dict = source_result.results_json.get("cameras")
+            if cameras_dict and isinstance(cameras_dict, dict):
+                try:
+                    from backend.src.services.camera_service import CameraService
+                    camera_service = CameraService(db=self.db)
+                    camera_service.discover_cameras(
+                        team_id=team_id,
+                        camera_ids=list(cameras_dict.keys()),
+                        camera_metadata=cameras_dict,
+                        commit=False,
+                    )
+                except Exception as e:
+                    logger.warning("Camera auto-discovery from no-change results failed: %s", e)
 
         # Complete the job
         job.complete(result_id=result.id)

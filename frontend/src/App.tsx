@@ -20,6 +20,7 @@ import {
   User,
   Bot,
   Bell,
+  ToolCase,
   type LucideIcon
 } from 'lucide-react'
 import { MainLayout } from './components/layout/MainLayout'
@@ -37,8 +38,8 @@ import AssetsPage from './pages/AssetsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import TeamPage from './pages/TeamPage'
 import SettingsPage from './pages/SettingsPage'
-import PipelinesPage from './pages/PipelinesPage'
 import PipelineEditorPage from './pages/PipelineEditorPage'
+import ResourcesPage from './pages/ResourcesPage'
 import EventsPage from './pages/EventsPage'
 import DirectoryPage from './pages/DirectoryPage'
 import LoginPage from './pages/LoginPage'
@@ -108,10 +109,11 @@ const routes: RouteConfig[] = [
     pageIcon: Users,
   },
   {
-    path: '/pipelines',
-    element: <PipelinesPage />,
-    pageTitle: 'Pipelines',
-    pageIcon: GitBranch,
+    path: '/resources',
+    element: <ResourcesPage />,
+    pageTitle: 'Resources',
+    pageIcon: ToolCase,
+    pageHelp: 'Manage cameras discovered by agents and photo processing pipelines',
   },
   {
     path: '/directory',
@@ -235,6 +237,8 @@ function App() {
             {/* Legacy route redirects (Issue #39 - Navigation restructure) */}
             <Route path="/connectors" element={<Navigate to="/settings?tab=connectors" replace />} />
             <Route path="/config" element={<Navigate to="/settings?tab=config" replace />} />
+            {/* Issue #217 - Pipelines moved under Resources page */}
+            <Route path="/pipelines" element={<Navigate to="/resources?tab=pipelines" replace />} />
 
             {/* Catch-all 404 route */}
             <Route path="*" element={<NotFoundPage />} />

@@ -28,6 +28,7 @@
  *   - art: AgentRegistrationToken (one-time registration tokens)
  *   - sub: PushSubscription (push notification subscriptions)
  *   - ntf: Notification (notification history)
+ *   - cam: Camera (physical camera equipment)
  *   In-memory entities (transient):
  *   - job: Job
  *   - imp: Import
@@ -54,6 +55,7 @@ export type EntityPrefix =
   | 'art'
   | 'sub'
   | 'ntf'
+  | 'cam'
   | 'job'
   | 'imp'
   | 'fld'
@@ -80,6 +82,7 @@ export const ENTITY_PREFIXES: Record<EntityPrefix, string> = {
   art: 'AgentRegistrationToken',
   sub: 'PushSubscription',
   ntf: 'Notification',
+  cam: 'Camera',
   job: 'Job',
   imp: 'Import',
   fld: 'InventoryFolder',
@@ -96,7 +99,7 @@ const CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
  * Format: {3-char prefix}_{26-char Crockford Base32}
  */
 const GUID_PATTERN =
-  /^(col|con|pip|res|evt|ser|loc|org|prf|cat|tea|usr|tok|agt|art|sub|ntf|job|imp|fld|rel)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$/i
+  /^(col|con|pip|res|evt|ser|loc|org|prf|cat|tea|usr|tok|agt|art|sub|ntf|cam|job|imp|fld|rel)_[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$/i
 
 /**
  * Validates if a string is a valid GUID.

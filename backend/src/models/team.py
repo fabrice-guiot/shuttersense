@@ -110,6 +110,12 @@ class Team(Base, GuidMixin, AuditMixin):
         lazy="dynamic",
         cascade="all, delete-orphan"
     )
+    cameras = relationship(
+        "Camera",
+        back_populates="team",
+        lazy="dynamic",
+        cascade="all, delete-orphan"
+    )
 
     @staticmethod
     def generate_slug(name: str) -> str:

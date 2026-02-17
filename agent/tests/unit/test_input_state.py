@@ -39,7 +39,7 @@ def sample_config():
         "photo_extensions": [".dng", ".cr3"],
         "metadata_extensions": [".xmp"],
         "require_sidecar": [".cr3"],
-        "cameras": {"AB3D": [{"name": "Canon R5"}]},
+        "camera_mappings": {"AB3D": [{"name": "Canon R5"}]},
         "processing_methods": {"HDR": "High Dynamic Range"},
         # These should be ignored
         "unrelated_key": "should be ignored",

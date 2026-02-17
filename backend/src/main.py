@@ -1051,7 +1051,7 @@ async def get_version() -> Dict[str, str]:
 from backend.src.api import (
     collections, connectors, tools, results, pipelines, trends,
     config, categories, events, locations, organizers, performers, analytics,
-    notifications
+    notifications, cameras
 )
 from backend.src.api import auth as auth_router
 from backend.src.api import users as users_router
@@ -1059,10 +1059,12 @@ from backend.src.api import tokens as tokens_router
 from backend.src.api.admin import teams_router as admin_teams_router
 from backend.src.api.admin import release_manifests_router as admin_release_manifests_router
 from backend.src.api.agent import router as agent_router
+from backend.src.api.agent.camera_routes import router as agent_camera_router
 
 # === Core Application ===
 app.include_router(collections.router, prefix="/api")
 app.include_router(pipelines.router, prefix="/api")
+app.include_router(cameras.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
 
 # === Processing & Results ===
@@ -1087,6 +1089,7 @@ app.include_router(notifications.router, prefix="/api")
 
 # === Infrastructure (internal APIs - not accessible via API tokens) ===
 app.include_router(agent_router)
+app.include_router(agent_camera_router)
 app.include_router(auth_router.router, prefix="/api")
 app.include_router(tokens_router.router)
 

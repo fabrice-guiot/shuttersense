@@ -1257,6 +1257,52 @@ class AgentApiClient:
         return None
 
     # -------------------------------------------------------------------------
+    # Camera Discovery (Issue #217)
+    # -------------------------------------------------------------------------
+
+    def discover_cameras(
+        self,
+        camera_ids: list[str],
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> list[dict[str, Any]]:
+        """
+        Discover cameras by sending a batch of camera IDs to the server.
+
+        Idempotent: creates Camera records with status "temporary" for any
+        IDs not already registered. Returns all Camera records (existing
+        and newly created) for the submitted IDs.
+
+        Args:
+            camera_ids: List of unique camera IDs discovered during analysis
+            timeout: Request timeout in seconds
+
+        Returns:
+            List of camera dicts with guid, camera_id, status, display_name
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ApiError: If request fails
+            ConnectionError: If connection to server fails
+        """
+        payload = {"camera_ids": camera_ids}
+
+        response = self.post("/cameras/discover", json=payload)
+
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("cameras", [])
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        elif response.status_code == 422:
+            detail = response.json().get("detail", "Validation error")
+            raise ApiError(f"Camera discovery validation error: {detail}", status_code=422)
+        else:
+            raise ApiError(
+                f"Camera discovery failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    # -------------------------------------------------------------------------
     # Collection Management (Issue #108, Task T007)
     # -------------------------------------------------------------------------
 

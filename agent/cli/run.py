@@ -58,11 +58,25 @@ from src.config_resolver import resolve_team_config
     type=click.Path(),
     help="Save HTML report to this path.",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force re-analysis even if no changes detected.",
+)
+@click.option(
+    "--snapshot",
+    default=None,
+    type=click.Path(),
+    help="Save analysis_data JSON to this directory for regression comparison.",
+)
 def run(
     collection_guid: str,
     tool: str,
     offline: bool,
     output: Optional[str],
+    force: bool,
+    snapshot: Optional[str],
 ) -> None:
     """Run an analysis tool against a Collection.
 
@@ -150,6 +164,20 @@ def run(
     else:
         click.echo(click.style("OK", fg="green", bold=True) + f" ({result.message})")
 
+    # --- Step 4b: Resolve Pipeline configuration (Issue #217) ---
+    pipeline_tool_config = _resolve_pipeline_config(team_config)
+
+    if pipeline_tool_config is not None:
+        click.echo(
+            click.style("Pipeline: ", fg="cyan")
+            + "Using Pipeline-derived extensions and settings"
+        )
+    else:
+        click.echo(
+            click.style("Pipeline: ", fg="yellow")
+            + "No Pipeline available, using Config-based settings"
+        )
+
     # --- Step 5: Load file list and compute Input State hash ---
     location = collection_entry.location
     click.echo(f"Running {tool} on: {location}")
@@ -158,7 +186,9 @@ def run(
     click.echo()
 
     try:
-        file_infos, input_state_hash = _prepare_analysis(location, tool, team_config)
+        file_infos, input_state_hash = _prepare_analysis(
+            location, tool, team_config, pipeline_tool_config
+        )
     except (FileNotFoundError, PermissionError, ValueError) as e:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
@@ -167,7 +197,7 @@ def run(
         sys.exit(1)
 
     # --- Step 6: Online no-change check ---
-    if not offline:
+    if not offline and not force:
         previous = _fetch_previous_result(config, collection_guid, tool)
         if previous and previous.get("input_state_hash") == input_state_hash:
             click.echo("No changes detected since last analysis.")
@@ -186,8 +216,23 @@ def run(
     start_time = time.time()
     executed_at = datetime.now(timezone.utc)
 
+    # Create HTTP client for online camera discovery
+    http_client = None
+    if not offline:
+        try:
+            http_client = AgentApiClient(
+                server_url=config.server_url,
+                api_key=config.api_key,
+            )
+        except Exception:
+            logger.debug("Could not create HTTP client for camera discovery")
+
     try:
-        analysis_data, report_html = _execute_tool(tool, file_infos, location, team_config)
+        analysis_data, report_html = _execute_tool(
+            tool, file_infos, location, team_config,
+            pipeline_tool_config=pipeline_tool_config,
+            http_client=http_client,
+        )
     except Exception as e:
         logger.debug("Analysis failed with exception", exc_info=True)
         click.echo(
@@ -218,6 +263,19 @@ def run(
         output_path = Path(output)
         output_path.write_text(report_html, encoding="utf-8")
         click.echo(f"  Report saved:  {output_path}")
+
+    # --- Step 8b: Save analysis snapshot if requested ---
+    if snapshot:
+        import json
+
+        snapshot_dir = Path(snapshot)
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        snapshot_path = snapshot_dir / f"{tool}_{collection_guid}.json"
+        snapshot_path.write_text(
+            json.dumps(analysis_data, sort_keys=True, indent=2, default=str),
+            encoding="utf-8",
+        )
+        click.echo(f"  Snapshot saved: {snapshot_path}")
 
     # --- Step 9: Upload or store result ---
     if offline:
@@ -296,10 +354,48 @@ def run(
         click.echo(f"  Result GUID: {upload_response.get('result_guid', 'N/A')}")
 
 
+def _resolve_pipeline_config(
+    team_config: TeamConfigCache,
+) -> Optional["PipelineToolConfig"]:
+    """
+    Resolve Pipeline configuration for the current analysis.
+
+    Resolution order (FR-023):
+    1. Collection-specific Pipeline (US5: T043 — not yet implemented)
+    2. Team default Pipeline from TeamConfigCache
+    3. None (Config-based fallback)
+
+    When the Pipeline is structurally invalid (e.g., missing Capture node),
+    logs a warning and returns None for Config fallback (FR-014).
+
+    Args:
+        team_config: Team configuration with optional default_pipeline
+
+    Returns:
+        PipelineToolConfig if a valid Pipeline is available, None otherwise
+    """
+    from src.analysis.pipeline_tool_config import extract_tool_config
+
+    pipeline = team_config.default_pipeline
+    if pipeline is None:
+        return None
+
+    try:
+        return extract_tool_config(pipeline.nodes, pipeline.edges)
+    except ValueError as e:
+        logger.warning(
+            "Pipeline '%s' is invalid, falling back to Config: %s",
+            pipeline.name,
+            e,
+        )
+        return None
+
+
 def _prepare_analysis(
     location: str,
     tool: str,
     team_config: TeamConfigCache,
+    pipeline_tool_config: Optional["PipelineToolConfig"] = None,
 ) -> Tuple[List, str]:
     """
     Load file list and compute Input State hash.
@@ -311,6 +407,7 @@ def _prepare_analysis(
         location: Local filesystem path to analyze
         tool: Tool name (photostats, photo_pairing, pipeline_validation)
         team_config: Team configuration with extensions, cameras, pipeline
+        pipeline_tool_config: Optional Pipeline-derived configuration (Issue #217)
 
     Returns:
         Tuple of (file_infos list, input_state_hash string)
@@ -353,6 +450,17 @@ def _prepare_analysis(
             "version": team_config.default_pipeline.version,
             "nodes": team_config.default_pipeline.nodes,
             "edges": team_config.default_pipeline.edges,
+        }
+
+    # Include pipeline_tool_config in hash when available (US5: T044)
+    if pipeline_tool_config is not None:
+        config_dict["pipeline_tool_config"] = {
+            "filename_regex": pipeline_tool_config.filename_regex,
+            "camera_id_group": pipeline_tool_config.camera_id_group,
+            "photo_extensions": sorted(pipeline_tool_config.photo_extensions),
+            "metadata_extensions": sorted(pipeline_tool_config.metadata_extensions),
+            "require_sidecar": sorted(pipeline_tool_config.require_sidecar),
+            "processing_suffixes": pipeline_tool_config.processing_suffixes,
         }
 
     config_hash = computer.compute_configuration_hash(config_dict)
@@ -438,15 +546,22 @@ def _execute_tool(
     file_infos: list,
     location: str,
     team_config: TeamConfigCache,
+    pipeline_tool_config: Optional["PipelineToolConfig"] = None,
+    http_client: Optional[AgentApiClient] = None,
 ) -> tuple[Dict[str, Any], Optional[str]]:
     """
     Execute an analysis tool against pre-loaded file data.
+
+    When pipeline_tool_config is provided, extensions and sidecar requirements
+    are derived from the Pipeline. Otherwise, falls back to TeamConfigCache.
 
     Args:
         tool: Tool name (photostats, photo_pairing, pipeline_validation)
         file_infos: Pre-loaded list of FileInfo objects
         location: Local filesystem path (for report display)
         team_config: Team configuration with extensions, cameras, pipeline
+        pipeline_tool_config: Optional Pipeline-derived configuration (Issue #217)
+        http_client: Optional AgentApiClient for camera discovery (Issue #217)
 
     Returns:
         Tuple of (analysis_data dict, optional HTML report string)
@@ -454,16 +569,25 @@ def _execute_tool(
     Raises:
         Exception: If analysis fails
     """
-    photo_extensions = set(team_config.photo_extensions)
-    metadata_extensions = set(team_config.metadata_extensions)
-    require_sidecar = set(team_config.require_sidecar)
+    if pipeline_tool_config is not None:
+        photo_extensions = set(pipeline_tool_config.photo_extensions)
+        metadata_extensions = set(pipeline_tool_config.metadata_extensions)
+        require_sidecar = set(pipeline_tool_config.require_sidecar)
+    else:
+        photo_extensions = set(team_config.photo_extensions)
+        metadata_extensions = set(team_config.metadata_extensions)
+        require_sidecar = set(team_config.require_sidecar)
 
     if tool == "photostats":
         return _run_photostats(
             file_infos, photo_extensions, metadata_extensions, require_sidecar, location
         )
     elif tool == "photo_pairing":
-        return _run_photo_pairing(file_infos, photo_extensions, location)
+        return _run_photo_pairing(
+            file_infos, photo_extensions, location,
+            pipeline_tool_config=pipeline_tool_config,
+            http_client=http_client,
+        )
     elif tool == "pipeline_validation":
         return _run_pipeline_validation(
             file_infos, photo_extensions, metadata_extensions, team_config, location
@@ -525,8 +649,18 @@ def _run_photo_pairing(
     file_infos: list,
     photo_extensions: set[str],
     location: str,
+    pipeline_tool_config: Optional["PipelineToolConfig"] = None,
+    http_client: Optional[AgentApiClient] = None,
 ) -> tuple[Dict[str, Any], Optional[str]]:
-    """Run Photo Pairing analysis and generate HTML report."""
+    """Run Photo Pairing analysis and generate HTML report.
+
+    Args:
+        file_infos: Pre-loaded list of FileInfo objects
+        photo_extensions: Set of photo file extensions
+        location: Local filesystem path (for report display)
+        pipeline_tool_config: Optional Pipeline-derived configuration (Issue #217)
+        http_client: Optional AgentApiClient for camera discovery (Issue #217)
+    """
     from src.analysis.photo_pairing_analyzer import (
         build_imagegroups,
         calculate_analytics,
@@ -536,11 +670,32 @@ def _run_photo_pairing(
     # Filter to photo files only
     photo_files = [f for f in file_infos if f.extension in photo_extensions]
 
-    group_result = build_imagegroups(photo_files)
+    # Build image groups — use Pipeline regex when available (US2: T022-T024)
+    if pipeline_tool_config is not None:
+        group_result = build_imagegroups(
+            photo_files,
+            filename_regex=pipeline_tool_config.filename_regex,
+            camera_id_group=pipeline_tool_config.camera_id_group,
+        )
+    else:
+        group_result = build_imagegroups(photo_files)
+
     imagegroups = group_result.get("imagegroups", [])
     invalid_files = group_result.get("invalid_files", [])
 
-    analytics = calculate_analytics(imagegroups, {})
+    # Camera discovery (US3: T026-T027)
+    camera_names = _discover_cameras(imagegroups, http_client)
+
+    # Build analytics config
+    analytics_config: Dict[str, Any] = {}
+    if pipeline_tool_config is not None:
+        analytics_config["processing_methods"] = pipeline_tool_config.processing_suffixes
+    if camera_names:
+        analytics_config["camera_mappings"] = {
+            cam_id: [{"name": name}] for cam_id, name in camera_names.items()
+        }
+
+    analytics = calculate_analytics(imagegroups, analytics_config)
 
     results = {
         "total_files": len(file_infos),
@@ -566,6 +721,44 @@ def _run_photo_pairing(
     invalid_file_paths = [f["path"] for f in invalid_files] if invalid_files and isinstance(invalid_files[0], dict) else invalid_files
     report_html = generate_photo_pairing_report(results, invalid_file_paths, location)
     return results, report_html
+
+
+def _discover_cameras(
+    imagegroups: list,
+    http_client: Optional[AgentApiClient] = None,
+) -> Dict[str, str]:
+    """
+    Extract unique camera IDs and discover cameras via server.
+
+    Builds a camera_id -> display_name mapping. Falls back to identity
+    mapping (camera_id -> camera_id) when offline or on error.
+
+    Args:
+        imagegroups: List of imagegroup dicts with 'camera_id' keys
+        http_client: Optional AgentApiClient (None for offline mode)
+
+    Returns:
+        Dict mapping camera_id to display_name
+    """
+    # Extract unique camera IDs
+    camera_ids = sorted(set(g["camera_id"] for g in imagegroups if g.get("camera_id")))
+    if not camera_ids:
+        return {}
+
+    if http_client is None:
+        # Offline mode: use raw IDs as names
+        logger.info("Offline mode: skipping camera discovery for %d cameras", len(camera_ids))
+        return {cam_id: cam_id for cam_id in camera_ids}
+
+    try:
+        cameras = http_client.discover_cameras(camera_ids)
+        return {
+            cam["camera_id"]: cam.get("display_name") or cam["camera_id"]
+            for cam in cameras
+        }
+    except Exception as e:
+        logger.warning("Camera discovery failed, using raw IDs: %s", e)
+        return {cam_id: cam_id for cam_id in camera_ids}
 
 
 def _run_pipeline_validation(

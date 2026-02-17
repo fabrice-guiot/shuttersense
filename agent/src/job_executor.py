@@ -383,6 +383,20 @@ class JobExecutor:
         # Check if this is a remote collection
         is_remote = connector is not None
 
+        # Extract PipelineToolConfig from Pipeline data (Issue #217)
+        pipeline_tool_config = None
+        pipeline_data = config.get("pipeline")
+        if pipeline_data and isinstance(pipeline_data, dict):
+            try:
+                from src.analysis.pipeline_tool_config import extract_tool_config
+                nodes_json = pipeline_data.get("nodes") or pipeline_data.get("nodes_json") or []
+                edges_json = pipeline_data.get("edges") or pipeline_data.get("edges_json") or []
+                if nodes_json:
+                    pipeline_tool_config = extract_tool_config(nodes_json, edges_json)
+                    logger.info("Extracted PipelineToolConfig from Pipeline %s", pipeline_data.get("guid", "?"))
+            except Exception as e:
+                logger.warning("Failed to extract PipelineToolConfig, falling back to config: %s", e)
+
         # Extract cached FileInfo for T071 (Issue #107)
         # Tools will use this instead of calling cloud APIs when available
         cached_file_info: Optional[List[FileInfo]] = None
@@ -400,10 +414,16 @@ class JobExecutor:
 
         if tool == "photostats":
             # Unified code path: connector=None means local, connector!=None means remote
-            return await self._run_photostats(collection_path, config, connector, cached_file_info)
+            return await self._run_photostats(
+                collection_path, config, connector, cached_file_info,
+                pipeline_tool_config=pipeline_tool_config,
+            )
         elif tool == "photo_pairing":
             # Unified code path: connector=None means local, connector!=None means remote
-            return await self._run_photo_pairing(collection_path, config, connector, cached_file_info)
+            return await self._run_photo_pairing(
+                collection_path, config, connector, cached_file_info,
+                pipeline_tool_config=pipeline_tool_config,
+            )
         elif tool == "pipeline_validation":
             # Unified code path: connector=None means local, connector!=None means remote
             return await self._run_pipeline_validation(
@@ -678,7 +698,8 @@ class JobExecutor:
         collection_path: Optional[str],
         config: Dict[str, Any],
         connector: Optional[Dict[str, Any]] = None,
-        cached_file_info: Optional[List[FileInfo]] = None
+        cached_file_info: Optional[List[FileInfo]] = None,
+        pipeline_tool_config: Optional[Any] = None,
     ) -> JobResult:
         """
         Run PhotoStats analysis on local or remote collection.
@@ -761,8 +782,16 @@ class JobExecutor:
                     files_scanned=len(file_infos)
                 )
 
+                # Override config extensions with Pipeline-derived values (Issue #217)
+                effective_config = config
+                if pipeline_tool_config is not None:
+                    effective_config = dict(config)
+                    effective_config["photo_extensions"] = list(pipeline_tool_config.photo_extensions)
+                    effective_config["metadata_extensions"] = list(pipeline_tool_config.metadata_extensions)
+                    effective_config["require_sidecar"] = list(pipeline_tool_config.require_sidecar)
+
                 # Process files using shared analysis module (same for local and remote)
-                results = self._process_photostats_files(file_infos, config)
+                results = self._process_photostats_files(file_infos, effective_config)
 
                 # Add scan duration
                 results['scan_time'] = time.time() - start_time
@@ -806,7 +835,8 @@ class JobExecutor:
         collection_path: Optional[str],
         config: Dict[str, Any],
         connector: Optional[Dict[str, Any]] = None,
-        cached_file_info: Optional[List[FileInfo]] = None
+        cached_file_info: Optional[List[FileInfo]] = None,
+        pipeline_tool_config: Optional[Any] = None,
     ) -> JobResult:
         """
         Run Photo Pairing analysis on local or remote collection.
@@ -880,9 +910,12 @@ class JobExecutor:
                     logger.info(f"Listing files from collection: {normalized_path}")
                     all_files = adapter.list_files_with_metadata(normalized_path)
 
-                # Filter to photo extensions
-                photo_extensions = set(config.get('photo_extensions', []))
-                photo_exts_lower = {ext.lower() for ext in photo_extensions}
+                # Use Pipeline-derived extensions when available (Issue #217)
+                if pipeline_tool_config is not None:
+                    photo_exts_lower = set(pipeline_tool_config.photo_extensions)
+                else:
+                    photo_extensions = set(config.get('photo_extensions', []))
+                    photo_exts_lower = {ext.lower() for ext in photo_extensions}
                 photo_files = [f for f in all_files if f.extension in photo_exts_lower]
                 logger.info(f"Found {len(photo_files)} photo files in collection")
 
@@ -894,8 +927,15 @@ class JobExecutor:
                     files_scanned=len(photo_files)
                 )
 
-                # Use SHARED analysis (same code path for local and remote)
-                result = build_imagegroups(photo_files)
+                # Use Pipeline regex for filename parsing when available (Issue #217 US2)
+                if pipeline_tool_config is not None and pipeline_tool_config.filename_regex:
+                    result = build_imagegroups(
+                        photo_files,
+                        filename_regex=pipeline_tool_config.filename_regex,
+                        camera_id_group=pipeline_tool_config.camera_id_group,
+                    )
+                else:
+                    result = build_imagegroups(photo_files)
                 imagegroups = result['imagegroups']
                 invalid_files = result['invalid_files']
 
@@ -906,8 +946,14 @@ class JobExecutor:
                     message="Calculating analytics..."
                 )
 
+                # Build analytics config with Pipeline-derived label resolution (Issue #217)
+                analytics_config = dict(config)
+                if pipeline_tool_config is not None:
+                    analytics_config["processing_methods"] = pipeline_tool_config.processing_suffixes
+
                 # Calculate analytics with config for label resolution
-                analytics = calculate_analytics(imagegroups, config)
+                # Camera entities are created server-side from camera_usage in results
+                analytics = calculate_analytics(imagegroups, analytics_config)
 
                 scan_duration = time.time() - start_time
 

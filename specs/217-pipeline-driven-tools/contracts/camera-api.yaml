@@ -1,0 +1,165 @@
+# Camera API Contract
+# User-facing endpoints for Camera CRUD and statistics
+# All endpoints require authentication (TenantContext)
+
+paths:
+  /api/cameras:
+    get:
+      summary: List cameras
+      description: Paginated, team-scoped list of cameras with optional filtering
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [temporary, confirmed] }
+        - name: search
+          in: query
+          description: Search by camera_id, display_name, make, or model
+          schema: { type: string }
+      responses:
+        200:
+          description: Paginated camera list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CameraResponse' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+  /api/cameras/stats:
+    get:
+      summary: Camera statistics
+      description: Aggregated KPIs for TopHeader display
+      responses:
+        200:
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CameraStatsResponse' }
+
+  /api/cameras/{guid}:
+    get:
+      summary: Get camera by GUID
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema: { type: string, pattern: '^cam_[a-z0-9]{26}$' }
+      responses:
+        200:
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CameraResponse' }
+        404:
+          description: Camera not found (or belongs to different team)
+
+    put:
+      summary: Update camera
+      description: Update camera details (confirm status, add make/model/serial)
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema: { type: string, pattern: '^cam_[a-z0-9]{26}$' }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CameraUpdateRequest' }
+      responses:
+        200:
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CameraResponse' }
+        404:
+          description: Camera not found
+
+    delete:
+      summary: Delete camera
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema: { type: string, pattern: '^cam_[a-z0-9]{26}$' }
+      responses:
+        200:
+          description: Camera deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CameraDeleteResponse' }
+        404:
+          description: Camera not found
+
+components:
+  schemas:
+    CameraResponse:
+      type: object
+      required: [guid, camera_id, status, created_at, updated_at]
+      properties:
+        guid: { type: string, example: "cam_01hgw2bbg0000000000000001" }
+        camera_id: { type: string, example: "AB3D" }
+        status: { type: string, enum: [temporary, confirmed] }
+        display_name: { type: string, nullable: true, example: "Canon EOS R5" }
+        make: { type: string, nullable: true, example: "Canon" }
+        model: { type: string, nullable: true, example: "EOS R5" }
+        serial_number: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        metadata_json: { type: object, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        audit:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AuditInfo'
+
+    CameraUpdateRequest:
+      type: object
+      properties:
+        status: { type: string, enum: [temporary, confirmed] }
+        display_name: { type: string, maxLength: 100 }
+        make: { type: string, maxLength: 100 }
+        model: { type: string, maxLength: 100 }
+        serial_number: { type: string, maxLength: 100 }
+        notes: { type: string, maxLength: 1000 }
+
+    CameraDeleteResponse:
+      type: object
+      required: [message, deleted_guid]
+      properties:
+        message: { type: string }
+        deleted_guid: { type: string, example: "cam_01hgw2bbg0000000000000001" }
+
+    CameraStatsResponse:
+      type: object
+      required: [total_cameras, confirmed_count, temporary_count]
+      properties:
+        total_cameras: { type: integer }
+        confirmed_count: { type: integer }
+        temporary_count: { type: integer }
+
+    AuditInfo:
+      type: object
+      description: Shared audit schema (from backend/src/schemas/audit.py)
+      properties:
+        created_at: { type: string, format: date-time }
+        created_by:
+          type: object
+          nullable: true
+          properties:
+            guid: { type: string }
+            display_name: { type: string }
+        updated_at: { type: string, format: date-time }
+        updated_by:
+          type: object
+          nullable: true
+          properties:
+            guid: { type: string }
+            display_name: { type: string }

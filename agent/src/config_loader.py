@@ -67,6 +67,10 @@ class ApiConfigLoader:
         # Extract config from response
         config_data = response.get("config", {})
 
+        # Remap server field name 'cameras' → 'camera_mappings' used by agent code
+        if "cameras" in config_data and "camera_mappings" not in config_data:
+            config_data["camera_mappings"] = config_data.pop("cameras")
+
         # Add job-specific fields
         config_data["collection_path"] = response.get("collection_path")
         config_data["pipeline_guid"] = response.get("pipeline_guid")

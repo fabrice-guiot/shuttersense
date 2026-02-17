@@ -227,6 +227,9 @@ backend/.env
 agent/src/_version.py
 debug-dump_*.md
 
+# Regression validation snapshots
+snapshots/
+
 # Agent binary distribution - allow version directories to be committed
 # Override the generic dist/ rule from line 13
 !agent/dist/

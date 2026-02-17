@@ -176,13 +176,14 @@ class InputStateComputer:
             "photo_extensions",
             "metadata_extensions",
             "require_sidecar",
-            "cameras",
+            "camera_mappings",
             "processing_methods",
             "pipeline",  # Pipeline rules affect validation
+            "pipeline_tool_config",  # Pipeline-derived tool config (Issue #217)
         ]
 
         result = {k: config[k] for k in relevant_keys if k in config}
-        result["_hash_version"] = 2  # v2: results now include path_stats
+        result["_hash_version"] = 3  # v3: camera_mappings key + Camera repo merge
         return result
 
     def compute_input_state_hash(

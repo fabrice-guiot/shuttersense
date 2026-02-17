@@ -92,6 +92,9 @@ from backend.src.models.inventory_folder import InventoryFolder
 from backend.src.models.push_subscription import PushSubscription
 from backend.src.models.notification import Notification
 
+# Camera equipment tracking (Issue #217)
+from backend.src.models.camera import Camera
+
 # Export Base and all models
 __all__ = [
     "Base",
@@ -151,4 +154,6 @@ __all__ = [
     # Push Notifications (Issue #114)
     "PushSubscription",
     "Notification",
+    # Camera equipment tracking (Issue #217)
+    "Camera",
 ]

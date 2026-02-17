@@ -1038,13 +1038,13 @@ async def get_job_config(
         collection_path = job.collection.location
 
     # Get pipeline data if applicable
-    # If job has no pipeline assigned, use the default pipeline for pipeline_validation tool
+    # If job has no pipeline assigned, resolve the team's default pipeline (Issue #217)
     pipeline_guid = None
     pipeline_data = None
     pipeline = job.pipeline
 
     # Resolve default pipeline if job has no explicit pipeline
-    if not pipeline and job.tool == "pipeline_validation":
+    if not pipeline:
         from backend.src.models.pipeline import Pipeline
         pipeline = db.query(Pipeline).filter(
             Pipeline.team_id == ctx.team_id,
@@ -1118,12 +1118,40 @@ async def get_job_config(
             credentials=credentials,
         )
 
+    # Merge Camera repo data into camera_mappings so that user-edited
+    # display names, make, model, serial_number are included in the config
+    # (and therefore in the input hash for no-change detection).
+    from backend.src.models.camera import Camera as CameraModel
+    camera_mappings = dict(loader.camera_mappings)
+    repo_cameras = db.query(CameraModel).filter(
+        CameraModel.team_id == ctx.team_id,
+    ).all()
+    for cam in repo_cameras:
+        repo_info = {}
+        if cam.display_name:
+            repo_info["name"] = cam.display_name
+        if cam.make:
+            repo_info["make"] = cam.make
+        if cam.model:
+            repo_info["model"] = cam.model
+        if cam.serial_number:
+            repo_info["serial_number"] = cam.serial_number
+        if repo_info:
+            if cam.camera_id in camera_mappings:
+                # Merge: repo overrides config
+                existing = camera_mappings[cam.camera_id]
+                base = existing[0] if isinstance(existing, list) and existing else {}
+                merged = {**base, **repo_info}
+                camera_mappings[cam.camera_id] = [merged]
+            else:
+                camera_mappings[cam.camera_id] = [repo_info]
+
     return JobConfigResponse(
         job_guid=job.guid,
         config=JobConfigData(
             photo_extensions=loader.photo_extensions,
             metadata_extensions=loader.metadata_extensions,
-            cameras=loader.camera_mappings,
+            cameras=camera_mappings,
             processing_methods=loader.processing_methods,
             require_sidecar=loader.require_sidecar,
         ),
@@ -1178,11 +1206,36 @@ async def get_team_config(
             edges=pipeline.edges_json or [],
         )
 
+    # Merge Camera repo data into camera_mappings (same as get_job_config)
+    from backend.src.models.camera import Camera as CameraModel
+    camera_mappings = dict(loader.camera_mappings)
+    repo_cameras = db.query(CameraModel).filter(
+        CameraModel.team_id == ctx.team_id,
+    ).all()
+    for cam in repo_cameras:
+        repo_info = {}
+        if cam.display_name:
+            repo_info["name"] = cam.display_name
+        if cam.make:
+            repo_info["make"] = cam.make
+        if cam.model:
+            repo_info["model"] = cam.model
+        if cam.serial_number:
+            repo_info["serial_number"] = cam.serial_number
+        if repo_info:
+            if cam.camera_id in camera_mappings:
+                existing = camera_mappings[cam.camera_id]
+                base = existing[0] if isinstance(existing, list) and existing else {}
+                merged = {**base, **repo_info}
+                camera_mappings[cam.camera_id] = [merged]
+            else:
+                camera_mappings[cam.camera_id] = [repo_info]
+
     return TeamConfigResponse(
         config=JobConfigData(
             photo_extensions=loader.photo_extensions,
             metadata_extensions=loader.metadata_extensions,
-            cameras=loader.camera_mappings,
+            cameras=camera_mappings,
             processing_methods=loader.processing_methods,
             require_sidecar=loader.require_sidecar,
         ),
