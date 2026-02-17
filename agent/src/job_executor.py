@@ -946,31 +946,13 @@ class JobExecutor:
                     message="Calculating analytics..."
                 )
 
-                # Camera discovery (Issue #217 US3)
-                camera_ids = sorted(set(g["camera_id"] for g in imagegroups if g.get("camera_id")))
-                if camera_ids:
-                    try:
-                        cameras = self._api_client.discover_cameras(camera_ids)
-                        camera_names = {
-                            cam["camera_id"]: cam.get("display_name") or cam["camera_id"]
-                            for cam in cameras
-                        }
-                    except Exception as e:
-                        logger.warning("Camera discovery failed, using raw IDs: %s", e)
-                        camera_names = {cam_id: cam_id for cam_id in camera_ids}
-                else:
-                    camera_names = {}
-
-                # Build analytics config with Pipeline-derived label resolution
+                # Build analytics config with Pipeline-derived label resolution (Issue #217)
                 analytics_config = dict(config)
                 if pipeline_tool_config is not None:
                     analytics_config["processing_methods"] = pipeline_tool_config.processing_suffixes
-                if camera_names:
-                    analytics_config["camera_mappings"] = {
-                        cam_id: [{"name": name}] for cam_id, name in camera_names.items()
-                    }
 
-                # Calculate analytics with enriched config for label resolution
+                # Calculate analytics with config for label resolution
+                # Camera entities are created server-side from camera_usage in results
                 analytics = calculate_analytics(imagegroups, analytics_config)
 
                 scan_duration = time.time() - start_time

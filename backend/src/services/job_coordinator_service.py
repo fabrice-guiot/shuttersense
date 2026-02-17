@@ -1208,6 +1208,24 @@ class JobCoordinatorService:
         # Update collection statistics from tool results
         self._update_collection_stats_from_results(job, completion_data)
 
+        # Auto-discover cameras from analysis results (Issue #217)
+        if completion_data.results:
+            camera_usage = completion_data.results.get("camera_usage")
+            if camera_usage and isinstance(camera_usage, dict):
+                try:
+                    from backend.src.services.camera_service import CameraService
+                    camera_service = CameraService(db=self.db)
+                    camera_ids = list(camera_usage.keys())
+                    camera_service.discover_cameras(
+                        team_id=team_id,
+                        camera_ids=camera_ids,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Camera auto-discovery from results failed: %s", e,
+                        extra={"job_guid": job.guid},
+                    )
+
         # Complete the job
         job.complete(result_id=result.id)
         if user_id is not None:
