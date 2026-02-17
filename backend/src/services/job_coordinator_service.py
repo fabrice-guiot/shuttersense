@@ -1439,6 +1439,20 @@ class JobCoordinatorService:
         self.db.add(result)
         self.db.flush()
 
+        # Auto-discover cameras from copied results (Issue #217)
+        if source_result.results_json:
+            camera_usage = source_result.results_json.get("camera_usage")
+            if camera_usage and isinstance(camera_usage, dict):
+                try:
+                    from backend.src.services.camera_service import CameraService
+                    camera_service = CameraService(db=self.db)
+                    camera_service.discover_cameras(
+                        team_id=team_id,
+                        camera_ids=list(camera_usage.keys()),
+                    )
+                except Exception as e:
+                    logger.warning("Camera auto-discovery from no-change results failed: %s", e)
+
         # Complete the job
         job.complete(result_id=result.id)
         job.progress = None
