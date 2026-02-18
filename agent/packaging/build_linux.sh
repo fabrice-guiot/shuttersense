@@ -118,9 +118,22 @@ pyinstaller \
 BINARY_PATH="$OUTPUT_DIR/$BINARY_NAME"
 if [ -f "$BINARY_PATH" ]; then
     CHECKSUM=$(sha256sum "$BINARY_PATH" | cut -d' ' -f1)
+    FILE_SIZE=$(stat --printf="%s" "$BINARY_PATH" 2>/dev/null || stat -f%z "$BINARY_PATH" 2>/dev/null || echo "0")
     echo "$CHECKSUM" > "$BINARY_PATH.sha256"
     echo "Build complete: $BINARY_PATH"
     echo "SHA-256: $CHECKSUM"
+    echo "Size: $FILE_SIZE bytes"
+
+    # Generate Alembic migration for this release (Issue #241)
+    if [ -f "$SCRIPT_DIR/generate_migration.sh" ]; then
+        echo ""
+        "$SCRIPT_DIR/generate_migration.sh" \
+            --version "$VERSION" \
+            --platform "$PLATFORM" \
+            --checksum "$CHECKSUM" \
+            --filename "$BINARY_NAME" \
+            --file-size "$FILE_SIZE"
+    fi
 else
     echo "Error: Binary not found at $BINARY_PATH"
     exit 1
