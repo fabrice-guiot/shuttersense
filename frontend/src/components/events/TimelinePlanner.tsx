@@ -9,6 +9,7 @@
 
 import { useState, useMemo, useRef, useCallback } from 'react'
 import { Filter, AlertTriangle } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import {
   Select,
@@ -20,6 +21,7 @@ import {
 import { TimelineEventMarker } from './TimelineEventMarker'
 import type { TimelineEventMarkerHandle } from './TimelineEventMarker'
 import { RadarComparisonDialog } from './RadarComparisonDialog'
+import { useResolveConflict } from '@/hooks/useResolveConflict'
 import type {
   ScoredEvent,
   ConflictGroup,
@@ -39,6 +41,10 @@ interface TimelinePlannerProps {
   categories?: CategoryInfo[]
   scoringWeights?: ScoringWeightsResponse
   onEventClick?: (event: ScoredEvent) => void
+  /** Open the full event detail dialog */
+  onViewEvent?: (event: ScoredEvent) => void
+  /** Open the event edit dialog */
+  onEditEvent?: (event: ScoredEvent) => void
   onResolved?: () => void
   className?: string
 }
@@ -176,12 +182,18 @@ export function TimelinePlanner({
   categories = [],
   scoringWeights,
   onEventClick,
+  onViewEvent,
+  onEditEvent,
   onResolved,
   className,
 }: TimelinePlannerProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [conflictFilter, setConflictFilter] = useState<ConflictFilter>('all')
   const [compareGroup, setCompareGroup] = useState<ConflictGroup | null>(null)
+
+  const { resolve, loading: resolveLoading } = useResolveConflict({
+    onSuccess: () => onResolved?.(),
+  })
 
   const markerRefs = useRef<Map<string, TimelineEventMarkerHandle>>(new Map())
 
@@ -260,6 +272,34 @@ export function TimelinePlanner({
     }
   }, [sortedEvents])
 
+  /** Skip an event by marking attendance as 'skipped' in its conflict group */
+  const handleSkip = useCallback(async (event: ScoredEvent) => {
+    const group = findEventGroup(event.guid, conflictGroups)
+    if (!group) return
+    try {
+      await resolve({
+        group_id: group.group_id,
+        decisions: [{ event_guid: event.guid, attendance: 'skipped' as const }],
+      })
+    } catch (err: any) {
+      toast.error(err.userMessage || 'Failed to skip event')
+    }
+  }, [conflictGroups, resolve])
+
+  /** Restore a skipped event by marking attendance as 'planned' */
+  const handleRestore = useCallback(async (event: ScoredEvent) => {
+    const group = findEventGroup(event.guid, conflictGroups)
+    if (!group) return
+    try {
+      await resolve({
+        group_id: group.group_id,
+        decisions: [{ event_guid: event.guid, attendance: 'planned' as const }],
+      })
+    } catch (err: any) {
+      toast.error(err.userMessage || 'Failed to restore event')
+    }
+  }, [conflictGroups, resolve])
+
   // Loading state
   if (loading) {
     return (
@@ -334,6 +374,8 @@ export function TimelinePlanner({
                     event={segment.event}
                     scoringWeights={scoringWeights}
                     onClick={() => onEventClick?.(segment.event)}
+                    onView={onViewEvent}
+                    onEdit={onEditEvent}
                   />
                 </div>
               )
@@ -356,6 +398,12 @@ export function TimelinePlanner({
                       event={event}
                       scoringWeights={scoringWeights}
                       onClick={() => onEventClick?.(event)}
+                      onView={onViewEvent}
+                      onEdit={onEditEvent}
+                      onSkip={handleSkip}
+                      onRestore={handleRestore}
+                      conflictGroupStatus={segment.group.status}
+                      actionLoading={resolveLoading}
                     />
                   </div>
                 ))}

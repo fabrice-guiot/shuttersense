@@ -10,6 +10,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle, BarChart3 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,6 +51,7 @@ import { useScoringWeights } from '@/hooks/useScoringWeights'
 import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest, EventPreset } from '@/contracts/api/event-api'
+import type { ScoredEvent } from '@/contracts/api/conflict-api'
 
 const PRESET_LABELS: Record<EventPreset, { icon: typeof Calendar; label: string }> = {
   upcoming_30d: { icon: Calendar, label: 'Upcoming' },
@@ -330,6 +332,7 @@ export default function EventsPage() {
   const fetchEventDetails = async (eventGuid: string): Promise<EventDetail | null> => {
     try {
       const response = await fetch(`/api/events/${eventGuid}`)
+      if (!response.ok) return null
       return await response.json()
     } catch {
       return null
@@ -426,6 +429,26 @@ export default function EventsPage() {
       await refetch()
       await refetchStats()
       refetchConflicts()
+    }
+  }
+
+  // Handle planner view click — open event detail dialog from a ScoredEvent
+  const handlePlannerViewEvent = async (scoredEvent: ScoredEvent) => {
+    const fullEvent = await fetchEventDetails(scoredEvent.guid)
+    if (fullEvent) {
+      setSelectedEvent(fullEvent)
+    } else {
+      toast.error('Failed to load event details')
+    }
+  }
+
+  // Handle planner edit click — open edit dialog directly from a ScoredEvent
+  const handlePlannerEditEvent = async (scoredEvent: ScoredEvent) => {
+    const fullEvent = await fetchEventDetails(scoredEvent.guid)
+    if (fullEvent) {
+      setEditEvent(fullEvent)
+    } else {
+      toast.error('Failed to load event details')
     }
   }
 
@@ -732,7 +755,12 @@ export default function EventsPage() {
               loading={conflictLoading}
               categories={categories.map(c => ({ guid: c.guid, name: c.name, icon: c.icon, color: c.color }))}
               scoringWeights={scoringWeights ?? undefined}
-              onResolved={refetchConflicts}
+              onViewEvent={handlePlannerViewEvent}
+              onEditEvent={handlePlannerEditEvent}
+              onResolved={() => {
+                refetchConflicts()
+                refetchStats()
+              }}
             />
           </div>
         </div>
