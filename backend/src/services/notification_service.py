@@ -1102,6 +1102,17 @@ class NotificationService:
                 "category": "agent_status",
                 "agent_guid": agent.guid,
             }
+        elif transition_type == "agent_outdated":
+            agent_version = getattr(agent, 'version', 'unknown') or 'unknown'
+            title = "Agent Outdated"
+            body = f'Agent "{agent.name}" (v{agent_version}) has a newer version available.'
+            tag = f"agent_outdated_{agent.guid}"
+            url = f"/agents/{agent.guid}"
+            data = {
+                "url": url,
+                "category": "agent_status",
+                "agent_guid": agent.guid,
+            }
         elif transition_type == "pool_recovery":
             title = "Agents Available"
             body = f'Agent "{agent.name}" is back online. Job processing has resumed.'

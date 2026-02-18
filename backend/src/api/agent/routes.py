@@ -276,6 +276,8 @@ def agent_to_response(
         capabilities=agent.capabilities,
         authorized_roots=agent.authorized_roots,
         version=agent.version,
+        platform=agent.platform,
+        is_outdated=agent.is_outdated,
         created_at=agent.created_at,
         team_guid=agent.team.guid if agent.team else "",
         current_job_guid=current_job_guid,
@@ -433,10 +435,20 @@ async def send_heartbeat(
         manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
     )
 
+    # Trigger outdated notification if agent just became outdated
+    if result.became_outdated:
+        _trigger_agent_notification(
+            agent=result.agent,
+            team_id=ctx.team_id,
+            transition_type="agent_outdated",
+        )
+
     return HeartbeatResponse(
         acknowledged=True,
         server_time=datetime.utcnow(),
         pending_commands=pending_commands,
+        is_outdated=result.agent.is_outdated,
+        latest_version=result.latest_version,
     )
 
 
@@ -1718,6 +1730,7 @@ async def get_pool_status(
         online_count=status_data["online_count"],
         offline_count=status_data["offline_count"],
         idle_count=status_data["idle_count"],
+        outdated_count=status_data["outdated_count"],
         running_jobs_count=status_data["running_jobs_count"],
         status=status_data["status"],
     )
@@ -3954,6 +3967,8 @@ async def get_agent_detail(
         capabilities=agent.capabilities,
         authorized_roots=agent.authorized_roots,
         version=agent.version,
+        platform=agent.platform,
+        is_outdated=agent.is_outdated,
         created_at=agent.created_at,
         team_guid=agent.team.guid if agent.team else "",
         current_job_guid=current_job.guid if current_job else None,
