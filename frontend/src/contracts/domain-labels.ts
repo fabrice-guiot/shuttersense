@@ -37,6 +37,7 @@ import {
 import type { ConnectorType } from './api/connector-api'
 import type { ConflictType } from './api/conflict-api'
 import type { CollectionType, CollectionState } from './api/collection-api'
+import type { AgentStatus } from './api/agent-api'
 
 // ============================================================================
 // Domain Object Icons
@@ -442,6 +443,43 @@ export const NOTIFICATION_CATEGORY_ICONS: Record<NotificationCategory, LucideIco
   conflict: AlertTriangle,
   retry_warning: RefreshCw
 }
+
+// ============================================================================
+// Agent Status (Issue #242 - Outdated Agent Detection)
+// ============================================================================
+
+/**
+ * Human-readable labels for agent statuses
+ */
+export const AGENT_STATUS_LABELS: Record<AgentStatus, string> = {
+  online: 'Online',
+  offline: 'Offline',
+  error: 'Error',
+  revoked: 'Revoked',
+}
+
+/**
+ * Label for the derived "outdated" display state (online + outdated)
+ */
+export const AGENT_OUTDATED_LABEL = 'Outdated'
+
+/**
+ * Badge variants for agent statuses
+ */
+export const AGENT_STATUS_BADGE_VARIANT: Record<
+  AgentStatus,
+  'success' | 'secondary' | 'destructive' | 'outline'
+> = {
+  online: 'success',
+  offline: 'secondary',
+  error: 'destructive',
+  revoked: 'outline',
+}
+
+/**
+ * Badge variant for the derived "outdated" display state
+ */
+export const AGENT_OUTDATED_BADGE_VARIANT = 'warning' as const
 
 /**
  * Short descriptions for notification category preference toggles
