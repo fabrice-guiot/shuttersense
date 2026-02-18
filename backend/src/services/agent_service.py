@@ -521,6 +521,7 @@ class AgentService:
         capabilities: Optional[List[str]] = None,
         authorized_roots: Optional[List[str]] = None,
         version: Optional[str] = None,
+        binary_checksum: Optional[str] = None,
         metrics: Optional[dict] = None
     ) -> HeartbeatResult:
         """
@@ -538,6 +539,7 @@ class AgentService:
             capabilities: Updated capabilities list
             authorized_roots: Updated authorized roots list
             version: Updated agent version
+            binary_checksum: Updated binary checksum (sent after self-update)
             metrics: System resource metrics (cpu_percent, memory_percent, disk_free_gb)
 
         Returns:
@@ -599,6 +601,9 @@ class AgentService:
 
         if version is not None:
             agent.version = version
+
+        if binary_checksum is not None:
+            agent.binary_checksum = binary_checksum
 
         # Update metrics if provided
         if metrics is not None:
@@ -665,6 +670,7 @@ class AgentService:
                 break
 
         if not matching_manifest:
+            agent.is_outdated = False
             return None, False
 
         latest_version = matching_manifest.version

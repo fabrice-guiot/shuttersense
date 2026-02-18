@@ -212,6 +212,7 @@ class AgentApiClient:
         capabilities: Optional[list[str]] = None,
         authorized_roots: Optional[list[str]] = None,
         version: Optional[str] = None,
+        binary_checksum: Optional[str] = None,
         current_job_guid: Optional[str] = None,
         current_job_progress: Optional[dict[str, Any]] = None,
         error_message: Optional[str] = None,
@@ -225,6 +226,7 @@ class AgentApiClient:
             capabilities: Updated capabilities list (if changed)
             authorized_roots: Updated authorized roots list (if changed)
             version: Updated version (if changed)
+            binary_checksum: Updated binary checksum (sent after self-update)
             current_job_guid: GUID of job currently being executed
             current_job_progress: Progress info for current job
             error_message: Error message if status is error
@@ -246,6 +248,8 @@ class AgentApiClient:
             payload["authorized_roots"] = authorized_roots
         if version is not None:
             payload["version"] = version
+        if binary_checksum is not None:
+            payload["binary_checksum"] = binary_checksum
         if current_job_guid:
             payload["current_job_guid"] = current_job_guid
         if current_job_progress:

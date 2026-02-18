@@ -198,6 +198,10 @@ class HeartbeatRequest(BaseModel):
         max_length=50,
         description="Agent version (if changed)"
     )
+    binary_checksum: Optional[str] = Field(
+        None,
+        description="SHA-256 checksum of agent binary (sent after self-update)"
+    )
     metrics: Optional[AgentMetrics] = Field(
         None,
         description="System resource metrics (CPU, memory, disk)"

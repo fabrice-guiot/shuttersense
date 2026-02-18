@@ -405,6 +405,7 @@ async def send_heartbeat(
         capabilities=data.capabilities,
         authorized_roots=data.authorized_roots,
         version=data.version,
+        binary_checksum=data.binary_checksum,
         error_message=data.error_message,
         metrics=metrics_dict,
     )
