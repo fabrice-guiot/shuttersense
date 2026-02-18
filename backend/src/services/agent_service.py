@@ -427,7 +427,7 @@ class AgentService:
 
         # Check if any manifests exist (bootstrap check)
         manifest_count = self.db.query(func.count(ReleaseManifest.id)).filter(
-            ReleaseManifest.is_active == True
+            ReleaseManifest.is_active.is_(True)
         ).scalar() or 0
 
         if manifest_count == 0:
@@ -643,10 +643,17 @@ class AgentService:
         Finds the latest active release manifest that supports the agent's
         platform and compares its checksum against the agent's binary_checksum.
         Updates agent.is_outdated accordingly.
+
+        Args:
+            agent: Agent to check for outdated status.
+
+        Returns:
+            Tuple of (latest_version, became_outdated) where latest_version is
+            the manifest version string or None if no matching manifest exists.
         """
         active_manifests = (
             self.db.query(ReleaseManifest)
-            .filter(ReleaseManifest.is_active == True)
+            .filter(ReleaseManifest.is_active.is_(True))
             .order_by(ReleaseManifest.created_at.desc())
             .all()
         )
@@ -1179,7 +1186,7 @@ class AgentService:
         # Count outdated agents (online or offline, excluding revoked)
         outdated_count = self.db.query(func.count(Agent.id)).filter(
             Agent.team_id == team_id,
-            Agent.is_outdated == True,
+            Agent.is_outdated.is_(True),
             Agent.status != AgentStatus.REVOKED
         ).scalar() or 0
 

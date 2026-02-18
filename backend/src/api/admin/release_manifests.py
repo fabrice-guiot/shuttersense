@@ -339,6 +339,10 @@ async def create_release_manifest(
                         ),
                     )
 
+        # Auto-cleanup old manifests for each platform (Issue #240)
+        # Run cleanup before commit so both creation and cleanup are atomic.
+        cleanup_old_manifests(db, manifest.platforms)
+
         db.commit()
         db.refresh(manifest)
 
@@ -354,10 +358,6 @@ async def create_release_manifest(
                 "is_active": manifest.is_active,
             }
         )
-
-        # Auto-cleanup old manifests for each platform (Issue #240)
-        cleanup_old_manifests(db, manifest.platforms)
-        db.commit()
 
         return manifest_to_response(manifest)
 

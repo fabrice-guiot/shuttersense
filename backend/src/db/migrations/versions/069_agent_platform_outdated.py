@@ -23,7 +23,7 @@ def upgrade() -> None:
     """Add platform and is_outdated to agents."""
     op.add_column('agents', sa.Column('platform', sa.String(50), nullable=True))
     op.add_column('agents', sa.Column(
-        'is_outdated', sa.Boolean(), server_default='false', nullable=False
+        'is_outdated', sa.Boolean(), server_default=sa.false(), nullable=False
     ))
 
 

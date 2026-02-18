@@ -1057,7 +1057,7 @@ class NotificationService:
         Args:
             agent: Agent instance (must have .id, .guid, .name, .team)
             team_id: Team ID for tenant isolation
-            transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+            transition_type: One of "pool_offline", "agent_error", "agent_outdated", "pool_recovery"
             error_description: Error message (required for agent_error)
 
         Returns:

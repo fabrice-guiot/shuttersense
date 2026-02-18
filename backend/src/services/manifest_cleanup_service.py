@@ -34,9 +34,10 @@ def cleanup_old_manifests_for_platform(
 ) -> int:
     """Clean up old manifests for a single platform.
 
-    Finds all active manifests that list the given platform, orders them by
-    version DESC then created_at DESC, keeps the first MANIFEST_RETENTION_COUNT,
+    Finds all manifests that list the given platform, orders them by
+    created_at DESC, keeps the first MANIFEST_RETENTION_COUNT,
     and deactivates + deletes the rest (CASCADE removes artifacts).
+    Both active and inactive manifests count toward the retention window.
 
     Args:
         db: Database session (caller is responsible for committing).
@@ -47,16 +48,14 @@ def cleanup_old_manifests_for_platform(
     """
     platform_lower = platform.lower()
 
-    # Fetch all manifests that support this platform, ordered by version
-    # DESC then created_at DESC so the newest come first.
+    # Fetch all manifests ordered by created_at DESC so the newest come first.
+    # We use created_at (not version) because lexicographic string sort is
+    # incorrect for semver (e.g., "9.0.0" > "10.0.0").
     # Platform matching is done in Python since platforms_json is
     # JSONB on PostgreSQL and TEXT on SQLite.
     all_manifests: List[ReleaseManifest] = (
         db.query(ReleaseManifest)
-        .order_by(
-            ReleaseManifest.version.desc(),
-            ReleaseManifest.created_at.desc(),
-        )
+        .order_by(ReleaseManifest.created_at.desc())
         .all()
     )
 

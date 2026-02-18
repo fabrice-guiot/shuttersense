@@ -129,6 +129,13 @@ PLATFORM_CLEAN=$(echo "$PLATFORM" | tr '-' '_')
 VERSION_CLEAN=$(echo "$VERSION" | sed 's/^v//' | tr '.-+' '___')
 
 REVISION_ID="${NEXT_NUM_PADDED}_release_${VERSION_CLEAN}_${PLATFORM_CLEAN}"
+
+# Alembic stores revision IDs in a varchar(32) column. Truncate if needed.
+if [ ${#REVISION_ID} -gt 32 ]; then
+    REVISION_ID="${REVISION_ID:0:32}"
+    echo "Warning: Revision ID truncated to 32 chars: $REVISION_ID"
+fi
+
 CREATE_DATE=$(date +%Y-%m-%d)
 
 # Generate a UUIDv4 for the manifest (cross-platform)
