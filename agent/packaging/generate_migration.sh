@@ -62,6 +62,11 @@ if [ ${#missing[@]} -gt 0 ]; then
     exit 1
 fi
 
+if ! [[ "$FILE_SIZE" =~ ^[0-9]+$ ]]; then
+    echo "Error: --file-size must be a non-negative integer, got: '$FILE_SIZE'"
+    exit 1
+fi
+
 if [ ! -f "$TEMPLATE_FILE" ]; then
     echo "Error: Template file not found: $TEMPLATE_FILE"
     exit 1
@@ -113,7 +118,7 @@ if [ -z "$HEAD_FILE" ]; then
 fi
 
 # Extract the revision string from the head file (e.g., revision = '068_fix_cameras_uuid_type')
-DOWN_REVISION=$(grep -m1 "^revision = " "$HEAD_FILE" | sed "s/^revision = '//" | sed "s/'$//")
+DOWN_REVISION=$(grep -m1 "^revision = " "$HEAD_FILE" | sed "s/^revision = ['\"]//; s/['\"]$//")
 if [ -z "$DOWN_REVISION" ]; then
     echo "Error: Could not extract revision ID from $HEAD_FILE"
     exit 1

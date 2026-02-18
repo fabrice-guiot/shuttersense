@@ -1190,7 +1190,7 @@ class AgentService:
             Agent.status != AgentStatus.REVOKED
         ).scalar() or 0
 
-        # Determine overall status (priority: running > outdated > idle > offline)
+        # Determine overall status (priority: offline > running > outdated > idle)
         if online_count == 0:
             status = "offline"
         elif running_jobs_count > 0:
