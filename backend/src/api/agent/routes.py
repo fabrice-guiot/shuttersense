@@ -31,7 +31,7 @@ from backend.src.utils.websocket import get_connection_manager
 from backend.src.services.tool_service import _db_job_to_response
 
 from backend.src.db.database import get_db
-from backend.src.middleware.tenant import TenantContext, get_tenant_context
+from backend.src.middleware.tenant import TenantContext, get_tenant_context, get_optional_tenant_context
 from backend.src.models import AgentStatus
 from backend.src.services.agent_service import AgentService
 from backend.src.services.connector_service import ConnectorService
@@ -130,7 +130,7 @@ from backend.src.services.download_service import (
 )
 from backend.src.config.settings import get_settings
 from fastapi.responses import FileResponse
-from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
+from backend.src.api.agent.dependencies import AgentContext, get_agent_context, get_optional_agent_context, require_online_agent
 
 
 # Create router with prefix and tags
@@ -3644,28 +3644,36 @@ async def get_previous_result_for_collection(
 @router.get("/releases/active", response_model=ActiveReleaseResponse)
 async def get_active_release(
     db: Session = Depends(get_db),
-    ctx: TenantContext = Depends(get_tenant_context),
+    _agent_ctx: Optional[AgentContext] = Depends(get_optional_agent_context),
+    _tenant_ctx: Optional[TenantContext] = Depends(get_optional_tenant_context),
 ):
     """
     Get the currently active release manifest with per-platform artifacts.
 
     Returns the active release manifest with download URLs for each platform.
-    Used by the Agent Setup Wizard to determine which binaries are available.
+    Used by both the Agent Setup Wizard (session auth) and agent CLI (API key auth).
 
     If multiple manifests are active, returns the one with the highest version
     (by string sort descending, then most recently created).
 
     Args:
         db: Database session dependency.
-        ctx: Tenant context enforcing session-based authentication.
+        _agent_ctx: Optional agent API key auth (for agent CLI).
+        _tenant_ctx: Optional user session/JWT auth (for frontend wizard).
 
     Returns:
         ActiveReleaseResponse with guid, version, artifacts, and dev_mode flag.
 
     Raises:
-        HTTPException(401): If the request is not authenticated.
+        HTTPException(401): If neither agent nor user auth is provided.
         HTTPException(404): If no active release manifest exists.
     """
+    if _agent_ctx is None and _tenant_ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
     settings = get_settings()
 
     # Find the active manifest with highest version
