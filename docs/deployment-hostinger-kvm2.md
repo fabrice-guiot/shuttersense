@@ -2214,3 +2214,105 @@ sudo /opt/shuttersense/scripts/auto-update-cron.sh
 - [ ] Database backups scheduled
 - [ ] Auto-updates scheduled (optional)
 - [ ] Critical keys backed up securely
+
+---
+
+## Addendum A: API Gateway Evaluation — Apache APISIX
+
+*Date: 2026-02-18*
+
+Apache APISIX was evaluated as a potential API gateway layer for ShutterSense. This addendum documents why it is not warranted for the current deployment and under what future conditions it should be reconsidered.
+
+### What APISIX Would Provide
+
+Apache APISIX is a high-performance, cloud-native API gateway built on NGINX and etcd. Its key capabilities include:
+
+- **Dynamic routing** — Real-time configuration changes via etcd without process restarts
+- **Gateway-level rate limiting** — Throttling before requests reach the application
+- **Circuit breaking** — Automatic upstream failure detection and recovery
+- **Canary/blue-green deployments** — Traffic splitting across service versions
+- **Active health checks** — Proactive upstream monitoring (active + passive)
+- **Multi-protocol support** — HTTP, gRPC, TCP/UDP, MQTT, Dubbo
+- **Observability plugins** — Native Prometheus, SkyWalking, and logging integrations
+- **Multi-language plugin system** — Lua (native), Java, Go, Python, Node.js via sidecars
+
+### Why APISIX Does Not Fit the Current Deployment
+
+#### 1. Infrastructure Overhead Exceeds Available Resources
+
+APISIX requires **etcd** as a distributed configuration store. This would change the deployment from:
+
+```
+nginx → Gunicorn/Uvicorn → PostgreSQL       (3 services)
+```
+
+to:
+
+```
+APISIX → etcd → Gunicorn/Uvicorn → PostgreSQL   (4 services)
+```
+
+On a **2 vCPU / 8 GB RAM** KVM2 instance already running nginx, Gunicorn (4 workers), and PostgreSQL, adding APISIX + etcd would consume meaningful memory and CPU. etcd alone recommends 2 GB RAM minimum for production stability.
+
+#### 2. Single-Server, Single-Backend Architecture
+
+APISIX is designed for **microservice architectures** where dynamic service discovery, multi-upstream routing, and cluster management provide value. ShutterSense runs as a single FastAPI monolith behind a single nginx reverse proxy. There is:
+
+- One backend service (no routing decisions to make)
+- One server (no cluster to coordinate)
+- No need for dynamic upstream reconfiguration
+
+The nginx configuration in section 9 handles this topology with ~170 lines of static config that changes only on deployment.
+
+#### 3. Security and Traffic Management Are Already Implemented
+
+The capabilities APISIX would bring are already covered at the application and OS level:
+
+| Capability | APISIX | Current Implementation |
+|---|---|---|
+| Rate limiting | Gateway plugin | `slowapi` in FastAPI (section 7.7) |
+| Brute-force protection | Rate limit plugin | Per-IP tracking with auto-block (SEC-13) |
+| Authentication | JWT/OAuth plugins | OAuth 2.0 PKCE + JWT + Agent keys (section 12) |
+| Security headers | Plugin | FastAPI `SecurityHeadersMiddleware` |
+| Request size limits | Plugin | FastAPI `RequestSizeLimitMiddleware` |
+| IP blocking | IP restriction plugin | Fail2ban + UFW + Hostinger firewall (section 5) |
+| Geofencing | GeoIP plugin | MaxMind GeoIP middleware (section 13) |
+| TLS termination | Built-in | nginx + Let's Encrypt (sections 8-9) |
+| DDoS mitigation | Traffic plugin | Hostinger cloud firewall + Fail2ban recidive |
+
+Migrating any of these to APISIX would mean rewriting working, tested middleware with no functional gain — only a change in where the logic executes.
+
+#### 4. Operational Complexity for a Small Team
+
+- **etcd operations** — Requires monitoring, backup, and recovery procedures for a distributed key-value store. A single-node etcd is a single point of failure; a clustered etcd requires 3+ nodes.
+- **Lua expertise** — Custom plugin development requires Lua knowledge. The Python/Go/Node.js plugin runners are available but add sidecar processes.
+- **Limited dashboard** — Day-to-day management is API/CLI-driven. The current nginx config is simpler to audit and modify.
+- **Vendor lock-in** — APISIX-specific route and plugin configurations are not portable. The current nginx config is industry-standard.
+
+#### 5. No Multi-Protocol Requirements
+
+ShutterSense uses HTTP/HTTPS and WebSocket. APISIX's support for gRPC, MQTT, Dubbo, and raw TCP/UDP provides no benefit to this application.
+
+### When to Reconsider APISIX
+
+APISIX should be re-evaluated if ShutterSense evolves toward any of the following:
+
+| Trigger | Why APISIX Helps |
+|---|---|
+| **Splitting into microservices** | Dynamic service discovery and routing across multiple backends |
+| **Multi-region deployment** | Traffic routing, failover, and geo-aware load balancing |
+| **Canary releases** | Gradual rollout of backend changes with traffic splitting |
+| **High API concurrency** | Gateway-level rate limiting before requests reach the app process |
+| **Moving to Kubernetes** | APISIX Ingress Controller replaces nginx Ingress with richer features |
+| **Adding gRPC services** | Native gRPC proxy and transcoding support |
+| **Dedicated infrastructure team** | Staff to operate etcd, monitor gateway metrics, and develop plugins |
+
+### Recommended Incremental Improvements Instead
+
+For the current single-server deployment, these provide gateway-level improvements without new infrastructure:
+
+1. **nginx `limit_req_zone`** — Add rate limiting at the nginx layer before requests reach Gunicorn, complementing the existing `slowapi` application-level limits
+2. **nginx `proxy_cache`** — Cache static API responses (e.g., `/api/version`, public documentation) to reduce backend load
+3. **Fail2ban tuning** — The current jails (section 5.4) already provide dynamic IP blocking; tune `findtime` and `maxretry` based on production traffic patterns
+
+These changes require only nginx configuration edits and are fully compatible with the current deployment architecture.
