@@ -1205,6 +1205,11 @@ class JobCoordinatorService:
         # Standard job completion - create analysis result
         result = self._create_analysis_result(job, completion_data, user_id=user_id)
 
+        # Issue #219: Mark inventory_import results as no-change when all deltas are empty
+        if job.tool == "inventory_import" and completion_data.results:
+            if completion_data.results.get("no_changes") is True:
+                result.status = ResultStatus.NO_CHANGE
+
         # Update collection statistics from tool results
         self._update_collection_stats_from_results(job, completion_data)
 
@@ -1261,45 +1266,46 @@ class JobCoordinatorService:
         )
 
         # Send inflection point notifications (Issue #114, T030)
-        # Only for new results (not no_change_copy), excluding collection_test
-        try:
-            from backend.src.services.notification_service import NotificationService
-            from backend.src.config.settings import get_settings
+        # Only for new results — skip no_change_copy and NO_CHANGE status (Issue #219)
+        if not result.no_change_copy and result.status != ResultStatus.NO_CHANGE:
+            try:
+                from backend.src.services.notification_service import NotificationService
+                from backend.src.config.settings import get_settings
 
-            settings = get_settings()
-            vapid_claims = {"sub": settings.vapid_subject} if settings.vapid_subject else {}
-            notification_service = NotificationService(
-                db=self.db,
-                vapid_private_key=settings.vapid_private_key,
-                vapid_claims=vapid_claims,
-            )
-            sent_count = notification_service.notify_inflection_point(job, result)
+                settings = get_settings()
+                vapid_claims = {"sub": settings.vapid_subject} if settings.vapid_subject else {}
+                notification_service = NotificationService(
+                    db=self.db,
+                    vapid_private_key=settings.vapid_private_key,
+                    vapid_claims=vapid_claims,
+                )
+                sent_count = notification_service.notify_inflection_point(job, result)
 
-            # Broadcast hint so frontend refreshes unread badge immediately
-            if sent_count > 0:
-                import asyncio
-                from backend.src.utils.websocket import get_connection_manager
+                # Broadcast hint so frontend refreshes unread badge immediately
+                if sent_count > 0:
+                    import asyncio
+                    from backend.src.utils.websocket import get_connection_manager
 
-                manager = get_connection_manager()
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(
-                        manager.broadcast_notification_hint(job.team_id)
-                    )
-                except RuntimeError as loop_err:
-                    logger.warning(
-                        "no running asyncio loop; cannot schedule "
-                        "broadcast_notification_hint after notify_inflection_point "
-                        "(get_connection_manager ok): %s",
-                        loop_err,
-                        extra={"job_guid": job.guid},
-                    )
-        except Exception as e:
-            # Non-blocking: notification failure must not affect job processing
-            logger.error(
-                f"Failed to send inflection point notifications: {e}",
-                extra={"job_guid": job.guid},
-            )
+                    manager = get_connection_manager()
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(
+                            manager.broadcast_notification_hint(job.team_id)
+                        )
+                    except RuntimeError as loop_err:
+                        logger.warning(
+                            "no running asyncio loop; cannot schedule "
+                            "broadcast_notification_hint after notify_inflection_point "
+                            "(get_connection_manager ok): %s",
+                            loop_err,
+                            extra={"job_guid": job.guid},
+                        )
+            except Exception as e:
+                # Non-blocking: notification failure must not affect job processing
+                logger.error(
+                    f"Failed to send inflection point notifications: {e}",
+                    extra={"job_guid": job.guid},
+                )
 
         return job
 

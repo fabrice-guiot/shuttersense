@@ -942,6 +942,72 @@ class TestCollectionDeltaDataclass:
         assert d["changes"][0]["key"] == "test/file.jpg"
         assert d["changes_truncated"] is False
 
+    def test_no_changes_flag_all_empty_deltas(self):
+        """Test no_changes detection when all deltas have zero changes (Issue #219)."""
+        delta1 = CollectionDelta(
+            collection_guid="col_test001",
+            summary=DeltaSummary(),  # Zero changes
+            changes=[],
+            is_first_import=False
+        )
+        delta2 = CollectionDelta(
+            collection_guid="col_test002",
+            summary=DeltaSummary(),  # Zero changes
+            changes=[],
+            is_first_import=False
+        )
+
+        deltas = {"col_test001": delta1, "col_test002": delta2}
+        no_changes = all(
+            not d.summary.has_changes and not d.is_first_import
+            for d in deltas.values()
+        )
+        assert no_changes is True
+
+    def test_no_changes_flag_false_when_has_changes(self):
+        """Test no_changes is False when any delta has actual changes (Issue #219)."""
+        delta1 = CollectionDelta(
+            collection_guid="col_test001",
+            summary=DeltaSummary(),  # Zero changes
+            changes=[],
+            is_first_import=False
+        )
+        delta2 = CollectionDelta(
+            collection_guid="col_test002",
+            summary=DeltaSummary(new_count=5),  # Has changes
+            changes=[],
+            is_first_import=False
+        )
+
+        deltas = {"col_test001": delta1, "col_test002": delta2}
+        no_changes = all(
+            not d.summary.has_changes and not d.is_first_import
+            for d in deltas.values()
+        )
+        assert no_changes is False
+
+    def test_no_changes_flag_false_when_first_import(self):
+        """Test no_changes is False when any delta is a first import (Issue #219)."""
+        delta1 = CollectionDelta(
+            collection_guid="col_test001",
+            summary=DeltaSummary(),  # Zero changes
+            changes=[],
+            is_first_import=False
+        )
+        delta2 = CollectionDelta(
+            collection_guid="col_test002",
+            summary=DeltaSummary(),  # Zero changes but first import
+            changes=[],
+            is_first_import=True
+        )
+
+        deltas = {"col_test001": delta1, "col_test002": delta2}
+        no_changes = all(
+            not d.summary.has_changes and not d.is_first_import
+            for d in deltas.values()
+        )
+        assert no_changes is False
+
     def test_to_dict_truncates_changes_over_1000(self):
         """Test that to_dict truncates changes list at 1000."""
         # Create 1500 changes
