@@ -50,6 +50,7 @@ import { useScoringWeights } from '@/hooks/useScoringWeights'
 import { AuditTrailSection } from '@/components/audit'
 import { useCategories } from '@/hooks/useCategories'
 import type { Event, EventDetail, EventCreateRequest, EventUpdateRequest, EventSeriesCreateRequest, EventPreset } from '@/contracts/api/event-api'
+import type { ScoredEvent } from '@/contracts/api/conflict-api'
 
 const PRESET_LABELS: Record<EventPreset, { icon: typeof Calendar; label: string }> = {
   upcoming_30d: { icon: Calendar, label: 'Upcoming' },
@@ -429,6 +430,22 @@ export default function EventsPage() {
     }
   }
 
+  // Handle planner view click — open event detail dialog from a ScoredEvent
+  const handlePlannerViewEvent = async (scoredEvent: ScoredEvent) => {
+    const fullEvent = await fetchEventDetails(scoredEvent.guid)
+    if (fullEvent) {
+      setSelectedEvent(fullEvent)
+    }
+  }
+
+  // Handle planner edit click — open edit dialog directly from a ScoredEvent
+  const handlePlannerEditEvent = async (scoredEvent: ScoredEvent) => {
+    const fullEvent = await fetchEventDetails(scoredEvent.guid)
+    if (fullEvent) {
+      setEditEvent(fullEvent)
+    }
+  }
+
   // ============================================================================
   // Helpers
   // ============================================================================
@@ -732,7 +749,12 @@ export default function EventsPage() {
               loading={conflictLoading}
               categories={categories.map(c => ({ guid: c.guid, name: c.name, icon: c.icon, color: c.color }))}
               scoringWeights={scoringWeights ?? undefined}
-              onResolved={refetchConflicts}
+              onViewEvent={handlePlannerViewEvent}
+              onEditEvent={handlePlannerEditEvent}
+              onResolved={() => {
+                refetchConflicts()
+                refetchStats()
+              }}
             />
           </div>
         </div>

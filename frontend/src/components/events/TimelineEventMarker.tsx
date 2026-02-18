@@ -8,13 +8,14 @@
  */
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { ChevronDown, ChevronRight, MapPin } from 'lucide-react'
+import { ChevronDown, ChevronRight, MapPin, Eye, Pencil, SkipForward, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { ICON_MAP } from '@/components/settings/CategoryForm'
 import { DimensionMicroBar } from './DimensionMicroBar'
 import { EventRadarChart } from './EventRadarChart'
 import { formatDate } from '@/utils/dateFormat'
-import type { ScoredEvent, ScoringWeightsResponse } from '@/contracts/api/conflict-api'
+import type { ScoredEvent, ScoringWeightsResponse, ConflictGroupStatus } from '@/contracts/api/conflict-api'
 
 // ============================================================================
 // Types
@@ -24,6 +25,18 @@ interface TimelineEventMarkerProps {
   event: ScoredEvent
   scoringWeights?: ScoringWeightsResponse
   onClick?: (event: ScoredEvent) => void
+  /** Open the full event detail dialog */
+  onView?: (event: ScoredEvent) => void
+  /** Open the event edit dialog */
+  onEdit?: (event: ScoredEvent) => void
+  /** Skip this event (conflict resolution) */
+  onSkip?: (event: ScoredEvent) => void
+  /** Restore a skipped event */
+  onRestore?: (event: ScoredEvent) => void
+  /** Status of the conflict group this event belongs to (undefined = no conflict) */
+  conflictGroupStatus?: ConflictGroupStatus
+  /** Whether a skip/restore action is in progress */
+  actionLoading?: boolean
   className?: string
   focused?: boolean
 }
@@ -49,7 +62,7 @@ function scoreBarColor(score: number): string {
 // ============================================================================
 
 export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, TimelineEventMarkerProps>(
-  function TimelineEventMarker({ event, scoringWeights, onClick, className, focused }, ref) {
+  function TimelineEventMarker({ event, scoringWeights, onClick, onView, onEdit, onSkip, onRestore, conflictGroupStatus, actionLoading, className, focused }, ref) {
   const [expanded, setExpanded] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const score = Math.round(event.scores.composite)
@@ -152,15 +165,69 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
         </div>
       </button>
 
-      {/* Expanded radar chart */}
+      {/* Expanded radar chart + action buttons */}
       {expanded && (
         <div className="pl-10 pr-3 pb-3">
-          <EventRadarChart
-            events={[{ label: event.title, scores: event.scores }]}
-            height={240}
-            colorDimensions
-            className="max-w-sm"
-          />
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+            <EventRadarChart
+              events={[{ label: event.title, scores: event.scores }]}
+              height={240}
+              colorDimensions
+              className="max-w-sm flex-1 min-w-0"
+            />
+
+            {/* Action buttons */}
+            {(onView || onEdit || onSkip || onRestore) && (
+              <div className="flex flex-row sm:flex-col gap-1.5 sm:pt-2 flex-shrink-0">
+                {onView && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); onView(event) }}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    View
+                  </Button>
+                )}
+                {onEdit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); onEdit(event) }}
+                  >
+                    <Pencil className="h-3 w-3 mr-1" />
+                    Edit
+                  </Button>
+                )}
+                {onSkip && !isSkipped && conflictGroupStatus && conflictGroupStatus !== 'resolved' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={actionLoading}
+                    onClick={(e) => { e.stopPropagation(); onSkip(event) }}
+                  >
+                    <SkipForward className="h-3 w-3 mr-1" />
+                    Skip
+                  </Button>
+                )}
+                {onRestore && isSkipped && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground"
+                    disabled={actionLoading}
+                    onClick={(e) => { e.stopPropagation(); onRestore(event) }}
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Restore
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
