@@ -10,6 +10,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2, MapPin, Building2, Ticket, Briefcase, Car, Calendar, AlertTriangle, BarChart3 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -331,6 +332,7 @@ export default function EventsPage() {
   const fetchEventDetails = async (eventGuid: string): Promise<EventDetail | null> => {
     try {
       const response = await fetch(`/api/events/${eventGuid}`)
+      if (!response.ok) return null
       return await response.json()
     } catch {
       return null
@@ -435,6 +437,8 @@ export default function EventsPage() {
     const fullEvent = await fetchEventDetails(scoredEvent.guid)
     if (fullEvent) {
       setSelectedEvent(fullEvent)
+    } else {
+      toast.error('Failed to load event details')
     }
   }
 
@@ -443,6 +447,8 @@ export default function EventsPage() {
     const fullEvent = await fetchEventDetails(scoredEvent.guid)
     if (fullEvent) {
       setEditEvent(fullEvent)
+    } else {
+      toast.error('Failed to load event details')
     }
   }
 
