@@ -29,6 +29,8 @@ export interface Agent {
   capabilities: string[]
   authorized_roots: string[]
   version: string
+  is_outdated: boolean
+  platform: string | null
   created_at: string
   team_guid: string
   current_job_guid: string | null
@@ -54,7 +56,8 @@ export interface AgentPoolStatusResponse {
   offline_count: number
   idle_count: number
   running_jobs_count: number
-  status: 'offline' | 'idle' | 'running'
+  outdated_count: number
+  status: 'offline' | 'idle' | 'running' | 'outdated'
 }
 
 // ============================================================================
@@ -182,6 +185,8 @@ export interface AgentDetailResponse {
   capabilities: string[]
   authorized_roots: string[]
   version: string
+  is_outdated: boolean
+  platform: string | null
   created_at: string
   team_guid: string
   current_job_guid: string | null

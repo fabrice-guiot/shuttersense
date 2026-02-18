@@ -185,6 +185,8 @@ class Agent(Base, GuidMixin):
     # Version and attestation
     version = Column(String(50), nullable=True)
     binary_checksum = Column(String(64), nullable=True)
+    platform = Column(String(50), nullable=True)
+    is_outdated = Column(Boolean, default=False, nullable=False)
 
     # Revocation
     revocation_reason = Column(Text, nullable=True)

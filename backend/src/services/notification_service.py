@@ -1057,7 +1057,7 @@ class NotificationService:
         Args:
             agent: Agent instance (must have .id, .guid, .name, .team)
             team_id: Team ID for tenant isolation
-            transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+            transition_type: One of "pool_offline", "agent_error", "agent_outdated", "pool_recovery"
             error_description: Error message (required for agent_error)
 
         Returns:
@@ -1096,6 +1096,17 @@ class NotificationService:
             title = "Agent Error"
             body = f'Agent "{agent.name}" reported an error: {error_desc}'
             tag = f"agent_error_{agent.guid}"
+            url = f"/agents/{agent.guid}"
+            data = {
+                "url": url,
+                "category": "agent_status",
+                "agent_guid": agent.guid,
+            }
+        elif transition_type == "agent_outdated":
+            agent_version = getattr(agent, 'version', 'unknown') or 'unknown'
+            title = "Agent Outdated"
+            body = f'Agent "{agent.name}" (v{agent_version}) has a newer version available.'
+            tag = f"agent_outdated_{agent.guid}"
             url = f"/agents/{agent.guid}"
             data = {
                 "url": url,

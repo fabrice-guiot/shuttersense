@@ -579,7 +579,7 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     )
     from backend.src.api.tools import get_websocket_manager, get_tool_service
     from backend.src.middleware.auth import require_auth
-    from backend.src.middleware.tenant import get_tenant_context
+    from backend.src.middleware.tenant import get_tenant_context, get_optional_tenant_context
 
     app.dependency_overrides[get_db] = get_test_db
     app.dependency_overrides[get_file_cache] = get_test_cache
@@ -589,6 +589,7 @@ def test_client(test_db_session, test_session_factory, test_cache, test_job_queu
     app.dependency_overrides[get_tool_service] = get_test_tool_service
     app.dependency_overrides[require_auth] = get_test_auth
     app.dependency_overrides[get_tenant_context] = get_test_auth
+    app.dependency_overrides[get_optional_tenant_context] = get_test_auth
 
     with TestClient(app) as client:
         yield client
@@ -695,7 +696,7 @@ def other_team_client(test_db_session, test_session_factory, test_cache, test_jo
     )
     from backend.src.api.tools import get_websocket_manager, get_tool_service
     from backend.src.middleware.auth import require_auth
-    from backend.src.middleware.tenant import get_tenant_context
+    from backend.src.middleware.tenant import get_tenant_context, get_optional_tenant_context
 
     app.dependency_overrides[get_db] = get_test_db
     app.dependency_overrides[get_file_cache] = get_test_cache
@@ -705,6 +706,7 @@ def other_team_client(test_db_session, test_session_factory, test_cache, test_jo
     app.dependency_overrides[get_tool_service] = get_test_tool_service
     app.dependency_overrides[require_auth] = get_test_auth
     app.dependency_overrides[get_tenant_context] = get_test_auth
+    app.dependency_overrides[get_optional_tenant_context] = get_test_auth
 
     with TestClient(app) as client:
         yield client

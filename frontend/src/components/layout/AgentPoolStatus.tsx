@@ -43,6 +43,8 @@ function getBadgeStyles(status: AgentPoolStatusResponse['status']): string {
   switch (status) {
     case 'running':
       return 'bg-success text-success-foreground hover:bg-success/90'
+    case 'outdated':
+      return 'bg-warning text-warning-foreground hover:bg-warning/90'
     case 'idle':
       return 'bg-info text-info-foreground hover:bg-info/90'
     case 'offline':
@@ -58,6 +60,8 @@ function getStatusLabel(status: AgentPoolStatusResponse['status']): string {
   switch (status) {
     case 'running':
       return 'Running'
+    case 'outdated':
+      return 'Outdated'
     case 'idle':
       return 'Idle'
     case 'offline':
@@ -76,6 +80,8 @@ function getBadgeCount(poolStatus: AgentPoolStatusResponse): number {
   switch (poolStatus.status) {
     case 'running':
       return poolStatus.running_jobs_count
+    case 'outdated':
+      return poolStatus.outdated_count
     case 'idle':
       return poolStatus.online_count
     case 'offline':
@@ -88,7 +94,7 @@ function getBadgeCount(poolStatus: AgentPoolStatusResponse): number {
  * Get tooltip text based on pool status
  */
 function getTooltipText(poolStatus: AgentPoolStatusResponse): string {
-  const { online_count, offline_count, idle_count, running_jobs_count, status } = poolStatus
+  const { online_count, offline_count, idle_count, running_jobs_count, outdated_count, status } = poolStatus
   const totalAgents = online_count + offline_count
 
   if (status === 'offline') {
@@ -105,6 +111,10 @@ function getTooltipText(poolStatus: AgentPoolStatusResponse): string {
     parts.push(`${running_jobs_count} job${running_jobs_count !== 1 ? 's' : ''} running`)
   } else if (idle_count > 0) {
     parts.push(`all idle`)
+  }
+
+  if (outdated_count > 0) {
+    parts.push(`${outdated_count} outdated`)
   }
 
   if (offline_count > 0) {

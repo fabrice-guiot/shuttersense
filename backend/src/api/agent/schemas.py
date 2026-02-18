@@ -198,6 +198,10 @@ class HeartbeatRequest(BaseModel):
         max_length=50,
         description="Agent version (if changed)"
     )
+    binary_checksum: Optional[str] = Field(
+        None,
+        description="SHA-256 checksum of agent binary (sent after self-update)"
+    )
     metrics: Optional[AgentMetrics] = Field(
         None,
         description="System resource metrics (CPU, memory, disk)"
@@ -243,13 +247,23 @@ class HeartbeatResponse(BaseModel):
         default_factory=list,
         description="Commands for agent to process"
     )
+    is_outdated: bool = Field(
+        default=False,
+        description="Whether the agent binary is outdated"
+    )
+    latest_version: Optional[str] = Field(
+        None,
+        description="Latest release version for this agent's platform"
+    )
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "acknowledged": True,
                 "server_time": "2026-01-18T12:00:00.000Z",
-                "pending_commands": []
+                "pending_commands": [],
+                "is_outdated": False,
+                "latest_version": None
             }
         }
     }
@@ -272,6 +286,8 @@ class AgentResponse(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
     authorized_roots: List[str] = Field(default_factory=list, description="Authorized local filesystem roots")
     version: Optional[str] = Field(None, description="Agent software version")
+    platform: Optional[str] = Field(None, description="Agent platform (e.g., 'darwin-arm64')")
+    is_outdated: bool = Field(False, description="Whether the agent binary is outdated")
     created_at: datetime = Field(..., description="Registration timestamp")
     metrics: Optional[AgentMetrics] = Field(None, description="System resource metrics")
 
@@ -350,6 +366,8 @@ class AgentDetailResponse(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
     authorized_roots: List[str] = Field(default_factory=list, description="Authorized local filesystem roots")
     version: Optional[str] = Field(None, description="Agent software version")
+    platform: Optional[str] = Field(None, description="Agent platform (e.g., 'darwin-arm64')")
+    is_outdated: bool = Field(False, description="Whether the agent binary is outdated")
     created_at: datetime = Field(..., description="Registration timestamp")
     metrics: Optional[AgentMetrics] = Field(None, description="System resource metrics")
 
@@ -456,10 +474,11 @@ class AgentPoolStatusResponse(BaseModel):
     online_count: int = Field(..., description="Number of online agents")
     offline_count: int = Field(..., description="Number of offline agents")
     idle_count: int = Field(..., description="Online agents not running jobs")
+    outdated_count: int = Field(0, description="Number of outdated agents")
     running_jobs_count: int = Field(..., description="Jobs currently executing")
     status: str = Field(
         ...,
-        description="Pool status: offline, idle, or running"
+        description="Pool status: offline, outdated, idle, or running"
     )
 
     model_config = {
@@ -468,6 +487,7 @@ class AgentPoolStatusResponse(BaseModel):
                 "online_count": 3,
                 "offline_count": 1,
                 "idle_count": 2,
+                "outdated_count": 1,
                 "running_jobs_count": 1,
                 "status": "running"
             }

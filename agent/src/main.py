@@ -26,6 +26,8 @@ from src.api_client import (
 from src.polling_loop import JobPollingLoop
 from src.job_executor import JobExecutor
 from src.metrics import MetricsCollector, is_metrics_available
+from src.version_cache import write_version_cache
+from src.attestation import get_binary_checksum
 
 
 def get_all_capabilities() -> list[str]:
@@ -185,6 +187,13 @@ class AgentRunner:
         authorized_roots = self.config.authorized_roots
         self.logger.info(f"Sending initial heartbeat (version: {__version__}, roots: {len(authorized_roots)})...")
 
+        # Compute binary checksum for outdated detection (Issue #243)
+        checksum = None
+        try:
+            checksum, _ = get_binary_checksum()
+        except Exception as e:
+            self.logger.debug(f"Could not compute binary checksum: {e}")
+
         # Collect initial metrics
         initial_metrics = None
         if self._metrics_collector:
@@ -197,6 +206,7 @@ class AgentRunner:
             await self._api_client.heartbeat(
                 capabilities=capabilities,
                 version=__version__,
+                binary_checksum=checksum,
                 authorized_roots=authorized_roots,
                 metrics=initial_metrics,
             )
@@ -289,6 +299,15 @@ class AgentRunner:
                 )
                 self.logger.debug(f"Heartbeat acknowledged, server time: {response.get('server_time')}")
                 heartbeat_count += 1
+
+                # Cache outdated status from heartbeat response (Issue #243)
+                try:
+                    write_version_cache(
+                        is_outdated=response.get("is_outdated", False),
+                        latest_version=response.get("latest_version"),
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Failed to cache version state: {e}")
 
                 # Reset failure counter on success
                 consecutive_failures = 0

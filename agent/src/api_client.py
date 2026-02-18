@@ -9,6 +9,7 @@ Task: T040
 """
 
 import logging
+import os
 from typing import Any, Optional
 
 import httpx
@@ -212,6 +213,7 @@ class AgentApiClient:
         capabilities: Optional[list[str]] = None,
         authorized_roots: Optional[list[str]] = None,
         version: Optional[str] = None,
+        binary_checksum: Optional[str] = None,
         current_job_guid: Optional[str] = None,
         current_job_progress: Optional[dict[str, Any]] = None,
         error_message: Optional[str] = None,
@@ -225,6 +227,7 @@ class AgentApiClient:
             capabilities: Updated capabilities list (if changed)
             authorized_roots: Updated authorized roots list (if changed)
             version: Updated version (if changed)
+            binary_checksum: Updated binary checksum (sent after self-update)
             current_job_guid: GUID of job currently being executed
             current_job_progress: Progress info for current job
             error_message: Error message if status is error
@@ -246,6 +249,8 @@ class AgentApiClient:
             payload["authorized_roots"] = authorized_roots
         if version is not None:
             payload["version"] = version
+        if binary_checksum is not None:
+            payload["binary_checksum"] = binary_checksum
         if current_job_guid:
             payload["current_job_guid"] = current_job_guid
         if current_job_progress:
@@ -1659,6 +1664,121 @@ class AgentApiClient:
                 f"Prepare upload failed with status {response.status_code}",
                 status_code=response.status_code,
             )
+
+    # -------------------------------------------------------------------------
+    # Release Management (Issue #243)
+    # -------------------------------------------------------------------------
+
+    def get_active_release(self) -> Optional[dict[str, Any]]:
+        """
+        Get the active release manifest with per-platform artifacts (synchronous).
+
+        Returns:
+            Dict with 'guid', 'version', 'artifacts', 'notes', 'dev_mode',
+            or None if no active release exists.
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        response = self.get("/releases/active")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            return None
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        else:
+            raise ApiError(
+                f"Get active release failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    def download_binary(
+        self,
+        download_url: str,
+        dest_path: str,
+        expected_checksum: Optional[str] = None,
+    ) -> str:
+        """
+        Download an agent binary to a local file (synchronous, streaming).
+
+        Args:
+            download_url: Relative URL path (e.g., /api/agent/v1/releases/.../download/...)
+            dest_path: Local file path to write the downloaded binary.
+            expected_checksum: Optional sha256-prefixed checksum to verify.
+
+        Returns:
+            SHA-256 hex digest of the downloaded file.
+
+        Raises:
+            ApiError: If download fails or checksum doesn't match.
+            ConnectionError: If connection to server fails.
+        """
+        import hashlib
+        import tempfile
+
+        def _cleanup(path: Optional[str]) -> None:
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+
+        client = self._get_sync_client()
+        tmp_path = None
+
+        try:
+            with client.stream("GET", download_url) as response:
+                if response.status_code == 401:
+                    raise AuthenticationError("Authentication required for download", status_code=401)
+                if response.status_code != 200:
+                    raise ApiError(
+                        f"Download failed with status {response.status_code}",
+                        status_code=response.status_code,
+                    )
+
+                hasher = hashlib.sha256()
+                # Write to temp file to avoid leaving partial binaries on failure
+                fd, tmp_path = tempfile.mkstemp(
+                    prefix="agent-", suffix=".tmp",
+                    dir=os.path.dirname(dest_path) or ".",
+                )
+                with os.fdopen(fd, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
+                        hasher.update(chunk)
+
+        except httpx.ConnectError as e:
+            _cleanup(tmp_path)
+            raise ConnectionError(f"Failed to connect to server: {e}") from e
+        except httpx.TimeoutException as e:
+            _cleanup(tmp_path)
+            raise ConnectionError(f"Connection timed out: {e}") from e
+        except Exception:
+            _cleanup(tmp_path)
+            raise
+
+        actual_checksum = hasher.hexdigest()
+
+        # Verify checksum if provided
+        if expected_checksum:
+            # Strip "sha256:" prefix if present
+            expected_hex = expected_checksum
+            if expected_hex.startswith("sha256:"):
+                expected_hex = expected_hex[7:]
+
+            if actual_checksum.lower() != expected_hex.lower():
+                _cleanup(tmp_path)
+                raise ApiError(
+                    f"Checksum mismatch: expected {expected_hex[:16]}..., "
+                    f"got {actual_checksum[:16]}..."
+                )
+
+        # Atomic replace — only reached on success
+        os.replace(tmp_path, dest_path)
+        return actual_checksum
 
     # -------------------------------------------------------------------------
     # Cleanup

@@ -61,6 +61,8 @@ class HeartbeatResult:
     previous_status: AgentStatus
     transitioned_to_error: bool = False
     pool_was_all_offline: bool = False
+    latest_version: Optional[str] = None
+    became_outdated: bool = False
 
 
 @dataclass
@@ -305,7 +307,8 @@ class AgentService:
             api_key_hash=api_key_hash,
             api_key_prefix=api_key_prefix,
             version=version,
-            binary_checksum=binary_checksum
+            binary_checksum=binary_checksum,
+            platform=platform,
         )
 
         self.db.add(agent)
@@ -424,7 +427,7 @@ class AgentService:
 
         # Check if any manifests exist (bootstrap check)
         manifest_count = self.db.query(func.count(ReleaseManifest.id)).filter(
-            ReleaseManifest.is_active == True
+            ReleaseManifest.is_active.is_(True)
         ).scalar() or 0
 
         if manifest_count == 0:
@@ -518,6 +521,7 @@ class AgentService:
         capabilities: Optional[List[str]] = None,
         authorized_roots: Optional[List[str]] = None,
         version: Optional[str] = None,
+        binary_checksum: Optional[str] = None,
         metrics: Optional[dict] = None
     ) -> HeartbeatResult:
         """
@@ -535,6 +539,7 @@ class AgentService:
             capabilities: Updated capabilities list
             authorized_roots: Updated authorized roots list
             version: Updated agent version
+            binary_checksum: Updated binary checksum (sent after self-update)
             metrics: System resource metrics (cpu_percent, memory_percent, disk_free_gb)
 
         Returns:
@@ -597,6 +602,9 @@ class AgentService:
         if version is not None:
             agent.version = version
 
+        if binary_checksum is not None:
+            agent.binary_checksum = binary_checksum
+
         # Update metrics if provided
         if metrics is not None:
             # Add timestamp to metrics
@@ -606,6 +614,12 @@ class AgentService:
             }
             agent.metrics_json = json.dumps(metrics_with_timestamp)
 
+        # Outdated detection: compare agent checksum against latest manifest
+        latest_version = None
+        became_outdated = False
+        if agent.platform and agent.binary_checksum:
+            latest_version, became_outdated = self._check_outdated(agent)
+
         self.db.commit()
 
         logger.debug(
@@ -613,7 +627,8 @@ class AgentService:
             extra={
                 "agent_guid": agent.guid,
                 "status": agent.status.value,
-                "has_metrics": metrics is not None
+                "has_metrics": metrics is not None,
+                "is_outdated": agent.is_outdated,
             }
         )
 
@@ -622,7 +637,62 @@ class AgentService:
             previous_status=previous_status,
             transitioned_to_error=transitioned_to_error,
             pool_was_all_offline=pool_was_all_offline,
+            latest_version=latest_version,
+            became_outdated=became_outdated,
         )
+
+    def _check_outdated(self, agent: Agent) -> Tuple[Optional[str], bool]:
+        """
+        Check if an agent's binary is outdated compared to the latest manifest.
+
+        Finds the latest active release manifest that supports the agent's
+        platform and compares its checksum against the agent's binary_checksum.
+        Updates agent.is_outdated accordingly.
+
+        Args:
+            agent: Agent to check for outdated status.
+
+        Returns:
+            Tuple of (latest_version, became_outdated) where latest_version is
+            the manifest version string or None if no matching manifest exists.
+        """
+        active_manifests = (
+            self.db.query(ReleaseManifest)
+            .filter(ReleaseManifest.is_active.is_(True))
+            .order_by(ReleaseManifest.created_at.desc())
+            .all()
+        )
+
+        matching_manifest = None
+        for manifest in active_manifests:
+            if manifest.supports_platform(agent.platform):
+                matching_manifest = manifest
+                break
+
+        if not matching_manifest:
+            agent.is_outdated = False
+            return None, False
+
+        latest_version = matching_manifest.version
+        was_outdated = agent.is_outdated
+
+        is_now_outdated = agent.binary_checksum != matching_manifest.checksum
+        agent.is_outdated = is_now_outdated
+
+        became_outdated = is_now_outdated and not was_outdated
+
+        if became_outdated:
+            logger.info(
+                "Agent detected as outdated",
+                extra={
+                    "agent_guid": agent.guid,
+                    "agent_version": agent.version,
+                    "latest_version": latest_version,
+                    "platform": agent.platform,
+                }
+            )
+
+        return latest_version, became_outdated
 
     def disconnect_agent(self, agent: Agent) -> Agent:
         """
@@ -1119,11 +1189,20 @@ class AgentService:
             Agent.status == AgentStatus.OFFLINE
         ).scalar() or 0
 
-        # Determine overall status
+        # Count outdated agents (online or offline, excluding revoked)
+        outdated_count = self.db.query(func.count(Agent.id)).filter(
+            Agent.team_id == team_id,
+            Agent.is_outdated.is_(True),
+            Agent.status != AgentStatus.REVOKED
+        ).scalar() or 0
+
+        # Determine overall status (priority: offline > running > outdated > idle)
         if online_count == 0:
             status = "offline"
         elif running_jobs_count > 0:
             status = "running"
+        elif outdated_count > 0:
+            status = "outdated"
         else:
             status = "idle"
 
@@ -1131,6 +1210,7 @@ class AgentService:
             "online_count": online_count,
             "offline_count": offline_count,
             "idle_count": idle_count,
+            "outdated_count": outdated_count,
             "running_jobs_count": running_jobs_count,
             "status": status
         }

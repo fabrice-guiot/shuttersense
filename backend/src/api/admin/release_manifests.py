@@ -24,6 +24,7 @@ from backend.src.models.release_artifact import ReleaseArtifact
 from backend.src.services.exceptions import NotFoundError, ValidationError
 from backend.src.services.download_service import resolve_binary_path
 from backend.src.config.settings import get_settings
+from backend.src.services.manifest_cleanup_service import cleanup_old_manifests
 from backend.src.utils.logging_config import get_logger
 
 
@@ -337,6 +338,10 @@ async def create_release_manifest(
                             f"Either deploy the files first, or set is_active=false to create an inactive manifest."
                         ),
                     )
+
+        # Auto-cleanup old manifests for each platform (Issue #240)
+        # Run cleanup before commit so both creation and cleanup are atomic.
+        cleanup_old_manifests(db, manifest.platforms)
 
         db.commit()
         db.refresh(manifest)

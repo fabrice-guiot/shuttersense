@@ -31,7 +31,7 @@ from backend.src.utils.websocket import get_connection_manager
 from backend.src.services.tool_service import _db_job_to_response
 
 from backend.src.db.database import get_db
-from backend.src.middleware.tenant import TenantContext, get_tenant_context
+from backend.src.middleware.tenant import TenantContext, get_tenant_context, get_optional_tenant_context
 from backend.src.models import AgentStatus
 from backend.src.services.agent_service import AgentService
 from backend.src.services.connector_service import ConnectorService
@@ -130,7 +130,7 @@ from backend.src.services.download_service import (
 )
 from backend.src.config.settings import get_settings
 from fastapi.responses import FileResponse
-from backend.src.api.agent.dependencies import AgentContext, get_agent_context, require_online_agent
+from backend.src.api.agent.dependencies import AgentContext, get_agent_context, get_optional_agent_context, require_online_agent
 
 
 # Create router with prefix and tags
@@ -157,7 +157,7 @@ async def _trigger_agent_notification_async(
         agent_name: Agent display name (for logging)
         agent_id: Agent internal ID (for re-fetching)
         team_id: Team ID for tenant isolation
-        transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+        transition_type: One of "pool_offline", "agent_error", "agent_outdated", "pool_recovery"
         error_description: Error message (for agent_error)
     """
     from backend.src.db.database import SessionLocal
@@ -226,7 +226,7 @@ def _trigger_agent_notification(
     Args:
         agent: Agent instance (values are captured before scheduling)
         team_id: Team ID for tenant isolation
-        transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+        transition_type: One of "pool_offline", "agent_error", "agent_outdated", "pool_recovery"
         error_description: Error message (for agent_error)
     """
     asyncio.create_task(
@@ -276,6 +276,8 @@ def agent_to_response(
         capabilities=agent.capabilities,
         authorized_roots=agent.authorized_roots,
         version=agent.version,
+        platform=agent.platform,
+        is_outdated=agent.is_outdated,
         created_at=agent.created_at,
         team_guid=agent.team.guid if agent.team else "",
         current_job_guid=current_job_guid,
@@ -403,6 +405,7 @@ async def send_heartbeat(
         capabilities=data.capabilities,
         authorized_roots=data.authorized_roots,
         version=data.version,
+        binary_checksum=data.binary_checksum,
         error_message=data.error_message,
         metrics=metrics_dict,
     )
@@ -433,10 +436,20 @@ async def send_heartbeat(
         manager.broadcast_agent_pool_status(ctx.team_id, pool_status)
     )
 
+    # Trigger outdated notification if agent just became outdated
+    if result.became_outdated:
+        _trigger_agent_notification(
+            agent=result.agent,
+            team_id=ctx.team_id,
+            transition_type="agent_outdated",
+        )
+
     return HeartbeatResponse(
         acknowledged=True,
         server_time=datetime.utcnow(),
         pending_commands=pending_commands,
+        is_outdated=result.agent.is_outdated,
+        latest_version=result.latest_version,
     )
 
 
@@ -1718,6 +1731,7 @@ async def get_pool_status(
         online_count=status_data["online_count"],
         offline_count=status_data["offline_count"],
         idle_count=status_data["idle_count"],
+        outdated_count=status_data["outdated_count"],
         running_jobs_count=status_data["running_jobs_count"],
         status=status_data["status"],
     )
@@ -3631,28 +3645,36 @@ async def get_previous_result_for_collection(
 @router.get("/releases/active", response_model=ActiveReleaseResponse)
 async def get_active_release(
     db: Session = Depends(get_db),
-    ctx: TenantContext = Depends(get_tenant_context),
+    _agent_ctx: Optional[AgentContext] = Depends(get_optional_agent_context),
+    _tenant_ctx: Optional[TenantContext] = Depends(get_optional_tenant_context),
 ):
     """
     Get the currently active release manifest with per-platform artifacts.
 
     Returns the active release manifest with download URLs for each platform.
-    Used by the Agent Setup Wizard to determine which binaries are available.
+    Used by both the Agent Setup Wizard (session auth) and agent CLI (API key auth).
 
     If multiple manifests are active, returns the one with the highest version
     (by string sort descending, then most recently created).
 
     Args:
         db: Database session dependency.
-        ctx: Tenant context enforcing session-based authentication.
+        _agent_ctx: Optional agent API key auth (for agent CLI).
+        _tenant_ctx: Optional user session/JWT auth (for frontend wizard).
 
     Returns:
         ActiveReleaseResponse with guid, version, artifacts, and dev_mode flag.
 
     Raises:
-        HTTPException(401): If the request is not authenticated.
+        HTTPException(401): If neither agent nor user auth is provided.
         HTTPException(404): If no active release manifest exists.
     """
+    if _agent_ctx is None and _tenant_ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
     settings = get_settings()
 
     # Find the active manifest with highest version
@@ -3954,6 +3976,8 @@ async def get_agent_detail(
         capabilities=agent.capabilities,
         authorized_roots=agent.authorized_roots,
         version=agent.version,
+        platform=agent.platform,
+        is_outdated=agent.is_outdated,
         created_at=agent.created_at,
         team_guid=agent.team.guid if agent.team else "",
         current_job_guid=current_job.guid if current_job else None,
