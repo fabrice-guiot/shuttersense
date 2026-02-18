@@ -9,6 +9,7 @@ Task: T040
 """
 
 import logging
+import os
 from typing import Any, Optional
 
 import httpx
@@ -1716,8 +1717,17 @@ class AgentApiClient:
             ConnectionError: If connection to server fails.
         """
         import hashlib
+        import tempfile
+
+        def _cleanup(path: Optional[str]) -> None:
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
         client = self._get_sync_client()
+        tmp_path = None
 
         try:
             with client.stream("GET", download_url) as response:
@@ -1730,15 +1740,25 @@ class AgentApiClient:
                     )
 
                 hasher = hashlib.sha256()
-                with open(dest_path, "wb") as f:
+                # Write to temp file to avoid leaving partial binaries on failure
+                fd, tmp_path = tempfile.mkstemp(
+                    prefix="agent-", suffix=".tmp",
+                    dir=os.path.dirname(dest_path) or ".",
+                )
+                with os.fdopen(fd, "wb") as f:
                     for chunk in response.iter_bytes(chunk_size=65536):
                         f.write(chunk)
                         hasher.update(chunk)
 
         except httpx.ConnectError as e:
-            raise ConnectionError(f"Failed to connect to server: {e}")
+            _cleanup(tmp_path)
+            raise ConnectionError(f"Failed to connect to server: {e}") from e
         except httpx.TimeoutException as e:
-            raise ConnectionError(f"Connection timed out: {e}")
+            _cleanup(tmp_path)
+            raise ConnectionError(f"Connection timed out: {e}") from e
+        except Exception:
+            _cleanup(tmp_path)
+            raise
 
         actual_checksum = hasher.hexdigest()
 
@@ -1750,17 +1770,14 @@ class AgentApiClient:
                 expected_hex = expected_hex[7:]
 
             if actual_checksum.lower() != expected_hex.lower():
-                # Remove the bad download
-                import os
-                try:
-                    os.unlink(dest_path)
-                except OSError:
-                    pass
+                _cleanup(tmp_path)
                 raise ApiError(
                     f"Checksum mismatch: expected {expected_hex[:16]}..., "
                     f"got {actual_checksum[:16]}..."
                 )
 
+        # Atomic replace — only reached on success
+        os.replace(tmp_path, dest_path)
         return actual_checksum
 
     # -------------------------------------------------------------------------

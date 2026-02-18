@@ -157,7 +157,7 @@ async def _trigger_agent_notification_async(
         agent_name: Agent display name (for logging)
         agent_id: Agent internal ID (for re-fetching)
         team_id: Team ID for tenant isolation
-        transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+        transition_type: One of "pool_offline", "agent_error", "agent_outdated", "pool_recovery"
         error_description: Error message (for agent_error)
     """
     from backend.src.db.database import SessionLocal
@@ -226,7 +226,7 @@ def _trigger_agent_notification(
     Args:
         agent: Agent instance (values are captured before scheduling)
         team_id: Team ID for tenant isolation
-        transition_type: One of "pool_offline", "agent_error", "pool_recovery"
+        transition_type: One of "pool_offline", "agent_error", "agent_outdated", "pool_recovery"
         error_description: Error message (for agent_error)
     """
     asyncio.create_task(
