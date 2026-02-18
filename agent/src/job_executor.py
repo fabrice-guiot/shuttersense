@@ -2191,7 +2191,7 @@ class JobExecutor:
                 )
 
                 # Phase C: Delta Detection (Issue #107 Phase 8)
-                collections_with_deltas = await self._execute_phase_c(
+                collections_with_deltas, no_changes = await self._execute_phase_c(
                     job_guid=job_guid,
                     connector_guid=connector_guid,
                     tool=tool,
@@ -2207,7 +2207,8 @@ class JobExecutor:
                         "total_files": result.total_files,
                         "total_size": result.total_size,
                         "collections_with_file_info": collections_updated,
-                        "collections_with_deltas": collections_with_deltas
+                        "collections_with_deltas": collections_with_deltas,
+                        "no_changes": no_changes
                     }
                 )
 
@@ -2219,7 +2220,8 @@ class JobExecutor:
                         "total_files": result.total_files,
                         "total_size": result.total_size,
                         "collections_with_file_info": collections_updated,
-                        "collections_with_deltas": collections_with_deltas
+                        "collections_with_deltas": collections_with_deltas,
+                        "no_changes": no_changes,
                     }
                 )
             else:
@@ -2401,7 +2403,7 @@ class JobExecutor:
         tool: Any,  # InventoryImportTool
         phase_b_result: Any,  # PhaseBResult
         collections_data: list[dict[str, Any]],
-    ) -> int:
+    ) -> tuple[int, bool]:
         """
         Execute Phase C: Delta Detection.
 
@@ -2418,7 +2420,8 @@ class JobExecutor:
             collections_data: Collections data from server (with stored file_info)
 
         Returns:
-            Number of collections with deltas reported
+            Tuple of (collections_with_deltas, no_changes) where no_changes is
+            True when all collections had zero changes and none were first imports.
         """
         try:
             if not phase_b_result or not phase_b_result.success:
@@ -2426,7 +2429,7 @@ class JobExecutor:
                     "Skipping Phase C: Phase B did not complete successfully",
                     extra={"job_guid": job_guid, "connector_guid": connector_guid}
                 )
-                return 0
+                return 0, False
 
             # Execute Phase C using the tool
             phase_c_result = tool.execute_phase_c(phase_b_result, collections_data)
@@ -2436,14 +2439,14 @@ class JobExecutor:
                     f"Phase C failed: {phase_c_result.error_message}",
                     extra={"job_guid": job_guid, "connector_guid": connector_guid}
                 )
-                return 0
+                return 0, False
 
             if phase_c_result.collections_processed == 0:
                 logger.info(
                     "Phase C: No collections to report deltas for",
                     extra={"job_guid": job_guid, "connector_guid": connector_guid}
                 )
-                return 0
+                return 0, False
 
             # Convert deltas to API format
             deltas = [delta.to_dict() for delta in phase_c_result.collection_deltas.values()]
@@ -2455,12 +2458,19 @@ class JobExecutor:
                 deltas=deltas
             )
 
+            # Issue #219: Detect whether all collections had zero changes
+            no_changes = all(
+                not d.summary.has_changes and not d.is_first_import
+                for d in phase_c_result.collection_deltas.values()
+            )
+
             logger.info(
                 f"Phase C complete: Reported deltas for {len(deltas)} collections",
                 extra={
                     "job_guid": job_guid,
                     "connector_guid": connector_guid,
                     "collections_with_deltas": len(deltas),
+                    "no_changes": no_changes,
                     "total_changes": sum(
                         d.summary.total_changes
                         for d in phase_c_result.collection_deltas.values()
@@ -2468,7 +2478,7 @@ class JobExecutor:
                 }
             )
 
-            return len(deltas)
+            return len(deltas), no_changes
 
         except Exception as e:
             logger.error(
@@ -2476,7 +2486,7 @@ class JobExecutor:
                 exc_info=True
             )
             # Phase C failures should not fail the entire job
-            return 0
+            return 0, False
 
     def _sync_progress_callback(
         self,
