@@ -26,6 +26,7 @@ from src.api_client import (
 from src.polling_loop import JobPollingLoop
 from src.job_executor import JobExecutor
 from src.metrics import MetricsCollector, is_metrics_available
+from src.version_cache import write_version_cache
 
 
 def get_all_capabilities() -> list[str]:
@@ -289,6 +290,15 @@ class AgentRunner:
                 )
                 self.logger.debug(f"Heartbeat acknowledged, server time: {response.get('server_time')}")
                 heartbeat_count += 1
+
+                # Cache outdated status from heartbeat response (Issue #243)
+                try:
+                    write_version_cache(
+                        is_outdated=response.get("is_outdated", False),
+                        latest_version=response.get("latest_version"),
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Failed to cache version state: {e}")
 
                 # Reset failure counter on success
                 consecutive_failures = 0

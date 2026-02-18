@@ -10,6 +10,29 @@ Task: T041
 import click
 
 from src import __version__
+from src.version_cache import read_cached_version_state
+
+
+def _show_outdated_warning() -> None:
+    """Print a warning banner if the agent is outdated (from cached heartbeat data)."""
+    state = read_cached_version_state()
+    if state and state.get("is_outdated"):
+        latest = state.get("latest_version") or "unknown"
+        click.echo(
+            click.style(
+                f"WARNING: This agent ({__version__}) is outdated. "
+                f"Latest version: {latest}",
+                fg="yellow",
+                bold=True,
+            )
+        )
+        click.echo(
+            click.style(
+                "Run 'shuttersense-agent update' to upgrade.",
+                fg="yellow",
+            )
+        )
+        click.echo()
 
 
 @click.group()
@@ -28,6 +51,9 @@ def cli(ctx: click.Context) -> None:
     # Ensure context object exists for subcommands
     ctx.ensure_object(dict)
 
+    # Show outdated warning banner on every command (Issue #243)
+    _show_outdated_warning()
+
 
 # Import and register subcommands
 from cli.register import register  # noqa: E402
@@ -40,6 +66,7 @@ from cli.collection import collection  # noqa: E402
 from cli.run import run  # noqa: E402
 from cli.sync_results import sync  # noqa: E402
 from cli.self_test import self_test  # noqa: E402
+from cli.update import update  # noqa: E402
 
 cli.add_command(register)
 cli.add_command(start)
@@ -51,6 +78,7 @@ cli.add_command(collection)
 cli.add_command(run)
 cli.add_command(sync)
 cli.add_command(self_test)
+cli.add_command(update)
 
 # Debug commands - only available in development mode
 import os as _os  # noqa: E402

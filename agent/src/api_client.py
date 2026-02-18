@@ -1661,6 +1661,105 @@ class AgentApiClient:
             )
 
     # -------------------------------------------------------------------------
+    # Release Management (Issue #243)
+    # -------------------------------------------------------------------------
+
+    def get_active_release(self) -> Optional[dict[str, Any]]:
+        """
+        Get the active release manifest with per-platform artifacts (synchronous).
+
+        Returns:
+            Dict with 'guid', 'version', 'artifacts', 'notes', 'dev_mode',
+            or None if no active release exists.
+
+        Raises:
+            AuthenticationError: If API key is invalid
+            ConnectionError: If connection to server fails
+        """
+        response = self.get("/releases/active")
+
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            return None
+        elif response.status_code == 401:
+            raise AuthenticationError("Invalid API key", status_code=401)
+        else:
+            raise ApiError(
+                f"Get active release failed with status {response.status_code}",
+                status_code=response.status_code,
+            )
+
+    def download_binary(
+        self,
+        download_url: str,
+        dest_path: str,
+        expected_checksum: Optional[str] = None,
+    ) -> str:
+        """
+        Download an agent binary to a local file (synchronous, streaming).
+
+        Args:
+            download_url: Relative URL path (e.g., /api/agent/v1/releases/.../download/...)
+            dest_path: Local file path to write the downloaded binary.
+            expected_checksum: Optional sha256-prefixed checksum to verify.
+
+        Returns:
+            SHA-256 hex digest of the downloaded file.
+
+        Raises:
+            ApiError: If download fails or checksum doesn't match.
+            ConnectionError: If connection to server fails.
+        """
+        import hashlib
+
+        client = self._get_sync_client()
+
+        try:
+            with client.stream("GET", download_url) as response:
+                if response.status_code == 401:
+                    raise AuthenticationError("Authentication required for download", status_code=401)
+                if response.status_code != 200:
+                    raise ApiError(
+                        f"Download failed with status {response.status_code}",
+                        status_code=response.status_code,
+                    )
+
+                hasher = hashlib.sha256()
+                with open(dest_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
+                        hasher.update(chunk)
+
+        except httpx.ConnectError as e:
+            raise ConnectionError(f"Failed to connect to server: {e}")
+        except httpx.TimeoutException as e:
+            raise ConnectionError(f"Connection timed out: {e}")
+
+        actual_checksum = hasher.hexdigest()
+
+        # Verify checksum if provided
+        if expected_checksum:
+            # Strip "sha256:" prefix if present
+            expected_hex = expected_checksum
+            if expected_hex.startswith("sha256:"):
+                expected_hex = expected_hex[7:]
+
+            if actual_checksum.lower() != expected_hex.lower():
+                # Remove the bad download
+                import os
+                try:
+                    os.unlink(dest_path)
+                except OSError:
+                    pass
+                raise ApiError(
+                    f"Checksum mismatch: expected {expected_hex[:16]}..., "
+                    f"got {actual_checksum[:16]}..."
+                )
+
+        return actual_checksum
+
+    # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
 
