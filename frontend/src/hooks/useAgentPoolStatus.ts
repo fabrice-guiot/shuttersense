@@ -17,7 +17,7 @@ import type { AgentPoolStatusResponse } from '@/contracts/api/agent-api'
 // Types
 // ============================================================================
 
-export type PoolStatus = 'offline' | 'idle' | 'running'
+export type PoolStatus = 'offline' | 'idle' | 'running' | 'outdated'
 
 export interface UseAgentPoolStatusReturn {
   poolStatus: AgentPoolStatusResponse | null

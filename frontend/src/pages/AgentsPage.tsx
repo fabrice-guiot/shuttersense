@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye, ExternalLink, Wand2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, MoreHorizontal, RefreshCw, Loader2, Eye, ExternalLink, Wand2, ArrowUpCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -48,6 +48,7 @@ import { AgentStatusBadge } from '@/components/agents/AgentStatusBadge'
 import { AgentDetailsDialog } from '@/components/agents/AgentDetailsDialog'
 import { RegistrationTokenDialog } from '@/components/agents/RegistrationTokenDialog'
 import { AgentSetupWizardDialog } from '@/components/agents/AgentSetupWizardDialog'
+import { AgentUpdateDialog } from '@/components/agents/AgentUpdateDialog'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime } from '@/utils/dateFormat'
 import { AuditTrailPopover } from '@/components/audit'
@@ -65,6 +66,7 @@ export default function AgentsPage() {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [newName, setNewName] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
@@ -144,7 +146,11 @@ export default function AgentsPage() {
       header: 'Status',
       cell: (agent) => (
         <>
-          <AgentStatusBadge status={agent.status} />
+          <AgentStatusBadge
+            status={agent.status}
+            isOutdated={agent.is_outdated}
+            runningJobsCount={agent.running_jobs_count}
+          />
           {agent.error_message && (
             <p className="text-xs text-destructive mt-1">{agent.error_message}</p>
           )}
@@ -225,6 +231,12 @@ export default function AgentsPage() {
               <Pencil className="h-4 w-4 mr-2" />
               Rename
             </DropdownMenuItem>
+            {agent.is_outdated && (
+              <DropdownMenuItem onClick={() => { setSelectedAgent(agent); setUpdateDialogOpen(true) }}>
+                <ArrowUpCircle className="h-4 w-4 mr-2" />
+                Update
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => handleRevoke(agent)}
               className="text-destructive focus:text-destructive"
@@ -353,6 +365,13 @@ export default function AgentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Agent Update Dialog */}
+      <AgentUpdateDialog
+        agent={selectedAgent}
+        open={updateDialogOpen}
+        onOpenChange={setUpdateDialogOpen}
+      />
 
       {/* Revoke Confirmation Dialog */}
       <AlertDialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
