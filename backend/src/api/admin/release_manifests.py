@@ -24,6 +24,7 @@ from backend.src.models.release_artifact import ReleaseArtifact
 from backend.src.services.exceptions import NotFoundError, ValidationError
 from backend.src.services.download_service import resolve_binary_path
 from backend.src.config.settings import get_settings
+from backend.src.services.manifest_cleanup_service import cleanup_old_manifests
 from backend.src.utils.logging_config import get_logger
 
 
@@ -353,6 +354,10 @@ async def create_release_manifest(
                 "is_active": manifest.is_active,
             }
         )
+
+        # Auto-cleanup old manifests for each platform (Issue #240)
+        cleanup_old_manifests(db, manifest.platforms)
+        db.commit()
 
         return manifest_to_response(manifest)
 
