@@ -252,6 +252,17 @@ black .
 - **Type hints**: Use where beneficial for clarity
 - **Testing**: Write tests alongside implementation (flexible TDD)
 
+### Alembic Migration Naming
+
+The `alembic_version.version_num` column in PostgreSQL is `varchar(32)`. **All migration revision IDs MUST be 32 characters or fewer.** This applies to:
+
+- The `revision = '...'` value inside the migration file
+- The migration filename (which must match the revision ID): `{NNN}_{short_description}.py`
+
+**Convention**: `{3-digit number}_{concise_snake_case_description}` — e.g., `069_agent_platform_outdated` (27 chars). Keep descriptions short. If a name exceeds 32 characters, shorten the description. Never sacrifice the numeric prefix.
+
+**Migration location**: `backend/src/db/migrations/versions/`
+
 ## Frontend Architecture
 
 ### Design System (Required Reading)
