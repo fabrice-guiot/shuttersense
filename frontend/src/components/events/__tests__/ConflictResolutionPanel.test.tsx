@@ -33,6 +33,8 @@ const twoEventGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: {
         venue_quality: 80,
         organizer_reputation: 50,
@@ -55,6 +57,8 @@ const twoEventGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: {
         venue_quality: 50,
         organizer_reputation: 50,
@@ -92,6 +96,8 @@ const threeEventGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 50, organizer_reputation: 50, performer_lineup: 50, logistics_ease: 50, readiness: 50, composite: 50 },
     },
     {
@@ -107,6 +113,8 @@ const threeEventGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 70, organizer_reputation: 80, performer_lineup: 60, logistics_ease: 50, readiness: 50, composite: 62 },
     },
     {
@@ -122,6 +130,8 @@ const threeEventGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 90, organizer_reputation: 90, performer_lineup: 80, logistics_ease: 80, readiness: 80, composite: 84 },
     },
   ],
@@ -148,6 +158,8 @@ const resolvedGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 80, organizer_reputation: 80, performer_lineup: 80, logistics_ease: 80, readiness: 80, composite: 80 },
     },
     {
@@ -163,6 +175,8 @@ const resolvedGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'skipped',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 40, organizer_reputation: 40, performer_lineup: 40, logistics_ease: 40, readiness: 40, composite: 40 },
     },
   ],
@@ -327,5 +341,36 @@ describe('ConflictResolutionPanel', () => {
     render(<ConflictResolutionPanel groups={[twoEventGroup]} />)
     expect(screen.getByText('09:00')).toBeInTheDocument()
     expect(screen.getByText('11:00')).toBeInTheDocument()
+  })
+
+  // ===========================================================================
+  // forces_skip button suppression (Issue #238)
+  // ===========================================================================
+
+  test('hides Skip button when event has forces_skip', () => {
+    const forcesSkipGroup: ConflictGroup = {
+      ...twoEventGroup,
+      events: [
+        { ...twoEventGroup.events[0], forces_skip: true, attendance: 'skipped' },
+        twoEventGroup.events[1],
+      ],
+    }
+    render(<ConflictResolutionPanel groups={[forcesSkipGroup]} />)
+    // Only the second event should have a Skip button
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    expect(skipButtons).toHaveLength(1)
+  })
+
+  test('hides Restore button when skipped event has forces_skip', () => {
+    const forcesSkipResolved: ConflictGroup = {
+      ...resolvedGroup,
+      events: [
+        resolvedGroup.events[0],
+        { ...resolvedGroup.events[1], forces_skip: true },
+      ],
+    }
+    render(<ConflictResolutionPanel groups={[forcesSkipResolved]} />)
+    // Skipped event with forces_skip should NOT have a Restore button
+    expect(screen.queryByRole('button', { name: /Restore/i })).not.toBeInTheDocument()
   })
 })

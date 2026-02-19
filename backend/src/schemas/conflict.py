@@ -106,6 +106,8 @@ class ScoredEvent(BaseModel):
     performer_count: int = Field(..., description="Number of confirmed performers")
     travel_required: Optional[bool] = None
     attendance: str
+    status: Optional[str] = Field(default=None, description="Event status key (e.g. 'future', 'cancelled')")
+    forces_skip: bool = Field(default=False, description="Whether this event's status forces attendance to 'skipped'")
     scores: EventScores
 
 

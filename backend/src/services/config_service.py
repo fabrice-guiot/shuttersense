@@ -390,10 +390,10 @@ class ConfigService:
         """
         # Hardcoded defaults as fallback (matches migration 019 and seed_data_service)
         defaults = [
-            {'key': 'future', 'label': 'Future', 'display_order': 0},
-            {'key': 'confirmed', 'label': 'Confirmed', 'display_order': 1},
-            {'key': 'completed', 'label': 'Completed', 'display_order': 2},
-            {'key': 'cancelled', 'label': 'Cancelled', 'display_order': 3},
+            {'key': 'future', 'label': 'Future', 'display_order': 0, 'forces_skip': False},
+            {'key': 'confirmed', 'label': 'Confirmed', 'display_order': 1, 'forces_skip': False},
+            {'key': 'completed', 'label': 'Completed', 'display_order': 2, 'forces_skip': False},
+            {'key': 'cancelled', 'label': 'Cancelled', 'display_order': 3, 'forces_skip': True},
         ]
 
         configs = self.db.query(Configuration).filter(
@@ -405,19 +405,33 @@ class ConfigService:
             logger.debug(f"No event statuses found for team {team_id}, using defaults")
             return defaults
 
-        # Each status value_json contains: {"label": "...", "display_order": N}
+        # Each status value_json contains: {"label": "...", "display_order": N, "forces_skip": bool}
         statuses = []
         for config in configs:
             value = config.value_json if isinstance(config.value_json, dict) else {}
             statuses.append({
                 "key": config.key,
                 "label": value.get("label", config.key.replace("_", " ").title()),
-                "display_order": value.get("display_order", 999)
+                "display_order": value.get("display_order", 999),
+                "forces_skip": value.get("forces_skip", False),
             })
 
         # Sort by display_order
         statuses.sort(key=lambda x: x["display_order"])
         return statuses
+
+    def get_forces_skip_statuses(self, team_id: int) -> set[str]:
+        """
+        Get the set of status keys that have forces_skip=True for a team.
+
+        Args:
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            Set of status key strings that force attendance to 'skipped'
+        """
+        statuses = self.get_event_statuses(team_id)
+        return {s["key"] for s in statuses if s.get("forces_skip", False)}
 
     def get_collection_ttl(self, team_id: int) -> Dict[str, int]:
         """

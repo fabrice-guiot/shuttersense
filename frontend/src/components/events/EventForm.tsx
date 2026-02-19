@@ -6,7 +6,7 @@
  * Issue #39 - Calendar Events feature (Phase 5)
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -189,6 +189,27 @@ export const EventForm = ({
       attendance: 'planned',
     }
   })
+
+  // Watch status field to enforce forces_skip behavior (Issue #238)
+  const watchedStatus = form.watch('status')
+  const currentStatusConfig = eventStatuses.find(s => s.key === watchedStatus)
+  const isForceSkipped = currentStatusConfig?.forces_skip ?? false
+
+  // Auto-set attendance when status forces skip, auto-revert when moving away
+  const prevForcesSkipRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    if (statusesLoading) return
+    const nowForces = currentStatusConfig?.forces_skip ?? false
+
+    if (nowForces) {
+      form.setValue('attendance', 'skipped')
+    } else if (prevForcesSkipRef.current === true && !nowForces) {
+      // Switched away from a forces_skip status → revert to 'planned'
+      form.setValue('attendance', 'planned')
+    }
+
+    prevForcesSkipRef.current = nowForces
+  }, [watchedStatus, eventStatuses, statusesLoading, form])
 
   // Populate form when editing - wait for eventStatuses to load to ensure Select works
   useEffect(() => {
@@ -849,7 +870,7 @@ export const EventForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Attendance</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isForceSkipped}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select attendance" />
@@ -861,6 +882,9 @@ export const EventForm = ({
                       <SelectItem value="skipped">Skipped</SelectItem>
                     </SelectContent>
                   </Select>
+                  {isForceSkipped && (
+                    <FormDescription>Locked to "Skipped" by status.</FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

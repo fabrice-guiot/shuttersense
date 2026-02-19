@@ -38,10 +38,10 @@ DEFAULT_CATEGORIES = [
 
 # Default event statuses matching migration 019_seed_default_event_statuses
 DEFAULT_EVENT_STATUSES = [
-    {'key': 'future', 'label': 'Future', 'display_order': 0},
-    {'key': 'confirmed', 'label': 'Confirmed', 'display_order': 1},
-    {'key': 'completed', 'label': 'Completed', 'display_order': 2},
-    {'key': 'cancelled', 'label': 'Cancelled', 'display_order': 3},
+    {'key': 'future', 'label': 'Future', 'display_order': 0, 'forces_skip': False},
+    {'key': 'confirmed', 'label': 'Confirmed', 'display_order': 1, 'forces_skip': False},
+    {'key': 'completed', 'label': 'Completed', 'display_order': 2, 'forces_skip': False},
+    {'key': 'cancelled', 'label': 'Cancelled', 'display_order': 3, 'forces_skip': True},
 ]
 
 # Default collection TTL values by state (in seconds)
@@ -211,7 +211,8 @@ class SeedDataService:
                 key=status_data['key'],
                 value_json={
                     'label': status_data['label'],
-                    'display_order': status_data['display_order']
+                    'display_order': status_data['display_order'],
+                    'forces_skip': status_data.get('forces_skip', False),
                 },
                 description=f"Event status: {status_data['label']}",
                 source=ConfigSource.DATABASE,

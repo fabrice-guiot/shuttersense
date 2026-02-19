@@ -5,10 +5,11 @@
  * Displays status list with CRUD operations and reordering.
  *
  * Issue #39 - Calendar Events feature (Phase 12)
+ * Issue #238 - Configurable forces_skip behavior
  */
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Pencil, GripVertical, Flag, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Pencil, GripVertical, Flag, Loader2, SkipForward } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import type { EventStatusConfig } from '@/contracts/api/config-api'
@@ -49,9 +51,9 @@ interface EventStatusesProps {
   /** Loading state */
   loading?: boolean
   /** Called when a status is created */
-  onCreate: (key: string, value: { label: string; display_order: number }) => Promise<void>
+  onCreate: (key: string, value: { label: string; display_order: number; forces_skip?: boolean }) => Promise<void>
   /** Called when a status is updated */
-  onUpdate: (key: string, value: { label: string; display_order: number }) => Promise<void>
+  onUpdate: (key: string, value: { label: string; display_order: number; forces_skip?: boolean }) => Promise<void>
   /** Called when a status is deleted */
   onDelete: (key: string) => Promise<void>
 }
@@ -75,21 +77,22 @@ export function EventStatusesSection({
 
   // Edit form state
   const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ key: '', label: '' })
+  const [formData, setFormData] = useState({ key: '', label: '', forces_skip: false })
 
   // Convert to sorted array
   const statusList = Object.entries(statuses)
     .map(([key, value]) => ({
       key,
       label: value.label,
-      display_order: value.display_order
+      display_order: value.display_order,
+      forces_skip: value.forces_skip ?? false
     }))
     .sort((a, b) => a.display_order - b.display_order)
 
   // Open add dialog
   const handleAdd = () => {
     setEditingKey(null)
-    setFormData({ key: '', label: '' })
+    setFormData({ key: '', label: '', forces_skip: false })
     setFormError(null)
     setEditDialogOpen(true)
   }
@@ -98,7 +101,7 @@ export function EventStatusesSection({
   const handleEdit = (key: string) => {
     const status = statuses[key]
     setEditingKey(key)
-    setFormData({ key, label: status.label })
+    setFormData({ key, label: status.label, forces_skip: status.forces_skip ?? false })
     setFormError(null)
     setEditDialogOpen(true)
   }
@@ -141,7 +144,8 @@ export function EventStatusesSection({
         // Update existing
         await onUpdate(editingKey, {
           label: formData.label.trim(),
-          display_order: statuses[editingKey].display_order
+          display_order: statuses[editingKey].display_order,
+          forces_skip: formData.forces_skip,
         })
       } else {
         // Create new - add at the end
@@ -150,7 +154,8 @@ export function EventStatusesSection({
           : -1
         await onCreate(formData.key.trim(), {
           label: formData.label.trim(),
-          display_order: maxOrder + 1
+          display_order: maxOrder + 1,
+          forces_skip: formData.forces_skip,
         })
       }
       setEditDialogOpen(false)
@@ -211,6 +216,7 @@ export function EventStatusesSection({
                 <TableHead className="w-10">#</TableHead>
                 <TableHead>Key</TableHead>
                 <TableHead>Label</TableHead>
+                <TableHead className="w-24">Forces Skip</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -226,6 +232,14 @@ export function EventStatusesSection({
                     </Badge>
                   </TableCell>
                   <TableCell>{status.label}</TableCell>
+                  <TableCell>
+                    {status.forces_skip && (
+                      <Badge variant="outline" className="text-xs gap-1">
+                        <SkipForward className="h-3 w-3" />
+                        Skip
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button
@@ -286,6 +300,22 @@ export function EventStatusesSection({
               <p className="text-xs text-muted-foreground">
                 Display name shown in dropdowns and forms.
               </p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="forcesSkip" className="text-sm font-medium">
+                  Forces Skip
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Automatically set attendance to "Skipped" for events with this status.
+                </p>
+              </div>
+              <Switch
+                id="forcesSkip"
+                checked={formData.forces_skip}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, forces_skip: checked }))}
+              />
             </div>
 
             {formError && (

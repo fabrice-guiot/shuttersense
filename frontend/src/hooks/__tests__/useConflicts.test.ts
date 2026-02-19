@@ -42,6 +42,8 @@ function makeScoredEvent(overrides: Partial<ScoredEvent> & { guid: string; title
     performer_count: overrides.performer_count ?? 0,
     travel_required: overrides.travel_required ?? null,
     attendance: overrides.attendance ?? 'planned',
+    status: overrides.status ?? 'future',
+    forces_skip: overrides.forces_skip ?? false,
     scores: overrides.scores ?? defaultScores,
   }
 }
