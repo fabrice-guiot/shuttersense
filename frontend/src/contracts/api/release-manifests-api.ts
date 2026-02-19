@@ -129,6 +129,8 @@ export interface ReleaseManifestListOptions {
   platform?: string
   /** Filter by version */
   version?: string
+  /** Only return the most recent manifest per version string */
+  latest_only?: boolean
 }
 
 /**

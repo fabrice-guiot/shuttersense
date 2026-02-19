@@ -615,10 +615,9 @@ class AgentService:
             agent.metrics_json = json.dumps(metrics_with_timestamp)
 
         # Outdated detection: compare agent checksum against latest manifest
-        latest_version = None
-        became_outdated = False
-        if agent.platform and agent.binary_checksum:
-            latest_version, became_outdated = self._check_outdated(agent)
+        # Also flags agents missing platform/checksum as outdated when
+        # active manifests exist (pre-upgrade agents need updating too).
+        latest_version, became_outdated = self._check_outdated(agent)
 
         self.db.commit()
 
@@ -649,6 +648,10 @@ class AgentService:
         platform and compares its checksum against the agent's binary_checksum.
         Updates agent.is_outdated accordingly.
 
+        Agents missing platform or binary_checksum (registered before upgrade
+        detection was added) are treated as outdated whenever any active
+        manifest exists, since they are clearly running a pre-upgrade build.
+
         Args:
             agent: Agent to check for outdated status.
 
@@ -662,6 +665,32 @@ class AgentService:
             .order_by(ReleaseManifest.created_at.desc())
             .all()
         )
+
+        if not active_manifests:
+            agent.is_outdated = False
+            return None, False
+
+        # Agents without platform or checksum are pre-upgrade builds.
+        # If any active manifest exists, they need updating.
+        if not agent.platform or not agent.binary_checksum:
+            latest_version = active_manifests[0].version
+            was_outdated = agent.is_outdated
+
+            agent.is_outdated = True
+            became_outdated = not was_outdated
+
+            if became_outdated:
+                logger.info(
+                    "Pre-upgrade agent detected as outdated (missing platform/checksum)",
+                    extra={
+                        "agent_guid": agent.guid,
+                        "agent_version": agent.version,
+                        "latest_version": latest_version,
+                        "platform": agent.platform,
+                    }
+                )
+
+            return latest_version, became_outdated
 
         matching_manifest = None
         for manifest in active_manifests:

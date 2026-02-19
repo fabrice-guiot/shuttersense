@@ -320,7 +320,11 @@ export default function AgentDetailPage() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <h1 className="text-2xl font-bold truncate">{agent.name}</h1>
-              <AgentStatusBadge status={agent.status} />
+              <AgentStatusBadge
+                status={agent.status}
+                isOutdated={agent.is_outdated}
+                hasMissingPlatform={!agent.platform}
+              />
               {wsConnected && (
                 <Badge variant="outline" className="text-xs">
                   <Activity className="mr-1 h-3 w-3" />

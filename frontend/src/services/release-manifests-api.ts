@@ -53,6 +53,9 @@ export async function listManifests(
   if (options?.version) {
     params.append('version', options.version)
   }
+  if (options?.latest_only) {
+    params.append('latest_only', 'true')
+  }
 
   const response = await api.get<ReleaseManifestListResponse>('/admin/release-manifests', {
     params,

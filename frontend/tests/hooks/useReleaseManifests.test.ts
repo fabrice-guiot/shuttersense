@@ -108,6 +108,7 @@ describe('useReleaseManifests', () => {
     await waitFor(() => {
       expect(releaseManifestsApi.listManifests).toHaveBeenCalledWith({
         active_only: true,
+        latest_only: true,
         platform: 'darwin-arm64',
         version: '1.0.0',
       })
