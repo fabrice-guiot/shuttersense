@@ -3654,8 +3654,8 @@ async def get_active_release(
     Returns the active release manifest with download URLs for each platform.
     Used by both the Agent Setup Wizard (session auth) and agent CLI (API key auth).
 
-    If multiple manifests are active, returns the one with the highest version
-    (by string sort descending, then most recently created).
+    If multiple manifests are active, returns the one with the highest semantic
+    version (PEP 440 comparison via parse_version_safe).
 
     Args:
         db: Database session dependency.
@@ -3677,12 +3677,20 @@ async def get_active_release(
 
     settings = get_settings()
 
-    # Find the active manifest with highest version
-    manifest = (
+    # Find the active manifest with highest semantic version.
+    # We fetch all active manifests and pick the max in Python because
+    # lexicographic SQL ORDER BY gets semver wrong (e.g. "v1.8" > "v1.18").
+    from backend.src.utils.version import parse_version_safe
+
+    active_manifests = (
         db.query(ReleaseManifest)
         .filter(ReleaseManifest.is_active.is_(True))
-        .order_by(ReleaseManifest.version.desc(), ReleaseManifest.created_at.desc())
-        .first()
+        .all()
+    )
+    manifest = (
+        max(active_manifests, key=lambda m: parse_version_safe(m.version))
+        if active_manifests
+        else None
     )
 
     if not manifest:
