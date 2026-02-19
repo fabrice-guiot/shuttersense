@@ -1,7 +1,7 @@
 # Implementation Plan: Polymorphic Target Entity for Job & AnalysisResult
 
 **Branch**: `110-polymorphic-results` | **Date**: 2026-02-19 | **Issue**: [#110](https://github.com/fabrice-guiot/shuttersense/issues/110)
-**Status**: Draft — awaiting reviewer feedback
+**Status**: Rev 2 — updated from reviewer feedback (CodeRabbit, Greptile)
 
 ## Summary
 
@@ -23,7 +23,7 @@ Refactor the `Job` and `AnalysisResult` data models to replace the growing set o
 
 Both `Job` and `AnalysisResult` have direct nullable FK columns for each entity type they can target:
 
-```
+```text
 analysis_results:  collection_id (FK), pipeline_id (FK), connector_id (FK)
 jobs:              collection_id (FK), pipeline_id (FK)
                    connector_id stored in progress_json (HACK)
@@ -68,10 +68,12 @@ target_entity_guid  VARCHAR(50)   -- cached GUID for API responses (avoids joins
 target_entity_name  VARCHAR(255)  -- cached display name (avoids joins)
 
 -- Context: snapshot of secondary entity references
-context_json        JSONB         -- structured context (see below)
+context_json        JSONB         -- structured context (see below), NULL when no context
 ```
 
 ### Context JSON Structure
+
+When context exists, `context_json` contains only the keys that are relevant (no null-valued keys):
 
 ```json
 {
@@ -89,6 +91,8 @@ context_json        JSONB         -- structured context (see below)
 }
 ```
 
+**Null handling convention**: When no context entities exist (e.g., inventory tools have no pipeline or connector context), `context_json` is `NULL` — not `{}` or `{"pipeline": null}`. When only some context exists (e.g., pipeline but no connector), only the present keys are included. This ensures consistency between backfilled records and newly-written records (Pydantic's `exclude_none=True` produces the same format).
+
 Context is a **point-in-time snapshot**:
 - Even if a pipeline is renamed or deleted, the context preserves what was used at execution time
 - This is _better_ than the current FK-with-SET-NULL behavior, which loses pipeline references on delete
@@ -96,17 +100,27 @@ Context is a **point-in-time snapshot**:
 
 ### Target Entity Type Enum
 
+Both Python and TypeScript define the **same** set of accepted entity types:
+
 ```python
+# backend/src/models/__init__.py
 class TargetEntityType(str, enum.Enum):
     COLLECTION = "collection"
     CONNECTOR = "connector"
     PIPELINE = "pipeline"
+    CAMERA = "camera"
     # Future (no schema change needed):
-    # CAMERA = "camera"
     # ALBUM = "album"
     # EVENT = "event"
     # WORKFLOW = "workflow"
 ```
+
+```typescript
+// frontend/src/contracts/api/target-api.ts
+export type TargetEntityType = 'collection' | 'connector' | 'pipeline' | 'camera'
+```
+
+> **Reviewer feedback addressed**: `CAMERA` is included in both Python and TypeScript enums to keep them aligned. Camera is already a model in the codebase (Issue #217). Future types (`ALBUM`, `EVENT`, `WORKFLOW`) remain commented out until their models exist.
 
 ### Why This Over Alternatives
 
@@ -132,62 +146,211 @@ class TargetEntityType(str, enum.Enum):
 
 ### Phase 1: Migration — Add Columns + Backfill Data
 
-**Migration**: `072_polymorphic_target.py` (≤32 char revision ID)
+**Migration**: `072_polymorphic_target.py` (22 chars — under the 32-char limit)
 
-**Operations**:
-1. Add 5 columns to `analysis_results` (all nullable)
-2. Add 5 columns to `jobs` (all nullable)
-3. Create composite indexes:
-   - `idx_results_target (target_entity_type, target_entity_id)`
-   - `idx_results_target_tool (target_entity_type, target_entity_id, tool, created_at DESC)`
-   - `idx_jobs_target (target_entity_type, target_entity_id)`
-4. Backfill existing records (dialect-aware SQL for PostgreSQL + SQLite):
+#### Step 1: Add columns
 
-**analysis_results backfill**:
-```sql
--- Collection-targeted results
-UPDATE analysis_results ar
-SET target_entity_type = 'collection',
-    target_entity_id = ar.collection_id,
-    target_entity_guid = c.uuid,  -- will need GUID computation
-    target_entity_name = c.name,
-    context_json = json_build_object(
-      'pipeline', CASE WHEN ar.pipeline_id IS NOT NULL THEN
-        json_build_object('id', ar.pipeline_id, 'guid', p.uuid, 'name', p.name, 'version', ar.pipeline_version)
-      ELSE NULL END,
-      'connector', CASE WHEN c.connector_id IS NOT NULL THEN
-        json_build_object('id', cn.id, 'guid', cn.uuid, 'name', cn.name)
-      ELSE NULL END
-    )
-FROM collections c
-LEFT JOIN pipelines p ON ar.pipeline_id = p.id
-LEFT JOIN connectors cn ON c.connector_id = cn.id
-WHERE ar.collection_id = c.id AND ar.collection_id IS NOT NULL;
+Add 5 columns to both `analysis_results` and `jobs` (all nullable):
 
--- Connector-targeted results (inventory tools)
-UPDATE analysis_results ar
-SET target_entity_type = 'connector',
-    target_entity_id = ar.connector_id,
-    target_entity_guid = cn.uuid,
-    target_entity_name = cn.name
-FROM connectors cn
-WHERE ar.connector_id = cn.id AND ar.collection_id IS NULL;
-
--- Pipeline-targeted results (display_graph)
-UPDATE analysis_results ar
-SET target_entity_type = 'pipeline',
-    target_entity_id = ar.pipeline_id,
-    target_entity_guid = p.uuid,
-    target_entity_name = p.name
-FROM pipelines p
-WHERE ar.pipeline_id = p.id AND ar.collection_id IS NULL AND ar.connector_id IS NULL;
+```python
+# Dialect-aware JSONB column type (used for context_json)
+context_col_type = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 ```
 
-**jobs backfill**: Similar pattern. For inventory jobs, extract `connector_id` from `progress_json`.
+- `target_entity_type`: `String(30)`, nullable
+- `target_entity_id`: `Integer`, nullable
+- `target_entity_guid`: `String(50)`, nullable
+- `target_entity_name`: `String(255)`, nullable
+- `context_json`: `context_col_type`, nullable
 
-**Note on GUID computation**: The backfill needs to convert UUIDs to GUID format (`prefix_crockfordbase32`). This may need to be done in Python (iterate rows) rather than pure SQL, since Crockford Base32 encoding is application logic. Alternatively, store the raw UUID temporarily and fix GUIDs in Phase 2 Python code.
+#### Step 2: Create indexes (dialect-aware)
 
-**Rollback**: Drop the new columns and indexes.
+On **PostgreSQL**: Use `CREATE INDEX CONCURRENTLY` via `op.execute()` to avoid write-locks on production tables. This requires the migration to run outside an Alembic transaction block (`autocommit` mode for this migration).
+
+On **SQLite** (tests): Use standard `op.create_index()`.
+
+```python
+dialect = op.get_bind().dialect.name
+
+if dialect == "postgresql":
+    # Non-blocking index creation for production
+    op.execute(
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_results_target "
+        "ON analysis_results (target_entity_type, target_entity_id)"
+    )
+    op.execute(
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_results_target_tool "
+        "ON analysis_results (target_entity_type, target_entity_id, tool, created_at DESC)"
+    )
+    op.execute(
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_target "
+        "ON jobs (target_entity_type, target_entity_id)"
+    )
+else:
+    # SQLite — standard index creation
+    op.create_index("idx_results_target", "analysis_results", ["target_entity_type", "target_entity_id"])
+    op.create_index("idx_results_target_tool", "analysis_results", ["target_entity_type", "target_entity_id", "tool", "created_at"])
+    op.create_index("idx_jobs_target", "jobs", ["target_entity_type", "target_entity_id"])
+```
+
+#### Step 3: Python-based backfill
+
+> **Reviewer feedback addressed**: The backfill is **entirely Python-based** (not raw SQL). This solves three problems at once:
+> 1. **GUID encoding**: Crockford Base32 is application logic in `GuidService` — cannot be done in SQL
+> 2. **Dialect compatibility**: No `json_build_object()` vs `json_object()` branching needed
+> 3. **context_json null handling**: Python can build dicts and skip null keys cleanly
+
+**Backfill algorithm** (runs inside `upgrade()`):
+
+```python
+from backend.src.services.guid import GuidService
+
+bind = op.get_bind()
+
+# --- Backfill analysis_results ---
+
+# 1. Collection-targeted results
+rows = bind.execute(sa.text("""
+    SELECT ar.id, ar.collection_id, ar.pipeline_id, ar.pipeline_version,
+           c.uuid AS col_uuid, c.name AS col_name, c.connector_id,
+           p.uuid AS pip_uuid, p.name AS pip_name,
+           cn.id AS cn_id, cn.uuid AS cn_uuid, cn.name AS cn_name
+    FROM analysis_results ar
+    JOIN collections c ON ar.collection_id = c.id
+    LEFT JOIN pipelines p ON ar.pipeline_id = p.id
+    LEFT JOIN connectors cn ON c.connector_id = cn.id
+    WHERE ar.collection_id IS NOT NULL
+      AND ar.target_entity_type IS NULL
+""")).fetchall()
+
+for row in rows:
+    context = {}
+    if row.pipeline_id:
+        context["pipeline"] = {
+            "id": row.pipeline_id,
+            "guid": GuidService.uuid_to_guid("pip", row.pip_uuid),
+            "name": row.pip_name,
+            "version": row.pipeline_version,
+        }
+    if row.cn_id:
+        context["connector"] = {
+            "id": row.cn_id,
+            "guid": GuidService.uuid_to_guid("con", row.cn_uuid),
+            "name": row.cn_name,
+        }
+
+    bind.execute(sa.text("""
+        UPDATE analysis_results
+        SET target_entity_type = :tet, target_entity_id = :tei,
+            target_entity_guid = :teg, target_entity_name = :ten,
+            context_json = :ctx
+        WHERE id = :id
+    """), {
+        "tet": "collection",
+        "tei": row.collection_id,
+        "teg": GuidService.uuid_to_guid("col", row.col_uuid),
+        "ten": row.col_name,
+        "ctx": json.dumps(context) if context else None,
+        "id": row.id,
+    })
+
+# 2. Connector-targeted results (inventory tools)
+rows = bind.execute(sa.text("""
+    SELECT ar.id, ar.connector_id, cn.uuid AS cn_uuid, cn.name AS cn_name
+    FROM analysis_results ar
+    JOIN connectors cn ON ar.connector_id = cn.id
+    WHERE ar.collection_id IS NULL AND ar.connector_id IS NOT NULL
+      AND ar.target_entity_type IS NULL
+""")).fetchall()
+
+for row in rows:
+    bind.execute(sa.text("""
+        UPDATE analysis_results
+        SET target_entity_type = :tet, target_entity_id = :tei,
+            target_entity_guid = :teg, target_entity_name = :ten,
+            context_json = NULL
+        WHERE id = :id
+    """), {
+        "tet": "connector",
+        "tei": row.connector_id,
+        "teg": GuidService.uuid_to_guid("con", row.cn_uuid),
+        "ten": row.cn_name,
+        "id": row.id,
+    })
+
+# 3. Pipeline-targeted results (display_graph)
+rows = bind.execute(sa.text("""
+    SELECT ar.id, ar.pipeline_id, p.uuid AS pip_uuid, p.name AS pip_name
+    FROM analysis_results ar
+    JOIN pipelines p ON ar.pipeline_id = p.id
+    WHERE ar.collection_id IS NULL AND ar.connector_id IS NULL
+      AND ar.pipeline_id IS NOT NULL
+      AND ar.target_entity_type IS NULL
+""")).fetchall()
+
+for row in rows:
+    bind.execute(sa.text("""
+        UPDATE analysis_results
+        SET target_entity_type = :tet, target_entity_id = :tei,
+            target_entity_guid = :teg, target_entity_name = :ten,
+            context_json = NULL
+        WHERE id = :id
+    """), {
+        "tet": "pipeline",
+        "tei": row.pipeline_id,
+        "teg": GuidService.uuid_to_guid("pip", row.pip_uuid),
+        "ten": row.pip_name,
+        "id": row.id,
+    })
+
+# --- Backfill jobs ---
+
+# 1. Collection-targeted jobs
+# (same pattern as analysis_results — omitted for brevity)
+
+# 2. Pipeline-targeted jobs (display_graph mode)
+# (same pattern — omitted for brevity)
+
+# 3. Connector-targeted jobs (inventory tools)
+# Extract connector_id from progress_json
+rows = bind.execute(sa.text("""
+    SELECT j.id, j.progress_json
+    FROM jobs j
+    WHERE j.tool IN ('inventory_validate', 'inventory_import')
+      AND j.target_entity_type IS NULL
+""")).fetchall()
+
+for row in rows:
+    progress = json.loads(row.progress_json) if row.progress_json else {}
+    connector_id = progress.get("connector_id")
+    if not connector_id:
+        continue  # Skip jobs with missing connector_id
+
+    cn = bind.execute(sa.text(
+        "SELECT id, uuid, name FROM connectors WHERE id = :cid"
+    ), {"cid": connector_id}).fetchone()
+
+    if not cn:
+        continue  # Connector may have been deleted
+
+    bind.execute(sa.text("""
+        UPDATE jobs
+        SET target_entity_type = :tet, target_entity_id = :tei,
+            target_entity_guid = :teg, target_entity_name = :ten,
+            context_json = NULL
+        WHERE id = :id
+    """), {
+        "tet": "connector",
+        "tei": cn.id,
+        "teg": GuidService.uuid_to_guid("con", cn.uuid),
+        "ten": cn.name,
+        "id": row.id,
+    })
+```
+
+#### Rollback
+
+Drop the new columns and indexes. No data loss — legacy FK columns are untouched.
 
 ### Phase 2: Model + Service Layer — Dual Write (No New Migration)
 
@@ -199,6 +362,8 @@ Update all code paths to write **both** old FK columns AND new target/context co
 
 This phase is pure code changes. If anything breaks, the old columns still work.
 
+**Rollback**: Revert the service-layer commits. Legacy FK columns remain authoritative — reads never switched away from them. All writes still populate old FKs, so no data inconsistency.
+
 ### Phase 3: Switch Reads + Update API Schemas + Frontend
 
 - **Backend reads**: Switch from FK-based queries to `target_entity_type + target_entity_id`
@@ -206,9 +371,11 @@ This phase is pure code changes. If anything breaks, the old columns still work.
 - **Deprecated fields**: Keep `collection_guid`, `collection_name`, `connector_guid`, `connector_name`, `pipeline_guid`, `pipeline_name`, `pipeline_version` — populated from target/context for backward compat
 - **Frontend**: Replace separate Collection/Connector columns in ResultsTable with unified "Target" column showing icon + name + navigation link. Show context (pipeline version, connector) as secondary info.
 
+**Rollback**: Revert the read-switch and schema commits. Old FK columns are still being written (Phase 2 dual-write continues), so reverting reads to FK-based queries restores the previous behavior immediately. Deprecated API fields were still being populated, so frontend can fall back without changes.
+
 ### Phase 4: Drop Legacy FK Columns (Deferred — Separate Future PR)
 
-Remove `collection_id`, `connector_id`, `pipeline_id`, `pipeline_version` from both models once Phase 3 is stable in production. This is a separate, clean PR with its own migration.
+Remove `collection_id`, `connector_id`, `pipeline_id`, `pipeline_version` from both models once Phase 3 is stable in production. This is a separate, clean PR with its own migration. Timeline: at least 2 releases after Phase 3 stabilizes.
 
 ## API Contract Changes
 
@@ -219,8 +386,8 @@ Remove `collection_id`, `connector_id`, `pipeline_id`, `pipeline_version` from b
 
 class TargetEntityInfo(BaseModel):
     """Primary target entity for a Job or AnalysisResult."""
-    entity_type: str       # "collection", "connector", "pipeline"
-    entity_guid: str       # col_xxx, con_xxx, pip_xxx
+    entity_type: TargetEntityType  # Enum, not plain str — enforces validation
+    entity_guid: str               # col_xxx, con_xxx, pip_xxx
     entity_name: str | None
 
 class ContextEntityRef(BaseModel):
@@ -238,13 +405,17 @@ class ResultContext(BaseModel):
     connector: ContextEntityRef | None = None
 ```
 
+> **Reviewer feedback addressed**: `TargetEntityInfo.entity_type` uses the `TargetEntityType` enum (not a plain `str`) so Python validates the same literals as TypeScript.
+
 ### TypeScript Contracts
 
 ```typescript
 // frontend/src/contracts/api/target-api.ts (NEW)
 
+export type TargetEntityType = 'collection' | 'connector' | 'pipeline' | 'camera'
+
 export interface TargetEntityInfo {
-  entity_type: 'collection' | 'connector' | 'pipeline' | 'camera'
+  entity_type: TargetEntityType
   entity_guid: string
   entity_name: string | null
 }
@@ -280,7 +451,7 @@ export interface ResultContext {
 
 Replace the separate "Collection" and "Connector" columns with one **"Target"** column:
 
-```
+```text
 Icon  Name (clickable link)    Context badge
 ────  ────────────────────    ──────────────
 📁   Vacation 2024            via Standard RAW v3
@@ -316,6 +487,7 @@ The server copies target + context from the Job to the AnalysisResult during `_c
 ## Files to Modify
 
 ### New Files
+
 | File | Purpose |
 |------|---------|
 | `backend/src/db/migrations/versions/072_polymorphic_target.py` | Alembic migration |
@@ -323,6 +495,7 @@ The server copies target + context from the Job to the AnalysisResult during `_c
 | `frontend/src/contracts/api/target-api.ts` | Shared target/context TypeScript types |
 
 ### Modified Files (Backend)
+
 | File | Changes |
 |------|---------|
 | `backend/src/models/__init__.py` | Add `TargetEntityType` enum |
@@ -338,6 +511,7 @@ The server copies target + context from the Job to the AnalysisResult during `_c
 | `backend/src/api/tools.py` | Populate target + context in JobResponse |
 
 ### Modified Files (Frontend)
+
 | File | Changes |
 |------|---------|
 | `frontend/src/contracts/api/results-api.ts` | Import + add target/context to interfaces |
@@ -347,6 +521,7 @@ The server copies target + context from the Job to the AnalysisResult during `_c
 | `frontend/src/pages/AnalyticsPage.tsx` | Target in job cards |
 
 ### Test Files
+
 | Impact | Files |
 |--------|-------|
 | High | `conftest.py`, `test_job_coordinator.py`, `test_result_service.py`, `test_tool_service.py`, `test_inventory_service.py` |
@@ -365,19 +540,42 @@ The server copies target + context from the Job to the AnalysisResult during `_c
 ## Verification Plan
 
 1. **Migration roundtrip**: `alembic upgrade head && alembic downgrade -1 && alembic upgrade head`
-2. **Backfill verification**: `SELECT target_entity_type, count(*) FROM analysis_results GROUP BY 1` — no NULLs
-3. **Context verification**: Spot-check collection-based results have pipeline guid/name/version in context_json
-4. **Backend tests**: `venv/bin/python -m pytest backend/tests/ -v`
-5. **Frontend type-check**: `cd frontend && npx tsc --noEmit`
-6. **Smoke test**: Run each tool type (photostats, pipeline_validation collection + display_graph, inventory_validate), verify target + context in results table and detail panel
-7. **Backward compat**: Verify deprecated `collection_guid`, `pipeline_guid` fields still populated in API responses
+2. **Backfill verification** — assert zero unbackfilled rows in both tables:
+   ```sql
+   SELECT count(*) AS unbackfilled FROM analysis_results WHERE target_entity_type IS NULL;
+   -- Expected: 0
+   SELECT count(*) AS unbackfilled FROM jobs WHERE target_entity_type IS NULL;
+   -- Expected: 0
+   ```
+3. **GUID format verification** — confirm backfilled GUIDs are properly encoded:
+   ```sql
+   SELECT target_entity_guid FROM analysis_results
+   WHERE target_entity_guid NOT LIKE 'col_%'
+     AND target_entity_guid NOT LIKE 'con_%'
+     AND target_entity_guid NOT LIKE 'pip_%'
+     AND target_entity_guid NOT LIKE 'cam_%'
+     AND target_entity_type IS NOT NULL;
+   -- Expected: 0 rows
+   ```
+4. **Context verification** — confirm collection-based results have pipeline context:
+   ```sql
+   SELECT count(*) FROM analysis_results
+   WHERE target_entity_type = 'collection'
+     AND pipeline_id IS NOT NULL
+     AND (context_json IS NULL OR context_json::text NOT LIKE '%pipeline%');
+   -- Expected: 0 (every result with a pipeline_id should have pipeline in context)
+   ```
+5. **Backend tests**: `venv/bin/python -m pytest backend/tests/ -v`
+6. **Frontend type-check**: `cd frontend && npx tsc --noEmit`
+7. **Smoke test**: Run each tool type (photostats, pipeline_validation collection + display_graph, inventory_validate), verify target + context in results table and detail panel
+8. **Backward compat**: Verify deprecated `collection_guid`, `pipeline_guid` fields still populated in API responses
 
-## Open Questions for Reviewers
+## Resolved Questions (from Rev 1 reviewer feedback)
 
-1. **Backfill GUID encoding**: Should the migration compute Crockford Base32 GUIDs in SQL or iterate in Python? SQL is faster but complex; Python is cleaner but slower for large datasets.
+1. **Backfill GUID encoding** — **Python iteration** (not SQL). Crockford Base32 is application logic in `GuidService`. SQL cannot encode it. Python iteration is dialect-agnostic, correct, and verifiable. Performance is acceptable for the current data volume.
 
-2. **Phase 4 timeline**: When should we drop the legacy FK columns? Options: (a) next release after Phase 3 stabilizes, (b) after 2 releases, (c) never (keep for safety net).
+2. **Phase 4 timeline** — **At least 2 releases** after Phase 3 stabilizes. Legacy FK columns are harmless to keep and provide a safety net.
 
-3. **Context JSON schema validation**: Should we enforce a JSON schema on `context_json` at the DB level (CHECK constraint) or only at the application level (Pydantic)? Application-level is simpler and sufficient for type safety.
+3. **Context JSON schema validation** — **Application-level only** (Pydantic `exclude_none=True`). No DB-level CHECK constraint. The JSONB column is opaque to the database; all structure is enforced by the `ResultContext` Pydantic model on write.
 
-4. **Name staleness**: Should we add a background task to refresh cached `target_entity_name` when entities are renamed, or accept point-in-time snapshots as the correct behavior?
+4. **Name staleness** — **Point-in-time snapshots are the correct behavior**. The result was produced when the collection had that name. No background refresh task needed. If requirements change in the future, a refresh can be added independently.
