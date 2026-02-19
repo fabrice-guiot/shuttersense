@@ -105,13 +105,6 @@ function buildFullSignedUrl(signedUrl: string): string {
   return `${window.location.origin}${prefix}${signedUrl}`
 }
 
-function isSecureContext(): boolean {
-  const { protocol, hostname } = window.location
-  if (protocol === 'https:') return true
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return true
-  return false
-}
-
 function agentPlatformToValidPlatform(platform: string | null): ValidPlatform | null {
   if (!platform) return null
   return VALID_PLATFORMS.find((p) => p === platform) ?? null
@@ -156,6 +149,7 @@ function UpdateStepIndicator({ currentStep }: { currentStep: number }) {
       {UPDATE_STEPS.map((step, index) => {
         const isActive = step.number === currentStep
         const isCompleted = step.number < currentStep
+        const isConnectorFilled = step.number <= currentStep
 
         return (
           <div key={step.number} className="flex items-center">
@@ -163,7 +157,7 @@ function UpdateStepIndicator({ currentStep }: { currentStep: number }) {
               <div
                 className={cn(
                   'h-px w-4 sm:w-6 flex-shrink-0',
-                  isCompleted ? 'bg-primary' : 'bg-border'
+                  isConnectorFilled ? 'bg-primary' : 'bg-border'
                 )}
               />
             )}
@@ -234,7 +228,7 @@ function UpdateDownloadStep({
   const [isDownloading, setIsDownloading] = useState(false)
 
   const isDevMode = import.meta.env.DEV || (activeRelease?.dev_mode ?? false)
-  const secure = isSecureContext()
+  const secure = window.isSecureContext
 
   // Resolve the initial platform label for display
   const initialPlatform = useMemo(
