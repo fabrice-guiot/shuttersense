@@ -50,8 +50,8 @@ import { CopyableCodeBlock } from '@/components/agents/wizard/CopyableCodeBlock'
 import { useClipboard } from '@/hooks/useClipboard'
 import { cn } from '@/lib/utils'
 import { detectPlatform } from '@/lib/os-detection'
+import { PLATFORM_LABELS } from '@/contracts/domain-labels'
 import {
-  PLATFORM_LABELS,
   VALID_PLATFORMS,
   type ValidPlatform,
 } from '@/contracts/api/release-manifests-api'
@@ -114,14 +114,7 @@ function isSecureContext(): boolean {
 
 function agentPlatformToValidPlatform(platform: string | null): ValidPlatform | null {
   if (!platform) return null
-  const knownPlatforms: ValidPlatform[] = [
-    'darwin-arm64',
-    'darwin-amd64',
-    'linux-amd64',
-    'linux-arm64',
-    'windows-amd64',
-  ]
-  return knownPlatforms.find((p) => p === platform) ?? null
+  return VALID_PLATFORMS.find((p) => p === platform) ?? null
 }
 
 function getPlatformFamily(platform: ValidPlatform): PlatformFamily {
@@ -218,6 +211,7 @@ interface UpdateDownloadStepProps {
   onPlatformChange: (platform: ValidPlatform) => void
   platformSource: 'agent' | 'browser'
   platformConfidence: 'high' | 'low'
+  resolvedInitialPlatform: ValidPlatform
   nearExpiry: boolean
   fetchRelease: () => void
 }
@@ -231,6 +225,7 @@ function UpdateDownloadStep({
   onPlatformChange,
   platformSource,
   platformConfidence,
+  resolvedInitialPlatform,
   nearExpiry,
   fetchRelease,
 }: UpdateDownloadStepProps) {
@@ -258,9 +253,7 @@ function UpdateDownloadStep({
     return VALID_PLATFORMS.filter((p) => artifactPlatforms.has(p))
   }, [activeRelease, isDevMode, selectedPlatform, initialPlatform])
 
-  const isOverridden = initialPlatform
-    ? selectedPlatform !== initialPlatform
-    : selectedPlatform !== resolveInitialPlatform(agent).platform
+  const isOverridden = selectedPlatform !== (initialPlatform ?? resolvedInitialPlatform)
 
   const matchingArtifact = activeRelease?.artifacts.find(
     (a) => a.platform === selectedPlatform
@@ -461,7 +454,10 @@ function UpdateDownloadStep({
 
               {/* Signed URL section */}
               {matchingArtifact.signed_url && fullSignedUrl && (
-                <div className={`space-y-3 border-t pt-4 ${isOverridden ? 'rounded-md border border-blue-200 bg-blue-50/30 p-4 dark:border-blue-900 dark:bg-blue-950/30' : ''}`}>
+                <div className={cn(
+                  'space-y-3 border-t pt-4',
+                  isOverridden && 'rounded-md border border-blue-200 bg-blue-50/30 p-4 dark:border-blue-900 dark:bg-blue-950/30'
+                )}>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <Label>Remote Download Link</Label>
@@ -823,14 +819,21 @@ export function AgentUpdateDialog({
     }
   }, [open, agent, fetchRelease])
 
-  // Check for near-expiry signed URLs (> 50 minutes since fetch)
+  // Check for near-expiry signed URLs using actual URL expiry timestamp
   useEffect(() => {
     if (!matchingArtifact?.signed_url) return
 
     const checkExpiry = () => {
-      const elapsed = Date.now() - fetchedAtRef.current
-      if (elapsed > 50 * 60 * 1000) {
-        setNearExpiry(true)
+      const expiry = parseSignedUrlExpiry(matchingArtifact.signed_url)
+      if (expiry) {
+        const remaining = expiry.getTime() - Date.now()
+        setNearExpiry(remaining < 10 * 60 * 1000) // warn when < 10 min left
+      } else {
+        // Fallback: if we can't parse expiry, use elapsed-time heuristic
+        const elapsed = Date.now() - fetchedAtRef.current
+        if (elapsed > 50 * 60 * 1000) {
+          setNearExpiry(true)
+        }
       }
     }
 
@@ -870,6 +873,7 @@ export function AgentUpdateDialog({
               onPlatformChange={setSelectedPlatform}
               platformSource={initialPlatformInfo.source}
               platformConfidence={initialPlatformInfo.confidence}
+              resolvedInitialPlatform={initialPlatformInfo.platform}
               nearExpiry={nearExpiry}
               fetchRelease={fetchRelease}
             />

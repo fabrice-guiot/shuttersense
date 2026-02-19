@@ -38,6 +38,7 @@ import type { ConnectorType } from './api/connector-api'
 import type { ConflictType } from './api/conflict-api'
 import type { CollectionType, CollectionState } from './api/collection-api'
 import type { AgentStatus } from './api/agent-api'
+import type { ValidPlatform } from './api/release-manifests-api'
 
 // ============================================================================
 // Domain Object Icons
@@ -480,6 +481,21 @@ export const AGENT_STATUS_BADGE_VARIANT: Record<
  * Badge variant for the derived "outdated" display state
  */
 export const AGENT_OUTDATED_BADGE_VARIANT = 'warning' as const
+
+// ============================================================================
+// Platform Labels (Release Manifests - Issue #90)
+// ============================================================================
+
+/**
+ * Human-readable labels for agent binary platforms
+ */
+export const PLATFORM_LABELS: Record<ValidPlatform, string> = {
+  'darwin-arm64': 'macOS (Apple Silicon)',
+  'darwin-amd64': 'macOS (Intel)',
+  'linux-amd64': 'Linux (x86_64)',
+  'linux-arm64': 'Linux (ARM64)',
+  'windows-amd64': 'Windows (x86_64)',
+}
 
 /**
  * Short descriptions for notification category preference toggles

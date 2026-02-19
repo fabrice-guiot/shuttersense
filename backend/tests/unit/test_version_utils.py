@@ -32,6 +32,9 @@ class TestParseVersionSafe:
     def test_two_part_version(self):
         assert parse_version_safe("v1.8") == Version("1.8")
 
+    def test_none_input_falls_back_to_zero(self):
+        assert parse_version_safe(None) == Version("0.0.0")
+
     def test_sorting_list_of_versions(self):
         versions = ["v1.8", "v1.18", "v2.0.0", "v1.2.3", "v0.9"]
         sorted_versions = sorted(versions, key=parse_version_safe)

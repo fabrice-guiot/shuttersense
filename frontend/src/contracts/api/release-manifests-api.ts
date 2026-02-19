@@ -149,13 +149,5 @@ export const VALID_PLATFORMS = [
  */
 export type ValidPlatform = (typeof VALID_PLATFORMS)[number]
 
-/**
- * Platform display labels for the UI.
- */
-export const PLATFORM_LABELS: Record<ValidPlatform, string> = {
-  'darwin-arm64': 'macOS (Apple Silicon)',
-  'darwin-amd64': 'macOS (Intel)',
-  'linux-amd64': 'Linux (x86_64)',
-  'linux-arm64': 'Linux (ARM64)',
-  'windows-amd64': 'Windows (x86_64)',
-}
+// Re-export PLATFORM_LABELS from centralized domain-labels for backward compatibility
+export { PLATFORM_LABELS } from '../domain-labels'

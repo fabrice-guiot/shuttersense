@@ -56,5 +56,8 @@ authlib>=1.6.0  # OAuth 2.0/OpenID Connect client
 itsdangerous>=2.2.0  # Session signing (used by Starlette)
 python-jose[cryptography]>=3.3.0  # JWT encoding/decoding for API tokens
 
+# Version Parsing
+packaging>=24.0  # Semantic version parsing (PEP 440)
+
 # Development
 ruff>=0.8.0  # Linter and formatter

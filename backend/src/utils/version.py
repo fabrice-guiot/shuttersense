@@ -24,6 +24,6 @@ def parse_version_safe(version_str: str) -> Version:
         every valid release.
     """
     try:
-        return Version(version_str.lstrip("v"))
+        return Version(version_str.removeprefix("v"))
     except (InvalidVersion, AttributeError):
         return _FALLBACK_VERSION

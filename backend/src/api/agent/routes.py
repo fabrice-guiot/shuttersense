@@ -3654,8 +3654,8 @@ async def get_active_release(
     Returns the active release manifest with download URLs for each platform.
     Used by both the Agent Setup Wizard (session auth) and agent CLI (API key auth).
 
-    If multiple manifests are active, returns the one with the highest version
-    (by string sort descending, then most recently created).
+    If multiple manifests are active, returns the one with the highest semantic
+    version (PEP 440 comparison via parse_version_safe).
 
     Args:
         db: Database session dependency.

@@ -35,6 +35,7 @@ from backend.src.models import (
 from backend.src.models.agent_registration_token import DEFAULT_TOKEN_EXPIRATION_HOURS
 from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
 from backend.src.utils.logging_config import get_logger
+from backend.src.utils.version import parse_version_safe
 
 
 logger = get_logger("agent")
@@ -659,8 +660,6 @@ class AgentService:
             Tuple of (latest_version, became_outdated) where latest_version is
             the manifest version string or None if no matching manifest exists.
         """
-        from backend.src.utils.version import parse_version_safe
-
         active_manifests = (
             self.db.query(ReleaseManifest)
             .filter(ReleaseManifest.is_active.is_(True))
