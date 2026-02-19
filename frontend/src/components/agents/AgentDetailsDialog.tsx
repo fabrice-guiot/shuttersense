@@ -62,7 +62,11 @@ export function AgentDetailsDialog({ agent, open, onOpenChange }: AgentDetailsDi
             </div>
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-muted-foreground">Status</h4>
-              <AgentStatusBadge status={agent.status} />
+              <AgentStatusBadge
+                status={agent.status}
+                isOutdated={agent.is_outdated}
+                hasMissingPlatform={!agent.platform}
+              />
             </div>
             {agent.error_message && (
               <div className="flex items-start gap-2 p-2 rounded-md bg-destructive/10 text-destructive text-sm">

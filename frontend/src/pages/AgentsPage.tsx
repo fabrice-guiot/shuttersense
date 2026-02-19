@@ -150,6 +150,7 @@ export default function AgentsPage() {
             status={agent.status}
             isOutdated={agent.is_outdated}
             runningJobsCount={agent.running_jobs_count}
+            hasMissingPlatform={!agent.platform}
           />
           {agent.error_message && (
             <p className="text-xs text-destructive mt-1">{agent.error_message}</p>
@@ -231,7 +232,7 @@ export default function AgentsPage() {
               <Pencil className="h-4 w-4 mr-2" />
               Rename
             </DropdownMenuItem>
-            {agent.is_outdated && (
+            {(agent.is_outdated || !agent.platform) && (
               <DropdownMenuItem onClick={() => { setSelectedAgent(agent); setUpdateDialogOpen(true) }}>
                 <ArrowUpCircle className="h-4 w-4 mr-2" />
                 Update

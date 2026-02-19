@@ -34,6 +34,8 @@ interface UseReleaseManifestsOptions {
   platform?: string
   /** Filter by version */
   version?: string
+  /** Only return the most recent manifest per version (default: true) */
+  latestOnly?: boolean
   /** Whether to auto-fetch manifests on mount */
   autoFetch?: boolean
 }
@@ -70,7 +72,7 @@ interface UseReleaseManifestsReturn {
 export function useReleaseManifests(
   options: UseReleaseManifestsOptions = {}
 ): UseReleaseManifestsReturn {
-  const { activeOnly = false, platform, version, autoFetch = true } = options
+  const { activeOnly = false, platform, version, latestOnly = true, autoFetch = true } = options
 
   const [manifests, setManifests] = useState<ReleaseManifest[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -87,8 +89,9 @@ export function useReleaseManifests(
     if (activeOnly) filterOptions.active_only = true
     if (platform) filterOptions.platform = platform
     if (version) filterOptions.version = version
+    if (latestOnly) filterOptions.latest_only = true
     return filterOptions
-  }, [activeOnly, platform, version])
+  }, [activeOnly, platform, version, latestOnly])
 
   /**
    * Fetch manifests list from API.

@@ -25,6 +25,8 @@ interface AgentStatusBadgeProps {
   status: AgentStatus
   isOutdated?: boolean
   runningJobsCount?: number
+  /** True when the agent has no platform set (pre-upgrade build) */
+  hasMissingPlatform?: boolean
   className?: string
   showLabel?: boolean
 }
@@ -37,7 +39,8 @@ interface AgentStatusBadgeProps {
 function getEffectiveState(
   status: AgentStatus,
   isOutdated: boolean,
-  runningJobsCount: number
+  runningJobsCount: number,
+  hasMissingPlatform: boolean
 ): { label: string; variant: string; showPulse: boolean } {
   if (status === 'error') {
     return {
@@ -55,7 +58,7 @@ function getEffectiveState(
     }
   }
 
-  if (status === 'online' && isOutdated && runningJobsCount === 0) {
+  if (status === 'online' && (isOutdated || hasMissingPlatform) && runningJobsCount === 0) {
     return {
       label: AGENT_OUTDATED_LABEL,
       variant: AGENT_OUTDATED_BADGE_VARIANT,
@@ -94,10 +97,11 @@ export function AgentStatusBadge({
   status,
   isOutdated = false,
   runningJobsCount = 0,
+  hasMissingPlatform = false,
   className,
   showLabel = true,
 }: AgentStatusBadgeProps) {
-  const { label, variant, showPulse } = getEffectiveState(status, isOutdated, runningJobsCount)
+  const { label, variant, showPulse } = getEffectiveState(status, isOutdated, runningJobsCount, hasMissingPlatform)
 
   return (
     <Badge

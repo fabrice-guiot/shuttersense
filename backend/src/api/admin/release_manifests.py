@@ -370,6 +370,7 @@ async def list_release_manifests(
     active_only: bool = Query(False, description="Only return active manifests"),
     platform: Optional[str] = Query(None, description="Filter by platform (manifests containing this platform)"),
     version: Optional[str] = Query(None, description="Filter by version"),
+    latest_only: bool = Query(False, description="Only return the most recent manifest per version string"),
     ctx: TenantContext = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
@@ -382,6 +383,7 @@ async def list_release_manifests(
     - **active_only**: If true, only return active manifests
     - **platform**: Filter by platform (returns manifests that support this platform)
     - **version**: Filter by version string
+    - **latest_only**: If true, only return the most recent manifest per version
     """
     query = db.query(ReleaseManifest)
 
@@ -391,14 +393,28 @@ async def list_release_manifests(
     if version:
         query = query.filter(ReleaseManifest.version == version)
 
+    # Sort by created_at DESC (not version) because lexicographic string sort
+    # is incorrect for semver (e.g., "9.0.0" > "10.0.0").
     manifests = query.order_by(
-        ReleaseManifest.version.desc(),
+        ReleaseManifest.created_at.desc(),
     ).all()
 
     # Filter by platform in Python since JSON array filtering is dialect-specific
     if platform:
         platform_lower = platform.lower()
         manifests = [m for m in manifests if m.supports_platform(platform_lower)]
+
+    # Deduplicate: keep only the most recent manifest per version string.
+    # Since results are already sorted by created_at DESC, the first occurrence
+    # of each version is the newest.
+    if latest_only:
+        seen_versions: dict[str, bool] = {}
+        deduplicated = []
+        for m in manifests:
+            if m.version not in seen_versions:
+                seen_versions[m.version] = True
+                deduplicated.append(m)
+        manifests = deduplicated
 
     # Count active
     active_count = sum(1 for m in manifests if m.is_active)

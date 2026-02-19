@@ -143,6 +143,42 @@ class TestAgentOutdatedDetection:
         assert became_outdated is False
         assert agent.is_outdated is False
 
+    def test_missing_platform_flagged_outdated(
+        self, agent_service, agent, active_manifest
+    ):
+        """Agent without platform is flagged outdated when active manifests exist."""
+        agent.platform = None
+
+        latest_version, became_outdated = agent_service._check_outdated(agent)
+
+        assert latest_version == "v2.0.0"
+        assert became_outdated is True
+        assert agent.is_outdated is True
+
+    def test_missing_checksum_flagged_outdated(
+        self, agent_service, agent, active_manifest
+    ):
+        """Agent without binary_checksum is flagged outdated when active manifests exist."""
+        agent.binary_checksum = None
+
+        latest_version, became_outdated = agent_service._check_outdated(agent)
+
+        assert latest_version == "v2.0.0"
+        assert became_outdated is True
+        assert agent.is_outdated is True
+
+    def test_missing_platform_not_outdated_without_manifests(
+        self, agent_service, agent
+    ):
+        """Agent without platform is NOT flagged when no active manifests exist."""
+        agent.platform = None
+
+        latest_version, became_outdated = agent_service._check_outdated(agent)
+
+        assert latest_version is None
+        assert became_outdated is False
+        assert agent.is_outdated is False
+
     def test_no_matching_platform_returns_none(
         self, test_db_session, agent_service, agent, test_user
     ):
@@ -213,10 +249,40 @@ class TestAgentOutdatedDetection:
         assert agent.is_outdated is False
         assert became_outdated is False
 
-    def test_heartbeat_skips_check_without_platform(
+    def test_heartbeat_flags_outdated_without_platform(
         self, agent_service, agent, active_manifest
     ):
-        """Heartbeat skips outdated check if agent has no platform."""
+        """Agent without platform is flagged outdated when active manifests exist."""
+        agent.platform = None
+
+        result = agent_service.process_heartbeat(
+            agent=agent,
+            status=AgentStatus.ONLINE,
+        )
+
+        assert result.latest_version == "v2.0.0"
+        assert result.became_outdated is True
+        assert result.agent.is_outdated is True
+
+    def test_heartbeat_flags_outdated_without_checksum(
+        self, agent_service, agent, active_manifest
+    ):
+        """Agent without binary_checksum is flagged outdated when active manifests exist."""
+        agent.binary_checksum = None
+
+        result = agent_service.process_heartbeat(
+            agent=agent,
+            status=AgentStatus.ONLINE,
+        )
+
+        assert result.latest_version == "v2.0.0"
+        assert result.became_outdated is True
+        assert result.agent.is_outdated is True
+
+    def test_heartbeat_not_outdated_without_platform_no_manifests(
+        self, agent_service, agent
+    ):
+        """Agent without platform is NOT flagged outdated when no active manifests exist."""
         agent.platform = None
 
         result = agent_service.process_heartbeat(
@@ -226,20 +292,7 @@ class TestAgentOutdatedDetection:
 
         assert result.latest_version is None
         assert result.became_outdated is False
-
-    def test_heartbeat_skips_check_without_checksum(
-        self, agent_service, agent, active_manifest
-    ):
-        """Heartbeat skips outdated check if agent has no binary_checksum."""
-        agent.binary_checksum = None
-
-        result = agent_service.process_heartbeat(
-            agent=agent,
-            status=AgentStatus.ONLINE,
-        )
-
-        assert result.latest_version is None
-        assert result.became_outdated is False
+        assert result.agent.is_outdated is False
 
     def test_heartbeat_includes_outdated_info(
         self, agent_service, agent, active_manifest
