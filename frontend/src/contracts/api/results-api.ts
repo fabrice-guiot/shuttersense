@@ -6,6 +6,7 @@
  */
 
 import type { AuditInfo } from './audit-api'
+import type { TargetEntityInfo, ResultContext } from './target-api'
 
 // ============================================================================
 // Entity Types
@@ -136,6 +137,10 @@ export interface AnalysisResultSummary {
   input_state_hash: string | null
   /** True if this result references a previous result */
   no_change_copy: boolean
+  /** Polymorphic target entity (Issue #110) */
+  target?: TargetEntityInfo | null
+  /** Execution context (Issue #110) */
+  context?: ResultContext | null
   audit?: AuditInfo | null
 }
 
@@ -175,6 +180,10 @@ export interface AnalysisResult {
   download_report_from: string | null
   /** Whether source result still exists (for NO_CHANGE results) */
   source_result_exists: boolean | null
+  /** Polymorphic target entity (Issue #110) */
+  target?: TargetEntityInfo | null
+  /** Execution context (Issue #110) */
+  context?: ResultContext | null
   audit?: AuditInfo | null
 }
 
@@ -214,6 +223,8 @@ export interface ResultDeleteResponse {
 export interface ResultListQueryParams {
   /** Filter by collection GUID (col_xxx) */
   collection_guid?: string
+  /** Filter by target entity type (collection, connector, pipeline, camera) */
+  target_entity_type?: string
   /** Filter by tool type */
   tool?: ToolType
   /** Filter by status */

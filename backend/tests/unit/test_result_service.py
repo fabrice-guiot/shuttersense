@@ -50,6 +50,15 @@ class TestResultServiceList:
         result.input_state_hash = None
         result.no_change_copy = False
         result.download_report_from = None
+        # Polymorphic target (Issue #110)
+        result.target_entity_type = None
+        result.target_entity_id = None
+        result.target_entity_guid = None
+        result.target_entity_name = None
+        result.context_json = None
+        result.context = None
+        # Connector fields (Issue #107)
+        result.connector_id = None
         # Audit trail (Issue #120)
         result.audit = None
         return result
@@ -149,6 +158,15 @@ class TestResultServiceGet:
         result.input_state_hash = None
         result.no_change_copy = False
         result.download_report_from = None
+        # Polymorphic target (Issue #110)
+        result.target_entity_type = None
+        result.target_entity_id = None
+        result.target_entity_guid = None
+        result.target_entity_name = None
+        result.context_json = None
+        result.context = None
+        # Connector fields (Issue #107)
+        result.connector_id = None
         # Audit trail (Issue #120)
         result.audit = None
         return result

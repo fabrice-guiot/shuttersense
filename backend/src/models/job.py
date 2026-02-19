@@ -18,7 +18,7 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Enum, Index
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Enum, Index, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
@@ -138,6 +138,16 @@ class Job(Base, GuidMixin, AuditMixin):
         nullable=True
     )
     pipeline_version = Column(Integer, nullable=True)
+
+    # Polymorphic target (Issue #110)
+    target_entity_type = Column(String(30), nullable=True)
+    target_entity_id = Column(Integer, nullable=True)
+    target_entity_guid = Column(String(50), nullable=True)
+    target_entity_name = Column(String(255), nullable=True)
+    context_json = Column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True
+    )
 
     # Tool and mode
     tool = Column(String(50), nullable=False)
@@ -317,6 +327,26 @@ class Job(Base, GuidMixin, AuditMixin):
             self.progress_json = None
         else:
             self.progress_json = json.dumps(value)
+
+    @property
+    def target_info(self) -> dict | None:
+        """Get polymorphic target info for API responses."""
+        if not self.target_entity_type:
+            return None
+        return {
+            "entity_type": self.target_entity_type,
+            "entity_guid": self.target_entity_guid,
+            "entity_name": self.target_entity_name,
+        }
+
+    @property
+    def context(self) -> dict | None:
+        """Get execution context as a dictionary."""
+        if self.context_json is None:
+            return None
+        if isinstance(self.context_json, str):
+            return json.loads(self.context_json)
+        return self.context_json
 
     @property
     def parameters(self) -> Optional[Dict[str, Any]]:

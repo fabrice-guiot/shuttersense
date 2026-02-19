@@ -476,6 +476,12 @@ class InventoryService:
             mode="validation",
             status=JobStatus.PENDING,
             priority=5,  # Higher priority for quick validation
+            # Polymorphic target (Issue #110)
+            target_entity_type="connector",
+            target_entity_id=connector.id,
+            target_entity_guid=connector.guid,
+            target_entity_name=connector.name,
+            context_json=None,
         )
 
         # Store connector_id in job metadata for agent to use
@@ -664,6 +670,12 @@ class InventoryService:
             mode="import",
             status=JobStatus.PENDING,
             priority=3,  # Normal priority
+            # Polymorphic target (Issue #110)
+            target_entity_type="connector",
+            target_entity_id=connector.id,
+            target_entity_guid=connector.guid,
+            target_entity_name=connector.name,
+            context_json=None,
         )
 
         # Store connector info in job metadata for agent to use
@@ -1695,6 +1707,12 @@ class InventoryService:
             priority=3,  # Normal priority
             created_by_user_id=user_id,
             updated_by_user_id=user_id,
+            # Polymorphic target (Issue #110)
+            target_entity_type="connector",
+            target_entity_id=connector.id,
+            target_entity_guid=connector.guid,
+            target_entity_name=connector.name,
+            context_json=None,
         )
 
         # Store connector info in job metadata for agent to use

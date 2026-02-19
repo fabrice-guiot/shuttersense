@@ -62,6 +62,7 @@ def get_result_service(db: Session = Depends(get_db)) -> ResultService:
 def list_results(
     ctx: TenantContext = Depends(require_auth),
     collection_guid: Optional[str] = Query(None, description="Filter by collection GUID (col_xxx)"),
+    target_entity_type: Optional[str] = Query(None, description="Filter by target entity type (collection, connector, pipeline, camera)"),
     tool: Optional[str] = Query(None, description="Filter by tool type"),
     status: Optional[ResultStatus] = Query(None, description="Filter by status"),
     no_change_copy: Optional[bool] = Query(None, description="Filter by no_change_copy flag (true=copies only, false=originals only)"),
@@ -98,6 +99,7 @@ def list_results(
         items, total = service.list_results(
             team_id=ctx.team_id,
             collection_guid=collection_guid,
+            target_entity_type=target_entity_type,
             tool=tool,
             status=status,
             no_change_copy=no_change_copy,

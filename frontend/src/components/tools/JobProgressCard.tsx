@@ -218,9 +218,11 @@ export function JobProgressCard({
 
         {/* Job details */}
         <div className="grid grid-cols-2 gap-2 text-sm min-w-0">
-          <div className="text-muted-foreground">Collection:</div>
+          <div className="text-muted-foreground">Target:</div>
           <div className="min-w-0">
-            {job.collection_guid ? (
+            {job.target?.entity_name ? (
+              <span className="text-sm truncate">{job.target.entity_name}</span>
+            ) : job.collection_guid ? (
               <GuidBadge guid={job.collection_guid} />
             ) : (
               <span className="text-muted-foreground">N/A</span>

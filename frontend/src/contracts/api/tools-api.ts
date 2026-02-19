@@ -6,6 +6,7 @@
  */
 
 import type { AuditInfo } from './audit-api'
+import type { TargetEntityInfo, ResultContext } from './target-api'
 
 // ============================================================================
 // Entity Types
@@ -63,6 +64,10 @@ export interface Job {
   agent_guid: string | null
   /** Name of assigned agent, null for in-memory jobs */
   agent_name: string | null
+  /** Polymorphic target entity (Issue #110) */
+  target?: TargetEntityInfo | null
+  /** Execution context (Issue #110) */
+  context?: ResultContext | null
   audit?: AuditInfo | null
 }
 

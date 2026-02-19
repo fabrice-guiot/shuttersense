@@ -74,6 +74,35 @@ def _convert_db_job_status(db_status) -> JobStatus:
     return status_map.get(db_status, JobStatus.QUEUED)
 
 
+def _build_target_context_from_job(job):
+    """Build TargetEntityInfo and ResultContext from a DB Job's polymorphic columns.
+
+    Args:
+        job: Job model instance with target_entity_type/context_json columns
+
+    Returns:
+        Tuple of (TargetEntityInfo or None, ResultContext or None)
+    """
+    from backend.src.schemas.target import TargetEntityInfo, ResultContext, PipelineContextRef, ContextEntityRef
+
+    target = None
+    ctx_obj = None
+
+    if job.target_entity_type:
+        target = TargetEntityInfo(
+            entity_type=job.target_entity_type,
+            entity_guid=job.target_entity_guid,
+            entity_name=job.target_entity_name,
+        )
+        ctx = job.context  # Uses the @property (handles JSON deserialization)
+        if ctx:
+            pip_ref = PipelineContextRef(**ctx["pipeline"]) if "pipeline" in ctx else None
+            con_ref = ContextEntityRef(**ctx["connector"]) if "connector" in ctx else None
+            ctx_obj = ResultContext(pipeline=pip_ref, connector=con_ref)
+
+    return target, ctx_obj
+
+
 def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
     """Convert DB Job model to JobResponse.
 
@@ -107,6 +136,9 @@ def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
     agent_guid = job.agent.guid if job.agent else None
     agent_name = job.agent.name if job.agent else None
 
+    # Build polymorphic target/context (Issue #110)
+    target, ctx_obj = _build_target_context_from_job(job)
+
     return JobResponse(
         id=job.guid,  # Use guid as the external ID
         collection_guid=collection_guid,
@@ -124,6 +156,8 @@ def _db_job_to_response(job, position: Optional[int] = None) -> JobResponse:
         result_guid=result_guid,
         agent_guid=agent_guid,
         agent_name=agent_name,
+        target=target,
+        context=ctx_obj,
         audit=job.audit,
     )
 
@@ -237,6 +271,23 @@ def agent_upload_offline_result(
             pipeline_id = default_pipeline.id
             pipeline_version = default_pipeline.version
 
+    # Build context_json for polymorphic target (Issue #110)
+    context = {}
+    pipeline = None
+    if pipeline_id:
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.id == pipeline_id,
+            Pipeline.team_id == team_id,
+        ).first()
+        if pipeline:
+            pip_ctx = {"guid": pipeline.guid, "name": pipeline.name}
+            if pipeline_version:
+                pip_ctx["version"] = pipeline_version
+            context["pipeline"] = pip_ctx
+    if collection.connector:
+        context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
+    ctx_json = json.dumps(context) if context else None
+
     # Create Job record with COMPLETED status (retroactive record of offline execution)
     job = Job(
         team_id=team_id,
@@ -253,6 +304,12 @@ def agent_upload_offline_result(
         pipeline_version=pipeline_version,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
+        # Polymorphic target (Issue #110)
+        target_entity_type="collection",
+        target_entity_id=collection_id,
+        target_entity_guid=collection.guid,
+        target_entity_name=collection.name,
+        context_json=ctx_json,
     )
     db.add(job)
     db.flush()  # Get job.id without committing
@@ -281,6 +338,12 @@ def agent_upload_offline_result(
         input_state_hash=input_state_hash,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
+        # Polymorphic target (Issue #110)
+        target_entity_type="collection",
+        target_entity_id=collection_id,
+        target_entity_guid=collection.guid,
+        target_entity_name=collection.name,
+        context_json=ctx_json,
     )
     db.add(result)
     db.flush()  # Get result.id
@@ -417,6 +480,23 @@ def agent_record_no_change_result(
             pipeline_id = default_pipeline.id
             pipeline_version = default_pipeline.version
 
+    # Build context_json for polymorphic target (Issue #110)
+    context = {}
+    pipeline = None
+    if pipeline_id:
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.id == pipeline_id,
+            Pipeline.team_id == team_id,
+        ).first()
+        if pipeline:
+            pip_ctx = {"guid": pipeline.guid, "name": pipeline.name}
+            if pipeline_version:
+                pip_ctx["version"] = pipeline_version
+            context["pipeline"] = pip_ctx
+    if collection.connector:
+        context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
+    ctx_json = json.dumps(context) if context else None
+
     # Create Job record with COMPLETED status (retroactive record of no-change detection)
     job = Job(
         team_id=team_id,
@@ -433,6 +513,12 @@ def agent_record_no_change_result(
         pipeline_version=pipeline_version,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
+        # Polymorphic target (Issue #110)
+        target_entity_type="collection",
+        target_entity_id=collection_id,
+        target_entity_guid=collection.guid,
+        target_entity_name=collection.name,
+        context_json=ctx_json,
     )
     db.add(job)
     db.flush()
@@ -459,6 +545,12 @@ def agent_record_no_change_result(
         download_report_from=download_from_guid,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
+        # Polymorphic target (Issue #110)
+        target_entity_type="collection",
+        target_entity_id=collection_id,
+        target_entity_guid=collection.guid,
+        target_entity_name=collection.name,
+        context_json=ctx_json,
     )
     db.add(result)
     db.flush()
@@ -761,6 +853,12 @@ class ToolService:
             required_capabilities=[ToolType.PIPELINE_VALIDATION.value],
             created_by_user_id=user_id,
             updated_by_user_id=user_id,
+            # Polymorphic target (Issue #110)
+            target_entity_type="pipeline",
+            target_entity_id=pipeline.id,
+            target_entity_guid=pipeline_guid,
+            target_entity_name=pipeline.name,
+            context_json=None,  # No context for display_graph
         )
 
         self.db.add(job)
@@ -770,6 +868,14 @@ class ToolService:
         logger.info(
             f"Job {job.guid} created for pipeline_validation (display_graph) on pipeline {pipeline_guid} "
             f"(agent execution, unbound)"
+        )
+
+        # Build target for response (Issue #110)
+        from backend.src.schemas.target import TargetEntityInfo
+        target = TargetEntityInfo(
+            entity_type="pipeline",
+            entity_guid=pipeline_guid,
+            entity_name=pipeline.name,
         )
 
         # Convert persistent Job to JobResponse
@@ -790,6 +896,8 @@ class ToolService:
             result_guid=None,
             agent_guid=None,  # No agent assigned yet
             agent_name=None,
+            target=target,
+            context=None,
             audit=job.audit,
         )
 
@@ -892,6 +1000,19 @@ class ToolService:
                 collection.connector.credential_location == CredentialLocation.AGENT):
             required_capabilities.append(f"connector:{collection.connector.guid}")
 
+        # Build context_json for polymorphic target (Issue #110)
+        context = {}
+        if pipeline_id and pipeline_guid:
+            pip_ctx = {"guid": pipeline_guid, "version": pipeline_version}
+            # Get pipeline name
+            pip = self.db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+            if pip:
+                pip_ctx["name"] = pip.name
+            context["pipeline"] = {k: v for k, v in pip_ctx.items() if v is not None}
+        if collection.connector:
+            context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
+        ctx_json = json.dumps(context) if context else None
+
         # Create persistent job record
         job = Job(
             team_id=collection.team_id,
@@ -905,6 +1026,12 @@ class ToolService:
             required_capabilities=required_capabilities,
             created_by_user_id=user_id,
             updated_by_user_id=user_id,
+            # Polymorphic target (Issue #110)
+            target_entity_type="collection",
+            target_entity_id=collection.id,
+            target_entity_guid=collection.guid,
+            target_entity_name=collection.name,
+            context_json=ctx_json,
         )
 
         self.db.add(job)
@@ -917,6 +1044,20 @@ class ToolService:
             f"Job {job.guid} created for {tool.value} on collection {collection.guid} "
             f"(persistent queue, {binding_info})"
         )
+
+        # Build target/context for response (Issue #110)
+        from backend.src.schemas.target import TargetEntityInfo, ResultContext, PipelineContextRef, ContextEntityRef
+        target = TargetEntityInfo(
+            entity_type="collection",
+            entity_guid=collection.guid,
+            entity_name=collection.name,
+        )
+        ctx_obj = None
+        ctx = job.context  # Uses the @property (handles JSON deserialization)
+        if ctx:
+            pip_ref = PipelineContextRef(**ctx["pipeline"]) if "pipeline" in ctx else None
+            con_ref = ContextEntityRef(**ctx["connector"]) if "connector" in ctx else None
+            ctx_obj = ResultContext(pipeline=pip_ref, connector=con_ref)
 
         # Convert persistent Job to JobResponse
         return JobResponse(
@@ -936,6 +1077,8 @@ class ToolService:
             result_guid=None,
             agent_guid=None,  # No agent assigned yet
             agent_name=None,
+            target=target,
+            context=ctx_obj,
             audit=job.audit,
         )
 
@@ -1260,6 +1403,12 @@ class ToolService:
             retry_count=original_job.retry_count + 1,
             max_retries=original_job.max_retries,
             parent_job_id=original_job.id,  # Link to original job
+            # Polymorphic target — copy from original (Issue #110)
+            target_entity_type=original_job.target_entity_type,
+            target_entity_id=original_job.target_entity_id,
+            target_entity_guid=original_job.target_entity_guid,
+            target_entity_name=original_job.target_entity_name,
+            context_json=original_job.context_json,
         )
 
         self.db.add(new_job)

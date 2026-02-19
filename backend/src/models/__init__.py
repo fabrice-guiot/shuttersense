@@ -33,6 +33,14 @@ class ToolType(enum.Enum):
     PIPELINE_VALIDATION = "pipeline_validation"
 
 
+class TargetEntityType(str, enum.Enum):
+    """Target entity types for Job and AnalysisResult polymorphic target."""
+    COLLECTION = "collection"
+    CONNECTOR = "connector"
+    PIPELINE = "pipeline"
+    CAMERA = "camera"
+
+
 # Import all models here so they are registered with Base.metadata
 # This is required for Alembic autogenerate to detect models
 
@@ -101,6 +109,7 @@ __all__ = [
     # Enums
     "ResultStatus",
     "ToolType",
+    "TargetEntityType",
     "ConfigSource",
     # Connector
     "Connector",

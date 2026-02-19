@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   Equal,
   GitBranch,
+  Plug,
+  Workflow,
 } from 'lucide-react'
 import {
   Dialog,
@@ -85,6 +87,19 @@ const TOOL_LABELS: Record<string, string> = {
   photostats: 'PhotoStats',
   photo_pairing: 'Photo Pairing',
   pipeline_validation: 'Pipeline Validation'
+}
+
+// Target entity type icons (Issue #110)
+const TARGET_TYPE_ICONS: Record<string, typeof FolderOpen> = {
+  collection: FolderOpen,
+  connector: Plug,
+  pipeline: Workflow,
+  camera: Camera,
+}
+
+function TargetIcon({ entityType }: { entityType: string }) {
+  const Icon = TARGET_TYPE_ICONS[entityType] ?? FolderOpen
+  return <Icon className="h-4 w-4" />
 }
 
 // ============================================================================
@@ -638,13 +653,30 @@ export function ResultDetailPanel({
           {/* Header info */}
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-            <span className="text-sm text-muted-foreground">
-              {result.collection_name}
-            </span>
-            {result.pipeline_name && (
+            {/* Target entity (Issue #110) */}
+            {result.target ? (
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <TargetIcon entityType={result.target.entity_type} />
+                {result.target.entity_name}
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                {result.collection_name}
+              </span>
+            )}
+            {/* Pipeline context (Issue #110) */}
+            {(result.context?.pipeline ?? result.pipeline_name) && (
               <Badge variant="outline">
-                Pipeline: {result.pipeline_name}
-                {result.pipeline_version && ` v${result.pipeline_version}`}
+                Pipeline: {result.context?.pipeline?.name ?? result.pipeline_name}
+                {(result.context?.pipeline?.version ?? result.pipeline_version) != null &&
+                  ` v${result.context?.pipeline?.version ?? result.pipeline_version}`}
+              </Badge>
+            )}
+            {/* Connector context (Issue #110) */}
+            {result.context?.connector && (
+              <Badge variant="outline">
+                <Plug className="h-3 w-3 mr-1" />
+                {result.context.connector.name}
               </Badge>
             )}
           </div>
