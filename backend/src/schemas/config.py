@@ -367,13 +367,18 @@ class EventStatusItem(BaseModel):
     key: str = Field(..., description="Status key/value used in code")
     label: str = Field(..., description="Human-readable display label")
     display_order: int = Field(..., description="Order in dropdowns/lists")
+    forces_skip: bool = Field(
+        default=False,
+        description="When true, events with this status automatically have attendance forced to 'skipped'"
+    )
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "key": "confirmed",
                 "label": "Confirmed",
-                "display_order": 1
+                "display_order": 1,
+                "forces_skip": False
             }
         }
     }
@@ -392,10 +397,10 @@ class EventStatusesResponse(BaseModel):
         "json_schema_extra": {
             "example": {
                 "statuses": [
-                    {"key": "future", "label": "Future", "display_order": 0},
-                    {"key": "confirmed", "label": "Confirmed", "display_order": 1},
-                    {"key": "completed", "label": "Completed", "display_order": 2},
-                    {"key": "cancelled", "label": "Cancelled", "display_order": 3}
+                    {"key": "future", "label": "Future", "display_order": 0, "forces_skip": False},
+                    {"key": "confirmed", "label": "Confirmed", "display_order": 1, "forces_skip": False},
+                    {"key": "completed", "label": "Completed", "display_order": 2, "forces_skip": False},
+                    {"key": "cancelled", "label": "Cancelled", "display_order": 3, "forces_skip": True}
                 ]
             }
         }

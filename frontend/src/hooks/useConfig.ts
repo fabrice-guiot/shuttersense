@@ -348,10 +348,10 @@ export const useEventStatuses = (autoFetch = true): UseEventStatusesReturn => {
       setError(errorMessage)
       // Fallback to default statuses if fetch fails
       setStatuses([
-        { key: 'future', label: 'Future', display_order: 0 },
-        { key: 'confirmed', label: 'Confirmed', display_order: 1 },
-        { key: 'completed', label: 'Completed', display_order: 2 },
-        { key: 'cancelled', label: 'Cancelled', display_order: 3 },
+        { key: 'future', label: 'Future', display_order: 0, forces_skip: false },
+        { key: 'confirmed', label: 'Confirmed', display_order: 1, forces_skip: false },
+        { key: 'completed', label: 'Completed', display_order: 2, forces_skip: false },
+        { key: 'cancelled', label: 'Cancelled', display_order: 3, forces_skip: true },
       ])
     } finally {
       setLoading(false)

@@ -201,7 +201,7 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
                     Edit
                   </Button>
                 )}
-                {onSkip && !isSkipped && conflictGroupStatus && conflictGroupStatus !== 'resolved' && (
+                {onSkip && !isSkipped && !event.forces_skip && conflictGroupStatus && conflictGroupStatus !== 'resolved' && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -213,7 +213,7 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
                     Skip
                   </Button>
                 )}
-                {onRestore && isSkipped && (
+                {onRestore && isSkipped && !event.forces_skip && (
                   <Button
                     variant="ghost"
                     size="sm"

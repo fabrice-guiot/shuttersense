@@ -190,6 +190,20 @@ export const EventForm = ({
     }
   })
 
+  // Watch status field to enforce forces_skip behavior (Issue #238)
+  const watchedStatus = form.watch('status')
+  const currentStatusConfig = eventStatuses.find(s => s.key === watchedStatus)
+  const isForceSkipped = currentStatusConfig?.forces_skip ?? false
+
+  // Auto-set attendance when status forces skip, auto-revert when moving away
+  useEffect(() => {
+    if (statusesLoading) return
+    const statusConfig = eventStatuses.find(s => s.key === watchedStatus)
+    if (statusConfig?.forces_skip) {
+      form.setValue('attendance', 'skipped')
+    }
+  }, [watchedStatus, eventStatuses, statusesLoading, form])
+
   // Populate form when editing - wait for eventStatuses to load to ensure Select works
   useEffect(() => {
     if (event && !statusesLoading) {
@@ -849,7 +863,7 @@ export const EventForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Attendance</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isForceSkipped}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select attendance" />
@@ -861,6 +875,9 @@ export const EventForm = ({
                       <SelectItem value="skipped">Skipped</SelectItem>
                     </SelectContent>
                   </Select>
+                  {isForceSkipped && (
+                    <FormDescription>Locked to "Skipped" by status.</FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

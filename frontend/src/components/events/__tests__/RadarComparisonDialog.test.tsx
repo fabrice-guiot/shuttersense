@@ -49,6 +49,8 @@ const twoEventGroup: ConflictGroup = {
       performer_count: 3,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: {
         venue_quality: 80,
         organizer_reputation: 70,
@@ -71,6 +73,8 @@ const twoEventGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: {
         venue_quality: 50,
         organizer_reputation: 40,
@@ -108,6 +112,8 @@ const threeEventMultiConflict: ConflictGroup = {
       performer_count: 0,
       travel_required: true,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 60, organizer_reputation: 50, performer_lineup: 40, logistics_ease: 70, readiness: 80, composite: 60 },
     },
     {
@@ -123,6 +129,8 @@ const threeEventMultiConflict: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 70, organizer_reputation: 60, performer_lineup: 50, logistics_ease: 80, readiness: 90, composite: 70 },
     },
     {
@@ -138,6 +146,8 @@ const threeEventMultiConflict: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'skipped',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 40, organizer_reputation: 30, performer_lineup: 20, logistics_ease: 60, readiness: 70, composite: 44 },
     },
   ],
@@ -165,6 +175,8 @@ const resolvedGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'planned',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 80, organizer_reputation: 80, performer_lineup: 80, logistics_ease: 80, readiness: 80, composite: 80 },
     },
     {
@@ -180,6 +192,8 @@ const resolvedGroup: ConflictGroup = {
       performer_count: 0,
       travel_required: false,
       attendance: 'skipped',
+      status: 'future',
+      forces_skip: false,
       scores: { venue_quality: 40, organizer_reputation: 40, performer_lineup: 40, logistics_ease: 40, readiness: 40, composite: 40 },
     },
   ],

@@ -69,6 +69,8 @@ export interface ScoredEvent {
   performer_count: number
   travel_required: boolean | null
   attendance: string           // 'planned' | 'attended' | 'skipped'
+  status: string | null        // Event status key (e.g. 'future', 'cancelled')
+  forces_skip: boolean         // Whether this event's status forces attendance to 'skipped'
   scores: EventScores
 }
 

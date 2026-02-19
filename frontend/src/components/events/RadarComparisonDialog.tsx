@@ -320,7 +320,7 @@ function EventDetailCard({
       </div>
 
       {/* Action */}
-      {!isResolved && !isSkipped && (
+      {!isResolved && !isSkipped && !event.forces_skip && (
         <Button
           variant="outline"
           size="sm"
@@ -332,7 +332,7 @@ function EventDetailCard({
           Skip
         </Button>
       )}
-      {isSkipped && (
+      {isSkipped && !event.forces_skip && (
         <Button
           variant="ghost"
           size="sm"

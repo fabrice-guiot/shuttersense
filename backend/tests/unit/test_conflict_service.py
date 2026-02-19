@@ -26,6 +26,7 @@ def _make_event(
     end_time=time(18, 0),
     is_all_day=False,
     attendance="planned",
+    status="future",
     location=None,
     organizer=None,
     event_performers=None,
@@ -50,6 +51,7 @@ def _make_event(
     event.end_time = end_time
     event.is_all_day = is_all_day
     event.attendance = attendance
+    event.status = status
     event.location = location
     event.organizer = organizer
     event.event_performers = event_performers or []

@@ -21,6 +21,7 @@ from backend.src.models import Event, EventSeries, Category, Location, Organizer
 from backend.src.utils.logging_config import get_logger
 from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
 from backend.src.services.guid import GuidService
+from backend.src.services.config_service import ConfigService
 
 
 logger = get_logger("services")
@@ -52,6 +53,21 @@ class EventService:
             db: SQLAlchemy database session
         """
         self.db = db
+        self._config_service = ConfigService(db)
+
+    def _status_forces_skip(self, status: str, team_id: int) -> bool:
+        """
+        Check if the given status key has forces_skip enabled for the team.
+
+        Args:
+            status: Event status key (e.g. 'cancelled')
+            team_id: Team ID for tenant isolation
+
+        Returns:
+            True if the status forces attendance to 'skipped'
+        """
+        forces_skip_statuses = self._config_service.get_forces_skip_statuses(team_id)
+        return status in forces_skip_statuses
 
     def get_by_guid(
         self,
@@ -925,6 +941,11 @@ class EventService:
             effective_travel_required = True
             logger.debug(f"Applied travel_required default from location: {location.name}")
 
+        # Enforce forces_skip: if status forces skip, override attendance
+        if self._status_forces_skip(status, team_id):
+            attendance = "skipped"
+            logger.debug(f"Status '{status}' forces attendance to 'skipped'")
+
         # Create event
         event = Event(
             team_id=team_id,
@@ -1095,6 +1116,11 @@ class EventService:
 
         self.db.add(series)
         self.db.flush()  # Get series ID
+
+        # Enforce forces_skip: if status forces skip, override attendance
+        if self._status_forces_skip(status, team_id):
+            attendance = "skipped"
+            logger.debug(f"Status '{status}' forces attendance to 'skipped' for series")
 
         # Create individual events
         for i, event_date in enumerate(sorted_dates, start=1):
@@ -1412,6 +1438,37 @@ class EventService:
 
         # Remove scope from updates (it's not an event field)
         updates.pop("scope", None)
+
+        # ---- forces_skip enforcement (Issue #238) ----
+        new_status = updates.get("status")
+        new_attendance = updates.get("attendance")
+        old_status = event.status
+        team_id = event.team_id
+
+        if new_status and new_status != old_status:
+            # Status is changing
+            new_forces = self._status_forces_skip(new_status, team_id)
+            old_forces = self._status_forces_skip(old_status, team_id)
+
+            if new_forces:
+                # New status forces skip → override attendance to 'skipped'
+                updates["attendance"] = "skipped"
+                logger.debug(f"Status '{new_status}' forces attendance to 'skipped'")
+            elif old_forces and not new_forces:
+                # Moving away from a forces_skip status → revert to 'planned'
+                # (unless the caller is explicitly setting a different attendance)
+                if new_attendance is None:
+                    updates["attendance"] = "planned"
+                    logger.debug(f"Reverting attendance to 'planned' (moved from forces_skip status '{old_status}')")
+        elif new_attendance and new_attendance != "skipped":
+            # Attendance is changing without a status change - check current status
+            effective_status = new_status or old_status
+            if self._status_forces_skip(effective_status, team_id):
+                raise ValidationError(
+                    f"Cannot change attendance away from 'skipped' while status "
+                    f"'{effective_status}' forces skip",
+                    field="attendance"
+                )
 
         # Determine which events to update based on scope
         if event.series and scope != "single":

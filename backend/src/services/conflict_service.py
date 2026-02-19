@@ -280,6 +280,9 @@ class ConflictService:
         rules = self.get_conflict_rules(team_id)
         weights = self.get_scoring_weights(team_id)
 
+        # Pre-compute forces_skip statuses for this team (Issue #238)
+        forces_skip_statuses = self.config_service.get_forces_skip_statuses(team_id)
+
         # Load events with relationships needed for conflict detection and scoring
         events = self._load_events(team_id, start_date, end_date)
 
@@ -307,7 +310,7 @@ class ConflictService:
 
         # Build scored events for planner view
         all_scored = [
-            self._build_scored_event(event, scores_by_guid[event.guid])
+            self._build_scored_event(event, scores_by_guid[event.guid], forces_skip_statuses)
             for event in events
         ]
 
@@ -322,7 +325,7 @@ class ConflictService:
             )
 
         # Build groups via Union-Find (reuse pre-computed scores)
-        groups = self._build_groups(events, edges, scores_by_guid)
+        groups = self._build_groups(events, edges, scores_by_guid, forces_skip_statuses)
 
         # Summary
         unresolved = sum(1 for g in groups if g.status == ConflictGroupStatus.UNRESOLVED)
@@ -520,6 +523,7 @@ class ConflictService:
         events: List[Event],
         edges: List[ConflictEdge],
         scores_by_guid: Dict[str, EventScores],
+        forces_skip_statuses: Optional[set] = None,
     ) -> List[ConflictGroup]:
         """Build conflict groups from edges using Union-Find."""
         # Map GUIDs to events
@@ -572,7 +576,7 @@ class ConflictService:
                 scores = scores_by_guid.get(guid)
                 if scores is None:
                     continue
-                group_events.append(self._build_scored_event(event, scores))
+                group_events.append(self._build_scored_event(event, scores, forces_skip_statuses))
 
             group_edges = component_edges.get(root, [])
             status = self._derive_group_status(group_events, group_edges)
@@ -613,7 +617,7 @@ class ConflictService:
             return ConflictGroupStatus.PARTIALLY_RESOLVED
         return ConflictGroupStatus.UNRESOLVED
 
-    def _build_scored_event(self, event: Event, scores: EventScores) -> ScoredEvent:
+    def _build_scored_event(self, event: Event, scores: EventScores, forces_skip_statuses: Optional[set] = None) -> ScoredEvent:
         """Build a ScoredEvent from an Event model and its scores."""
         confirmed_count = sum(
             1 for ep in event.event_performers
@@ -665,6 +669,8 @@ class ConflictService:
             performer_count=confirmed_count,
             travel_required=event.travel_required,
             attendance=event.attendance,
+            status=event.status,
+            forces_skip=event.status in (forces_skip_statuses or set()),
             scores=scores,
         )
 
@@ -748,6 +754,9 @@ class ConflictService:
         # Allowed attendance values from AttendanceStatus enum
         ALLOWED_ATTENDANCE = {"planned", "attended", "skipped"}
 
+        # Pre-compute forces_skip statuses for this team (Issue #238)
+        forces_skip_statuses = self.config_service.get_forces_skip_statuses(team_id)
+
         updated = 0
         for decision in decisions:
             # Safely extract and validate decision fields
@@ -779,6 +788,14 @@ class ConflictService:
 
             if not event:
                 raise NotFoundError("Event", event_guid)
+
+            # Enforce forces_skip: reject attendance changes away from 'skipped'
+            # when the event's status forces skip (Issue #238)
+            if event.status in forces_skip_statuses and attendance != "skipped":
+                raise ValidationError(
+                    f"Cannot change attendance away from 'skipped' while status "
+                    f"'{event.status}' forces skip"
+                )
 
             if event.attendance != attendance:
                 event.attendance = attendance

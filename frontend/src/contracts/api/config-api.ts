@@ -42,6 +42,8 @@ export interface EventStatusConfig {
   label: string
   /** Order in dropdowns/lists */
   display_order: number
+  /** When true, events with this status automatically have attendance forced to 'skipped' */
+  forces_skip?: boolean
 }
 
 export interface CollectionTTLConfig {
@@ -58,6 +60,8 @@ export interface EventStatusItem {
   label: string
   /** Order in dropdowns/lists */
   display_order: number
+  /** When true, events with this status automatically have attendance forced to 'skipped' */
+  forces_skip?: boolean
 }
 
 export interface EventStatusesResponse {
