@@ -659,11 +659,16 @@ class AgentService:
             Tuple of (latest_version, became_outdated) where latest_version is
             the manifest version string or None if no matching manifest exists.
         """
+        from backend.src.utils.version import parse_version_safe
+
         active_manifests = (
             self.db.query(ReleaseManifest)
             .filter(ReleaseManifest.is_active.is_(True))
-            .order_by(ReleaseManifest.created_at.desc())
             .all()
+        )
+        # Sort by semantic version descending so [0] is the latest.
+        active_manifests.sort(
+            key=lambda m: parse_version_safe(m.version), reverse=True
         )
 
         if not active_manifests:
