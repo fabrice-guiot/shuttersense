@@ -60,6 +60,8 @@ describe('useAgentDetail', () => {
     capabilities: ['local_filesystem', 'tool:photostats:1.0.0'],
     authorized_roots: ['/Users/photographer/Photos'],
     version: '1.0.0',
+    is_outdated: false,
+    platform: 'darwin-arm64',
     created_at: '2026-01-15T10:00:00Z',
     team_guid: 'tea_01hgw2bbg00000000000000001',
     current_job_guid: null,
