@@ -286,7 +286,7 @@ def agent_upload_offline_result(
             context["pipeline"] = pip_ctx
     if collection.connector:
         context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
-    ctx_json = json.dumps(context) if context else None
+    ctx_json = context if context else None
 
     # Create Job record with COMPLETED status (retroactive record of offline execution)
     job = Job(
@@ -495,7 +495,7 @@ def agent_record_no_change_result(
             context["pipeline"] = pip_ctx
     if collection.connector:
         context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
-    ctx_json = json.dumps(context) if context else None
+    ctx_json = context if context else None
 
     # Create Job record with COMPLETED status (retroactive record of no-change detection)
     job = Job(
@@ -1014,7 +1014,7 @@ class ToolService:
             context["pipeline"] = {k: v for k, v in pip_ctx.items() if v is not None}
         if collection.connector:
             context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
-        ctx_json = json.dumps(context) if context else None
+        ctx_json = context if context else None
 
         # Create persistent job record
         job = Job(

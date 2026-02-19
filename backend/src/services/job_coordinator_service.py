@@ -1929,7 +1929,6 @@ class JobCoordinatorService:
                 required_capabilities.append(f"connector:{collection.connector.guid}")
 
             # Build context_json for polymorphic target (Issue #110)
-            import json as json_mod
             context = {}
             if collection.pipeline_id:
                 from backend.src.models import Pipeline as PipelineModel
@@ -1944,7 +1943,7 @@ class JobCoordinatorService:
                     context["pipeline"] = pip_ctx
             if collection.connector:
                 context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
-            ctx_json = json_mod.dumps(context) if context else None
+            ctx_json = context if context else None
 
             # Create refresh job
             refresh_job = Job(
