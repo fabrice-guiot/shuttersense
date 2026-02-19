@@ -127,7 +127,7 @@ describe('ResultsTable', () => {
       renderWithRouter(<ResultsTable {...defaultProps} />)
 
       const table = within(screen.getByTestId('desktop-view'))
-      expect(table.getByText('Collection')).toBeInTheDocument()
+      expect(table.getByText('Target')).toBeInTheDocument()
       expect(table.getByText('Tool')).toBeInTheDocument()
       expect(table.getByText('Status')).toBeInTheDocument()
       expect(table.getByText('Files')).toBeInTheDocument()
@@ -142,7 +142,7 @@ describe('ResultsTable', () => {
     test('shows loading spinner when loading', () => {
       renderWithRouter(<ResultsTable {...defaultProps} loading={true} />)
       expect(screen.getByRole('status')).toBeInTheDocument()
-      expect(screen.queryByText('Collection')).not.toBeInTheDocument()
+      expect(screen.queryByText('Target')).not.toBeInTheDocument()
     })
 
     test('shows empty state when no results', () => {

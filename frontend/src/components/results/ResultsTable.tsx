@@ -12,8 +12,13 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
-  Copy
+  Copy,
+  FolderOpen,
+  Plug,
+  Camera,
+  Workflow
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { ResponsiveTable, type ColumnDef } from '@/components/ui/responsive-table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -44,6 +49,7 @@ import type {
   ToolType,
   ResultListQueryParams
 } from '@/contracts/api/results-api'
+import type { TargetEntityType } from '@/contracts/api/target-api'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/utils/dateFormat'
 
@@ -75,6 +81,14 @@ const STATUS_CONFIG: Record<
   FAILED: { label: 'Failed', variant: 'destructive' },
   CANCELLED: { label: 'Cancelled', variant: 'secondary' },
   NO_CHANGE: { label: 'No Change', variant: 'default' }
+}
+
+// Target entity type icons (Issue #110)
+const TARGET_ICONS: Record<TargetEntityType, LucideIcon> = {
+  collection: FolderOpen,
+  connector: Plug,
+  pipeline: Workflow,
+  camera: Camera,
 }
 
 // Tool display names
@@ -152,20 +166,24 @@ export function ResultsTable({
 
   const resultColumns: ColumnDef<AnalysisResultSummary>[] = [
     {
-      header: 'Collection',
-      cell: (result) => result.collection_name ?? (
-        <span className="text-muted-foreground text-sm">-</span>
-      ),
+      header: 'Target',
+      cell: (result) => {
+        // Use polymorphic target if available, fall back to legacy fields
+        const entityType = result.target?.entity_type
+        const entityName = result.target?.entity_name ?? result.collection_name ?? result.connector_name
+        const Icon = entityType ? TARGET_ICONS[entityType] ?? FolderOpen : (result.connector_name ? Plug : FolderOpen)
+
+        return entityName ? (
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">{entityName}</span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-sm">-</span>
+        )
+      },
       cellClassName: 'font-medium',
       cardRole: 'title',
-    },
-    {
-      header: 'Connector',
-      cell: (result) => result.connector_name ?? (
-        <span className="text-muted-foreground text-sm">-</span>
-      ),
-      cellClassName: 'font-medium',
-      cardRole: 'subtitle',
     },
     {
       header: 'Tool',
@@ -178,16 +196,23 @@ export function ResultsTable({
     },
     {
       header: 'Pipeline',
-      cell: (result) => result.pipeline_name ? (
-        <span className="text-sm" title={`v${result.pipeline_version}`}>
-          {result.pipeline_name}
-          <span className="text-muted-foreground text-xs ml-1">
-            v{result.pipeline_version}
+      cell: (result) => {
+        // Prefer context pipeline info (Issue #110), fall back to legacy fields
+        const pipeName = result.context?.pipeline?.name ?? result.pipeline_name
+        const pipeVersion = result.context?.pipeline?.version ?? result.pipeline_version
+        return pipeName ? (
+          <span className="text-sm" title={pipeVersion != null ? `v${pipeVersion}` : undefined}>
+            {pipeName}
+            {pipeVersion != null && (
+              <span className="text-muted-foreground text-xs ml-1">
+                v{pipeVersion}
+              </span>
+            )}
           </span>
-        </span>
-      ) : (
-        <span className="text-muted-foreground text-sm">-</span>
-      ),
+        ) : (
+          <span className="text-muted-foreground text-sm">-</span>
+        )
+      },
       cardRole: 'detail',
     },
     {
@@ -420,8 +445,8 @@ export function ResultsTable({
             <DialogTitle>Delete Result</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this analysis result
-              {deleteDialog.result?.collection_name
-                ? ` for "${deleteDialog.result.collection_name}"`
+              {(deleteDialog.result?.target?.entity_name ?? deleteDialog.result?.collection_name)
+                ? ` for "${deleteDialog.result?.target?.entity_name ?? deleteDialog.result?.collection_name}"`
                 : ''}
               ? This action cannot be undone.
             </DialogDescription>

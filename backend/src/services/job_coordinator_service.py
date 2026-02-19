@@ -523,12 +523,12 @@ class JobCoordinatorService:
 
     def _find_previous_result(self, job: Job) -> Optional[PreviousResultInfo]:
         """
-        Find the most recent successful result for the same context+tool.
+        Find the most recent successful result for the same target+tool.
 
         Used for Input State comparison in storage optimization (Issue #92).
 
-        For collection-based jobs: looks up by collection_id + tool
-        For display_graph jobs (no collection): looks up by pipeline_id + tool
+        Uses polymorphic target columns if available (Issue #110), with
+        fallback to legacy FK columns for un-backfilled records.
 
         Args:
             job: The job being claimed
@@ -536,37 +536,48 @@ class JobCoordinatorService:
         Returns:
             PreviousResultInfo if a previous result exists, None otherwise
         """
-        # Build the appropriate query based on job type
-        # Display graph jobs have no collection but have a pipeline
-        is_display_graph = job.tool == "pipeline_validation" and not job.collection_id
-
-        if is_display_graph:
-            # For display_graph: match by pipeline_id + tool (no collection)
-            if not job.pipeline_id:
-                return None
-
+        # Use polymorphic target columns if available (Issue #110)
+        if job.target_entity_type and job.target_entity_id:
             previous = self.db.query(AnalysisResult).filter(
                 AnalysisResult.team_id == job.team_id,
-                AnalysisResult.pipeline_id == job.pipeline_id,
-                AnalysisResult.collection_id.is_(None),  # Explicitly match NULL
+                AnalysisResult.target_entity_type == job.target_entity_type,
+                AnalysisResult.target_entity_id == job.target_entity_id,
                 AnalysisResult.tool == job.tool,
                 AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE])
             ).order_by(
                 AnalysisResult.completed_at.desc()
             ).first()
         else:
-            # For collection-based jobs: match by collection_id + tool
-            if not job.collection_id:
-                return None
+            # Fallback to legacy FK columns for un-backfilled records
+            is_display_graph = job.tool == "pipeline_validation" and not job.collection_id
 
-            previous = self.db.query(AnalysisResult).filter(
-                AnalysisResult.team_id == job.team_id,
-                AnalysisResult.collection_id == job.collection_id,
-                AnalysisResult.tool == job.tool,
-                AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE])
-            ).order_by(
-                AnalysisResult.completed_at.desc()
-            ).first()
+            if is_display_graph:
+                # For display_graph: match by pipeline_id + tool (no collection)
+                if not job.pipeline_id:
+                    return None
+
+                previous = self.db.query(AnalysisResult).filter(
+                    AnalysisResult.team_id == job.team_id,
+                    AnalysisResult.pipeline_id == job.pipeline_id,
+                    AnalysisResult.collection_id.is_(None),  # Explicitly match NULL
+                    AnalysisResult.tool == job.tool,
+                    AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE])
+                ).order_by(
+                    AnalysisResult.completed_at.desc()
+                ).first()
+            else:
+                # For collection-based jobs: match by collection_id + tool
+                if not job.collection_id:
+                    return None
+
+                previous = self.db.query(AnalysisResult).filter(
+                    AnalysisResult.team_id == job.team_id,
+                    AnalysisResult.collection_id == job.collection_id,
+                    AnalysisResult.tool == job.tool,
+                    AnalysisResult.status.in_([ResultStatus.COMPLETED, ResultStatus.NO_CHANGE])
+                ).order_by(
+                    AnalysisResult.completed_at.desc()
+                ).first()
 
         if not previous:
             return None
@@ -742,6 +753,12 @@ class JobCoordinatorService:
             input_state_hash=input_state_hash,
             no_change_copy=True,
             download_report_from=download_from_guid,
+            # Polymorphic target — copy from job (Issue #110)
+            target_entity_type=job.target_entity_type,
+            target_entity_id=job.target_entity_id,
+            target_entity_guid=job.target_entity_guid,
+            target_entity_name=job.target_entity_name,
+            context_json=job.context_json,
         )
 
         self.db.add(result)
@@ -1441,6 +1458,12 @@ class JobCoordinatorService:
             input_state_json=input_state_json,  # Only stored in DEBUG mode
             no_change_copy=True,
             download_report_from=download_from_guid,
+            # Polymorphic target — copy from job (Issue #110)
+            target_entity_type=job.target_entity_type,
+            target_entity_id=job.target_entity_id,
+            target_entity_guid=job.target_entity_guid,
+            target_entity_name=job.target_entity_name,
+            context_json=job.context_json,
             # Audit tracking
             created_by_user_id=user_id,
             updated_by_user_id=user_id,
@@ -1828,6 +1851,12 @@ class JobCoordinatorService:
             files_scanned=completion_data.files_scanned or 0,
             issues_found=completion_data.issues_found or (0 if success else 1),
             error_message=results.get("error") if not success else None,
+            # Polymorphic target — copy from job (Issue #110)
+            target_entity_type=job.target_entity_type,
+            target_entity_id=job.target_entity_id,
+            target_entity_guid=job.target_entity_guid,
+            target_entity_name=job.target_entity_name,
+            context_json=job.context_json,
             # Audit tracking
             created_by_user_id=user_id,
             updated_by_user_id=user_id,
@@ -1899,6 +1928,23 @@ class JobCoordinatorService:
                     collection.connector.credential_location == CredentialLocation.AGENT):
                 required_capabilities.append(f"connector:{collection.connector.guid}")
 
+            # Build context_json for polymorphic target (Issue #110)
+            context = {}
+            if collection.pipeline_id:
+                from backend.src.models import Pipeline as PipelineModel
+                pip = self.db.query(PipelineModel).filter(
+                    PipelineModel.id == collection.pipeline_id,
+                    PipelineModel.team_id == job.team_id,
+                ).first()
+                if pip:
+                    pip_ctx = {"guid": pip.guid, "name": pip.name}
+                    if collection.pipeline_version:
+                        pip_ctx["version"] = collection.pipeline_version
+                    context["pipeline"] = pip_ctx
+            if collection.connector:
+                context["connector"] = {"guid": collection.connector.guid, "name": collection.connector.name}
+            ctx_json = context if context else None
+
             # Create refresh job
             refresh_job = Job(
                 team_id=job.team_id,
@@ -1910,6 +1956,12 @@ class JobCoordinatorService:
                 status=JobStatus.PENDING,
                 bound_agent_id=collection.bound_agent_id,
                 required_capabilities=required_capabilities,
+                # Polymorphic target (Issue #110)
+                target_entity_type="collection",
+                target_entity_id=collection.id,
+                target_entity_guid=collection.guid,
+                target_entity_name=collection.name,
+                context_json=ctx_json,
             )
             self.db.add(refresh_job)
 
@@ -1973,6 +2025,12 @@ class JobCoordinatorService:
             # Storage optimization fields (Issue #92)
             input_state_hash=completion_data.input_state_hash,
             input_state_json=completion_data.input_state_json,
+            # Polymorphic target — copy from job (Issue #110)
+            target_entity_type=job.target_entity_type,
+            target_entity_id=job.target_entity_id,
+            target_entity_guid=job.target_entity_guid,
+            target_entity_name=job.target_entity_name,
+            context_json=job.context_json,
             # Audit tracking
             created_by_user_id=user_id,
             updated_by_user_id=user_id,
@@ -2150,6 +2208,12 @@ class JobCoordinatorService:
             required_capabilities=completed_job.required_capabilities,
             created_by_user_id=completed_job.created_by_user_id,
             updated_by_user_id=completed_job.created_by_user_id,
+            # Polymorphic target — copy from parent (Issue #110)
+            target_entity_type=completed_job.target_entity_type,
+            target_entity_id=completed_job.target_entity_id,
+            target_entity_guid=completed_job.target_entity_guid,
+            target_entity_name=completed_job.target_entity_name,
+            context_json=completed_job.context_json,
         )
 
         self.db.add(scheduled_job)
@@ -2185,10 +2249,16 @@ class JobCoordinatorService:
         if completed_job.tool != "inventory_import":
             return None
 
-        # Get connector info from job progress
-        progress = completed_job.progress or {}
-        connector_id = progress.get("connector_id")
-        connector_guid = progress.get("connector_guid")
+        # Get connector info — prefer target columns (Issue #110), fall back to progress_json
+        connector_id = None
+        connector_guid = None
+        if completed_job.target_entity_type == "connector" and completed_job.target_entity_id:
+            connector_id = completed_job.target_entity_id
+            connector_guid = completed_job.target_entity_guid
+        else:
+            progress = completed_job.progress or {}
+            connector_id = progress.get("connector_id")
+            connector_guid = progress.get("connector_guid")
 
         if not connector_id:
             logger.warning(
@@ -2409,6 +2479,12 @@ class JobCoordinatorService:
             files_scanned=0,
             issues_found=0,
             error_message=error_message,
+            # Polymorphic target — copy from job (Issue #110)
+            target_entity_type=job.target_entity_type,
+            target_entity_id=job.target_entity_id,
+            target_entity_guid=job.target_entity_guid,
+            target_entity_name=job.target_entity_name,
+            context_json=job.context_json,
             # Audit tracking
             created_by_user_id=user_id,
             updated_by_user_id=user_id,

@@ -278,7 +278,7 @@ describe('JobProgressCard', () => {
       />
     )
 
-    expect(screen.getByText('Collection:')).toBeInTheDocument()
+    expect(screen.getByText('Target:')).toBeInTheDocument()
     expect(screen.getByText('col_01hgw2bbg0000000000000001')).toBeInTheDocument()
   })
 

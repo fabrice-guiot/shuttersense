@@ -27,6 +27,7 @@ from backend.src.schemas.results import (
     SortField, SortOrder, AnalysisResultSummary, AnalysisResultResponse,
     ResultStatsResponse, ResultListResponse
 )
+from backend.src.schemas.target import TargetEntityInfo, ResultContext, PipelineContextRef, ContextEntityRef
 from backend.src.services.exceptions import NotFoundError
 from backend.src.services.guid import GuidService
 from backend.src.utils.logging_config import get_logger
@@ -144,6 +145,7 @@ class ResultService:
         self,
         team_id: int,
         collection_guid: Optional[str] = None,
+        target_entity_type: Optional[str] = None,
         tool: Optional[str] = None,
         status: Optional[ResultStatus] = None,
         no_change_copy: Optional[bool] = None,
@@ -160,6 +162,7 @@ class ResultService:
         Args:
             team_id: Team ID for tenant isolation
             collection_guid: Filter by collection GUID (col_xxx)
+            target_entity_type: Filter by target entity type (collection, connector, pipeline, camera)
             tool: Filter by tool type
             status: Filter by result status
             no_change_copy: Filter by no_change_copy flag (True=copies, False=originals)
@@ -188,6 +191,8 @@ class ResultService:
             else:
                 # Collection not found - return empty results
                 return [], 0
+        if target_entity_type:
+            query = query.filter(AnalysisResult.target_entity_type == target_entity_type)
         if tool:
             query = query.filter(AnalysisResult.tool == tool)
         if status:
@@ -247,6 +252,21 @@ class ResultService:
                     Connector.team_id == team_id
                 ).first()
 
+            # Build target/context from polymorphic columns (Issue #110)
+            target = None
+            result_context = None
+            if result.target_entity_type:
+                target = TargetEntityInfo(
+                    entity_type=result.target_entity_type,
+                    entity_guid=result.target_entity_guid,
+                    entity_name=result.target_entity_name,
+                )
+                ctx = result.context  # Uses the @property (handles JSON deserialization)
+                if ctx:
+                    pip_ref = PipelineContextRef(**ctx["pipeline"]) if "pipeline" in ctx else None
+                    con_ref = ContextEntityRef(**ctx["connector"]) if "connector" in ctx else None
+                    result_context = ResultContext(pipeline=pip_ref, connector=con_ref)
+
             summaries.append(AnalysisResultSummary(
                 guid=result.guid,
                 collection_guid=collection.guid if collection else None,
@@ -268,6 +288,9 @@ class ResultService:
                 # Storage Optimization Fields (Issue #92)
                 input_state_hash=result.input_state_hash,
                 no_change_copy=result.no_change_copy,
+                # Polymorphic target (Issue #110)
+                target=target,
+                context=result_context,
                 # Audit trail (Issue #120)
                 audit=result.audit,
             ))
@@ -370,6 +393,21 @@ class ResultService:
                 source_result_exists = False
                 has_report = False
 
+        # Build target/context from polymorphic columns (Issue #110)
+        target = None
+        result_context = None
+        if result.target_entity_type:
+            target = TargetEntityInfo(
+                entity_type=result.target_entity_type,
+                entity_guid=result.target_entity_guid,
+                entity_name=result.target_entity_name,
+            )
+            ctx = result.context  # Uses the @property (handles JSON deserialization)
+            if ctx:
+                pip_ref = PipelineContextRef(**ctx["pipeline"]) if "pipeline" in ctx else None
+                con_ref = ContextEntityRef(**ctx["connector"]) if "connector" in ctx else None
+                result_context = ResultContext(pipeline=pip_ref, connector=con_ref)
+
         return AnalysisResultResponse(
             guid=result.guid,
             collection_guid=collection.guid if collection else None,
@@ -396,6 +434,9 @@ class ResultService:
             no_change_copy=result.no_change_copy,
             download_report_from=result.download_report_from,
             source_result_exists=source_result_exists,
+            # Polymorphic target (Issue #110)
+            target=target,
+            context=result_context,
             audit=result.audit,
         )
 

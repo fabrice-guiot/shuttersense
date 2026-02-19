@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from backend.src.models import ResultStatus
 from backend.src.schemas.audit import AuditInfo
+from backend.src.schemas.target import TargetEntityInfo, ResultContext
 
 
 class SortField(str, Enum):
@@ -45,6 +46,7 @@ class ResultsQueryParams(BaseModel):
     All parameters are optional for flexible filtering.
     """
     collection_guid: Optional[str] = Field(None, description="Filter by collection GUID (col_xxx)")
+    target_entity_type: Optional[str] = Field(None, description="Filter by target entity type (collection, connector, pipeline, camera)")
     tool: Optional[str] = Field(None, description="Filter by tool type")
     status: Optional[ResultStatus] = Field(None, description="Filter by status")
     from_date: Optional[date] = Field(None, description="Filter from date")
@@ -87,6 +89,9 @@ class AnalysisResultSummary(BaseModel):
     # Storage Optimization Fields (Issue #92)
     input_state_hash: Optional[str] = Field(None, description="SHA-256 hash of Input State (null for legacy results)")
     no_change_copy: bool = Field(False, description="True if this result references a previous result")
+    # Polymorphic target (Issue #110)
+    target: Optional[TargetEntityInfo] = Field(None, description="Primary target entity")
+    context: Optional[ResultContext] = Field(None, description="Execution context (pipeline, connector)")
     audit: Optional[AuditInfo] = None
 
     model_config = {
@@ -212,6 +217,9 @@ class AnalysisResultResponse(BaseModel):
     no_change_copy: bool = Field(False, description="True if this result references a previous result")
     download_report_from: Optional[str] = Field(None, description="GUID of source result for report download (res_xxx)")
     source_result_exists: Optional[bool] = Field(None, description="Whether source result still exists (for NO_CHANGE results)")
+    # Polymorphic target (Issue #110)
+    target: Optional[TargetEntityInfo] = Field(None, description="Primary target entity")
+    context: Optional[ResultContext] = Field(None, description="Execution context (pipeline, connector)")
     audit: Optional[AuditInfo] = None
 
     model_config = {

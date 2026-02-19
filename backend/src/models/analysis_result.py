@@ -115,6 +115,16 @@ class AnalysisResult(Base, GuidMixin, AuditMixin):
         index=True
     )
 
+    # Polymorphic target (Issue #110)
+    target_entity_type = Column(String(30), nullable=True)
+    target_entity_id = Column(Integer, nullable=True)
+    target_entity_guid = Column(String(50), nullable=True)
+    target_entity_name = Column(String(255), nullable=True)
+    context_json = Column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True
+    )
+
     # Core fields
     tool = Column(String(50), nullable=False, index=True)
     status = Column(
@@ -218,6 +228,27 @@ class AnalysisResult(Base, GuidMixin, AuditMixin):
         if self.no_change_copy and self.download_report_from:
             return True
         return self.report_html is not None and len(self.report_html) > 0
+
+    @property
+    def target_info(self) -> dict | None:
+        """Get polymorphic target info for API responses."""
+        if not self.target_entity_type:
+            return None
+        return {
+            "entity_type": self.target_entity_type,
+            "entity_guid": self.target_entity_guid,
+            "entity_name": self.target_entity_name,
+        }
+
+    @property
+    def context(self) -> dict | None:
+        """Get execution context as a dictionary."""
+        if self.context_json is None:
+            return None
+        if isinstance(self.context_json, str):
+            import json
+            return json.loads(self.context_json)
+        return self.context_json
 
     def get_result_summary(self) -> Dict[str, Any]:
         """

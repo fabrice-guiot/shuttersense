@@ -20,6 +20,7 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 from backend.src.schemas.audit import AuditInfo
+from backend.src.schemas.target import TargetEntityInfo, ResultContext
 
 
 class ToolType(str, Enum):
@@ -158,6 +159,9 @@ class JobResponse(BaseModel):
     result_guid: Optional[str] = Field(None, description="Analysis result GUID when completed")
     agent_guid: Optional[str] = Field(None, description="GUID of assigned agent (agt_xxx)")
     agent_name: Optional[str] = Field(None, description="Name of assigned agent")
+    # Polymorphic target (Issue #110)
+    target: Optional[TargetEntityInfo] = Field(None, description="Primary target entity")
+    context: Optional[ResultContext] = Field(None, description="Execution context (pipeline, connector)")
     audit: Optional[AuditInfo] = None
 
     model_config = {
