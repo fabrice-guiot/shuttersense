@@ -7,7 +7,7 @@
  * Issue #182 - Calendar Conflict Visualization & Event Picker (Phase 5, US3)
  */
 
-import { Building2, Clock, MapPin, RotateCcw, SkipForward, Users } from 'lucide-react'
+import { Building2, Clock, Lock, MapPin, RotateCcw, SkipForward, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -343,6 +343,12 @@ function EventDetailCard({
           <RotateCcw className="h-3 w-3 mr-1" />
           Restore
         </Button>
+      )}
+      {event.forces_skip && (
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <Lock className="h-3 w-3" />
+          Attendance locked by status
+        </p>
       )}
     </div>
   )

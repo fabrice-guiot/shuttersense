@@ -177,56 +177,61 @@ export const TimelineEventMarker = forwardRef<TimelineEventMarkerHandle, Timelin
             />
 
             {/* Action buttons */}
-            {(onView || onEdit || onSkip || onRestore) && (
-              <div className="flex flex-row sm:flex-col gap-1.5 sm:pt-2 flex-shrink-0">
-                {onView && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={(e) => { e.stopPropagation(); onView(event) }}
-                  >
-                    <Eye className="h-3 w-3 mr-1" />
-                    View
-                  </Button>
-                )}
-                {onEdit && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={(e) => { e.stopPropagation(); onEdit(event) }}
-                  >
-                    <Pencil className="h-3 w-3 mr-1" />
-                    Edit
-                  </Button>
-                )}
-                {onSkip && !isSkipped && !event.forces_skip && conflictGroupStatus && conflictGroupStatus !== 'resolved' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={actionLoading}
-                    onClick={(e) => { e.stopPropagation(); onSkip(event) }}
-                  >
-                    <SkipForward className="h-3 w-3 mr-1" />
-                    Skip
-                  </Button>
-                )}
-                {onRestore && isSkipped && !event.forces_skip && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-muted-foreground"
-                    disabled={actionLoading}
-                    onClick={(e) => { e.stopPropagation(); onRestore(event) }}
-                  >
-                    <RotateCcw className="h-3 w-3 mr-1" />
-                    Restore
-                  </Button>
-                )}
-              </div>
-            )}
+            {(() => {
+              const showSkip = !!onSkip && !isSkipped && !event.forces_skip && !!conflictGroupStatus && conflictGroupStatus !== 'resolved'
+              const showRestore = !!onRestore && isSkipped && !event.forces_skip
+              if (!onView && !onEdit && !showSkip && !showRestore) return null
+              return (
+                <div className="flex flex-row sm:flex-col gap-1.5 sm:pt-2 flex-shrink-0">
+                  {onView && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={(e) => { e.stopPropagation(); onView(event) }}
+                    >
+                      <Eye className="h-3 w-3 mr-1" />
+                      View
+                    </Button>
+                  )}
+                  {onEdit && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={(e) => { e.stopPropagation(); onEdit(event) }}
+                    >
+                      <Pencil className="h-3 w-3 mr-1" />
+                      Edit
+                    </Button>
+                  )}
+                  {showSkip && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={actionLoading}
+                      onClick={(e) => { e.stopPropagation(); onSkip!(event) }}
+                    >
+                      <SkipForward className="h-3 w-3 mr-1" />
+                      Skip
+                    </Button>
+                  )}
+                  {showRestore && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground"
+                      disabled={actionLoading}
+                      onClick={(e) => { e.stopPropagation(); onRestore!(event) }}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Restore
+                    </Button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}

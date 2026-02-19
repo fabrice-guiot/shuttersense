@@ -6,7 +6,7 @@
  * Issue #39 - Calendar Events feature (Phase 5)
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -196,12 +196,20 @@ export const EventForm = ({
   const isForceSkipped = currentStatusConfig?.forces_skip ?? false
 
   // Auto-set attendance when status forces skip, auto-revert when moving away
+  const prevForcesSkipRef = useRef<boolean | null>(null)
   useEffect(() => {
     if (statusesLoading) return
     const statusConfig = eventStatuses.find(s => s.key === watchedStatus)
-    if (statusConfig?.forces_skip) {
+    const nowForces = statusConfig?.forces_skip ?? false
+
+    if (nowForces) {
       form.setValue('attendance', 'skipped')
+    } else if (prevForcesSkipRef.current === true && !nowForces) {
+      // Switched away from a forces_skip status → revert to 'planned'
+      form.setValue('attendance', 'planned')
     }
+
+    prevForcesSkipRef.current = nowForces
   }, [watchedStatus, eventStatuses, statusesLoading, form])
 
   // Populate form when editing - wait for eventStatuses to load to ensure Select works

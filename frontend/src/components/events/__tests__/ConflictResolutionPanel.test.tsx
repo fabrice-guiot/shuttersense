@@ -342,4 +342,35 @@ describe('ConflictResolutionPanel', () => {
     expect(screen.getByText('09:00')).toBeInTheDocument()
     expect(screen.getByText('11:00')).toBeInTheDocument()
   })
+
+  // ===========================================================================
+  // forces_skip button suppression (Issue #238)
+  // ===========================================================================
+
+  test('hides Skip button when event has forces_skip', () => {
+    const forcesSkipGroup: ConflictGroup = {
+      ...twoEventGroup,
+      events: [
+        { ...twoEventGroup.events[0], forces_skip: true, attendance: 'skipped' },
+        twoEventGroup.events[1],
+      ],
+    }
+    render(<ConflictResolutionPanel groups={[forcesSkipGroup]} />)
+    // Only the second event should have a Skip button
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    expect(skipButtons).toHaveLength(1)
+  })
+
+  test('hides Restore button when skipped event has forces_skip', () => {
+    const forcesSkipResolved: ConflictGroup = {
+      ...resolvedGroup,
+      events: [
+        resolvedGroup.events[0],
+        { ...resolvedGroup.events[1], forces_skip: true },
+      ],
+    }
+    render(<ConflictResolutionPanel groups={[forcesSkipResolved]} />)
+    // Skipped event with forces_skip should NOT have a Restore button
+    expect(screen.queryByRole('button', { name: /Restore/i })).not.toBeInTheDocument()
+  })
 })

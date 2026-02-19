@@ -424,4 +424,53 @@ describe('RadarComparisonDialog', () => {
     const dashes = screen.getAllByText('\u2014')
     expect(dashes.length).toBeGreaterThan(0)
   })
+
+  // ===========================================================================
+  // forces_skip button suppression (Issue #238)
+  // ===========================================================================
+
+  test('hides Skip button when event has forces_skip', () => {
+    const forcesSkipGroup: ConflictGroup = {
+      ...twoEventGroup,
+      events: [
+        { ...twoEventGroup.events[0], forces_skip: true, attendance: 'skipped' },
+        twoEventGroup.events[1],
+      ],
+    }
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={forcesSkipGroup} />
+    )
+    // Only the second event should have a Skip button
+    const skipButtons = screen.getAllByRole('button', { name: /Skip/i })
+    expect(skipButtons).toHaveLength(1)
+  })
+
+  test('hides Restore button when skipped event has forces_skip', () => {
+    const forcesSkipResolved: ConflictGroup = {
+      ...resolvedGroup,
+      events: [
+        resolvedGroup.events[0],
+        { ...resolvedGroup.events[1], forces_skip: true },
+      ],
+    }
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={forcesSkipResolved} />
+    )
+    // Skipped event with forces_skip should NOT have a Restore button
+    expect(screen.queryByRole('button', { name: /Restore/i })).not.toBeInTheDocument()
+  })
+
+  test('shows attendance locked message for forces_skip event', () => {
+    const forcesSkipGroup: ConflictGroup = {
+      ...twoEventGroup,
+      events: [
+        { ...twoEventGroup.events[0], forces_skip: true, attendance: 'skipped' },
+        twoEventGroup.events[1],
+      ],
+    }
+    render(
+      <RadarComparisonDialog open={true} onOpenChange={vi.fn()} group={forcesSkipGroup} />
+    )
+    expect(screen.getByText('Attendance locked by status')).toBeInTheDocument()
+  })
 })

@@ -95,8 +95,9 @@ def event_service(test_db_session):
 class TestConfigServiceForcesSkip:
     """Tests for forces_skip in ConfigService."""
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_get_event_statuses_includes_forces_skip(
-        self, config_service, test_team, seed_statuses
+        self, config_service, test_team
     ):
         """Event statuses include forces_skip field."""
         statuses = config_service.get_event_statuses(test_team.id)
@@ -106,17 +107,18 @@ class TestConfigServiceForcesSkip:
         future = next(s for s in statuses if s['key'] == 'future')
         assert future['forces_skip'] is False
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_get_forces_skip_statuses(
-        self, config_service, test_team, seed_statuses
+        self, config_service, test_team
     ):
         """get_forces_skip_statuses returns only forces_skip=True keys."""
         result = config_service.get_forces_skip_statuses(test_team.id)
         assert result == {'cancelled'}
 
-    def test_get_forces_skip_statuses_empty_when_none_set(
+    def test_get_forces_skip_statuses_returns_defaults_when_no_db_config(
         self, config_service, test_team
     ):
-        """Returns empty set when no statuses have forces_skip."""
+        """Returns default forces_skip statuses when no DB config exists."""
         # No seed_statuses - defaults will be used from hardcoded fallback
         result = config_service.get_forces_skip_statuses(test_team.id)
         # Defaults include cancelled with forces_skip=True
@@ -150,8 +152,9 @@ class TestConfigServiceForcesSkip:
 class TestEventServiceCreateForcesSkip:
     """Tests for forces_skip enforcement during event creation."""
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_create_with_forces_skip_status_overrides_attendance(
-        self, event_service, test_team, test_category, seed_statuses
+        self, event_service, test_team, test_category
     ):
         """Creating an event with a forces_skip status sets attendance to 'skipped'."""
         event = event_service.create(
@@ -165,8 +168,9 @@ class TestEventServiceCreateForcesSkip:
         assert event.attendance == "skipped"
         assert event.status == "cancelled"
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_create_with_normal_status_keeps_attendance(
-        self, event_service, test_team, test_category, seed_statuses
+        self, event_service, test_team, test_category
     ):
         """Creating an event with a normal status keeps the provided attendance."""
         event = event_service.create(
@@ -211,8 +215,9 @@ class TestEventServiceUpdateForcesSkip:
         assert updated.attendance == "skipped"
         assert updated.status == "cancelled"
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_changing_from_forces_skip_reverts_attendance_to_planned(
-        self, event_service, test_team, test_category, seed_statuses
+        self, event_service, test_team, test_category
     ):
         """Changing from a forces_skip status to normal reverts attendance to 'planned'."""
         # Create a cancelled event (will have attendance=skipped)
@@ -233,8 +238,9 @@ class TestEventServiceUpdateForcesSkip:
         assert updated.attendance == "planned"
         assert updated.status == "confirmed"
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_cannot_change_attendance_when_forces_skip(
-        self, event_service, test_team, test_category, seed_statuses
+        self, event_service, test_team, test_category
     ):
         """Changing attendance away from 'skipped' when status forces skip raises error."""
         event = event_service.create(
@@ -252,8 +258,9 @@ class TestEventServiceUpdateForcesSkip:
                 attendance="planned",
             )
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_can_set_attendance_to_skipped_when_forces_skip(
-        self, event_service, test_team, test_category, seed_statuses
+        self, event_service, test_team, test_category
     ):
         """Setting attendance to 'skipped' when forces_skip is allowed (no-op)."""
         event = event_service.create(
@@ -288,8 +295,9 @@ class TestEventServiceUpdateForcesSkip:
 class TestConflictResolvesForcesSkip:
     """Tests for forces_skip enforcement in conflict resolution."""
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_resolve_rejects_restore_for_forces_skip_status(
-        self, test_db_session, test_team, test_category, seed_statuses
+        self, test_db_session, test_team, test_category
     ):
         """Resolving a conflict to 'planned' on a forces_skip event raises error."""
         from backend.src.services.conflict_service import ConflictService
@@ -313,8 +321,9 @@ class TestConflictResolvesForcesSkip:
                 user_id=1,
             )
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_resolve_allows_skip_for_forces_skip_status(
-        self, test_db_session, test_team, test_category, seed_statuses
+        self, test_db_session, test_team, test_category
     ):
         """Resolving to 'skipped' on a forces_skip event is allowed."""
         from backend.src.services.conflict_service import ConflictService
@@ -337,8 +346,9 @@ class TestConflictResolvesForcesSkip:
         )
         assert updated == 0  # No change needed
 
+    @pytest.mark.usefixtures("seed_statuses")
     def test_resolve_allows_restore_for_normal_status(
-        self, test_db_session, test_team, test_category, seed_statuses
+        self, test_db_session, test_team, test_category
     ):
         """Resolving to 'planned' on a non-forces_skip event works normally."""
         from backend.src.services.conflict_service import ConflictService

@@ -617,7 +617,12 @@ class ConflictService:
             return ConflictGroupStatus.PARTIALLY_RESOLVED
         return ConflictGroupStatus.UNRESOLVED
 
-    def _build_scored_event(self, event: Event, scores: EventScores, forces_skip_statuses: Optional[set] = None) -> ScoredEvent:
+    def _build_scored_event(
+        self,
+        event: Event,
+        scores: EventScores,
+        forces_skip_statuses: Optional[set] = None,
+    ) -> ScoredEvent:
         """Build a ScoredEvent from an Event model and its scores."""
         confirmed_count = sum(
             1 for ep in event.event_performers

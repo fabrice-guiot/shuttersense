@@ -171,7 +171,7 @@ function ConflictEventRow({
       </div>
 
       {/* Action button */}
-      {!isResolved && !isSkipped && (
+      {!isResolved && !isSkipped && !event.forces_skip && (
         <Button
           variant="outline"
           size="sm"
@@ -183,7 +183,7 @@ function ConflictEventRow({
           Skip
         </Button>
       )}
-      {isSkipped && (
+      {isSkipped && !event.forces_skip && (
         <Button
           variant="ghost"
           size="sm"

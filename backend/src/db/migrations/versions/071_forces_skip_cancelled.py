@@ -11,7 +11,6 @@ Forward-only: does not retroactively update existing event attendance.
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.sql import table, column
-from sqlalchemy.dialects.postgresql import JSONB
 
 
 # revision identifiers, used by Alembic.
@@ -26,7 +25,7 @@ configurations = table(
     column('id', sa.Integer),
     column('category', sa.String),
     column('key', sa.String),
-    column('value_json', JSONB),
+    column('value_json', sa.JSON),
     column('team_id', sa.Integer),
 )
 

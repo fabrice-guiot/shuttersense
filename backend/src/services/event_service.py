@@ -1442,32 +1442,14 @@ class EventService:
         # ---- forces_skip enforcement (Issue #238) ----
         new_status = updates.get("status")
         new_attendance = updates.get("attendance")
-        old_status = event.status
         team_id = event.team_id
 
-        if new_status and new_status != old_status:
-            # Status is changing
-            new_forces = self._status_forces_skip(new_status, team_id)
-            old_forces = self._status_forces_skip(old_status, team_id)
-
-            if new_forces:
-                # New status forces skip → override attendance to 'skipped'
-                updates["attendance"] = "skipped"
-                logger.debug(f"Status '{new_status}' forces attendance to 'skipped'")
-            elif old_forces and not new_forces:
-                # Moving away from a forces_skip status → revert to 'planned'
-                # (unless the caller is explicitly setting a different attendance)
-                if new_attendance is None:
-                    updates["attendance"] = "planned"
-                    logger.debug(f"Reverting attendance to 'planned' (moved from forces_skip status '{old_status}')")
-        elif new_attendance and new_attendance != "skipped":
+        if new_attendance and new_attendance != "skipped" and not new_status:
             # Attendance is changing without a status change - check current status
-            effective_status = new_status or old_status
-            if self._status_forces_skip(effective_status, team_id):
+            if self._status_forces_skip(event.status, team_id):
                 raise ValidationError(
-                    f"Cannot change attendance away from 'skipped' while status "
-                    f"'{effective_status}' forces skip",
-                    field="attendance"
+                    f"Cannot change attendance away from 'skipped' while status '{event.status}' forces skip",
+                    field="attendance",
                 )
 
         # Determine which events to update based on scope
@@ -1476,8 +1458,16 @@ class EventService:
         else:
             events_to_update = [event]
 
-        # Apply regular updates based on scope
+        # Apply regular updates based on scope, with per-event forces_skip enforcement
         for e in events_to_update:
+            if new_status and new_status != e.status:
+                new_forces = self._status_forces_skip(new_status, team_id)
+                old_forces = self._status_forces_skip(e.status, team_id)
+                if new_forces:
+                    updates["attendance"] = "skipped"
+                elif old_forces and not new_forces and new_attendance is None:
+                    updates["attendance"] = "planned"
+
             for field, value in updates.items():
                 if hasattr(e, field):
                     setattr(e, field, value)

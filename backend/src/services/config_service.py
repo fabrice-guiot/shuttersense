@@ -420,7 +420,7 @@ class ConfigService:
         statuses.sort(key=lambda x: x["display_order"])
         return statuses
 
-    def get_forces_skip_statuses(self, team_id: int) -> set:
+    def get_forces_skip_statuses(self, team_id: int) -> set[str]:
         """
         Get the set of status keys that have forces_skip=True for a team.
 
