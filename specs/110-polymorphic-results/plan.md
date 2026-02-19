@@ -1,7 +1,7 @@
 # Implementation Plan: Polymorphic Target Entity for Job & AnalysisResult
 
 **Branch**: `110-polymorphic-results` | **Date**: 2026-02-19 | **Issue**: [#110](https://github.com/fabrice-guiot/shuttersense/issues/110)
-**Status**: Rev 2 — updated from reviewer feedback (CodeRabbit, Greptile)
+**Status**: Rev 3 — updated from second round of reviewer feedback (CodeRabbit)
 
 ## Summary
 
@@ -78,18 +78,18 @@ When context exists, `context_json` contains only the keys that are relevant (no
 ```json
 {
   "pipeline": {
-    "id": 5,
     "guid": "pip_01hgw2bbg0000000000000002",
     "name": "Standard RAW Workflow",
     "version": 3
   },
   "connector": {
-    "id": 12,
     "guid": "con_01hgw2bbg0000000000000001",
     "name": "AWS Production S3"
   }
 }
 ```
+
+> **Reviewer feedback addressed (Rev 3)**: Context JSON entries contain only `guid`, `name`, and role-specific fields (e.g., `version` for pipelines). Internal `id` values are **excluded** from context_json — they are internal-only and the GUID is sufficient for any downstream lookup or navigation. This keeps the Pydantic `ContextEntityRef` model (with `guid` + `name` fields) perfectly aligned with the JSON structure, so Phase 2 dual-writes via Pydantic won't silently drop fields.
 
 **Null handling convention**: When no context entities exist (e.g., inventory tools have no pipeline or connector context), `context_json` is `NULL` — not `{}` or `{"pipeline": null}`. When only some context exists (e.g., pipeline but no connector), only the present keys are included. This ensures consistency between backfilled records and newly-written records (Pydantic's `exclude_none=True` produces the same format).
 
@@ -165,7 +165,7 @@ context_col_type = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 
 #### Step 2: Create indexes (dialect-aware)
 
-On **PostgreSQL**: Use `CREATE INDEX CONCURRENTLY` via `op.execute()` to avoid write-locks on production tables. This requires the migration to run outside an Alembic transaction block (`autocommit` mode for this migration).
+On **PostgreSQL**: Use `CREATE INDEX CONCURRENTLY` via `op.execute()` to avoid write-locks on production tables. `CREATE INDEX CONCURRENTLY` cannot run inside a transaction — Alembic's default behavior wraps each migration in a transaction, so we must use `op.get_context().autocommit_block()` to temporarily exit the transaction for each concurrent index creation.
 
 On **SQLite** (tests): Use standard `op.create_index()`.
 
@@ -173,19 +173,22 @@ On **SQLite** (tests): Use standard `op.create_index()`.
 dialect = op.get_bind().dialect.name
 
 if dialect == "postgresql":
-    # Non-blocking index creation for production
-    op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_results_target "
-        "ON analysis_results (target_entity_type, target_entity_id)"
-    )
-    op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_results_target_tool "
-        "ON analysis_results (target_entity_type, target_entity_id, tool, created_at DESC)"
-    )
-    op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_target "
-        "ON jobs (target_entity_type, target_entity_id)"
-    )
+    # Non-blocking index creation for production.
+    # CREATE INDEX CONCURRENTLY cannot run inside a transaction,
+    # so we use autocommit_block() to temporarily exit the transaction.
+    with op.get_context().autocommit_block():
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_results_target "
+            "ON analysis_results (target_entity_type, target_entity_id)"
+        )
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_results_target_tool "
+            "ON analysis_results (target_entity_type, target_entity_id, tool, created_at DESC)"
+        )
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_target "
+            "ON jobs (target_entity_type, target_entity_id)"
+        )
 else:
     # SQLite — standard index creation
     op.create_index("idx_results_target", "analysis_results", ["target_entity_type", "target_entity_id"])
@@ -227,14 +230,12 @@ for row in rows:
     context = {}
     if row.pipeline_id:
         context["pipeline"] = {
-            "id": row.pipeline_id,
             "guid": GuidService.uuid_to_guid("pip", row.pip_uuid),
             "name": row.pip_name,
             "version": row.pipeline_version,
         }
     if row.cn_id:
         context["connector"] = {
-            "id": row.cn_id,
             "guid": GuidService.uuid_to_guid("con", row.cn_uuid),
             "name": row.cn_name,
         }
@@ -306,13 +307,83 @@ for row in rows:
 # --- Backfill jobs ---
 
 # 1. Collection-targeted jobs
-# (same pattern as analysis_results — omitted for brevity)
+# Note: Job model has pipeline_id and pipeline_version as direct FK columns,
+# but does NOT have connector_id as a FK (it's hacked into progress_json).
+# For context, we join through the collection to get the connector.
+rows = bind.execute(sa.text("""
+    SELECT j.id, j.collection_id, j.pipeline_id, j.pipeline_version,
+           c.uuid AS col_uuid, c.name AS col_name, c.connector_id,
+           p.uuid AS pip_uuid, p.name AS pip_name,
+           cn.id AS cn_id, cn.uuid AS cn_uuid, cn.name AS cn_name
+    FROM jobs j
+    JOIN collections c ON j.collection_id = c.id
+    LEFT JOIN pipelines p ON j.pipeline_id = p.id
+    LEFT JOIN connectors cn ON c.connector_id = cn.id
+    WHERE j.collection_id IS NOT NULL
+      AND j.target_entity_type IS NULL
+""")).fetchall()
+
+for row in rows:
+    context = {}
+    if row.pipeline_id:
+        context["pipeline"] = {
+            "guid": GuidService.uuid_to_guid("pip", row.pip_uuid),
+            "name": row.pip_name,
+            "version": row.pipeline_version,
+        }
+    if row.cn_id:
+        context["connector"] = {
+            "guid": GuidService.uuid_to_guid("con", row.cn_uuid),
+            "name": row.cn_name,
+        }
+
+    bind.execute(sa.text("""
+        UPDATE jobs
+        SET target_entity_type = :tet, target_entity_id = :tei,
+            target_entity_guid = :teg, target_entity_name = :ten,
+            context_json = :ctx
+        WHERE id = :id
+    """), {
+        "tet": "collection",
+        "tei": row.collection_id,
+        "teg": GuidService.uuid_to_guid("col", row.col_uuid),
+        "ten": row.col_name,
+        "ctx": json.dumps(context) if context else None,
+        "id": row.id,
+    })
 
 # 2. Pipeline-targeted jobs (display_graph mode)
-# (same pattern — omitted for brevity)
+# These jobs have collection_id=NULL and pipeline_id set.
+rows = bind.execute(sa.text("""
+    SELECT j.id, j.pipeline_id, p.uuid AS pip_uuid, p.name AS pip_name
+    FROM jobs j
+    JOIN pipelines p ON j.pipeline_id = p.id
+    WHERE j.collection_id IS NULL
+      AND j.pipeline_id IS NOT NULL
+      AND j.tool NOT IN ('inventory_validate', 'inventory_import')
+      AND j.target_entity_type IS NULL
+""")).fetchall()
+
+for row in rows:
+    bind.execute(sa.text("""
+        UPDATE jobs
+        SET target_entity_type = :tet, target_entity_id = :tei,
+            target_entity_guid = :teg, target_entity_name = :ten,
+            context_json = NULL
+        WHERE id = :id
+    """), {
+        "tet": "pipeline",
+        "tei": row.pipeline_id,
+        "teg": GuidService.uuid_to_guid("pip", row.pip_uuid),
+        "ten": row.pip_name,
+        "id": row.id,
+    })
 
 # 3. Connector-targeted jobs (inventory tools)
-# Extract connector_id from progress_json
+# connector_id is NOT a FK on Job — it's extracted from progress_json.
+# IMPORTANT: On PostgreSQL, JSONB columns are auto-decoded by psycopg2
+# to Python dicts. On SQLite, progress_json is stored as Text and
+# returned as a string. We must handle both cases.
 rows = bind.execute(sa.text("""
     SELECT j.id, j.progress_json
     FROM jobs j
@@ -321,7 +392,8 @@ rows = bind.execute(sa.text("""
 """)).fetchall()
 
 for row in rows:
-    progress = json.loads(row.progress_json) if row.progress_json else {}
+    raw = row.progress_json
+    progress = raw if isinstance(raw, dict) else (json.loads(raw) if raw else {})
     connector_id = progress.get("connector_id")
     if not connector_id:
         continue  # Skip jobs with missing connector_id
@@ -348,9 +420,30 @@ for row in rows:
     })
 ```
 
-#### Rollback
+#### Rollback (downgrade)
 
-Drop the new columns and indexes. No data loss — legacy FK columns are untouched.
+Drop the new indexes and columns. No data loss — legacy FK columns are untouched.
+
+```python
+dialect = op.get_bind().dialect.name
+
+if dialect == "postgresql":
+    # DROP INDEX CONCURRENTLY also requires autocommit_block()
+    with op.get_context().autocommit_block():
+        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_results_target")
+        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_results_target_tool")
+        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_jobs_target")
+else:
+    op.drop_index("idx_results_target", table_name="analysis_results")
+    op.drop_index("idx_results_target_tool", table_name="analysis_results")
+    op.drop_index("idx_jobs_target", table_name="jobs")
+
+# Drop columns from both tables (reverse of Step 1)
+for table in ("analysis_results", "jobs"):
+    for col in ("context_json", "target_entity_name", "target_entity_guid",
+                "target_entity_id", "target_entity_type"):
+        op.drop_column(table, col)
+```
 
 ### Phase 2: Model + Service Layer — Dual Write (No New Migration)
 
@@ -547,9 +640,19 @@ The server copies target + context from the Job to the AnalysisResult during `_c
    SELECT count(*) AS unbackfilled FROM jobs WHERE target_entity_type IS NULL;
    -- Expected: 0
    ```
-3. **GUID format verification** — confirm backfilled GUIDs are properly encoded:
+3. **GUID format verification** — confirm backfilled GUIDs are properly encoded in **both** tables:
    ```sql
+   -- analysis_results
    SELECT target_entity_guid FROM analysis_results
+   WHERE target_entity_guid NOT LIKE 'col_%'
+     AND target_entity_guid NOT LIKE 'con_%'
+     AND target_entity_guid NOT LIKE 'pip_%'
+     AND target_entity_guid NOT LIKE 'cam_%'
+     AND target_entity_type IS NOT NULL;
+   -- Expected: 0 rows
+
+   -- jobs
+   SELECT target_entity_guid FROM jobs
    WHERE target_entity_guid NOT LIKE 'col_%'
      AND target_entity_guid NOT LIKE 'con_%'
      AND target_entity_guid NOT LIKE 'pip_%'
