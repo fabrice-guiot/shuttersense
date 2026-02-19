@@ -6,7 +6,7 @@
  */
 
 import type { AuditInfo } from './audit-api'
-import type { TargetEntityInfo, ResultContext } from './target-api'
+import type { TargetEntityType, TargetEntityInfo, ResultContext } from './target-api'
 
 // ============================================================================
 // Entity Types
@@ -223,8 +223,8 @@ export interface ResultDeleteResponse {
 export interface ResultListQueryParams {
   /** Filter by collection GUID (col_xxx) */
   collection_guid?: string
-  /** Filter by target entity type (collection, connector, pipeline, camera) */
-  target_entity_type?: string
+  /** Filter by target entity type */
+  target_entity_type?: TargetEntityType
   /** Filter by tool type */
   tool?: ToolType
   /** Filter by status */

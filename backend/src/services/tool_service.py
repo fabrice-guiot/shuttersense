@@ -1005,7 +1005,10 @@ class ToolService:
         if pipeline_id and pipeline_guid:
             pip_ctx = {"guid": pipeline_guid, "version": pipeline_version}
             # Get pipeline name
-            pip = self.db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+            pip = self.db.query(Pipeline).filter(
+                Pipeline.id == pipeline_id,
+                Pipeline.team_id == collection.team_id,
+            ).first()
             if pip:
                 pip_ctx["name"] = pip.name
             context["pipeline"] = {k: v for k, v in pip_ctx.items() if v is not None}

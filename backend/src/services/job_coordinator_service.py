@@ -1933,7 +1933,10 @@ class JobCoordinatorService:
             context = {}
             if collection.pipeline_id:
                 from backend.src.models import Pipeline as PipelineModel
-                pip = self.db.query(PipelineModel).filter(PipelineModel.id == collection.pipeline_id).first()
+                pip = self.db.query(PipelineModel).filter(
+                    PipelineModel.id == collection.pipeline_id,
+                    PipelineModel.team_id == job.team_id,
+                ).first()
                 if pip:
                     pip_ctx = {"guid": pip.guid, "name": pip.name}
                     if collection.pipeline_version:
