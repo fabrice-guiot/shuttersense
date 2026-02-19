@@ -85,7 +85,7 @@ export function ReleaseManifestsTab() {
     createManifest,
     updateManifest,
     deleteManifest,
-  } = useReleaseManifests()
+  } = useReleaseManifests({ latestOnly: false })
 
   // KPI Stats for header
   const { stats, refetch: refetchStats } = useReleaseManifestStats()

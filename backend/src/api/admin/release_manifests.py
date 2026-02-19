@@ -408,11 +408,11 @@ async def list_release_manifests(
     # Since results are already sorted by created_at DESC, the first occurrence
     # of each version is the newest.
     if latest_only:
-        seen_versions: dict[str, bool] = {}
+        seen_versions: set[str] = set()
         deduplicated = []
         for m in manifests:
             if m.version not in seen_versions:
-                seen_versions[m.version] = True
+                seen_versions.add(m.version)
                 deduplicated.append(m)
         manifests = deduplicated
 

@@ -617,8 +617,6 @@ class AgentService:
         # Outdated detection: compare agent checksum against latest manifest
         # Also flags agents missing platform/checksum as outdated when
         # active manifests exist (pre-upgrade agents need updating too).
-        latest_version = None
-        became_outdated = False
         latest_version, became_outdated = self._check_outdated(agent)
 
         self.db.commit()

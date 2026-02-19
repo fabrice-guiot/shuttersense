@@ -58,6 +58,8 @@ function getEffectiveState(
     }
   }
 
+  // hasMissingPlatform is a transition-period safety net: pre-upgrade agents won't have
+  // is_outdated=true until their next heartbeat. Remove once all agents have heartbeated post-deploy.
   if (status === 'online' && (isOutdated || hasMissingPlatform) && runningJobsCount === 0) {
     return {
       label: AGENT_OUTDATED_LABEL,
