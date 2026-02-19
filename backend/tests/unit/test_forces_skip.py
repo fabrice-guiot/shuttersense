@@ -193,7 +193,7 @@ class TestEventServiceUpdateForcesSkip:
     """Tests for forces_skip enforcement during event updates."""
 
     @pytest.fixture
-    def planned_event(self, event_service, test_team, test_category, seed_statuses):
+    def planned_event(self, event_service, test_team, test_category, seed_statuses):  # noqa: ARG002
         """Create a normal event with status=future, attendance=planned."""
         return event_service.create(
             team_id=test_team.id,

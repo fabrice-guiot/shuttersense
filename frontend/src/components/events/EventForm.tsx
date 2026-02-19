@@ -199,8 +199,7 @@ export const EventForm = ({
   const prevForcesSkipRef = useRef<boolean | null>(null)
   useEffect(() => {
     if (statusesLoading) return
-    const statusConfig = eventStatuses.find(s => s.key === watchedStatus)
-    const nowForces = statusConfig?.forces_skip ?? false
+    const nowForces = currentStatusConfig?.forces_skip ?? false
 
     if (nowForces) {
       form.setValue('attendance', 'skipped')

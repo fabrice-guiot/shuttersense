@@ -523,7 +523,7 @@ class ConflictService:
         events: List[Event],
         edges: List[ConflictEdge],
         scores_by_guid: Dict[str, EventScores],
-        forces_skip_statuses: Optional[set] = None,
+        forces_skip_statuses: set[str] | None = None,
     ) -> List[ConflictGroup]:
         """Build conflict groups from edges using Union-Find."""
         # Map GUIDs to events
@@ -621,7 +621,7 @@ class ConflictService:
         self,
         event: Event,
         scores: EventScores,
-        forces_skip_statuses: Optional[set] = None,
+        forces_skip_statuses: set[str] | None = None,
     ) -> ScoredEvent:
         """Build a ScoredEvent from an Event model and its scores."""
         confirmed_count = sum(
