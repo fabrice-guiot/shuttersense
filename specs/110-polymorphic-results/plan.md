@@ -1,7 +1,7 @@
 # Implementation Plan: Polymorphic Target Entity for Job & AnalysisResult
 
 **Branch**: `110-polymorphic-results` | **Date**: 2026-02-19 | **Issue**: [#110](https://github.com/fabrice-guiot/shuttersense/issues/110)
-**Status**: Rev 3 — updated from second round of reviewer feedback (CodeRabbit)
+**Status**: Rev 4 — updated from third round of reviewer feedback (CodeRabbit)
 
 ## Summary
 
@@ -206,6 +206,7 @@ else:
 **Backfill algorithm** (runs inside `upgrade()`):
 
 ```python
+import json
 from backend.src.services.guid import GuidService
 
 bind = op.get_bind()
@@ -229,16 +230,13 @@ rows = bind.execute(sa.text("""
 for row in rows:
     context = {}
     if row.pipeline_id:
-        context["pipeline"] = {
-            "guid": GuidService.uuid_to_guid("pip", row.pip_uuid),
-            "name": row.pip_name,
-            "version": row.pipeline_version,
-        }
+        pip = {"guid": GuidService.uuid_to_guid("pip", row.pip_uuid),
+               "name": row.pip_name, "version": row.pipeline_version}
+        context["pipeline"] = {k: v for k, v in pip.items() if v is not None}
     if row.cn_id:
-        context["connector"] = {
-            "guid": GuidService.uuid_to_guid("con", row.cn_uuid),
-            "name": row.cn_name,
-        }
+        con = {"guid": GuidService.uuid_to_guid("con", row.cn_uuid),
+               "name": row.cn_name}
+        context["connector"] = {k: v for k, v in con.items() if v is not None}
 
     bind.execute(sa.text("""
         UPDATE analysis_results
@@ -326,16 +324,13 @@ rows = bind.execute(sa.text("""
 for row in rows:
     context = {}
     if row.pipeline_id:
-        context["pipeline"] = {
-            "guid": GuidService.uuid_to_guid("pip", row.pip_uuid),
-            "name": row.pip_name,
-            "version": row.pipeline_version,
-        }
+        pip = {"guid": GuidService.uuid_to_guid("pip", row.pip_uuid),
+               "name": row.pip_name, "version": row.pipeline_version}
+        context["pipeline"] = {k: v for k, v in pip.items() if v is not None}
     if row.cn_id:
-        context["connector"] = {
-            "guid": GuidService.uuid_to_guid("con", row.cn_uuid),
-            "name": row.cn_name,
-        }
+        con = {"guid": GuidService.uuid_to_guid("con", row.cn_uuid),
+               "name": row.cn_name}
+        context["connector"] = {k: v for k, v in con.items() if v is not None}
 
     bind.execute(sa.text("""
         UPDATE jobs
@@ -391,19 +386,29 @@ rows = bind.execute(sa.text("""
       AND j.target_entity_type IS NULL
 """)).fetchall()
 
+skipped_jobs = []
 for row in rows:
     raw = row.progress_json
     progress = raw if isinstance(raw, dict) else (json.loads(raw) if raw else {})
     connector_id = progress.get("connector_id")
     if not connector_id:
-        continue  # Skip jobs with missing connector_id
+        skipped_jobs.append(row.id)
+        continue  # Skip jobs with missing connector_id in progress_json
 
     cn = bind.execute(sa.text(
         "SELECT id, uuid, name FROM connectors WHERE id = :cid"
     ), {"cid": connector_id}).fetchone()
 
     if not cn:
+        skipped_jobs.append(row.id)
         continue  # Connector may have been deleted
+
+if skipped_jobs:
+    import logging
+    logging.getLogger("alembic.migration").warning(
+        "Backfill skipped %d inventory jobs (missing connector_id or deleted connector): %s",
+        len(skipped_jobs), skipped_jobs
+    )
 
     bind.execute(sa.text("""
         UPDATE jobs
@@ -633,12 +638,22 @@ The server copies target + context from the Job to the AnalysisResult during `_c
 ## Verification Plan
 
 1. **Migration roundtrip**: `alembic upgrade head && alembic downgrade -1 && alembic upgrade head`
-2. **Backfill verification** — assert zero unbackfilled rows in both tables:
+2. **Backfill verification** — assert zero unbackfilled rows (excluding known-unresolvable orphans):
    ```sql
    SELECT count(*) AS unbackfilled FROM analysis_results WHERE target_entity_type IS NULL;
    -- Expected: 0
-   SELECT count(*) AS unbackfilled FROM jobs WHERE target_entity_type IS NULL;
+
+   -- Jobs: exclude inventory jobs that may have missing/deleted connector_id
+   SELECT count(*) AS unbackfilled FROM jobs
+   WHERE target_entity_type IS NULL
+     AND tool NOT IN ('inventory_validate', 'inventory_import');
    -- Expected: 0
+
+   -- Separately: count orphaned inventory jobs for operator visibility
+   SELECT count(*) AS orphaned_inventory_jobs FROM jobs
+   WHERE target_entity_type IS NULL
+     AND tool IN ('inventory_validate', 'inventory_import');
+   -- Expected: 0 (non-zero indicates jobs with missing/deleted connector — logged by migration)
    ```
 3. **GUID format verification** — confirm backfilled GUIDs are properly encoded in **both** tables:
    ```sql
@@ -660,13 +675,21 @@ The server copies target + context from the Job to the AnalysisResult during `_c
      AND target_entity_type IS NOT NULL;
    -- Expected: 0 rows
    ```
-4. **Context verification** — confirm collection-based results have pipeline context:
+4. **Context verification** — confirm collection-based records with pipeline_id have pipeline context in **both** tables:
    ```sql
+   -- analysis_results
    SELECT count(*) FROM analysis_results
    WHERE target_entity_type = 'collection'
      AND pipeline_id IS NOT NULL
      AND (context_json IS NULL OR context_json::text NOT LIKE '%pipeline%');
-   -- Expected: 0 (every result with a pipeline_id should have pipeline in context)
+   -- Expected: 0
+
+   -- jobs
+   SELECT count(*) FROM jobs
+   WHERE target_entity_type = 'collection'
+     AND pipeline_id IS NOT NULL
+     AND (context_json IS NULL OR context_json::text NOT LIKE '%pipeline%');
+   -- Expected: 0
    ```
 5. **Backend tests**: `venv/bin/python -m pytest backend/tests/ -v`
 6. **Frontend type-check**: `cd frontend && npx tsc --noEmit`
