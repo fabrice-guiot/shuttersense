@@ -307,6 +307,18 @@ function UpdateDownloadStep({
         </div>
       </div>
 
+      {/* Same-version explanation */}
+      {!loading && activeRelease && agent.is_outdated && agent.version === activeRelease.version && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            The version number matches, but the binary checksum differs.
+            A new build was published for the same version. Download and install the
+            updated binary to clear the outdated status.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Platform source info */}
       <div className="space-y-2">
         <Label>
@@ -630,10 +642,24 @@ function ReplaceBinaryStep({
         Replace the existing agent binary with the downloaded version.
       </p>
 
-      {(family === 'macos' || family === 'linux' || family === 'generic') && (
+      {family === 'macos' && (
         <div className="space-y-3">
           <CopyableCodeBlock label="replace binary" language="bash" alwaysShowCopy>
-            {`chmod +x ~/${filename}\nsudo mv ~/${filename} /usr/local/bin/shuttersense-agent`}
+            {`xattr -cr ~/Downloads/${filename}\nchmod +x ~/Downloads/${filename}\nsudo mv ~/Downloads/${filename} /usr/local/bin/shuttersense-agent`}
+          </CopyableCodeBlock>
+          <p className="text-xs text-muted-foreground">
+            The <code className="text-xs">xattr -cr</code> command removes the macOS quarantine flag
+            so the binary can run without Gatekeeper warnings.
+            Adjust the paths if you downloaded the binary to a different location or
+            installed the agent elsewhere.
+          </p>
+        </div>
+      )}
+
+      {(family === 'linux' || family === 'generic') && (
+        <div className="space-y-3">
+          <CopyableCodeBlock label="replace binary" language="bash" alwaysShowCopy>
+            {`chmod +x ~/Downloads/${filename}\nsudo mv ~/Downloads/${filename} /usr/local/bin/shuttersense-agent`}
           </CopyableCodeBlock>
           <p className="text-xs text-muted-foreground">
             Adjust the paths if you downloaded the binary to a different location or

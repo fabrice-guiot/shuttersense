@@ -65,6 +65,8 @@ describe('useAgentPoolStatus', () => {
     offline_count: 1,
     idle_count: 2,
     running_jobs_count: 1,
+    outdated_count: 0,
+    unverified_count: 0,
     status: 'running',
   }
 
@@ -208,6 +210,8 @@ describe('useAgentPoolStatus', () => {
       ...mockPoolStatus,
       status: 'idle',
       running_jobs_count: 0,
+      outdated_count: 0,
+      unverified_count: 0,
     }
 
     act(() => {

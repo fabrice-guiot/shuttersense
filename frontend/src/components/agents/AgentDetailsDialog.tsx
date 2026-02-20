@@ -65,6 +65,7 @@ export function AgentDetailsDialog({ agent, open, onOpenChange }: AgentDetailsDi
               <AgentStatusBadge
                 status={agent.status}
                 isOutdated={agent.is_outdated}
+                isVerified={agent.is_verified}
                 hasMissingPlatform={!agent.platform}
               />
             </div>

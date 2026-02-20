@@ -127,6 +127,16 @@ class AppSettings(BaseSettings):
         description="Documentation site URL (e.g., https://docs.shuttersense.ai). Added to CORS allowed origins."
     )
 
+    # Agent binary attestation enforcement (Issue #236)
+    # Agents must have a verified binary checksum (matching a release manifest)
+    # to claim jobs and upload results. Enabled by default for security.
+    # Set to False ONLY in development environments where agents run from source.
+    require_agent_attestation: bool = Field(
+        default=True,
+        validation_alias="SHUSAI_REQUIRE_AGENT_ATTESTATION",
+        description="Enforce agent binary attestation for job operations. Default: True."
+    )
+
     # Job execution settings
     # By default, all jobs are persisted to DB for agent execution.
     # Only tool types listed here will use in-memory queue for server-side execution.

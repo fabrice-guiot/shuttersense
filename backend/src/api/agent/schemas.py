@@ -251,6 +251,10 @@ class HeartbeatResponse(BaseModel):
         default=False,
         description="Whether the agent binary is outdated"
     )
+    is_verified: bool = Field(
+        default=True,
+        description="Whether the agent binary is verified against a known release"
+    )
     latest_version: Optional[str] = Field(
         None,
         description="Latest release version for this agent's platform"
@@ -263,6 +267,7 @@ class HeartbeatResponse(BaseModel):
                 "server_time": "2026-01-18T12:00:00.000Z",
                 "pending_commands": [],
                 "is_outdated": False,
+                "is_verified": True,
                 "latest_version": None
             }
         }
@@ -288,6 +293,7 @@ class AgentResponse(BaseModel):
     version: Optional[str] = Field(None, description="Agent software version")
     platform: Optional[str] = Field(None, description="Agent platform (e.g., 'darwin-arm64')")
     is_outdated: bool = Field(False, description="Whether the agent binary is outdated")
+    is_verified: bool = Field(True, description="Whether the agent binary is verified against a known release")
     created_at: datetime = Field(..., description="Registration timestamp")
     metrics: Optional[AgentMetrics] = Field(None, description="System resource metrics")
 
@@ -353,6 +359,15 @@ class AgentJobHistoryItem(BaseModel):
     }
 
 
+class MatchedManifestInfo(BaseModel):
+    """Summary of the release manifest matching an agent's binary checksum."""
+
+    guid: str = Field(..., description="Release manifest GUID (rel_xxx)")
+    version: str = Field(..., description="Release version (e.g., '1.0.0')")
+    platforms: List[str] = Field(default_factory=list, description="Supported platforms")
+    is_active: bool = Field(..., description="Whether this manifest is currently active")
+
+
 class AgentDetailResponse(BaseModel):
     """Response schema for agent detail view with extended information."""
 
@@ -368,6 +383,11 @@ class AgentDetailResponse(BaseModel):
     version: Optional[str] = Field(None, description="Agent software version")
     platform: Optional[str] = Field(None, description="Agent platform (e.g., 'darwin-arm64')")
     is_outdated: bool = Field(False, description="Whether the agent binary is outdated")
+    is_verified: bool = Field(True, description="Whether the agent binary is verified against a known release")
+    matched_manifest: Optional["MatchedManifestInfo"] = Field(
+        None,
+        description="Release manifest matching the agent's binary checksum, if any"
+    )
     created_at: datetime = Field(..., description="Registration timestamp")
     metrics: Optional[AgentMetrics] = Field(None, description="System resource metrics")
 
@@ -475,6 +495,7 @@ class AgentPoolStatusResponse(BaseModel):
     offline_count: int = Field(..., description="Number of offline agents")
     idle_count: int = Field(..., description="Online agents not running jobs")
     outdated_count: int = Field(0, description="Number of outdated agents")
+    unverified_count: int = Field(0, description="Number of unverified agents")
     running_jobs_count: int = Field(..., description="Jobs currently executing")
     status: str = Field(
         ...,
