@@ -2172,7 +2172,7 @@ class EventService:
             notification_service = NotificationService(
                 db=self.db,
                 vapid_private_key=settings.vapid_private_key,
-                vapid_claims={"sub": f"mailto:{settings.vapid_subject}"},
+                vapid_claims={"sub": settings.vapid_subject},
             )
 
             for group in unresolved_groups:

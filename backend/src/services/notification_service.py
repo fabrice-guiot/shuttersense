@@ -589,6 +589,8 @@ class NotificationService:
                 data=payload_json,
                 vapid_private_key=self.vapid_private_key,
                 vapid_claims=self.vapid_claims,
+                ttl=86400,
+                headers={"Urgency": "high"},
             )
         except WebPushException as e:
             if hasattr(e, "response") and e.response is not None:
