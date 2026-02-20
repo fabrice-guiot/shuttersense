@@ -24,6 +24,7 @@ _TEST_MASTER_KEY = Fernet.generate_key().decode('utf-8')
 # Set test environment variables before importing app modules
 os.environ['SHUSAI_MASTER_KEY'] = _TEST_MASTER_KEY
 os.environ['SHUSAI_DB_URL'] = 'sqlite:///:memory:'
+os.environ['SHUSAI_REQUIRE_AGENT_ATTESTATION'] = 'false'
 
 # Allow temp directories for testing (covers both macOS and Linux paths)
 # macOS: /private/var/folders (resolved) and /var/folders (symlink)
