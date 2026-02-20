@@ -249,8 +249,8 @@ class AgentApiClient:
             payload["authorized_roots"] = authorized_roots
         if version is not None:
             payload["version"] = version
-        if binary_checksum is not None:
-            payload["binary_checksum"] = binary_checksum
+        # Always include binary_checksum — None signals "clear stale value" (dev mode)
+        payload["binary_checksum"] = binary_checksum
         if current_job_guid:
             payload["current_job_guid"] = current_job_guid
         if current_job_progress:

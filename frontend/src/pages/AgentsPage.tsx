@@ -149,6 +149,7 @@ export default function AgentsPage() {
           <AgentStatusBadge
             status={agent.status}
             isOutdated={agent.is_outdated}
+            isVerified={agent.is_verified}
             runningJobsCount={agent.running_jobs_count}
             hasMissingPlatform={!agent.platform}
           />

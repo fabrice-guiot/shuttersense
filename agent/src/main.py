@@ -27,7 +27,7 @@ from src.polling_loop import JobPollingLoop
 from src.job_executor import JobExecutor
 from src.metrics import MetricsCollector, is_metrics_available
 from src.version_cache import write_version_cache
-from src.attestation import get_binary_checksum
+from src.attestation import get_binary_checksum, is_development_mode
 
 
 def get_all_capabilities() -> list[str]:
@@ -187,12 +187,20 @@ class AgentRunner:
         authorized_roots = self.config.authorized_roots
         self.logger.info(f"Sending initial heartbeat (version: {__version__}, roots: {len(authorized_roots)})...")
 
-        # Compute binary checksum for outdated detection (Issue #243)
-        checksum = None
-        try:
-            checksum, _ = get_binary_checksum()
-        except Exception as e:
-            self.logger.debug(f"Could not compute binary checksum: {e}")
+        # Compute binary checksum for attestation (Issue #236, #243)
+        # Skip in development mode — script hashes change on every edit
+        # and will never match a release manifest.
+        self._binary_checksum = None
+        if is_development_mode():
+            self.logger.info("Development mode — skipping binary attestation")
+        else:
+            try:
+                checksum, method = get_binary_checksum()
+                self._binary_checksum = checksum
+                self.logger.info(f"Binary checksum ({method}): {checksum[:16]}...")
+            except Exception as e:
+                self.logger.warning(f"Could not compute binary checksum: {e}")
+        checksum = self._binary_checksum
 
         # Collect initial metrics
         initial_metrics = None
@@ -290,11 +298,12 @@ class AgentRunner:
                     if not metrics_result.is_empty:
                         metrics = metrics_result.to_dict()
 
-                # Send heartbeat with authorized roots, capabilities (if refreshed), version, and metrics
+                # Send heartbeat with authorized roots, capabilities (if refreshed), version, checksum, and metrics
                 response = await self._api_client.heartbeat(
                     authorized_roots=self.config.authorized_roots,
                     capabilities=capabilities,
                     version=__version__,
+                    binary_checksum=self._binary_checksum,
                     metrics=metrics,
                 )
                 self.logger.debug(f"Heartbeat acknowledged, server time: {response.get('server_time')}")

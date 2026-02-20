@@ -465,6 +465,21 @@ export const AGENT_STATUS_LABELS: Record<AgentStatus, string> = {
 export const AGENT_OUTDATED_LABEL = 'Outdated'
 
 /**
+ * Label for the derived "unverified" display state (binary not attested)
+ */
+export const AGENT_UNVERIFIED_LABEL = 'Unverified'
+
+/**
+ * Label for the derived "idle" display state (online, verified, no running jobs)
+ */
+export const AGENT_IDLE_LABEL = 'Idle'
+
+/**
+ * Label for the derived "running" display state (online, verified, running jobs)
+ */
+export const AGENT_RUNNING_LABEL = 'Running'
+
+/**
  * Badge variants for agent statuses
  */
 export const AGENT_STATUS_BADGE_VARIANT: Record<
@@ -481,6 +496,11 @@ export const AGENT_STATUS_BADGE_VARIANT: Record<
  * Badge variant for the derived "outdated" display state
  */
 export const AGENT_OUTDATED_BADGE_VARIANT = 'warning' as const
+
+/**
+ * Badge variant for the derived "unverified" display state
+ */
+export const AGENT_UNVERIFIED_BADGE_VARIANT = 'destructive' as const
 
 // ============================================================================
 // Platform Labels (Release Manifests - Issue #90)

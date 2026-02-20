@@ -446,6 +446,19 @@ class TestPoolStatusWithOutdated:
         assert status["outdated_count"] == 0
         assert status["status"] == "idle"
 
+    def test_pool_status_outdated_excludes_unverified(
+        self, agent_service, agent, test_team
+    ):
+        """Unverified agents are not counted as outdated (their outdated flag is meaningless)."""
+        agent.is_outdated = True
+        agent.is_verified = False
+        agent.status = AgentStatus.ONLINE
+
+        status = agent_service.get_pool_status(test_team.id)
+
+        assert status["outdated_count"] == 0
+        assert status["status"] == "idle"
+
 
 # ============================================================================
 # Notification Tests
@@ -487,3 +500,158 @@ class TestAgentOutdatedNotification:
         assert result.became_outdated is True
         assert result.agent.is_outdated is True
         assert result.latest_version == "v2.0.0"
+
+
+# ============================================================================
+# Attestation Verification Tests (Issue #236)
+# ============================================================================
+
+class TestAgentAttestationVerification:
+    """Tests for continuous binary attestation verification."""
+
+    def test_verified_when_checksum_matches_any_manifest(
+        self, agent_service, agent, matching_manifest
+    ):
+        """Agent is verified when checksum matches any active manifest."""
+        agent_service._check_outdated(agent)
+
+        assert agent.is_verified is True
+
+    def test_not_verified_when_checksum_unknown(
+        self, agent_service, agent, active_manifest
+    ):
+        """Agent is not verified when checksum doesn't match any manifest."""
+        agent_service._check_outdated(agent)
+
+        assert agent.is_verified is False
+
+    def test_verified_when_no_manifests_exist(
+        self, agent_service, agent
+    ):
+        """Agent is verified when no active manifests exist (dev/bootstrap)."""
+        agent_service._check_outdated(agent)
+
+        assert agent.is_verified is True
+
+    def test_verified_when_missing_checksum(
+        self, agent_service, agent, active_manifest
+    ):
+        """Agent without checksum stays verified (dev/pre-upgrade agent)."""
+        agent.binary_checksum = None
+
+        agent_service._check_outdated(agent)
+
+        assert agent.is_verified is True
+
+    def test_verified_when_missing_platform(
+        self, agent_service, agent, active_manifest
+    ):
+        """Agent without platform stays verified (dev/pre-upgrade agent)."""
+        agent.platform = None
+
+        agent_service._check_outdated(agent)
+
+        assert agent.is_verified is True
+
+    def test_verified_after_update_to_matching_checksum(
+        self, test_db_session, agent_service, agent, active_manifest
+    ):
+        """Agent becomes verified after updating to a known checksum."""
+        # First: unverified (has a checksum that doesn't match any manifest)
+        agent_service._check_outdated(agent)
+        assert agent.is_verified is False
+
+        # Update binary to match manifest
+        agent.binary_checksum = MANIFEST_CHECKSUM
+        test_db_session.flush()
+
+        agent_service._check_outdated(agent)
+        assert agent.is_verified is True
+
+    def test_heartbeat_sets_is_verified(
+        self, agent_service, agent, matching_manifest
+    ):
+        """Heartbeat processing sets is_verified via _check_outdated."""
+        result = agent_service.process_heartbeat(
+            agent=agent,
+            status=AgentStatus.ONLINE,
+        )
+
+        assert result.agent.is_verified is True
+
+    def test_heartbeat_unverified_for_unknown_checksum(
+        self, agent_service, agent, active_manifest
+    ):
+        """Heartbeat processing marks agent unverified for unknown checksum."""
+        result = agent_service.process_heartbeat(
+            agent=agent,
+            status=AgentStatus.ONLINE,
+            binary_checksum=AGENT_CHECKSUM,
+        )
+
+        assert result.agent.is_verified is False
+
+    def test_can_execute_jobs_requires_verified(
+        self, agent_service, agent, active_manifest
+    ):
+        """can_execute_jobs is False when agent is unverified."""
+        agent.status = AgentStatus.ONLINE
+        agent_service._check_outdated(agent)
+
+        assert agent.is_verified is False
+        assert agent.can_execute_jobs is False
+
+    def test_can_execute_jobs_when_verified(
+        self, agent_service, agent, matching_manifest
+    ):
+        """can_execute_jobs is True when agent is online and verified."""
+        agent.status = AgentStatus.ONLINE
+        agent_service._check_outdated(agent)
+
+        assert agent.is_verified is True
+        assert agent.can_execute_jobs is True
+
+
+# ============================================================================
+# Pool Status Unverified Count Tests (Issue #236)
+# ============================================================================
+
+class TestPoolStatusWithUnverified:
+    """Tests for pool status including unverified_count."""
+
+    def test_pool_status_includes_unverified_count(
+        self, agent_service, agent, test_team
+    ):
+        """Pool status includes unverified_count."""
+        agent.is_verified = False
+        agent.status = AgentStatus.ONLINE
+
+        status = agent_service.get_pool_status(test_team.id)
+
+        assert "unverified_count" in status
+        assert status["unverified_count"] == 1
+
+    def test_pool_status_unverified_excludes_revoked(
+        self, test_db_session, agent_service, agent, test_team
+    ):
+        """Revoked agents are not counted as unverified."""
+        agent.is_verified = False
+        agent.status = AgentStatus.REVOKED
+        agent.revocation_reason = "test"
+        agent.revoked_at = datetime.utcnow()
+        test_db_session.flush()
+
+        status = agent_service.get_pool_status(test_team.id)
+
+        assert status["unverified_count"] == 0
+
+    def test_pool_status_zero_unverified_by_default(
+        self, agent_service, agent, test_team
+    ):
+        """Unverified count is 0 when all agents are verified."""
+        agent.status = AgentStatus.ONLINE
+        agent.is_verified = True
+
+        status = agent_service.get_pool_status(test_team.id)
+
+        assert status["unverified_count"] == 0

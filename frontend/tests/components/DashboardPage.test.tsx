@@ -102,6 +102,8 @@ const mockPoolStatus: AgentPoolStatusResponse = {
   offline_count: 1,
   idle_count: 1,
   running_jobs_count: 0,
+  outdated_count: 0,
+  unverified_count: 0,
   status: 'idle',
 }
 

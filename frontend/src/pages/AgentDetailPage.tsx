@@ -39,6 +39,7 @@ import { AgentStatusBadge } from '@/components/agents/AgentStatusBadge'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime, formatRelativeTime } from '@/utils/dateFormat'
 import { AuditTrailSection } from '@/components/audit'
+import { ACTIVE_STATUS_CONFIG } from '@/contracts/domain-labels'
 import type { AgentJobHistoryItem } from '@/contracts/api/agent-api'
 
 // ============================================================================
@@ -323,6 +324,7 @@ export default function AgentDetailPage() {
               <AgentStatusBadge
                 status={agent.status}
                 isOutdated={agent.is_outdated}
+                isVerified={agent.is_verified}
                 hasMissingPlatform={!agent.platform}
               />
               {wsConnected && (
@@ -425,6 +427,22 @@ export default function AgentDetailPage() {
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Agent Version</dt>
               <dd className="text-sm mt-1 truncate" title={agent.version}>{agent.version}</dd>
+            </div>
+            <div>
+              <dt className="text-sm font-medium text-muted-foreground">Matched Release</dt>
+              <dd className="text-sm mt-1">
+                {agent.matched_manifest ? (
+                  <span className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono">{agent.matched_manifest.version}</span>
+                    <GuidBadge guid={agent.matched_manifest.guid} />
+                    {!agent.matched_manifest.is_active && (
+                      <Badge variant="outline" className="text-xs">{ACTIVE_STATUS_CONFIG.inactive.label}</Badge>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">{'\u2014'}</span>
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-muted-foreground">Last Heartbeat</dt>

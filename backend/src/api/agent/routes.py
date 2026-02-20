@@ -57,6 +57,7 @@ from backend.src.api.agent.schemas import (
     AgentMetrics,
     # Agent detail (Phase 11)
     AgentDetailResponse,
+    MatchedManifestInfo,
     AgentJobHistoryItem,
     AgentJobHistoryResponse,
     # Job schemas (Phase 5)
@@ -130,7 +131,7 @@ from backend.src.services.download_service import (
 )
 from backend.src.config.settings import get_settings
 from fastapi.responses import FileResponse
-from backend.src.api.agent.dependencies import AgentContext, get_agent_context, get_optional_agent_context, require_online_agent
+from backend.src.api.agent.dependencies import AgentContext, get_agent_context, get_optional_agent_context, require_online_agent, require_verified_agent
 
 
 # Create router with prefix and tags
@@ -278,6 +279,7 @@ def agent_to_response(
         version=agent.version,
         platform=agent.platform,
         is_outdated=agent.is_outdated,
+        is_verified=agent.is_verified,
         created_at=agent.created_at,
         team_guid=agent.team.guid if agent.team else "",
         current_job_guid=current_job_guid,
@@ -449,6 +451,7 @@ async def send_heartbeat(
         server_time=datetime.utcnow(),
         pending_commands=pending_commands,
         is_outdated=result.agent.is_outdated,
+        is_verified=result.agent.is_verified,
         latest_version=result.latest_version,
     )
 
@@ -531,7 +534,7 @@ async def disconnect_agent(
     description="Claim the next available job for execution. Returns 204 if no jobs available."
 )
 async def claim_job(
-    ctx: AgentContext = Depends(require_online_agent),
+    ctx: AgentContext = Depends(require_verified_agent),
     service: AgentService = Depends(get_agent_service),
     db: Session = Depends(get_db),
 ):
@@ -539,7 +542,7 @@ async def claim_job(
     Claim the next available job for the agent.
 
     Uses FOR UPDATE SKIP LOCKED for atomic claiming. Requires the agent
-    to be in ONLINE status.
+    to be online and have a verified binary.
 
     Returns 204 No Content if no jobs are available.
     """
@@ -676,7 +679,7 @@ async def claim_job(
 async def update_job_progress(
     job_guid: str,
     data: JobProgressRequest,
-    ctx: AgentContext = Depends(require_online_agent),
+    ctx: AgentContext = Depends(require_verified_agent),
     service: AgentService = Depends(get_agent_service),
     db: Session = Depends(get_db),
 ):
@@ -754,7 +757,7 @@ async def update_job_progress(
 async def complete_job_no_change(
     job_guid: str,
     data: JobNoChangeRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
     service: AgentService = Depends(get_agent_service),
     db: Session = Depends(get_db),
 ):
@@ -833,7 +836,7 @@ async def complete_job_no_change(
 async def complete_job(
     job_guid: str,
     data: JobCompleteWithUploadRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
     service: AgentService = Depends(get_agent_service),
     db: Session = Depends(get_db),
 ):
@@ -931,7 +934,7 @@ async def complete_job(
 async def fail_job(
     job_guid: str,
     data: JobFailRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
     service: AgentService = Depends(get_agent_service),
     db: Session = Depends(get_db),
 ):
@@ -1283,7 +1286,7 @@ def get_upload_service():
 async def initiate_upload(
     job_guid: str,
     data: InitiateUploadRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
     db: Session = Depends(get_db),
 ):
     """
@@ -1359,7 +1362,7 @@ async def upload_chunk(
     upload_id: str,
     chunk_index: int,
     request: Request,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
 ):
     """
     Upload a chunk of data.
@@ -1458,7 +1461,7 @@ async def get_upload_status(
 async def finalize_upload(
     upload_id: str,
     data: FinalizeUploadRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
 ):
     """
     Finalize an upload.
@@ -3223,7 +3226,7 @@ async def agent_test_collection(
 )
 async def agent_prepare_result_upload(
     data: AgentPrepareResultUploadRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
     db: Session = Depends(get_db),
 ):
     """Create a placeholder Job for chunked offline result upload."""
@@ -3321,7 +3324,7 @@ async def agent_prepare_result_upload(
 )
 async def agent_upload_result(
     data: AgentUploadResultRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
     db: Session = Depends(get_db),
 ):
     """Upload an offline analysis result from an agent."""
@@ -3492,7 +3495,7 @@ async def agent_upload_result(
 )
 async def agent_record_no_change_result(
     data: AgentNoChangeResultRequest,
-    ctx: AgentContext = Depends(get_agent_context),
+    ctx: AgentContext = Depends(require_verified_agent),
     db: Session = Depends(get_db),
 ):
     """Record a NO_CHANGE result from an agent CLI no-change detection."""
@@ -3688,7 +3691,10 @@ async def get_active_release(
         .all()
     )
     manifest = (
-        max(active_manifests, key=lambda m: parse_version_safe(m.version))
+        max(
+            active_manifests,
+            key=lambda m: (parse_version_safe(m.version), m.created_at or datetime.min),
+        )
         if active_manifests
         else None
     )
@@ -3973,6 +3979,18 @@ async def get_agent_detail(
         Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
     ).first()
 
+    # Look up the release manifest matching the agent's binary checksum
+    matched_manifest = None
+    if agent.binary_checksum:
+        manifest = ReleaseManifest.find_by_checksum(db, agent.binary_checksum, active_only=False)
+        if manifest:
+            matched_manifest = MatchedManifestInfo(
+                guid=manifest.guid,
+                version=manifest.version,
+                platforms=manifest.platforms,
+                is_active=manifest.is_active,
+            )
+
     return AgentDetailResponse(
         guid=agent.guid,
         name=agent.name,
@@ -3986,6 +4004,8 @@ async def get_agent_detail(
         version=agent.version,
         platform=agent.platform,
         is_outdated=agent.is_outdated,
+        is_verified=agent.is_verified,
+        matched_manifest=matched_manifest,
         created_at=agent.created_at,
         team_guid=agent.team.guid if agent.team else "",
         current_job_guid=current_job.guid if current_job else None,

@@ -212,3 +212,41 @@ def require_online_agent(
             detail=f"Agent must be online to perform this action. Current status: {ctx.status.value}"
         )
     return ctx
+
+
+def require_verified_agent(
+    ctx: AgentContext = Depends(require_online_agent)
+) -> AgentContext:
+    """
+    Dependency that requires the agent to be online AND have a verified binary.
+
+    Use this for job operation endpoints where unverified agents must be
+    blocked. Unverified agents can still heartbeat and disconnect, but
+    cannot claim, execute, or upload job results.
+
+    Enforcement is controlled by SHUSAI_REQUIRE_AGENT_ATTESTATION (default: True).
+    Set to False only in development where agents run from source.
+
+    Args:
+        ctx: Agent context from require_online_agent
+
+    Returns:
+        AgentContext if agent is online and verified
+
+    Raises:
+        HTTPException 403: If agent binary is not verified (production only)
+    """
+    from backend.src.config.settings import get_settings
+
+    settings = get_settings()
+    if not settings.require_agent_attestation:
+        # Attestation enforcement disabled for this environment.
+        # Only set SHUSAI_REQUIRE_AGENT_ATTESTATION=false in development.
+        return ctx
+
+    if not ctx.agent or not ctx.agent.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Agent binary not verified. Ensure you are running an official release."
+        )
+    return ctx

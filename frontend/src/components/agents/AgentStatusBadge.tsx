@@ -2,13 +2,16 @@
  * AgentStatusBadge Component
  *
  * Displays agent status with appropriate styling for each state.
- * Supports derived "outdated" state when agent is online but running
- * an old version with no active jobs.
+ * Supports derived states beyond the base API status.
  *
- * Priority: error > running > outdated > online > offline > revoked
+ * Individual agent progression (lowest → highest):
+ *   Offline > Unverified > Idle > Outdated > Running
+ *
+ * An unverified agent cannot progress beyond Unverified (except in dev mode).
  *
  * Issue #90 - Distributed Agent Architecture (Phase 3)
  * Issue #242 - Outdated Agent Detection
+ * Issue #236 - Continuous Attestation
  */
 
 import { Badge } from '@/components/ui/badge'
@@ -19,11 +22,16 @@ import {
   AGENT_STATUS_BADGE_VARIANT,
   AGENT_OUTDATED_LABEL,
   AGENT_OUTDATED_BADGE_VARIANT,
+  AGENT_UNVERIFIED_LABEL,
+  AGENT_UNVERIFIED_BADGE_VARIANT,
+  AGENT_IDLE_LABEL,
+  AGENT_RUNNING_LABEL,
 } from '@/contracts/domain-labels'
 
 interface AgentStatusBadgeProps {
   status: AgentStatus
   isOutdated?: boolean
+  isVerified?: boolean
   runningJobsCount?: number
   /** True when the agent has no platform set (pre-upgrade build) */
   hasMissingPlatform?: boolean
@@ -34,14 +42,17 @@ interface AgentStatusBadgeProps {
 /**
  * Determine the effective display state for the badge.
  *
- * Priority: error > running > outdated > online > offline > revoked
+ * Progression: Offline > Unverified > Idle > Outdated > Running
+ * Error and Revoked are terminal states shown unconditionally.
  */
 function getEffectiveState(
   status: AgentStatus,
   isOutdated: boolean,
+  isVerified: boolean,
   runningJobsCount: number,
   hasMissingPlatform: boolean
 ): { label: string; variant: string; showPulse: boolean } {
+  // Terminal states — always shown as-is
   if (status === 'error') {
     return {
       label: AGENT_STATUS_LABELS.error,
@@ -50,17 +61,44 @@ function getEffectiveState(
     }
   }
 
-  if (status === 'online' && runningJobsCount > 0) {
+  if (status === 'revoked') {
     return {
-      label: AGENT_STATUS_LABELS.online,
+      label: AGENT_STATUS_LABELS.revoked,
+      variant: AGENT_STATUS_BADGE_VARIANT.revoked,
+      showPulse: false,
+    }
+  }
+
+  if (status === 'offline') {
+    return {
+      label: AGENT_STATUS_LABELS.offline,
+      variant: AGENT_STATUS_BADGE_VARIANT.offline,
+      showPulse: false,
+    }
+  }
+
+  // --- Agent is online from here ---
+
+  // Unverified: agent cannot progress further (blocked from jobs)
+  if (!isVerified) {
+    return {
+      label: AGENT_UNVERIFIED_LABEL,
+      variant: AGENT_UNVERIFIED_BADGE_VARIANT,
+      showPulse: false,
+    }
+  }
+
+  // Running: online + verified + active jobs (highest progression)
+  if (runningJobsCount > 0) {
+    return {
+      label: AGENT_RUNNING_LABEL,
       variant: AGENT_STATUS_BADGE_VARIANT.online,
       showPulse: true,
     }
   }
 
-  // hasMissingPlatform is a transition-period safety net: pre-upgrade agents won't have
-  // is_outdated=true until their next heartbeat. Remove once all agents have heartbeated post-deploy.
-  if (status === 'online' && (isOutdated || hasMissingPlatform) && runningJobsCount === 0) {
+  // Outdated: online + verified + idle + outdated manifest
+  if (isOutdated || hasMissingPlatform) {
     return {
       label: AGENT_OUTDATED_LABEL,
       variant: AGENT_OUTDATED_BADGE_VARIANT,
@@ -68,42 +106,38 @@ function getEffectiveState(
     }
   }
 
-  if (status === 'online') {
-    return {
-      label: AGENT_STATUS_LABELS.online,
-      variant: AGENT_STATUS_BADGE_VARIANT.online,
-      showPulse: true,
-    }
-  }
-
-  // offline, revoked
+  // Idle: online + verified + no jobs + up to date
   return {
-    label: AGENT_STATUS_LABELS[status] || status,
-    variant: AGENT_STATUS_BADGE_VARIANT[status] || 'secondary',
-    showPulse: false,
+    label: AGENT_IDLE_LABEL,
+    variant: AGENT_STATUS_BADGE_VARIANT.online,
+    showPulse: true,
   }
 }
 
 /**
  * AgentStatusBadge displays the current status of an agent.
  *
- * Status states:
- * - error: Agent reported an error state (red)
- * - online + running jobs: Agent is busy (green with pulse)
- * - online + outdated + idle: Agent needs update (amber/warning)
- * - online: Agent is connected and responsive (green with pulse)
+ * Status states (progression):
  * - offline: Agent hasn't sent heartbeat recently (gray)
+ * - unverified: Binary checksum doesn't match any release manifest (red)
+ * - idle: Agent is online, verified, no active jobs (green with pulse)
+ * - outdated: Agent is idle but running an old version (amber/warning)
+ * - running: Agent is executing jobs (green with pulse)
+ *
+ * Terminal states:
+ * - error: Agent reported an error state (red)
  * - revoked: Agent access has been revoked (outlined)
  */
 export function AgentStatusBadge({
   status,
   isOutdated = false,
+  isVerified = true,
   runningJobsCount = 0,
   hasMissingPlatform = false,
   className,
   showLabel = true,
 }: AgentStatusBadgeProps) {
-  const { label, variant, showPulse } = getEffectiveState(status, isOutdated, runningJobsCount, hasMissingPlatform)
+  const { label, variant, showPulse } = getEffectiveState(status, isOutdated, isVerified, runningJobsCount, hasMissingPlatform)
 
   return (
     <Badge

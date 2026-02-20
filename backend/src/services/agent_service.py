@@ -400,15 +400,10 @@ class AgentService:
         Validate agent binary attestation against release manifests.
 
         Security logic:
-        - If REQUIRE_AGENT_ATTESTATION=true, manifests MUST exist (production)
+        - If SHUSAI_REQUIRE_AGENT_ATTESTATION=true (default), manifests MUST exist
         - If no release manifests exist and not required, allow (bootstrap/dev)
         - If manifests exist, require matching active checksum
         - Development mode agents are logged but still validated
-
-        Environment Variables:
-            REQUIRE_AGENT_ATTESTATION: Set to 'true' in production to enforce
-                that release manifests must exist. Prevents accidental deployment
-                without attestation. Default: 'false' (allows bootstrap mode)
 
         Args:
             binary_checksum: SHA-256 hash of agent binary
@@ -418,13 +413,11 @@ class AgentService:
         Raises:
             ValidationError: If attestation fails
         """
-        import os
         from sqlalchemy import func
+        from backend.src.config.settings import get_settings
 
-        # Check if attestation is required (production mode)
-        require_attestation = os.environ.get(
-            'REQUIRE_AGENT_ATTESTATION', 'false'
-        ).lower() == 'true'
+        settings = get_settings()
+        require_attestation = settings.require_agent_attestation
 
         # Check if any manifests exist (bootstrap check)
         manifest_count = self.db.query(func.count(ReleaseManifest.id)).filter(
@@ -435,7 +428,7 @@ class AgentService:
             if require_attestation:
                 # Production mode: attestation required but no manifests configured
                 logger.error(
-                    "Agent registration denied: REQUIRE_AGENT_ATTESTATION=true but no manifests exist",
+                    "Agent registration denied: attestation required but no manifests exist",
                     extra={
                         "binary_checksum": binary_checksum,
                         "platform": platform,
@@ -450,7 +443,7 @@ class AgentService:
             # Bootstrap/dev mode allowed - log warning for visibility
             logger.warning(
                 "Agent registration allowed: no release manifests configured (bootstrap mode). "
-                "Set REQUIRE_AGENT_ATTESTATION=true in production.",
+                "Set SHUSAI_REQUIRE_AGENT_ATTESTATION=true in production.",
                 extra={
                     "binary_checksum": binary_checksum,
                     "platform": platform,
@@ -603,8 +596,9 @@ class AgentService:
         if version is not None:
             agent.version = version
 
-        if binary_checksum is not None:
-            agent.binary_checksum = binary_checksum
+        # Always update binary_checksum — the agent sends it on every heartbeat.
+        # None means dev mode or pre-upgrade agent; clears any stale value.
+        agent.binary_checksum = binary_checksum
 
         # Update metrics if provided
         if metrics is not None:
@@ -666,21 +660,29 @@ class AgentService:
             .all()
         )
         # Sort by semantic version descending so [0] is the latest.
+        # Secondary sort by created_at descending breaks ties when multiple
+        # manifests share the same version (newest manifest wins).
         active_manifests.sort(
-            key=lambda m: parse_version_safe(m.version), reverse=True
+            key=lambda m: (parse_version_safe(m.version), m.created_at or datetime.min),
+            reverse=True,
         )
 
         if not active_manifests:
             agent.is_outdated = False
+            agent.is_verified = True  # No manifests = dev/bootstrap, trust all
             return None, False
 
-        # Agents without platform or checksum are pre-upgrade builds.
+        # Agents without platform or checksum are pre-upgrade or dev builds.
         # If any active manifest exists, they need updating.
         if not agent.platform or not agent.binary_checksum:
             latest_version = active_manifests[0].version
             was_outdated = agent.is_outdated
 
             agent.is_outdated = True
+            # Don't unverify — missing checksum means dev mode or pre-upgrade,
+            # not a tampered binary. Verification only fails when a provided
+            # checksum doesn't match any manifest.
+
             became_outdated = not was_outdated
 
             if became_outdated:
@@ -704,6 +706,8 @@ class AgentService:
 
         if not matching_manifest:
             agent.is_outdated = False
+            # No manifest for this platform — verify against ANY manifest checksum
+            self._verify_attestation(agent, active_manifests)
             return None, False
 
         latest_version = matching_manifest.version
@@ -725,7 +729,47 @@ class AgentService:
                 }
             )
 
+        # Verify binary attestation against any active manifest checksum
+        self._verify_attestation(agent, active_manifests)
+
         return latest_version, became_outdated
+
+    def _verify_attestation(
+        self, agent: Agent, active_manifests: List[ReleaseManifest]
+    ) -> None:
+        """
+        Verify agent binary attestation against any active manifest checksum.
+
+        Sets agent.is_verified based on whether the binary_checksum matches
+        any active manifest. This is a continuous check, not just registration-time.
+
+        Args:
+            agent: Agent to verify.
+            active_manifests: List of active release manifests.
+        """
+        if not agent.binary_checksum:
+            # No checksum = dev mode or pre-upgrade agent.
+            # Don't unverify — only fail when a provided checksum doesn't match.
+            return
+
+        # Check if checksum matches ANY active manifest (not just the latest).
+        # Uses the in-memory list to avoid an extra DB round-trip per heartbeat.
+        checksum_lower = agent.binary_checksum.lower()
+        match = any(m.checksum == checksum_lower for m in active_manifests)
+        if match:
+            agent.is_verified = True
+        else:
+            was_verified = agent.is_verified
+            agent.is_verified = False
+            if was_verified:
+                logger.warning(
+                    "Agent binary not verified — checksum does not match any active manifest",
+                    extra={
+                        "agent_guid": agent.guid,
+                        "agent_checksum": agent.binary_checksum,
+                        "platform": agent.platform,
+                    }
+                )
 
     def disconnect_agent(self, agent: Agent) -> Agent:
         """
@@ -1222,14 +1266,26 @@ class AgentService:
             Agent.status == AgentStatus.OFFLINE
         ).scalar() or 0
 
-        # Count outdated agents (online or offline, excluding revoked)
+        # Count outdated agents (online or offline, excluding revoked and unverified).
+        # Unverified agents have no valid checksum to compare — their outdated
+        # flag is meaningless and should not drive the pool badge.
         outdated_count = self.db.query(func.count(Agent.id)).filter(
             Agent.team_id == team_id,
             Agent.is_outdated.is_(True),
+            Agent.is_verified.is_(True),
             Agent.status != AgentStatus.REVOKED
         ).scalar() or 0
 
-        # Determine overall status (priority: offline > running > outdated > idle)
+        # Count unverified agents (excluding revoked)
+        unverified_count = self.db.query(func.count(Agent.id)).filter(
+            Agent.team_id == team_id,
+            Agent.is_verified.is_(False),
+            Agent.status != AgentStatus.REVOKED
+        ).scalar() or 0
+
+        # Determine overall status.
+        # Progression: Offline > Idle > Outdated > Running
+        # (Running is highest — shown when at least one agent is running)
         if online_count == 0:
             status = "offline"
         elif running_jobs_count > 0:
@@ -1244,6 +1300,7 @@ class AgentService:
             "offline_count": offline_count,
             "idle_count": idle_count,
             "outdated_count": outdated_count,
+            "unverified_count": unverified_count,
             "running_jobs_count": running_jobs_count,
             "status": status
         }

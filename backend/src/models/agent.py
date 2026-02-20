@@ -187,6 +187,7 @@ class Agent(Base, GuidMixin):
     binary_checksum = Column(String(64), nullable=True)
     platform = Column(String(50), nullable=True)
     is_outdated = Column(Boolean, default=False, nullable=False)
+    is_verified = Column(Boolean, default=True, nullable=False)
 
     # Revocation
     revocation_reason = Column(Text, nullable=True)
@@ -466,12 +467,12 @@ class Agent(Base, GuidMixin):
         """
         Check if the agent can execute jobs.
 
-        An agent can execute jobs if it is online and not revoked.
+        An agent can execute jobs if it is online and its binary is verified.
 
         Returns:
             True if agent can execute jobs
         """
-        return self.status == AgentStatus.ONLINE
+        return self.status == AgentStatus.ONLINE and self.is_verified
 
     def has_capability(self, capability: str) -> bool:
         """

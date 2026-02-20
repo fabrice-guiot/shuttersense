@@ -38,6 +38,8 @@ describe('AgentPoolStatus', () => {
       offline_count: 1,
       idle_count: 2,
       running_jobs_count: 5,
+      outdated_count: 0,
+      unverified_count: 0,
       status: 'running',
     }
 
@@ -71,6 +73,8 @@ describe('AgentPoolStatus', () => {
       offline_count: 0,
       idle_count: 3,
       running_jobs_count: 0,
+      outdated_count: 0,
+      unverified_count: 0,
       status: 'idle',
     }
 
@@ -104,6 +108,8 @@ describe('AgentPoolStatus', () => {
       offline_count: 2,
       idle_count: 0,
       running_jobs_count: 0,
+      outdated_count: 0,
+      unverified_count: 0,
       status: 'offline',
     }
 
@@ -137,6 +143,8 @@ describe('AgentPoolStatus', () => {
       offline_count: 0,
       idle_count: 0,
       running_jobs_count: 0,
+      outdated_count: 0,
+      unverified_count: 0,
       status: 'offline',
     }
 
@@ -165,6 +173,8 @@ describe('AgentPoolStatus', () => {
           offline_count: 0,
           idle_count: 1,
           running_jobs_count: 0,
+          outdated_count: 0,
+          unverified_count: 0,
           status: 'idle',
         },
         loading: false,
@@ -217,6 +227,8 @@ describe('AgentPoolStatus', () => {
           offline_count: 0,
           idle_count: 3,
           running_jobs_count: 0,
+          outdated_count: 0,
+          unverified_count: 0,
           status: 'idle',
         },
         loading: true,
@@ -237,6 +249,8 @@ describe('AgentPoolStatus', () => {
           offline_count: 1,
           idle_count: 0,
           running_jobs_count: 2,
+          outdated_count: 0,
+          unverified_count: 0,
           status: 'running',
         },
         loading: false,
@@ -259,6 +273,8 @@ describe('AgentPoolStatus', () => {
           offline_count: 0,
           idle_count: 1,
           running_jobs_count: 0,
+          outdated_count: 0,
+          unverified_count: 0,
           status: 'idle',
         },
         loading: false,
@@ -282,6 +298,8 @@ describe('AgentPoolStatus', () => {
           offline_count: 0,
           idle_count: 1,
           running_jobs_count: 0,
+          outdated_count: 0,
+          unverified_count: 0,
           status: 'idle',
         },
         loading: false,

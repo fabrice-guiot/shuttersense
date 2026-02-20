@@ -30,6 +30,7 @@ export interface Agent {
   authorized_roots: string[]
   version: string
   is_outdated: boolean
+  is_verified: boolean
   platform: string | null
   created_at: string
   team_guid: string
@@ -57,6 +58,7 @@ export interface AgentPoolStatusResponse {
   idle_count: number
   running_jobs_count: number
   outdated_count: number
+  unverified_count: number
   status: 'offline' | 'idle' | 'running' | 'outdated'
 }
 
@@ -171,6 +173,21 @@ export interface ActiveReleaseResponse {
 }
 
 // ============================================================================
+// Matched Manifest Info (Issue #236 - Agent Attestation)
+// ============================================================================
+
+export interface MatchedManifestInfo {
+  /** Release manifest GUID (rel_xxx) */
+  guid: string
+  /** Release version (e.g., "1.0.0") */
+  version: string
+  /** Supported platforms */
+  platforms: string[]
+  /** Whether this manifest is currently active */
+  is_active: boolean
+}
+
+// ============================================================================
 // Agent Detail Response (Phase 11 - Health Monitoring)
 // ============================================================================
 
@@ -186,6 +203,8 @@ export interface AgentDetailResponse {
   authorized_roots: string[]
   version: string
   is_outdated: boolean
+  is_verified: boolean
+  matched_manifest: MatchedManifestInfo | null
   platform: string | null
   created_at: string
   team_guid: string

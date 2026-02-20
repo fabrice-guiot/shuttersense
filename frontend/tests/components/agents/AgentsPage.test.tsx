@@ -45,6 +45,7 @@ describe('AgentsPage', () => {
       authorized_roots: ['/Users/photographer/Photos', '/Volumes/External'],
       version: '1.0.0',
       is_outdated: false,
+      is_verified: true,
       platform: 'darwin-arm64',
       created_at: '2026-01-15T10:00:00Z',
       team_guid: 'tea_01hgw2bbg00000000000000001',
@@ -63,6 +64,7 @@ describe('AgentsPage', () => {
       authorized_roots: ['/home/photos'],
       version: '1.0.0',
       is_outdated: false,
+      is_verified: true,
       platform: 'linux-amd64',
       created_at: '2026-01-10T08:00:00Z',
       team_guid: 'tea_01hgw2bbg00000000000000001',
@@ -128,7 +130,8 @@ describe('AgentsPage', () => {
       expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
-    expect(screen.getAllByText('Online')[0]).toBeInTheDocument()
+    // Online + verified + no running jobs = "Idle" (Issue #236)
+    expect(screen.getAllByText('Idle')[0]).toBeInTheDocument()
     expect(screen.getAllByText('Offline')[0]).toBeInTheDocument()
   })
 

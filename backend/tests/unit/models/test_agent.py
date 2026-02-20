@@ -178,12 +178,13 @@ class TestAgentStatusProperties:
         assert agent.is_revoked is False
 
     def test_can_execute_jobs_when_online(self):
-        """Test can_execute_jobs returns True when ONLINE."""
+        """Test can_execute_jobs returns True when ONLINE and verified."""
         agent = Agent(
             name="Test Agent",
             api_key_hash="a" * 64,
             api_key_prefix="agt_key_",
-            status=AgentStatus.ONLINE
+            status=AgentStatus.ONLINE,
+            is_verified=True,
         )
         assert agent.can_execute_jobs is True
 
