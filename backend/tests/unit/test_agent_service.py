@@ -5,7 +5,6 @@ Tests agent registration, heartbeat processing, token management,
 and offline detection.
 """
 
-import os
 import pytest
 import hashlib
 from datetime import datetime, timedelta
@@ -1298,18 +1297,27 @@ class TestAgentBinaryAttestation:
 
 
 class TestAgentAttestationProductionMode:
-    """Tests for REQUIRE_AGENT_ATTESTATION environment variable.
+    """Tests for SHUSAI_REQUIRE_AGENT_ATTESTATION setting.
 
-    When REQUIRE_AGENT_ATTESTATION=true (production mode), attestation
+    When require_agent_attestation=True (default / production mode), attestation
     is mandatory even if no manifests exist. This prevents accidental
     deployment without proper attestation configuration.
     """
 
-    @patch.dict(os.environ, {'REQUIRE_AGENT_ATTESTATION': 'true'})
+    def _mock_settings(self, require: bool):
+        """Create a mock settings object with the given attestation flag."""
+        from unittest.mock import MagicMock
+        settings = MagicMock()
+        settings.require_agent_attestation = require
+        return patch(
+            'backend.src.config.settings.get_settings',
+            return_value=settings,
+        )
+
     def test_production_mode_rejects_when_no_manifests(
         self, test_db_session, test_team, test_user
     ):
-        """With REQUIRE_AGENT_ATTESTATION=true, reject if no manifests exist."""
+        """With require_agent_attestation=True, reject if no manifests exist."""
         service = AgentService(test_db_session)
 
         token_result = service.create_registration_token(
@@ -1317,22 +1325,22 @@ class TestAgentAttestationProductionMode:
             created_by_user_id=test_user.id,
         )
 
-        # Should fail because no manifests exist
-        with pytest.raises(ValidationError, match="no release manifests are configured"):
-            service.register_agent(
-                plaintext_token=token_result.plaintext_token,
-                name="Production Agent",
-                hostname="prod-host",
-                version="1.0.0",
-                binary_checksum="a" * 64,
-                platform="darwin-arm64",
-            )
+        with self._mock_settings(require=True):
+            # Should fail because no manifests exist
+            with pytest.raises(ValidationError, match="no release manifests are configured"):
+                service.register_agent(
+                    plaintext_token=token_result.plaintext_token,
+                    name="Production Agent",
+                    hostname="prod-host",
+                    version="1.0.0",
+                    binary_checksum="a" * 64,
+                    platform="darwin-arm64",
+                )
 
-    @patch.dict(os.environ, {'REQUIRE_AGENT_ATTESTATION': 'true'})
     def test_production_mode_allows_with_valid_manifest(
         self, test_db_session, test_team, test_user
     ):
-        """With REQUIRE_AGENT_ATTESTATION=true, allow if checksum matches manifest."""
+        """With require_agent_attestation=True, allow if checksum matches manifest."""
         from backend.src.models.release_manifest import ReleaseManifest
 
         service = AgentService(test_db_session)
@@ -1353,22 +1361,22 @@ class TestAgentAttestationProductionMode:
             created_by_user_id=test_user.id,
         )
 
-        # Should succeed because manifest exists and checksum matches
-        result = service.register_agent(
-            plaintext_token=token_result.plaintext_token,
-            name="Production Agent",
-            hostname="prod-host",
-            version="1.0.0",
-            binary_checksum=checksum,
-            platform="darwin-arm64",
-        )
-        assert result.agent is not None
+        with self._mock_settings(require=True):
+            # Should succeed because manifest exists and checksum matches
+            result = service.register_agent(
+                plaintext_token=token_result.plaintext_token,
+                name="Production Agent",
+                hostname="prod-host",
+                version="1.0.0",
+                binary_checksum=checksum,
+                platform="darwin-arm64",
+            )
+            assert result.agent is not None
 
-    @patch.dict(os.environ, {'REQUIRE_AGENT_ATTESTATION': 'false'})
     def test_dev_mode_allows_without_manifests(
         self, test_db_session, test_team, test_user
     ):
-        """With REQUIRE_AGENT_ATTESTATION=false (default), allow bootstrap mode."""
+        """With require_agent_attestation=False, allow bootstrap mode."""
         service = AgentService(test_db_session)
 
         token_result = service.create_registration_token(
@@ -1376,35 +1384,35 @@ class TestAgentAttestationProductionMode:
             created_by_user_id=test_user.id,
         )
 
-        # Should succeed in bootstrap mode
-        result = service.register_agent(
-            plaintext_token=token_result.plaintext_token,
-            name="Dev Agent",
-            hostname="dev-host",
-            version="1.0.0-dev",
-        )
-        assert result.agent is not None
-
-    def test_default_is_dev_mode(
-        self, test_db_session, test_team, test_user
-    ):
-        """Without REQUIRE_AGENT_ATTESTATION set, default to allowing bootstrap."""
-        service = AgentService(test_db_session)
-
-        # Ensure env var is not set (or remove if set)
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('REQUIRE_AGENT_ATTESTATION', None)
-
-            token_result = service.create_registration_token(
-                team_id=test_team.id,
-                created_by_user_id=test_user.id,
-            )
-
-            # Should succeed - default is bootstrap allowed
+        with self._mock_settings(require=False):
+            # Should succeed in bootstrap mode
             result = service.register_agent(
                 plaintext_token=token_result.plaintext_token,
-                name="Default Mode Agent",
-                hostname="default-host",
-                version="1.0.0",
+                name="Dev Agent",
+                hostname="dev-host",
+                version="1.0.0-dev",
             )
             assert result.agent is not None
+
+    def test_default_enforces_attestation(
+        self, test_db_session, test_team, test_user
+    ):
+        """Default setting (True) enforces attestation — rejects when no manifests."""
+        service = AgentService(test_db_session)
+
+        token_result = service.create_registration_token(
+            team_id=test_team.id,
+            created_by_user_id=test_user.id,
+        )
+
+        # Default is True (enforced) — no manifests should cause rejection
+        with self._mock_settings(require=True):
+            with pytest.raises(ValidationError, match="no release manifests are configured"):
+                service.register_agent(
+                    plaintext_token=token_result.plaintext_token,
+                    name="Default Mode Agent",
+                    hostname="default-host",
+                    version="1.0.0",
+                    binary_checksum="a" * 64,
+                    platform="darwin-arm64",
+                )

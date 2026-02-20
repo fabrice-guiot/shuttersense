@@ -400,15 +400,10 @@ class AgentService:
         Validate agent binary attestation against release manifests.
 
         Security logic:
-        - If REQUIRE_AGENT_ATTESTATION=true, manifests MUST exist (production)
+        - If SHUSAI_REQUIRE_AGENT_ATTESTATION=true (default), manifests MUST exist
         - If no release manifests exist and not required, allow (bootstrap/dev)
         - If manifests exist, require matching active checksum
         - Development mode agents are logged but still validated
-
-        Environment Variables:
-            REQUIRE_AGENT_ATTESTATION: Set to 'true' in production to enforce
-                that release manifests must exist. Prevents accidental deployment
-                without attestation. Default: 'false' (allows bootstrap mode)
 
         Args:
             binary_checksum: SHA-256 hash of agent binary
@@ -418,13 +413,11 @@ class AgentService:
         Raises:
             ValidationError: If attestation fails
         """
-        import os
         from sqlalchemy import func
+        from backend.src.config.settings import get_settings
 
-        # Check if attestation is required (production mode)
-        require_attestation = os.environ.get(
-            'REQUIRE_AGENT_ATTESTATION', 'false'
-        ).lower() == 'true'
+        settings = get_settings()
+        require_attestation = settings.require_agent_attestation
 
         # Check if any manifests exist (bootstrap check)
         manifest_count = self.db.query(func.count(ReleaseManifest.id)).filter(
@@ -435,7 +428,7 @@ class AgentService:
             if require_attestation:
                 # Production mode: attestation required but no manifests configured
                 logger.error(
-                    "Agent registration denied: REQUIRE_AGENT_ATTESTATION=true but no manifests exist",
+                    "Agent registration denied: attestation required but no manifests exist",
                     extra={
                         "binary_checksum": binary_checksum,
                         "platform": platform,
@@ -450,7 +443,7 @@ class AgentService:
             # Bootstrap/dev mode allowed - log warning for visibility
             logger.warning(
                 "Agent registration allowed: no release manifests configured (bootstrap mode). "
-                "Set REQUIRE_AGENT_ATTESTATION=true in production.",
+                "Set SHUSAI_REQUIRE_AGENT_ATTESTATION=true in production.",
                 extra={
                     "binary_checksum": binary_checksum,
                     "platform": platform,
