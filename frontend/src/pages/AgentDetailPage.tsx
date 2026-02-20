@@ -39,6 +39,7 @@ import { AgentStatusBadge } from '@/components/agents/AgentStatusBadge'
 import { GuidBadge } from '@/components/GuidBadge'
 import { formatDateTime, formatRelativeTime } from '@/utils/dateFormat'
 import { AuditTrailSection } from '@/components/audit'
+import { ACTIVE_STATUS_CONFIG } from '@/contracts/domain-labels'
 import type { AgentJobHistoryItem } from '@/contracts/api/agent-api'
 
 // ============================================================================
@@ -435,7 +436,7 @@ export default function AgentDetailPage() {
                     <span className="font-mono">{agent.matched_manifest.version}</span>
                     <GuidBadge guid={agent.matched_manifest.guid} />
                     {!agent.matched_manifest.is_active && (
-                      <Badge variant="outline" className="text-xs">Inactive</Badge>
+                      <Badge variant="outline" className="text-xs">{ACTIVE_STATUS_CONFIG.inactive.label}</Badge>
                     )}
                   </span>
                 ) : (

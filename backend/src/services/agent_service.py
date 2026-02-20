@@ -759,9 +759,11 @@ class AgentService:
             # Don't unverify — only fail when a provided checksum doesn't match.
             return
 
-        # Check if checksum matches ANY active manifest (not just the latest)
-        manifest = ReleaseManifest.find_by_checksum(self.db, agent.binary_checksum)
-        if manifest:
+        # Check if checksum matches ANY active manifest (not just the latest).
+        # Uses the in-memory list to avoid an extra DB round-trip per heartbeat.
+        checksum_lower = agent.binary_checksum.lower()
+        match = any(m.checksum == checksum_lower for m in active_manifests)
+        if match:
             agent.is_verified = True
         else:
             was_verified = agent.is_verified
