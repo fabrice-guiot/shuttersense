@@ -42,7 +42,8 @@ class TestRetryWarningTrigger:
     ):
         """Should call notify_retry_warning when retry_count reaches max_retries - 1."""
         mock_settings.return_value = MagicMock(
-            vapid_private_key="test", vapid_subject="mailto:test@example.com"
+            vapid_private_key="test", vapid_subject="mailto:test@example.com",
+            require_agent_attestation=False,
         )
         mock_ns_instance = MagicMock()
         mock_ns_class.return_value = mock_ns_instance
@@ -83,7 +84,8 @@ class TestRetryWarningTrigger:
     ):
         """Should NOT call notify_retry_warning on non-final retry."""
         mock_settings.return_value = MagicMock(
-            vapid_private_key="test", vapid_subject="mailto:test@example.com"
+            vapid_private_key="test", vapid_subject="mailto:test@example.com",
+            require_agent_attestation=False,
         )
         mock_ns_instance = MagicMock()
         mock_ns_class.return_value = mock_ns_instance

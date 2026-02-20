@@ -51,7 +51,8 @@ class TestFailJobNotification:
     ):
         """fail_job() should call notify_job_failure on the notification service."""
         mock_settings.return_value = MagicMock(
-            vapid_private_key="test", vapid_subject="mailto:test@example.com"
+            vapid_private_key="test", vapid_subject="mailto:test@example.com",
+            require_agent_attestation=False,
         )
         mock_ns_instance = MagicMock()
         mock_ns_class.return_value = mock_ns_instance
@@ -102,7 +103,8 @@ class TestCompleteJobNotification:
     ):
         """complete_job() should call notify_inflection_point for new results."""
         mock_settings.return_value = MagicMock(
-            vapid_private_key="test", vapid_subject="mailto:test@example.com"
+            vapid_private_key="test", vapid_subject="mailto:test@example.com",
+            require_agent_attestation=False,
         )
         mock_ns_instance = MagicMock()
         mock_ns_class.return_value = mock_ns_instance
@@ -160,7 +162,8 @@ class TestInventoryImportNoChangeNotification:
         """complete_job() should skip notify_inflection_point when
         inventory_import reports no_changes=True (Issue #219)."""
         mock_settings.return_value = MagicMock(
-            vapid_private_key="test", vapid_subject="mailto:test@example.com"
+            vapid_private_key="test", vapid_subject="mailto:test@example.com",
+            require_agent_attestation=False,
         )
         mock_ns_instance = MagicMock()
         mock_ns_class.return_value = mock_ns_instance
@@ -223,7 +226,8 @@ class TestInventoryImportNoChangeNotification:
         """complete_job() should call notify_inflection_point when
         inventory_import reports no_changes=False (Issue #219)."""
         mock_settings.return_value = MagicMock(
-            vapid_private_key="test", vapid_subject="mailto:test@example.com"
+            vapid_private_key="test", vapid_subject="mailto:test@example.com",
+            require_agent_attestation=False,
         )
         mock_ns_instance = MagicMock()
         mock_ns_class.return_value = mock_ns_instance
