@@ -145,7 +145,8 @@ describe('AgentDetailPage', () => {
       expect(screen.getByText('Studio Mac')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Online')).toBeInTheDocument()
+    // Online + verified + no running jobs = "Idle" (Issue #236)
+    expect(screen.getByText('Idle')).toBeInTheDocument()
   })
 
   it('displays agent hostname', async () => {

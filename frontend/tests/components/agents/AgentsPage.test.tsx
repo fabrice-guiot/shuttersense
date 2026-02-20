@@ -130,7 +130,8 @@ describe('AgentsPage', () => {
       expect(screen.getAllByText('Studio Mac')[0]).toBeInTheDocument()
     })
 
-    expect(screen.getAllByText('Online')[0]).toBeInTheDocument()
+    // Online + verified + no running jobs = "Idle" (Issue #236)
+    expect(screen.getAllByText('Idle')[0]).toBeInTheDocument()
     expect(screen.getAllByText('Offline')[0]).toBeInTheDocument()
   })
 

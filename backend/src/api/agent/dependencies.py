@@ -224,9 +224,8 @@ def require_verified_agent(
     blocked. Unverified agents can still heartbeat and disconnect, but
     cannot claim, execute, or upload job results.
 
-    Enforcement is only active when the server has a distribution directory
-    configured (production mode). In dev mode (no dist dir), all online
-    agents are allowed through.
+    Enforcement is controlled by SHUSAI_REQUIRE_AGENT_ATTESTATION (default: True).
+    Set to False only in development where agents run from source.
 
     Args:
         ctx: Agent context from require_online_agent

@@ -14,7 +14,8 @@ describe('AgentStatusBadge', () => {
   it('renders online status with success styling', () => {
     render(<AgentStatusBadge status="online" />)
 
-    const badge = screen.getByText('Online')
+    // Online + verified + no running jobs = "Idle" (Issue #236)
+    const badge = screen.getByText('Idle')
     expect(badge).toBeInTheDocument()
     // Check for success variant styling
     expect(badge).toHaveClass('bg-success')
@@ -66,13 +67,13 @@ describe('AgentStatusBadge', () => {
     render(<AgentStatusBadge status="online" showLabel={false} />)
 
     // Badge should exist but without visible text
-    expect(screen.queryByText('Online')).not.toBeInTheDocument()
+    expect(screen.queryByText('Idle')).not.toBeInTheDocument()
   })
 
   it('applies custom className', () => {
     render(<AgentStatusBadge status="online" className="custom-class" />)
 
-    const badge = screen.getByText('Online')
+    const badge = screen.getByText('Idle')
     expect(badge).toHaveClass('custom-class')
   })
 })
