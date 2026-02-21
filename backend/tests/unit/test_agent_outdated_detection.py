@@ -143,17 +143,22 @@ class TestAgentOutdatedDetection:
         assert became_outdated is False
         assert agent.is_outdated is False
 
-    def test_missing_platform_flagged_outdated(
+    def test_missing_platform_unknown_checksum_not_outdated(
         self, agent_service, agent, active_manifest
     ):
-        """Agent without platform is flagged outdated when active manifests exist."""
+        """Agent without platform and unknown checksum is unverified, not outdated.
+
+        We can't determine the agent's platform from its checksum (no match),
+        so we can't compare against a platform-specific manifest. The agent
+        IS flagged as unverified, which is the more important signal.
+        """
         agent.platform = None
 
         latest_version, became_outdated = agent_service._check_outdated(agent)
 
-        assert latest_version == "v2.0.0"
-        assert became_outdated is True
-        assert agent.is_outdated is True
+        assert agent.is_outdated is False
+        assert agent.is_verified is False  # Unknown binary
+        assert latest_version is None
 
     def test_missing_checksum_flagged_outdated(
         self, agent_service, agent, active_manifest
@@ -178,6 +183,51 @@ class TestAgentOutdatedDetection:
         assert latest_version is None
         assert became_outdated is False
         assert agent.is_outdated is False
+
+    def test_missing_platform_backfilled_from_matching_checksum(
+        self, agent_service, agent, matching_manifest
+    ):
+        """Agent without platform but with matching checksum gets platform backfilled."""
+        agent.platform = None
+
+        latest_version, became_outdated = agent_service._check_outdated(agent)
+
+        # Platform backfilled from the matching manifest
+        assert agent.platform == "darwin-arm64"
+        # Not outdated because checksum matches the latest manifest
+        assert agent.is_outdated is False
+        assert became_outdated is False
+        assert latest_version == "v1.0.0"
+        # Verified because checksum matches a known manifest
+        assert agent.is_verified is True
+
+    def test_missing_platform_backfilled_still_outdated(
+        self, test_db_session, agent_service, agent, matching_manifest, test_user
+    ):
+        """Agent with backfilled platform is still outdated if not on latest version."""
+        agent.platform = None
+
+        # Create a newer manifest (v2.0.0) AFTER matching_manifest (v1.0.0)
+        # so it gets a higher DB id, reflecting real insertion order.
+        newer = ReleaseManifest(
+            version="v2.0.0",
+            checksum=MANIFEST_CHECKSUM,
+            is_active=True,
+            created_by_user_id=test_user.id,
+            updated_by_user_id=test_user.id,
+        )
+        newer.platforms = ["darwin-arm64"]
+        test_db_session.add(newer)
+        test_db_session.commit()
+
+        latest_version, became_outdated = agent_service._check_outdated(agent)
+
+        # Platform backfilled from the matching (older) manifest
+        assert agent.platform == "darwin-arm64"
+        # Outdated because v2.0.0 is the latest for darwin-arm64
+        assert agent.is_outdated is True
+        assert became_outdated is True
+        assert latest_version == "v2.0.0"
 
     def test_no_matching_platform_returns_none(
         self, test_db_session, agent_service, agent, test_user
@@ -249,20 +299,22 @@ class TestAgentOutdatedDetection:
         assert agent.is_outdated is False
         assert became_outdated is False
 
-    def test_heartbeat_flags_outdated_without_platform(
+    def test_heartbeat_without_platform_no_checksum(
         self, agent_service, agent, active_manifest
     ):
-        """Agent without platform is flagged outdated when active manifests exist."""
+        """Heartbeat without checksum and no platform: verified (dev mode), not outdated."""
         agent.platform = None
 
+        # Heartbeat without binary_checksum clears the stored checksum (dev mode)
         result = agent_service.process_heartbeat(
             agent=agent,
             status=AgentStatus.ONLINE,
         )
 
-        assert result.latest_version == "v2.0.0"
-        assert result.became_outdated is True
-        assert result.agent.is_outdated is True
+        # No checksum = dev/pre-upgrade. No platform = can't determine latest.
+        # Verified stays True (absence of checksum ≠ tampering).
+        assert result.agent.is_verified is True
+        assert result.agent.is_outdated is False
 
     def test_heartbeat_flags_outdated_without_checksum(
         self, agent_service, agent, active_manifest
@@ -543,15 +595,16 @@ class TestAgentAttestationVerification:
 
         assert agent.is_verified is True
 
-    def test_verified_when_missing_platform(
+    def test_unverified_when_missing_platform_and_unknown_checksum(
         self, agent_service, agent, active_manifest
     ):
-        """Agent without platform stays verified (dev/pre-upgrade agent)."""
+        """Agent without platform and non-matching checksum is unverified."""
         agent.platform = None
 
         agent_service._check_outdated(agent)
 
-        assert agent.is_verified is True
+        # Checksum doesn't match any manifest, so attestation fails.
+        assert agent.is_verified is False
 
     def test_verified_after_update_to_matching_checksum(
         self, test_db_session, agent_service, agent, active_manifest
