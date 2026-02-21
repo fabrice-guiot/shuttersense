@@ -119,6 +119,7 @@ class TestAgentOutdatedDetection:
 
     def test_agent_detected_as_outdated(self, agent_service, agent, active_manifest):
         """Agent with old checksum is flagged outdated."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         latest_version, became_outdated = agent_service._check_outdated(agent)
 
         assert agent.is_outdated is True
@@ -129,6 +130,7 @@ class TestAgentOutdatedDetection:
         self, agent_service, agent, matching_manifest
     ):
         """Agent with matching checksum is not flagged outdated."""
+        _ = matching_manifest  # side-effect: populates DB with manifest
         latest_version, became_outdated = agent_service._check_outdated(agent)
 
         assert agent.is_outdated is False
@@ -143,22 +145,29 @@ class TestAgentOutdatedDetection:
         assert became_outdated is False
         assert agent.is_outdated is False
 
-    def test_missing_platform_flagged_outdated(
+    def test_missing_platform_unknown_checksum_not_outdated(
         self, agent_service, agent, active_manifest
     ):
-        """Agent without platform is flagged outdated when active manifests exist."""
+        """Agent without platform and unknown checksum is unverified, not outdated.
+
+        We can't determine the agent's platform from its checksum (no match),
+        so we can't compare against a platform-specific manifest. The agent
+        IS flagged as unverified, which is the more important signal.
+        """
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.platform = None
 
-        latest_version, became_outdated = agent_service._check_outdated(agent)
+        latest_version, _ = agent_service._check_outdated(agent)
 
-        assert latest_version == "v2.0.0"
-        assert became_outdated is True
-        assert agent.is_outdated is True
+        assert agent.is_outdated is False
+        assert agent.is_verified is False  # Unknown binary
+        assert latest_version is None
 
     def test_missing_checksum_flagged_outdated(
         self, agent_service, agent, active_manifest
     ):
         """Agent without binary_checksum is flagged outdated when active manifests exist."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.binary_checksum = None
 
         latest_version, became_outdated = agent_service._check_outdated(agent)
@@ -178,6 +187,53 @@ class TestAgentOutdatedDetection:
         assert latest_version is None
         assert became_outdated is False
         assert agent.is_outdated is False
+
+    def test_missing_platform_backfilled_from_matching_checksum(
+        self, agent_service, agent, matching_manifest
+    ):
+        """Agent without platform but with matching checksum gets platform backfilled."""
+        _ = matching_manifest  # side-effect: populates DB with manifest
+        agent.platform = None
+
+        latest_version, became_outdated = agent_service._check_outdated(agent)
+
+        # Platform backfilled from the matching manifest
+        assert agent.platform == "darwin-arm64"
+        # Not outdated because checksum matches the latest manifest
+        assert agent.is_outdated is False
+        assert became_outdated is False
+        assert latest_version == "v1.0.0"
+        # Verified because checksum matches a known manifest
+        assert agent.is_verified is True
+
+    def test_missing_platform_backfilled_still_outdated(
+        self, test_db_session, agent_service, agent, matching_manifest, test_user
+    ):
+        """Agent with backfilled platform is still outdated if not on latest version."""
+        _ = matching_manifest  # side-effect: populates DB with manifest
+        agent.platform = None
+
+        # Create a newer manifest (v2.0.0) AFTER matching_manifest (v1.0.0)
+        # so it gets a higher DB id, reflecting real insertion order.
+        newer = ReleaseManifest(
+            version="v2.0.0",
+            checksum=MANIFEST_CHECKSUM,
+            is_active=True,
+            created_by_user_id=test_user.id,
+            updated_by_user_id=test_user.id,
+        )
+        newer.platforms = ["darwin-arm64"]
+        test_db_session.add(newer)
+        test_db_session.commit()
+
+        latest_version, became_outdated = agent_service._check_outdated(agent)
+
+        # Platform backfilled from the matching (older) manifest
+        assert agent.platform == "darwin-arm64"
+        # Outdated because v2.0.0 is the latest for darwin-arm64
+        assert agent.is_outdated is True
+        assert became_outdated is True
+        assert latest_version == "v2.0.0"
 
     def test_no_matching_platform_returns_none(
         self, test_db_session, agent_service, agent, test_user
@@ -223,6 +279,7 @@ class TestAgentOutdatedDetection:
         self, agent_service, agent, active_manifest
     ):
         """became_outdated is True only on first detection (False->True)."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         # First call: transition to outdated
         _, became_outdated_1 = agent_service._check_outdated(agent)
         assert became_outdated_1 is True
@@ -237,6 +294,7 @@ class TestAgentOutdatedDetection:
         self, test_db_session, agent_service, agent, active_manifest, test_user
     ):
         """Agent auto-resolves outdated when updated to matching checksum."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         # First: detect as outdated
         agent_service._check_outdated(agent)
         assert agent.is_outdated is True
@@ -249,25 +307,29 @@ class TestAgentOutdatedDetection:
         assert agent.is_outdated is False
         assert became_outdated is False
 
-    def test_heartbeat_flags_outdated_without_platform(
+    def test_heartbeat_without_platform_no_checksum(
         self, agent_service, agent, active_manifest
     ):
-        """Agent without platform is flagged outdated when active manifests exist."""
+        """Heartbeat without checksum and no platform: verified (dev mode), not outdated."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.platform = None
 
+        # Heartbeat without binary_checksum clears the stored checksum (dev mode)
         result = agent_service.process_heartbeat(
             agent=agent,
             status=AgentStatus.ONLINE,
         )
 
-        assert result.latest_version == "v2.0.0"
-        assert result.became_outdated is True
-        assert result.agent.is_outdated is True
+        # No checksum = dev/pre-upgrade. No platform = can't determine latest.
+        # Verified stays True (absence of checksum ≠ tampering).
+        assert result.agent.is_verified is True
+        assert result.agent.is_outdated is False
 
     def test_heartbeat_flags_outdated_without_checksum(
         self, agent_service, agent, active_manifest
     ):
         """Agent without binary_checksum is flagged outdated when active manifests exist."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.binary_checksum = None
 
         result = agent_service.process_heartbeat(
@@ -298,6 +360,7 @@ class TestAgentOutdatedDetection:
         self, agent_service, agent, active_manifest
     ):
         """Heartbeat result includes outdated info when detected."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         result = agent_service.process_heartbeat(
             agent=agent,
             status=AgentStatus.ONLINE,
@@ -363,8 +426,10 @@ class TestPoolStatusWithOutdated:
         self, agent_service, agent, active_manifest, test_team
     ):
         """Pool status includes outdated_count."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         # Mark agent as outdated
         agent.is_outdated = True
+        agent.is_verified = True
         agent.status = AgentStatus.ONLINE
 
         status = agent_service.get_pool_status(test_team.id)
@@ -390,7 +455,9 @@ class TestPoolStatusWithOutdated:
         self, agent_service, agent, active_manifest, test_team
     ):
         """Status is 'outdated' when agents are online but outdated (no running jobs)."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.is_outdated = True
+        agent.is_verified = True
         agent.status = AgentStatus.ONLINE
 
         status = agent_service.get_pool_status(test_team.id)
@@ -401,9 +468,11 @@ class TestPoolStatusWithOutdated:
         self, test_db_session, agent_service, agent, active_manifest, test_team, test_user
     ):
         """Running jobs take priority over outdated status."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         from backend.src.models.job import Job, JobStatus
 
         agent.is_outdated = True
+        agent.is_verified = True
         agent.status = AgentStatus.ONLINE
 
         # Create a collection for the job
@@ -489,6 +558,7 @@ class TestAgentOutdatedNotification:
         active_manifest, test_team
     ):
         """Heartbeat that detects outdated should trigger agent_outdated notification."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         from backend.src.api.agent.routes import _trigger_agent_notification
 
         # Process heartbeat which marks agent as outdated
@@ -513,6 +583,7 @@ class TestAgentAttestationVerification:
         self, agent_service, agent, matching_manifest
     ):
         """Agent is verified when checksum matches any active manifest."""
+        _ = matching_manifest  # side-effect: populates DB with manifest
         agent_service._check_outdated(agent)
 
         assert agent.is_verified is True
@@ -521,6 +592,7 @@ class TestAgentAttestationVerification:
         self, agent_service, agent, active_manifest
     ):
         """Agent is not verified when checksum doesn't match any manifest."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent_service._check_outdated(agent)
 
         assert agent.is_verified is False
@@ -537,26 +609,30 @@ class TestAgentAttestationVerification:
         self, agent_service, agent, active_manifest
     ):
         """Agent without checksum stays verified (dev/pre-upgrade agent)."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.binary_checksum = None
 
         agent_service._check_outdated(agent)
 
         assert agent.is_verified is True
 
-    def test_verified_when_missing_platform(
+    def test_unverified_when_missing_platform_and_unknown_checksum(
         self, agent_service, agent, active_manifest
     ):
-        """Agent without platform stays verified (dev/pre-upgrade agent)."""
+        """Agent without platform and non-matching checksum is unverified."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.platform = None
 
         agent_service._check_outdated(agent)
 
-        assert agent.is_verified is True
+        # Checksum doesn't match any manifest, so attestation fails.
+        assert agent.is_verified is False
 
     def test_verified_after_update_to_matching_checksum(
         self, test_db_session, agent_service, agent, active_manifest
     ):
         """Agent becomes verified after updating to a known checksum."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         # First: unverified (has a checksum that doesn't match any manifest)
         agent_service._check_outdated(agent)
         assert agent.is_verified is False
@@ -572,6 +648,7 @@ class TestAgentAttestationVerification:
         self, agent_service, agent, matching_manifest
     ):
         """Heartbeat processing sets is_verified via _check_outdated."""
+        _ = matching_manifest  # side-effect: populates DB with manifest
         result = agent_service.process_heartbeat(
             agent=agent,
             status=AgentStatus.ONLINE,
@@ -583,6 +660,7 @@ class TestAgentAttestationVerification:
         self, agent_service, agent, active_manifest
     ):
         """Heartbeat processing marks agent unverified for unknown checksum."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         result = agent_service.process_heartbeat(
             agent=agent,
             status=AgentStatus.ONLINE,
@@ -595,6 +673,7 @@ class TestAgentAttestationVerification:
         self, agent_service, agent, active_manifest
     ):
         """can_execute_jobs is False when agent is unverified."""
+        _ = active_manifest  # side-effect: populates DB with manifest
         agent.status = AgentStatus.ONLINE
         agent_service._check_outdated(agent)
 
@@ -605,6 +684,7 @@ class TestAgentAttestationVerification:
         self, agent_service, agent, matching_manifest
     ):
         """can_execute_jobs is True when agent is online and verified."""
+        _ = matching_manifest  # side-effect: populates DB with manifest
         agent.status = AgentStatus.ONLINE
         agent_service._check_outdated(agent)
 

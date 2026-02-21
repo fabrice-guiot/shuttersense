@@ -35,7 +35,7 @@ from backend.src.models import (
 from backend.src.models.agent_registration_token import DEFAULT_TOKEN_EXPIRATION_HOURS
 from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
 from backend.src.utils.logging_config import get_logger
-from backend.src.utils.version import parse_version_safe
+
 
 
 logger = get_logger("agent")
@@ -639,13 +639,15 @@ class AgentService:
         """
         Check if an agent's binary is outdated compared to the latest manifest.
 
-        Finds the latest active release manifest that supports the agent's
-        platform and compares its checksum against the agent's binary_checksum.
-        Updates agent.is_outdated accordingly.
+        Algorithm:
+        1. Match the agent's checksum to a manifest (verified = match found).
+        2. If matched, check whether a newer manifest exists for the same
+           platform (newer = higher id, i.e. inserted later). If yes → outdated.
+        3. If no match, check whether a manifest exists for the agent's
+           platform — if yes, the agent should be running an official build.
 
-        Agents missing platform or binary_checksum (registered before upgrade
-        detection was added) are treated as outdated whenever any active
-        manifest exists, since they are clearly running a pre-upgrade build.
+        Verification (is_verified) and currency (is_outdated) are independent:
+        an agent can be verified-but-outdated, or unverified-but-not-outdated.
 
         Args:
             agent: Agent to check for outdated status.
@@ -659,63 +661,99 @@ class AgentService:
             .filter(ReleaseManifest.is_active.is_(True))
             .all()
         )
-        # Sort by semantic version descending so [0] is the latest.
-        # Secondary sort by created_at descending breaks ties when multiple
-        # manifests share the same version (newest manifest wins).
-        active_manifests.sort(
-            key=lambda m: (parse_version_safe(m.version), m.created_at or datetime.min),
-            reverse=True,
-        )
 
         if not active_manifests:
             agent.is_outdated = False
             agent.is_verified = True  # No manifests = dev/bootstrap, trust all
             return None, False
 
-        # Agents without platform or checksum are pre-upgrade or dev builds.
-        # If any active manifest exists, they need updating.
-        if not agent.platform or not agent.binary_checksum:
-            latest_version = active_manifests[0].version
+        # ── Helper: find the latest manifest for a given platform ──
+        def _latest_for_platform(platform: str) -> Optional[ReleaseManifest]:
+            candidates = [m for m in active_manifests if m.supports_platform(platform)]
+            return max(candidates, key=lambda m: m.id) if candidates else None
+
+        # No checksum → pre-upgrade or dev build. Outdated if an official
+        # manifest exists for the agent's platform. Don't unverify (absence ≠ tampering).
+        if not agent.binary_checksum:
+            latest = _latest_for_platform(agent.platform) if agent.platform else None
             was_outdated = agent.is_outdated
-
-            agent.is_outdated = True
-            # Don't unverify — missing checksum means dev mode or pre-upgrade,
-            # not a tampered binary. Verification only fails when a provided
-            # checksum doesn't match any manifest.
-
-            became_outdated = not was_outdated
-
+            agent.is_outdated = latest is not None
+            latest_version = latest.version if latest else None
+            became_outdated = agent.is_outdated and not was_outdated
             if became_outdated:
                 logger.info(
-                    "Pre-upgrade agent detected as outdated (missing platform/checksum)",
-                    extra={
-                        "agent_guid": agent.guid,
-                        "agent_version": agent.version,
-                        "latest_version": latest_version,
-                        "platform": agent.platform,
-                    }
+                    "Pre-upgrade agent detected as outdated (missing checksum)",
+                    extra={"agent_guid": agent.guid, "agent_version": agent.version},
                 )
-
             return latest_version, became_outdated
 
-        matching_manifest = None
-        for manifest in active_manifests:
-            if manifest.supports_platform(agent.platform):
-                matching_manifest = manifest
-                break
+        # ── Step 1: find the agent's manifest by checksum ──
+        checksum_lower = agent.binary_checksum.lower()
+        agent_manifest = next(
+            (m for m in active_manifests if m.checksum == checksum_lower), None
+        )
 
-        if not matching_manifest:
-            agent.is_outdated = False
-            # No manifest for this platform — verify against ANY manifest checksum
-            self._verify_attestation(agent, active_manifests)
-            return None, False
+        # Attestation: verified iff checksum matches a known manifest.
+        was_verified = agent.is_verified
+        agent.is_verified = agent_manifest is not None
+        if not agent.is_verified and was_verified:
+            logger.warning(
+                "Agent binary not verified — checksum does not match any active manifest",
+                extra={
+                    "agent_guid": agent.guid,
+                    "agent_checksum": agent.binary_checksum,
+                    "platform": agent.platform,
+                },
+            )
 
-        latest_version = matching_manifest.version
+        # ── Step 2: determine outdated status ──
         was_outdated = agent.is_outdated
 
-        is_now_outdated = agent.binary_checksum != matching_manifest.checksum
-        agent.is_outdated = is_now_outdated
+        if agent_manifest is not None:
+            # Agent runs a known build. Backfill platform if missing.
+            if not agent.platform and agent_manifest.platforms:
+                if len(agent_manifest.platforms) == 1:
+                    agent.platform = agent_manifest.platforms[0]
+                    logger.info(
+                        "Backfilled agent platform from manifest checksum match",
+                        extra={
+                            "agent_guid": agent.guid,
+                            "platform": agent.platform,
+                            "manifest_version": agent_manifest.version,
+                        },
+                    )
+                else:
+                    logger.warning(
+                        "Cannot backfill platform: manifest has multiple platforms",
+                        extra={
+                            "agent_guid": agent.guid,
+                            "manifest_version": agent_manifest.version,
+                            "platforms": agent_manifest.platforms,
+                        },
+                    )
 
+            # Is there a newer manifest for the same platform?
+            platform = agent.platform
+            if platform:
+                latest = _latest_for_platform(platform)
+                is_now_outdated = latest is not None and latest.id != agent_manifest.id
+                latest_version = latest.version if latest else agent_manifest.version
+            else:
+                is_now_outdated = False
+                latest_version = agent_manifest.version
+        else:
+            # Unknown binary. Outdated if an official build exists for the
+            # agent's platform (agent should be running a known release).
+            platform = agent.platform
+            if platform:
+                latest = _latest_for_platform(platform)
+                is_now_outdated = latest is not None
+                latest_version = latest.version if latest else None
+            else:
+                is_now_outdated = False
+                latest_version = None
+
+        agent.is_outdated = is_now_outdated
         became_outdated = is_now_outdated and not was_outdated
 
         if became_outdated:
@@ -726,50 +764,10 @@ class AgentService:
                     "agent_version": agent.version,
                     "latest_version": latest_version,
                     "platform": agent.platform,
-                }
+                },
             )
 
-        # Verify binary attestation against any active manifest checksum
-        self._verify_attestation(agent, active_manifests)
-
         return latest_version, became_outdated
-
-    def _verify_attestation(
-        self, agent: Agent, active_manifests: List[ReleaseManifest]
-    ) -> None:
-        """
-        Verify agent binary attestation against any active manifest checksum.
-
-        Sets agent.is_verified based on whether the binary_checksum matches
-        any active manifest. This is a continuous check, not just registration-time.
-
-        Args:
-            agent: Agent to verify.
-            active_manifests: List of active release manifests.
-        """
-        if not agent.binary_checksum:
-            # No checksum = dev mode or pre-upgrade agent.
-            # Don't unverify — only fail when a provided checksum doesn't match.
-            return
-
-        # Check if checksum matches ANY active manifest (not just the latest).
-        # Uses the in-memory list to avoid an extra DB round-trip per heartbeat.
-        checksum_lower = agent.binary_checksum.lower()
-        match = any(m.checksum == checksum_lower for m in active_manifests)
-        if match:
-            agent.is_verified = True
-        else:
-            was_verified = agent.is_verified
-            agent.is_verified = False
-            if was_verified:
-                logger.warning(
-                    "Agent binary not verified — checksum does not match any active manifest",
-                    extra={
-                        "agent_guid": agent.guid,
-                        "agent_checksum": agent.binary_checksum,
-                        "platform": agent.platform,
-                    }
-                )
 
     def disconnect_agent(self, agent: Agent) -> Agent:
         """
