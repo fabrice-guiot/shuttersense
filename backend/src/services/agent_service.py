@@ -712,15 +712,25 @@ class AgentService:
         if agent_manifest is not None:
             # Agent runs a known build. Backfill platform if missing.
             if not agent.platform and agent_manifest.platforms:
-                agent.platform = agent_manifest.platforms[0]
-                logger.info(
-                    "Backfilled agent platform from manifest checksum match",
-                    extra={
-                        "agent_guid": agent.guid,
-                        "platform": agent.platform,
-                        "manifest_version": agent_manifest.version,
-                    },
-                )
+                if len(agent_manifest.platforms) == 1:
+                    agent.platform = agent_manifest.platforms[0]
+                    logger.info(
+                        "Backfilled agent platform from manifest checksum match",
+                        extra={
+                            "agent_guid": agent.guid,
+                            "platform": agent.platform,
+                            "manifest_version": agent_manifest.version,
+                        },
+                    )
+                else:
+                    logger.warning(
+                        "Cannot backfill platform: manifest has multiple platforms",
+                        extra={
+                            "agent_guid": agent.guid,
+                            "manifest_version": agent_manifest.version,
+                            "platforms": agent_manifest.platforms,
+                        },
+                    )
 
             # Is there a newer manifest for the same platform?
             platform = agent.platform
