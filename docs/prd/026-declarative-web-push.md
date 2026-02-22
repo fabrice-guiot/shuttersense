@@ -56,7 +56,7 @@ Safari 26 (iOS 26) ships Declarative Web Push as a stable, default-enabled featu
 
 ### Current Push Architecture
 
-```
+```text
 Server                          Push Service              Client
   │                                │                        │
   │  webpush(payload_json,         │                        │
@@ -133,7 +133,7 @@ This is not a theoretical risk — it is the primary failure mode for web push o
 
 ### How Declarative Web Push Fixes This
 
-```
+```text
 Server                          Push Service              Client
   │                                │                        │
   │  webpush(payload_json,         │                        │
@@ -299,10 +299,18 @@ self.addEventListener('push', (event: PushEvent) => {
     data,
   }
 
+  // Extract app_badge from declarative payload top level
+  const appBadge =
+    payload.web_push === 8030
+      ? (payload.app_badge as number | undefined)
+      : undefined
+
   event.waitUntil(
     Promise.all([
       self.registration.showNotification(title, options),
-      self.navigator.setAppBadge?.(),
+      appBadge !== undefined
+        ? self.navigator.setAppBadge?.(appBadge)
+        : self.navigator.setAppBadge?.(),
     ])
   )
 })

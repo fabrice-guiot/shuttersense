@@ -140,7 +140,7 @@ This also means:
 
 Edge has an experimental flag that fixes notification attribution for PWAs:
 
-```
+```text
 edge://flags/#enable-mac-pwas-notification-attribution
 ```
 
@@ -189,7 +189,7 @@ Safari (macOS Sonoma+ / Safari 17+) takes a fundamentally different approach:
 **Limitations:**
 - Safari's "Add to Dock" is not a full PWA install — it copies cookies at install time but uses separate storage afterward.
 - The Badging API (`navigator.setAppBadge()`) works for Dock web apps but not in regular Safari tabs.
-- Safari 18.4+ supports **Declarative Web Push** — notifications can be delivered without an active service worker (Safari-only feature as of early 2026).
+- Safari 18.4+ (iOS/iPadOS) and Safari 18.5+ (macOS 15.5+) support **Declarative Web Push** — notifications can be delivered without an active service worker (Safari-only feature as of early 2026).
 
 ### iOS / iPadOS Push
 

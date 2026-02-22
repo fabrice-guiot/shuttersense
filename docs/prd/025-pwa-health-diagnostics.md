@@ -176,7 +176,7 @@ The panel MUST organize checks into the following categories:
 | Check | Detection Method | Pass | Warn | Fail |
 |-------|-----------------|------|------|------|
 | Display mode | `matchMedia('(display-mode: standalone)')` + `navigator.standalone` | Standalone (installed PWA) | Browser tab (installable) | Browser tab (not installable) |
-| Manifest | `navigator.getInstalledRelatedApps()` or manifest link presence | Valid manifest with icons | Manifest present but missing fields | No manifest detected |
+| Manifest | Fetch and parse `document.querySelector('link[rel="manifest"]')?.href`, inspect for required fields (`name`/`short_name`, `icons`, `start_url`, `display`) | Valid manifest with required fields and icons | Manifest present but missing fields (e.g., no maskable icon) | No manifest `<link>` detected or fetch fails |
 | Browser | `navigator.userAgentData` / UA parsing | Supported browser | Limited support (Firefox, Safari in-tab) | Unsupported browser |
 
 #### Category 2: Service Worker
