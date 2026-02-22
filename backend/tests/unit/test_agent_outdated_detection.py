@@ -12,6 +12,7 @@ from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 from backend.src.models.agent import Agent, AgentStatus
+from backend.src.models.agent_runtime import AgentRuntime
 from backend.src.models.release_manifest import ReleaseManifest
 from backend.src.models import User, UserStatus, UserType, Team, Collection
 from backend.src.models.collection import CollectionType
@@ -62,7 +63,6 @@ def agent(test_db_session, test_team, test_user, system_user):
         created_by_user_id=test_user.id,
         name="Test Agent",
         hostname="test-host",
-        status=AgentStatus.OFFLINE,
         api_key_hash=_make_checksum("test-api-key"),
         api_key_prefix="agt_key_12345678",
         version="v1.0.0",
@@ -71,6 +71,13 @@ def agent(test_db_session, test_team, test_user, system_user):
         is_outdated=False,
     )
     test_db_session.add(a)
+    test_db_session.flush()
+
+    runtime = AgentRuntime(
+        agent_id=a.id,
+        status=AgentStatus.OFFLINE,
+    )
+    test_db_session.add(runtime)
     test_db_session.commit()
     test_db_session.refresh(a)
     return a

@@ -50,7 +50,7 @@ import { RegistrationTokenDialog } from '@/components/agents/RegistrationTokenDi
 import { AgentSetupWizardDialog } from '@/components/agents/AgentSetupWizardDialog'
 import { AgentUpdateDialog } from '@/components/agents/AgentUpdateDialog'
 import { GuidBadge } from '@/components/GuidBadge'
-import { formatDateTime } from '@/utils/dateFormat'
+import { formatRelativeTime } from '@/utils/dateFormat'
 import { AuditTrailPopover } from '@/components/audit'
 import type { Agent } from '@/contracts/api/agent-api'
 
@@ -193,7 +193,7 @@ export default function AgentsPage() {
     {
       header: 'Last Heartbeat',
       cell: (agent) => agent.last_heartbeat ? (
-        <span className="text-sm">{formatDateTime(agent.last_heartbeat)}</span>
+        <span className="text-sm">{formatRelativeTime(agent.last_heartbeat)}</span>
       ) : (
         <span className="text-muted-foreground">Never</span>
       ),

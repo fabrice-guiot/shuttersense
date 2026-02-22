@@ -32,6 +32,7 @@ from backend.src.models import (
     Job, JobStatus,
     ReleaseManifest,
 )
+from backend.src.models.agent_runtime import AgentRuntime
 from backend.src.models.agent_registration_token import DEFAULT_TOKEN_EXPIRATION_HOURS
 from backend.src.services.exceptions import NotFoundError, ValidationError, ConflictError
 from backend.src.utils.logging_config import get_logger
@@ -241,8 +242,8 @@ class AgentService:
         """
         Register a new agent using a registration token.
 
-        Creates the agent, a dedicated SYSTEM user for audit trail,
-        and generates an API key for authentication.
+        Creates the agent, its runtime record, a dedicated SYSTEM user for
+        audit trail, and generates an API key for authentication.
 
         Args:
             plaintext_token: Registration token
@@ -285,7 +286,6 @@ class AgentService:
             agent_name=name
         )
 
-        # Create agent
         # Serialize capabilities and authorized_roots to JSON string for SQLite compatibility
         capabilities_list = capabilities or []
         capabilities_serialized = json.dumps(capabilities_list) if capabilities_list else "[]"
@@ -293,6 +293,7 @@ class AgentService:
         authorized_roots_list = authorized_roots or []
         authorized_roots_serialized = json.dumps(authorized_roots_list) if authorized_roots_list else "[]"
 
+        # Create agent (identity/config only)
         agent = Agent(
             team_id=token.team_id,
             system_user_id=system_user.id,
@@ -300,11 +301,7 @@ class AgentService:
             name=name,
             hostname=hostname,
             os_info=os_info,
-            status=AgentStatus.OFFLINE,  # Start as offline until first heartbeat
-            last_heartbeat=None,  # No heartbeat received yet
-            capabilities_json=capabilities_serialized,
-            authorized_roots_json=authorized_roots_serialized,
-            connectors_json="[]",  # Empty list serialized for SQLite compatibility
+            connectors_json="[]",
             api_key_hash=api_key_hash,
             api_key_prefix=api_key_prefix,
             version=version,
@@ -313,11 +310,27 @@ class AgentService:
         )
 
         self.db.add(agent)
-        self.db.flush()  # Flush to get agent.id for token update
+        self.db.flush()  # Flush to get agent.id
+
+        # Create runtime record (volatile state)
+        runtime = AgentRuntime(
+            agent_id=agent.id,
+            status=AgentStatus.OFFLINE,
+            last_heartbeat=None,
+            capabilities_json=capabilities_serialized,
+            authorized_roots_json=authorized_roots_serialized,
+            pending_commands_json="[]",
+            metrics_json=None,
+        )
+        self.db.add(runtime)
+        self.db.flush()
+
+        # Populate the relationship so proxy properties work immediately
+        agent.runtime = runtime
 
         # Mark token as used
         token.mark_as_used(agent.id)
-        self.db.commit()  # Commit the entire registration transaction
+        self.db.commit()
 
         logger.info(
             "Agent registered",
@@ -524,6 +537,14 @@ class AgentService:
         Updates last_heartbeat timestamp and optionally updates
         status, capabilities, authorized_roots, version, and metrics.
 
+        Volatile fields (status, last_heartbeat, metrics, capabilities, etc.)
+        are written to agent.runtime — this does NOT trigger onupdate on
+        agents.updated_at.
+
+        Identity fields (version, binary_checksum, is_outdated, is_verified)
+        are written to the agents table — onupdate fires only when these
+        actually change.
+
         Returns HeartbeatResult with transition metadata for notification triggers.
 
         Args:
@@ -557,16 +578,16 @@ class AgentService:
         pool_was_all_offline = False
         if effective_status == AgentStatus.ONLINE and previous_status != AgentStatus.ONLINE:
             # Count currently ONLINE agents before we update this one
-            online_count = self.db.query(func.count(Agent.id)).filter(
+            online_count = self.db.query(func.count(AgentRuntime.id)).filter(
+                AgentRuntime.status == AgentStatus.ONLINE,
+            ).join(Agent, Agent.id == AgentRuntime.agent_id).filter(
                 Agent.team_id == agent.team_id,
-                Agent.status == AgentStatus.ONLINE,
             ).scalar() or 0
             pool_was_all_offline = (online_count == 0)
 
-        # Update heartbeat timestamp
+        # ── Update runtime (volatile) fields ──
         agent.last_heartbeat = datetime.utcnow()
 
-        # Update status (default to ONLINE)
         if status:
             agent.status = status
             if status == AgentStatus.ERROR:
@@ -574,7 +595,6 @@ class AgentService:
             elif agent.status == AgentStatus.ONLINE:
                 agent.error_message = None
         else:
-            # No status provided, set to ONLINE
             agent.status = AgentStatus.ONLINE
             agent.error_message = None
 
@@ -584,34 +604,31 @@ class AgentService:
             and previous_status != AgentStatus.ERROR
         )
 
-        # Update optional fields if provided
+        # Update optional runtime fields if provided
         if capabilities is not None:
-            # Serialize capabilities to JSON string for SQLite compatibility
             agent.capabilities_json = json.dumps(capabilities) if capabilities else "[]"
 
         if authorized_roots is not None:
-            # Serialize authorized_roots to JSON string for SQLite compatibility
             agent.authorized_roots_json = json.dumps(authorized_roots) if authorized_roots else "[]"
 
-        if version is not None:
-            agent.version = version
-
-        # Always update binary_checksum — the agent sends it on every heartbeat.
-        # None means dev mode or pre-upgrade agent; clears any stale value.
-        agent.binary_checksum = binary_checksum
-
-        # Update metrics if provided
+        # Update metrics on runtime
         if metrics is not None:
-            # Add timestamp to metrics
             metrics_with_timestamp = {
                 **metrics,
                 "metrics_updated_at": datetime.utcnow().isoformat()
             }
             agent.metrics_json = json.dumps(metrics_with_timestamp)
 
+        # ── Update identity fields (on agents table) ──
+        # These writes trigger onupdate on agents.updated_at only when
+        # the value actually changes.
+        if version is not None:
+            agent.version = version
+
+        # Always update binary_checksum — the agent sends it on every heartbeat.
+        agent.binary_checksum = binary_checksum
+
         # Outdated detection: compare agent checksum against latest manifest
-        # Also flags agents missing platform/checksum as outdated when
-        # active manifests exist (pre-upgrade agents need updating too).
         latest_version, became_outdated = self._check_outdated(agent)
 
         self.db.commit()
@@ -642,9 +659,9 @@ class AgentService:
         Algorithm:
         1. Match the agent's checksum to a manifest (verified = match found).
         2. If matched, check whether a newer manifest exists for the same
-           platform (newer = higher id, i.e. inserted later). If yes → outdated.
+           platform (newer = higher id, i.e. inserted later). If yes -> outdated.
         3. If no match, check whether a manifest exists for the agent's
-           platform — if yes, the agent should be running an official build.
+           platform -- if yes, the agent should be running an official build.
 
         Verification (is_verified) and currency (is_outdated) are independent:
         an agent can be verified-but-outdated, or unverified-but-not-outdated.
@@ -672,8 +689,8 @@ class AgentService:
             candidates = [m for m in active_manifests if m.supports_platform(platform)]
             return max(candidates, key=lambda m: m.id) if candidates else None
 
-        # No checksum → pre-upgrade or dev build. Outdated if an official
-        # manifest exists for the agent's platform. Don't unverify (absence ≠ tampering).
+        # No checksum -> pre-upgrade or dev build. Outdated if an official
+        # manifest exists for the agent's platform. Don't unverify (absence != tampering).
         if not agent.binary_checksum:
             latest = _latest_for_platform(agent.platform) if agent.platform else None
             was_outdated = agent.is_outdated
@@ -698,7 +715,7 @@ class AgentService:
         agent.is_verified = agent_manifest is not None
         if not agent.is_verified and was_verified:
             logger.warning(
-                "Agent binary not verified — checksum does not match any active manifest",
+                "Agent binary not verified -- checksum does not match any active manifest",
                 extra={
                     "agent_guid": agent.guid,
                     "agent_checksum": agent.binary_checksum,
@@ -782,7 +799,7 @@ class AgentService:
         Returns:
             Updated agent
         """
-        if agent.status == AgentStatus.REVOKED:
+        if agent.is_revoked:
             # Revoked agents stay revoked
             return agent
 
@@ -816,12 +833,17 @@ class AgentService:
 
         cutoff = datetime.utcnow() - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)
 
-        # Find agents that should be offline
-        offline_agents = self.db.query(Agent).filter(
-            Agent.team_id == team_id,
-            Agent.status == AgentStatus.ONLINE,
-            Agent.last_heartbeat < cutoff
-        ).all()
+        # Find agents that should be offline — join AgentRuntime for status/heartbeat
+        offline_agents = (
+            self.db.query(Agent)
+            .join(AgentRuntime, Agent.id == AgentRuntime.agent_id)
+            .filter(
+                Agent.team_id == team_id,
+                AgentRuntime.status == AgentStatus.ONLINE,
+                AgentRuntime.last_heartbeat < cutoff,
+            )
+            .all()
+        )
 
         for agent in offline_agents:
             agent.status = AgentStatus.OFFLINE
@@ -840,10 +862,15 @@ class AgentService:
         # Check if the pool is now empty after marking agents offline
         pool_now_empty = False
         if offline_agents:
-            remaining_online = self.db.query(func.count(Agent.id)).filter(
-                Agent.team_id == team_id,
-                Agent.status == AgentStatus.ONLINE,
-            ).scalar() or 0
+            remaining_online = (
+                self.db.query(func.count(AgentRuntime.id))
+                .join(Agent, Agent.id == AgentRuntime.agent_id)
+                .filter(
+                    Agent.team_id == team_id,
+                    AgentRuntime.status == AgentStatus.ONLINE,
+                )
+                .scalar() or 0
+            )
             pool_now_empty = (remaining_online == 0)
 
         return OfflineCheckResult(
@@ -996,10 +1023,15 @@ class AgentService:
         query = self.db.query(Agent).filter(Agent.team_id == team_id)
 
         if status:
-            query = query.filter(Agent.status == status)
+            query = query.join(AgentRuntime, Agent.id == AgentRuntime.agent_id).filter(
+                AgentRuntime.status == status
+            )
 
         if not include_revoked:
-            query = query.filter(Agent.status != AgentStatus.REVOKED)
+            # Filter using runtime status to exclude REVOKED
+            if not status:
+                query = query.join(AgentRuntime, Agent.id == AgentRuntime.agent_id, isouter=True)
+            query = query.filter(AgentRuntime.status != AgentStatus.REVOKED)
 
         return query.order_by(Agent.name).all()
 
@@ -1028,6 +1060,7 @@ class AgentService:
 
         old_name = agent.name
         agent.name = new_name
+        # onupdate on agents.updated_at fires automatically since name changed
 
         # Update SYSTEM user display name
         if agent.system_user:
@@ -1064,7 +1097,9 @@ class AgentService:
         if agent.is_revoked:
             raise ValidationError("Agent is already revoked")
 
+        # Set runtime status to REVOKED
         agent.status = AgentStatus.REVOKED
+        # Set identity fields (triggers onupdate on agents.updated_at)
         agent.revocation_reason = reason
         agent.revoked_at = datetime.utcnow()
 
@@ -1133,6 +1168,7 @@ class AgentService:
         self._release_agent_jobs(agent)
 
         # Delete the agent (SYSTEM user is preserved for audit trail)
+        # AgentRuntime is cascade-deleted
         self.db.delete(agent)
         self.db.commit()
 
@@ -1232,14 +1268,18 @@ class AgentService:
         # Update status of agents with stale heartbeats before counting
         self.check_offline_agents(team_id)
 
-        # Count online agents
-        online_count = self.db.query(func.count(Agent.id)).filter(
-            Agent.team_id == team_id,
-            Agent.status == AgentStatus.ONLINE
-        ).scalar() or 0
+        # Count online agents — join AgentRuntime for status
+        online_count = (
+            self.db.query(func.count(Agent.id))
+            .join(AgentRuntime, Agent.id == AgentRuntime.agent_id)
+            .filter(
+                Agent.team_id == team_id,
+                AgentRuntime.status == AgentStatus.ONLINE,
+            )
+            .scalar() or 0
+        )
 
         # Count active jobs (ASSIGNED = claimed by agent, RUNNING = executing)
-        # Both count as "in progress" for the badge
         running_jobs_count = self.db.query(func.count(Job.id)).filter(
             Job.team_id == team_id,
             Job.status.in_([JobStatus.ASSIGNED, JobStatus.RUNNING])
@@ -1252,38 +1292,54 @@ class AgentService:
             Job.agent_id.isnot(None)
         ).scalar_subquery()
 
-        idle_count = self.db.query(func.count(Agent.id)).filter(
-            Agent.team_id == team_id,
-            Agent.status == AgentStatus.ONLINE,
-            ~Agent.id.in_(busy_agent_ids)
-        ).scalar() or 0
+        idle_count = (
+            self.db.query(func.count(Agent.id))
+            .join(AgentRuntime, Agent.id == AgentRuntime.agent_id)
+            .filter(
+                Agent.team_id == team_id,
+                AgentRuntime.status == AgentStatus.ONLINE,
+                ~Agent.id.in_(busy_agent_ids),
+            )
+            .scalar() or 0
+        )
 
         # Count offline agents (not online, not revoked)
-        offline_count = self.db.query(func.count(Agent.id)).filter(
-            Agent.team_id == team_id,
-            Agent.status == AgentStatus.OFFLINE
-        ).scalar() or 0
+        offline_count = (
+            self.db.query(func.count(Agent.id))
+            .join(AgentRuntime, Agent.id == AgentRuntime.agent_id)
+            .filter(
+                Agent.team_id == team_id,
+                AgentRuntime.status == AgentStatus.OFFLINE,
+            )
+            .scalar() or 0
+        )
 
         # Count outdated agents (online or offline, excluding revoked and unverified).
-        # Unverified agents have no valid checksum to compare — their outdated
-        # flag is meaningless and should not drive the pool badge.
-        outdated_count = self.db.query(func.count(Agent.id)).filter(
-            Agent.team_id == team_id,
-            Agent.is_outdated.is_(True),
-            Agent.is_verified.is_(True),
-            Agent.status != AgentStatus.REVOKED
-        ).scalar() or 0
+        outdated_count = (
+            self.db.query(func.count(Agent.id))
+            .join(AgentRuntime, Agent.id == AgentRuntime.agent_id)
+            .filter(
+                Agent.team_id == team_id,
+                Agent.is_outdated.is_(True),
+                Agent.is_verified.is_(True),
+                AgentRuntime.status != AgentStatus.REVOKED,
+            )
+            .scalar() or 0
+        )
 
         # Count unverified agents (excluding revoked)
-        unverified_count = self.db.query(func.count(Agent.id)).filter(
-            Agent.team_id == team_id,
-            Agent.is_verified.is_(False),
-            Agent.status != AgentStatus.REVOKED
-        ).scalar() or 0
+        unverified_count = (
+            self.db.query(func.count(Agent.id))
+            .join(AgentRuntime, Agent.id == AgentRuntime.agent_id)
+            .filter(
+                Agent.team_id == team_id,
+                Agent.is_verified.is_(False),
+                AgentRuntime.status != AgentStatus.REVOKED,
+            )
+            .scalar() or 0
+        )
 
         # Determine overall status.
-        # Progression: Offline > Idle > Outdated > Running
-        # (Running is highest — shown when at least one agent is running)
         if online_count == 0:
             status = "offline"
         elif running_jobs_count > 0:

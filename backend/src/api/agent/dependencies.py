@@ -134,8 +134,8 @@ async def get_agent_context(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    # Check if agent is revoked
-    if agent.status == AgentStatus.REVOKED:
+    # Check if agent is revoked (uses revoked_at on agents table, no runtime join needed)
+    if agent.is_revoked:
         logger.warning(
             "Agent auth failed: agent is revoked",
             extra={"agent_guid": agent.guid, "revocation_reason": agent.revocation_reason}

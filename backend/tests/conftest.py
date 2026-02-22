@@ -780,8 +780,8 @@ def create_agent(test_db_session, test_team, test_user):
         )
         agent = result.agent
 
-        # Update status if needed
-        if status != AgentStatus.ONLINE:
+        # Set the desired status (registration creates as OFFLINE)
+        if status != AgentStatus.OFFLINE:
             agent.status = status
             test_db_session.commit()
             test_db_session.refresh(agent)
