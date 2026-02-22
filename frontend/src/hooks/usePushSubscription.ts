@@ -61,6 +61,22 @@ interface UsePushSubscriptionReturn {
   refreshStatus: () => Promise<void>
 }
 
+/**
+ * Get an active SW registration, waiting briefly for activation if needed.
+ * Returns null if no registration exists or activation doesn't happen in time.
+ */
+async function getActiveRegistration(timeoutMs = 5000): Promise<ServiceWorkerRegistration | null> {
+  const reg = await navigator.serviceWorker.getRegistration()
+  if (!reg) return null
+  if (reg.active) return reg
+
+  // SW exists but is installing/waiting — race .ready against a timeout
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ])
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -109,7 +125,11 @@ export const usePushSubscription = (
     async (serverSubscriptions: PushSubscriptionResponse[]): Promise<string | null> => {
       if (!isSupported) return null
       try {
-        const registration = await navigator.serviceWorker.ready
+        // Use getRegistration() instead of .ready — .ready never resolves
+        // when no service worker is registered, which would hang forever
+        // and keep the loading state stuck (all controls disabled).
+        const registration = await navigator.serviceWorker.getRegistration()
+        if (!registration?.active) return null
         const pushSub = await registration.pushManager.getSubscription()
         if (!pushSub) return null
         const match = serverSubscriptions.some((s) => s.endpoint === pushSub.endpoint)
@@ -182,8 +202,11 @@ export const usePushSubscription = (
       // 2. Get VAPID public key from server
       const { vapid_public_key } = await notificationService.getVapidKey()
 
-      // 3. Get the active service worker registration
-      const registration = await navigator.serviceWorker.ready
+      // 3. Get the active service worker registration (waits up to 5s for activation)
+      const registration = await getActiveRegistration()
+      if (!registration?.active) {
+        throw new Error('Service worker is not active. Try reloading the page.')
+      }
 
       // 4. Subscribe via PushManager
       const applicationServerKey = urlBase64ToUint8Array(vapid_public_key)
@@ -255,8 +278,10 @@ export const usePushSubscription = (
         const target = subscriptionsRef.current.find((s) => s.guid === guid)
         if (target && currentDeviceEndpoint && target.endpoint === currentDeviceEndpoint) {
           try {
-            const registration = await navigator.serviceWorker.ready
-            const pushSub = await registration.pushManager.getSubscription()
+            const registration = await getActiveRegistration()
+            const pushSub = registration?.active
+              ? await registration.pushManager.getSubscription()
+              : null
             if (pushSub) {
               await pushSub.unsubscribe()
             }
@@ -367,9 +392,10 @@ export const usePushSubscription = (
     setError(null)
     try {
       // 1. Unsubscribe from PushManager
-      const registration = await navigator.serviceWorker.ready
-      const pushSubscription =
-        await registration.pushManager.getSubscription()
+      const registration = await getActiveRegistration()
+      const pushSubscription = registration?.active
+        ? await registration.pushManager.getSubscription()
+        : null
 
       if (pushSubscription) {
         const endpoint = pushSubscription.endpoint

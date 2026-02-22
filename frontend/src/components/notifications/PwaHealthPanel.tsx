@@ -53,6 +53,7 @@ export function PwaHealthPanel({
   const {
     result,
     running,
+    checkingSection,
     runDiagnostics,
     copyDiagnostics,
     clearCacheAndReload,
@@ -92,22 +93,38 @@ export function PwaHealthPanel({
 
   return (
     <div className="space-y-4">
-      {/* Diagnostic Sections */}
-      {running && !result && (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">
-            Running diagnostics...
-          </span>
-        </div>
-      )}
+      {/* Diagnostic Sections — rendered progressively */}
+      <div className="space-y-1">
+        {result?.sections.map((section) => (
+          <DiagnosticSection key={section.id} section={section} />
+        ))}
 
-      {result && (
-        <div className="space-y-1">
-          {result.sections.map((section) => (
-            <DiagnosticSection key={section.id} section={section} />
-          ))}
-        </div>
+        {/* Active section spinner */}
+        {checkingSection && (
+          <div className="flex items-center gap-2 rounded-md px-3 py-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              Checking...
+            </span>
+          </div>
+        )}
+
+        {/* Initial state before any result */}
+        {running && !result && !checkingSection && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">
+              Running diagnostics...
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Last checked timestamp */}
+      {result && !running && (
+        <p className="text-xs text-muted-foreground text-right">
+          Last checked: {new Date(result.collectedAt).toLocaleTimeString()}
+        </p>
       )}
 
       {/* Action Buttons */}
@@ -155,7 +172,7 @@ export function PwaHealthPanel({
           </AlertDialogContent>
         </AlertDialog>
 
-        <Button variant="outline" size="sm" onClick={handleCopy} disabled={!result}>
+        <Button variant="outline" size="sm" onClick={handleCopy} disabled={!result || running}>
           <Clipboard className="mr-1.5 h-3.5 w-3.5" />
           Copy Report
         </Button>

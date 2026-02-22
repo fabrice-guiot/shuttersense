@@ -71,13 +71,17 @@ cleanupOutdatedCaches()
 // except /api/ routes (which should go to the backend).
 // Uses createHandlerBoundToURL so the precached index.html is resolved
 // regardless of cache versioning / revision hashes.
-const navigationRoute = new NavigationRoute(
-  createHandlerBoundToURL('/index.html'),
-  {
-    denylist: [/^\/api\//],
-  }
-)
-registerRoute(navigationRoute)
+// Guard: in dev mode the precache manifest is empty, so createHandlerBoundToURL
+// would throw. Vite's dev server handles navigation in that case.
+if (self.__WB_MANIFEST.length > 0) {
+  const navigationRoute = new NavigationRoute(
+    createHandlerBoundToURL('/index.html'),
+    {
+      denylist: [/^\/api\//],
+    }
+  )
+  registerRoute(navigationRoute)
+}
 
 // ============================================================================
 // Runtime Caching for API

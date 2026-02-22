@@ -34,6 +34,8 @@ import type {
 export interface UsePwaHealthReturn {
   result: PwaHealthResult | null
   running: boolean
+  /** ID of the section currently being evaluated (null when idle) */
+  checkingSection: string | null
   runDiagnostics: () => Promise<void>
   copyDiagnostics: () => Promise<boolean>
   clearCacheAndReload: () => Promise<void>
@@ -537,64 +539,63 @@ function formatDiagnosticsText(result: PwaHealthResult): string {
 export function usePwaHealth(): UsePwaHealthReturn {
   const [result, setResult] = useState<PwaHealthResult | null>(null)
   const [running, setRunning] = useState(false)
+  /** ID of the section currently being checked (shown as spinner in UI) */
+  const [checkingSection, setCheckingSection] = useState<string | null>(null)
 
   const runDiagnostics = useCallback(async () => {
+    // Clear previous results so the UI resets
+    setResult(null)
     setRunning(true)
+
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    const STAGGER_MS = 400
+
+    const meta = {
+      collectedAt: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      browser: detectBrowserName(),
+      platform: detectPlatformName(),
+    }
+
+    // Section definitions — each with an async runner and static metadata
+    const sectionDefs: {
+      id: string
+      title: string
+      icon: string
+      run: () => Promise<DiagnosticCheck[]> | DiagnosticCheck[]
+    }[] = [
+      { id: 'installation', title: 'Installation', icon: 'Download', run: checkInstallation },
+      { id: 'service-worker', title: 'Service Worker', icon: 'Cpu', run: checkServiceWorker },
+      { id: 'cache', title: 'Cache', icon: 'Database', run: checkCache },
+      { id: 'push', title: 'Push Notifications', icon: 'Bell', run: checkPushNotifications },
+      { id: 'platform', title: 'Platform Warnings', icon: 'Monitor', run: checkPlatformWarnings },
+    ]
+
+    const completed: DiagnosticSection[] = []
+
     try {
-      const [installation, serviceWorker, cache, push] = await Promise.all([
-        checkInstallation(),
-        checkServiceWorker(),
-        checkCache(),
-        checkPushNotifications(),
-      ])
-      const platformWarnings = checkPlatformWarnings()
+      for (const def of sectionDefs) {
+        setCheckingSection(def.id)
 
-      const sections: DiagnosticSection[] = [
-        {
-          id: 'installation',
-          title: 'Installation',
-          icon: 'Download',
-          overallStatus: worstStatus(installation),
-          checks: installation,
-        },
-        {
-          id: 'service-worker',
-          title: 'Service Worker',
-          icon: 'Cpu',
-          overallStatus: worstStatus(serviceWorker),
-          checks: serviceWorker,
-        },
-        {
-          id: 'cache',
-          title: 'Cache',
-          icon: 'Database',
-          overallStatus: worstStatus(cache),
-          checks: cache,
-        },
-        {
-          id: 'push',
-          title: 'Push Notifications',
-          icon: 'Bell',
-          overallStatus: worstStatus(push),
-          checks: push,
-        },
-        {
-          id: 'platform',
-          title: 'Platform Warnings',
-          icon: 'Monitor',
-          overallStatus: worstStatus(platformWarnings),
-          checks: platformWarnings,
-        },
-      ]
+        const checks = await def.run()
+        completed.push({
+          id: def.id,
+          title: def.title,
+          icon: def.icon,
+          overallStatus: worstStatus(checks),
+          checks,
+        })
 
-      setResult({
-        sections,
-        collectedAt: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        browser: detectBrowserName(),
-        platform: detectPlatformName(),
-      })
+        // Update result progressively so the UI shows each section as it finishes
+        setResult({ sections: [...completed], ...meta })
+
+        // Brief pause between sections so the user can see them appear
+        if (def !== sectionDefs[sectionDefs.length - 1]) {
+          await delay(STAGGER_MS)
+        }
+      }
     } finally {
+      setCheckingSection(null)
       setRunning(false)
     }
   }, [])
@@ -634,6 +635,7 @@ export function usePwaHealth(): UsePwaHealthReturn {
   return {
     result,
     running,
+    checkingSection,
     runDiagnostics,
     copyDiagnostics,
     clearCacheAndReload,
