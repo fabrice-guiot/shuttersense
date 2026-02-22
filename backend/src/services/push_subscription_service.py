@@ -146,6 +146,71 @@ class PushSubscriptionService:
         )
         return True
 
+    def get_subscription_by_guid(
+        self, user_id: int, team_id: int, guid: str
+    ) -> PushSubscription:
+        """
+        Get a push subscription by its GUID.
+
+        Args:
+            user_id: Owning user's internal ID
+            team_id: Team ID for tenant isolation
+            guid: Subscription GUID (sub_xxx)
+
+        Returns:
+            PushSubscription instance
+
+        Raises:
+            NotFoundError: If no subscription matches guid + user + team
+        """
+        try:
+            sub_uuid = PushSubscription.parse_guid(guid)
+        except ValueError as ve:
+            raise NotFoundError("PushSubscription", guid) from ve
+
+        subscription = (
+            self.db.query(PushSubscription)
+            .filter(
+                PushSubscription.uuid == sub_uuid,
+                PushSubscription.user_id == user_id,
+                PushSubscription.team_id == team_id,
+            )
+            .first()
+        )
+
+        if not subscription:
+            raise NotFoundError("PushSubscription", guid)
+
+        return subscription
+
+    def rename_subscription(
+        self, user_id: int, team_id: int, guid: str, device_name: str
+    ) -> PushSubscription:
+        """
+        Rename a push subscription.
+
+        Args:
+            user_id: Owning user's internal ID
+            team_id: Team ID for tenant isolation
+            guid: Subscription GUID (sub_xxx)
+            device_name: New device name (1-100 chars, pre-trimmed)
+
+        Returns:
+            Updated PushSubscription instance
+
+        Raises:
+            NotFoundError: If no subscription matches guid + user + team
+        """
+        subscription = self.get_subscription_by_guid(user_id, team_id, guid)
+        subscription.device_name = device_name
+        self.db.commit()
+        self.db.refresh(subscription)
+        logger.info(
+            "Renamed push subscription",
+            extra={"guid": guid, "device_name": device_name, "user_id": user_id},
+        )
+        return subscription
+
     def remove_subscription(self, user_id: int, team_id: int, endpoint: str) -> bool:
         """
         Remove a push subscription by endpoint for a specific user.

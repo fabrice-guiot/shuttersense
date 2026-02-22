@@ -556,6 +556,56 @@ class NotificationService:
 
         return success_count
 
+    def deliver_push_to_subscription(
+        self, subscription: PushSubscription, payload: Dict[str, Any]
+    ) -> bool:
+        """
+        Send a push notification to a single subscription.
+
+        Wraps _send_push() with logging, error handling, and stale subscription cleanup.
+
+        Args:
+            subscription: Target PushSubscription instance
+            payload: Push notification payload dict
+
+        Returns:
+            True if delivery succeeded, False otherwise
+        """
+        payload_json = json.dumps(payload)
+        endpoint_short = subscription.endpoint[:60] if subscription.endpoint else "?"
+        try:
+            self._send_push(subscription, payload_json)
+            subscription.last_used_at = datetime.utcnow()
+            self.db.commit()
+            logger.debug(
+                "Push delivered to subscription",
+                extra={
+                    "subscription_guid": subscription.guid,
+                    "endpoint": endpoint_short,
+                },
+            )
+            return True
+        except PushGoneError:
+            logger.info(
+                "Removing expired push subscription",
+                extra={
+                    "subscription_guid": subscription.guid,
+                    "endpoint": endpoint_short,
+                },
+            )
+            self.db.delete(subscription)
+            self.db.commit()
+            return False
+        except PushDeliveryError as e:
+            logger.warning(
+                f"Push delivery to subscription failed: {e}",
+                extra={
+                    "subscription_guid": subscription.guid,
+                    "endpoint": endpoint_short,
+                },
+            )
+            return False
+
     def _send_push(self, subscription: PushSubscription, payload_json: str) -> None:
         """
         Send a push notification to a single subscription via pywebpush.

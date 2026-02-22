@@ -90,6 +90,32 @@ class SubscriptionStatusResponse(BaseModel):
     )
 
 
+class PushSubscriptionUpdate(BaseModel):
+    """Schema for updating a push subscription (rename)."""
+
+    device_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="New device name",
+    )
+
+    @field_validator("device_name", mode="before")
+    @classmethod
+    def strip_device_name(cls, v: str) -> str:
+        """Strip whitespace from device name before length validation."""
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class TestPushResponse(BaseModel):
+    """Response schema for test push delivery."""
+
+    success: bool = Field(..., description="Whether the test push was delivered")
+    error: Optional[str] = Field(default=None, description="Error message if delivery failed")
+
+
 class PushSubscriptionRemove(BaseModel):
     """Schema for removing a push subscription by endpoint."""
 

@@ -12,7 +12,9 @@ import { validateGuid } from '@/utils/guid'
 import type {
   PushSubscriptionCreateRequest,
   PushSubscriptionResponse,
+  PushSubscriptionUpdateRequest,
   PushSubscriptionRemoveRequest,
+  TestPushResponse,
   SubscriptionStatusResponse,
   NotificationPreferencesResponse,
   NotificationPreferencesUpdateRequest,
@@ -59,6 +61,37 @@ export const unsubscribe = async (
 export const unsubscribeByGuid = async (guid: string): Promise<void> => {
   const safeGuid = encodeURIComponent(validateGuid(guid, 'sub'))
   await api.delete(`/notifications/subscribe/${safeGuid}`)
+}
+
+/**
+ * Send a test push notification to a specific device
+ *
+ * @param guid - Subscription GUID (sub_xxx)
+ */
+export const testDevice = async (guid: string): Promise<TestPushResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'sub'))
+  const response = await api.post<TestPushResponse>(
+    `/notifications/subscribe/${safeGuid}/test`
+  )
+  return response.data
+}
+
+/**
+ * Rename a push subscription device
+ *
+ * @param guid - Subscription GUID (sub_xxx)
+ * @param deviceName - New device name
+ */
+export const renameDevice = async (
+  guid: string,
+  deviceName: string
+): Promise<PushSubscriptionResponse> => {
+  const safeGuid = encodeURIComponent(validateGuid(guid, 'sub'))
+  const response = await api.patch<PushSubscriptionResponse>(
+    `/notifications/subscribe/${safeGuid}`,
+    { device_name: deviceName } satisfies PushSubscriptionUpdateRequest
+  )
+  return response.data
 }
 
 /**

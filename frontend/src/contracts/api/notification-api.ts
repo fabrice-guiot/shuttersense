@@ -43,6 +43,21 @@ export interface SubscriptionStatusResponse {
 }
 
 /**
+ * Request body for updating a push subscription (rename)
+ */
+export interface PushSubscriptionUpdateRequest {
+  device_name: string
+}
+
+/**
+ * Response for test push delivery
+ */
+export interface TestPushResponse {
+  success: boolean
+  error?: string | null
+}
+
+/**
  * Request body for removing a push subscription
  */
 export interface PushSubscriptionRemoveRequest {
