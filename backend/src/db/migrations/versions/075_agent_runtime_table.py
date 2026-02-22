@@ -104,16 +104,11 @@ def upgrade() -> None:
 
     # ── Step 3: Drop volatile columns and old index from agents ──
     if is_sqlite:
+        # Drop indexes before entering batch context to avoid broad exception handling
+        bind.execute(sa.text("DROP INDEX IF EXISTS ix_agents_team_status"))
+        bind.execute(sa.text("DROP INDEX IF EXISTS ix_agents_status"))
         # SQLite requires batch_alter_table for column drops
         with op.batch_alter_table("agents") as batch_op:
-            # Drop the composite index first
-            batch_op.drop_index("ix_agents_team_status")
-            # Drop the status column index
-            try:
-                batch_op.drop_index("ix_agents_status")
-            except Exception:
-                pass  # May not exist as a standalone index
-            # Drop volatile columns
             batch_op.drop_column("status")
             batch_op.drop_column("error_message")
             batch_op.drop_column("last_heartbeat")
@@ -142,23 +137,12 @@ def downgrade() -> None:
 
     json_type = sa.Text() if is_sqlite else JSONB()
 
-    # Status enum — reuse existing PG enum type
-    status_enum = sa.Enum(
-        "online", "offline", "error", "revoked",
-        name="agent_status",
-        create_constraint=False,
-        create_type=False,
-    )
-    status_default = "offline" if is_sqlite else sa.text("'offline'::agent_status")
-
     # ── Step 1: Re-add volatile columns to agents ──
+    # Restore status as VARCHAR(20) to match the pre-migration schema (migration 032)
     if is_sqlite:
         with op.batch_alter_table("agents") as batch_op:
             batch_op.add_column(sa.Column(
-                "status",
-                status_enum,
-                nullable=False,
-                server_default=status_default,
+                "status", sa.String(20), nullable=False, server_default="offline",
             ))
             batch_op.add_column(sa.Column("error_message", sa.Text, nullable=True))
             batch_op.add_column(sa.Column("last_heartbeat", sa.DateTime, nullable=True))
@@ -168,10 +152,7 @@ def downgrade() -> None:
             batch_op.add_column(sa.Column("metrics_json", json_type, nullable=True))
     else:
         op.add_column("agents", sa.Column(
-            "status",
-            status_enum,
-            nullable=False,
-            server_default=status_default,
+            "status", sa.String(20), nullable=False, server_default="offline",
         ))
         op.add_column("agents", sa.Column("error_message", sa.Text, nullable=True))
         op.add_column("agents", sa.Column("last_heartbeat", sa.DateTime, nullable=True))
@@ -195,9 +176,10 @@ def downgrade() -> None:
             WHERE agents.id IN (SELECT agent_id FROM agent_runtime)
         """))
     else:
+        # Cast status from native enum back to varchar
         bind.execute(sa.text("""
             UPDATE agents SET
-                status = rt.status,
+                status = rt.status::text,
                 error_message = rt.error_message,
                 last_heartbeat = rt.last_heartbeat,
                 capabilities_json = rt.capabilities_json,
@@ -216,3 +198,7 @@ def downgrade() -> None:
     op.drop_index("ix_agent_runtime_status", table_name="agent_runtime")
     op.drop_index("ix_agent_runtime_agent_id", table_name="agent_runtime")
     op.drop_table("agent_runtime")
+
+    # Clean up the native PG enum type (created by upgrade if it didn't exist)
+    if not is_sqlite:
+        bind.execute(sa.text("DROP TYPE IF EXISTS agent_status"))
