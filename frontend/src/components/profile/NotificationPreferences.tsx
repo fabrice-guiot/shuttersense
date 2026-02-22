@@ -11,8 +11,8 @@
  * Issue #114 - PWA with Push Notifications (US2)
  */
 
-import { useCallback, useState } from 'react'
-import { Bell, BellOff, Info, Monitor, Smartphone, Trash2 } from 'lucide-react'
+import { useCallback, useState, useRef, useEffect } from 'react'
+import { Bell, BellOff, Info, Monitor, Smartphone, Trash2, Pencil, Send, Check, X } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -33,6 +33,7 @@ import { TimezoneCombobox } from '@/components/ui/timezone-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { formatDate, formatRelativeTime } from '@/utils/dateFormat'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
@@ -128,9 +129,12 @@ export function NotificationPreferences() {
     isCurrentDeviceSubscribed,
     currentDeviceEndpoint,
     loading: subscriptionLoading,
+    testingGuid,
     subscribe,
     unsubscribe,
     removeDevice,
+    testDevice,
+    renameDevice,
   } = usePushSubscription()
 
   const {
@@ -140,6 +144,17 @@ export function NotificationPreferences() {
   } = useNotificationPreferences()
 
   const [removingGuid, setRemovingGuid] = useState<string | null>(null)
+  const [renamingGuid, setRenamingGuid] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
+  // Focus the rename input when it appears
+  useEffect(() => {
+    if (renamingGuid && renameInputRef.current) {
+      renameInputRef.current.focus()
+      renameInputRef.current.select()
+    }
+  }, [renamingGuid])
 
   const loading = subscriptionLoading || preferencesLoading
   const isEnabled = preferences?.enabled ?? false
@@ -151,9 +166,11 @@ export function NotificationPreferences() {
   const handleMasterToggle = useCallback(
     async (checked: boolean) => {
       if (checked) {
-        // Enable: subscribe this device + enable on server
-        await subscribe()
+        // Enable on server first, then subscribe — so that when subscribe()
+        // calls refreshStatus(), the server already has enabled=true and
+        // currentDeviceEndpoint resolves correctly (fixes stale banner).
         await updatePreferences({ enabled: true })
+        await subscribe()
       } else {
         // Disable: unsubscribe device + disable on server
         await unsubscribe()
@@ -184,6 +201,48 @@ export function NotificationPreferences() {
     },
     [removeDevice]
   )
+
+  /**
+   * Handle sending a test push to a specific device
+   */
+  const handleTestDevice = useCallback(
+    async (guid: string) => {
+      await testDevice(guid)
+    },
+    [testDevice]
+  )
+
+  /**
+   * Start inline rename for a device
+   */
+  const handleStartRename = useCallback(
+    (guid: string, currentName: string) => {
+      setRenamingGuid(guid)
+      setRenameValue(currentName)
+    },
+    []
+  )
+
+  /**
+   * Confirm rename for a device
+   */
+  const handleConfirmRename = useCallback(
+    async () => {
+      if (!renamingGuid || !renameValue.trim()) return
+      await renameDevice(renamingGuid, renameValue.trim())
+      setRenamingGuid(null)
+      setRenameValue('')
+    },
+    [renamingGuid, renameValue, renameDevice]
+  )
+
+  /**
+   * Cancel rename
+   */
+  const handleCancelRename = useCallback(() => {
+    setRenamingGuid(null)
+    setRenameValue('')
+  }, [])
 
   /**
    * Handle per-category toggle
@@ -459,37 +518,99 @@ export function NotificationPreferences() {
                     </p>
                     {subscriptions.map((sub) => {
                       const DeviceIcon = getDeviceIcon(sub.device_name)
+                      const isRenaming = renamingGuid === sub.guid
                       return (
                         <div
                           key={sub.guid}
                           className="flex items-center gap-3 text-sm"
                         >
-                          <DeviceIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="flex-1">
-                            <span className="font-medium">
-                              {sub.device_name || 'Unknown device'}
-                            </span>
-                            {currentDeviceEndpoint && sub.endpoint === currentDeviceEndpoint && (
-                              <Badge variant="secondary" className="ml-2 text-xs">
-                                this device
-                              </Badge>
+                          <DeviceIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            {isRenaming ? (
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  ref={renameInputRef}
+                                  value={renameValue}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleConfirmRename()
+                                    if (e.key === 'Escape') handleCancelRename()
+                                  }}
+                                  className="h-7 text-sm"
+                                  maxLength={100}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-primary"
+                                  onClick={handleConfirmRename}
+                                  disabled={loading || !renameValue.trim()}
+                                  title="Save name"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 shrink-0 text-muted-foreground"
+                                  onClick={handleCancelRename}
+                                  title="Cancel"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span>
+                                <span className="font-medium">
+                                  {sub.device_name || 'Unknown device'}
+                                </span>
+                                {currentDeviceEndpoint && sub.endpoint === currentDeviceEndpoint && (
+                                  <Badge variant="secondary" className="ml-2 text-xs">
+                                    this device
+                                  </Badge>
+                                )}
+                                <span className="ml-2 text-muted-foreground">
+                                  {sub.last_used_at
+                                    ? `Last used ${formatRelativeTime(sub.last_used_at)}`
+                                    : `Added ${formatDate(sub.created_at)}`}
+                                </span>
+                              </span>
                             )}
-                            <span className="ml-2 text-muted-foreground">
-                              {sub.last_used_at
-                                ? `Last used ${formatRelativeTime(sub.last_used_at)}`
-                                : `Added ${formatDate(sub.created_at)}`}
-                            </span>
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleRemoveDevice(sub.guid)}
-                            disabled={loading || removingGuid === sub.guid}
-                            title="Remove this device"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          </div>
+                          {!isRenaming && (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleStartRename(sub.guid, sub.device_name || '')}
+                                disabled={loading}
+                                title="Rename device"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleTestDevice(sub.guid)}
+                                disabled={loading || testingGuid === sub.guid}
+                                title="Send simulated notification"
+                              >
+                                <Send className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleRemoveDevice(sub.guid)}
+                                disabled={loading || removingGuid === sub.guid}
+                                title="Remove this device"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )
                     })}

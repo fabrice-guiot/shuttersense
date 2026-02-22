@@ -103,11 +103,15 @@ self.addEventListener('push', (event: PushEvent) => {
   const safeTitle = (payload.title as string) || 'Notification'
   const { body, icon, badge, tag, data } = payload as Record<string, unknown>
 
-  const options: NotificationOptions = {
+  const notifTag = tag as string | undefined
+
+  const options: NotificationOptions & { renotify?: boolean } = {
     body: (body as string) || '',
     icon: (icon as string) || '/icons/icon-192x192.png',
     badge: (badge as string) || '/icons/badge-72x72.png',
-    tag: tag as string | undefined,
+    tag: notifTag,
+    renotify: !!notifTag,
+    requireInteraction: false,
     data,
   }
 

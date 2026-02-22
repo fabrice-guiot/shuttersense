@@ -730,4 +730,38 @@ class TestFilenameValidation:
 GNU Affero General Public License v3.0 (AGPL-3.0)
 
 <!-- MANUAL ADDITIONS START -->
+
+## Plan Persistence
+
+Whenever you enter plan mode (via `EnterPlanMode` or the `/plan` command), you MUST save the finalized plan as a **persistent Markdown file** in the `specs/` directory — NOT in the ephemeral `.claude/` plan files, which get overwritten across sessions.
+
+### File Location Rules
+
+1. **Related to an existing epic** (identifiable by issue number or spec folder): save as an amendment inside that spec's folder.
+   - Path: `specs/{NNN}-{epic-slug}/plan-{descriptive-name}.md`
+   - Example: `specs/114-pwa-push-notifications/plan-device-registration-debugging.md`
+
+2. **Standalone / no matching epic**: save at the `specs/` root.
+   - Path: `specs/plan-{descriptive-name}.md`
+   - Example: `specs/plan-database-index-optimization.md`
+
+### Naming Convention
+
+- Prefix: `plan-`
+- Body: lowercase kebab-case describing the plan's purpose (3-6 words)
+- Extension: `.md`
+
+### Content Requirements
+
+The saved plan file MUST include:
+- **Title** with date (`# Plan: <Title> (YYYY-MM-DD)`)
+- **Context**: why this plan exists (issue number, problem statement)
+- **Changes**: the concrete steps / implementation plan
+- **Files**: key files that will be created or modified
+- **Verification**: how to confirm the work is correct
+
+### Timing
+
+Write the plan file **before** calling `ExitPlanMode`. This ensures the plan survives regardless of whether the session continues or a new conversation starts.
+
 <!-- MANUAL ADDITIONS END -->

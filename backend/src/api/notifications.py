@@ -20,7 +20,9 @@ from backend.src.middleware.auth import require_auth, TenantContext
 from backend.src.schemas.notifications import (
     PushSubscriptionCreate,
     PushSubscriptionResponse,
+    PushSubscriptionUpdate,
     PushSubscriptionRemove,
+    TestPushResponse,
     SubscriptionStatusResponse,
     NotificationPreferencesResponse,
     NotificationPreferencesUpdate,
@@ -113,7 +115,7 @@ async def create_push_subscription(
     If a subscription with the same endpoint already exists, it is replaced.
     On first subscription, sends a welcome notification to confirm delivery works.
     """
-    # Check if this is the user's first subscription
+    # Check if this is the user's first subscription (for in-app welcome record)
     existing = service.list_subscriptions(
         user_id=ctx.user_id, team_id=ctx.team_id
     )
@@ -128,7 +130,7 @@ async def create_push_subscription(
         device_name=body.device_name,
     )
 
-    # Send welcome notification on first subscription
+    # Create in-app welcome notification only on first subscription
     if is_first:
         notif_service.create_notification(
             team_id=ctx.team_id,
@@ -142,21 +144,19 @@ async def create_push_subscription(
             ),
             data={"url": "/profile"},
         )
-        # Deliver push to the newly created subscription
-        notif_service.deliver_push(
-            user_id=ctx.user_id,
-            team_id=ctx.team_id,
-            payload={
-                "title": "Notifications enabled",
-                "body": (
-                    "You've successfully enabled push notifications. "
-                    "All future notifications will appear here."
-                ),
-                "icon": "/icons/icon-192x192.png",
-                "badge": "/icons/badge-72x72.png",
-                "data": {"url": "/profile"},
-            },
-        )
+
+    # Send confirmation push to the newly registered device (every registration)
+    device_label = subscription.device_name or "this device"
+    notif_service.deliver_push_to_subscription(
+        subscription=subscription,
+        payload={
+            "title": "Device registered",
+            "body": f"Device registered \u2014 {device_label} is now receiving notifications",
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+            "data": {"url": "/profile"},
+        },
+    )
 
     return PushSubscriptionResponse.model_validate(subscription)
 
@@ -219,6 +219,86 @@ async def remove_push_subscription_by_guid(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Subscription not found",
         ) from err
+
+
+@router.post(
+    "/subscribe/{guid}/test",
+    response_model=TestPushResponse,
+    summary="Send a test push notification to a specific device",
+)
+@limiter.limit("5/minute")
+async def test_push_subscription(
+    request: Request,
+    guid: str,
+    ctx: TenantContext = Depends(require_auth),
+    service: PushSubscriptionService = Depends(get_push_subscription_service),
+    notif_service: NotificationService = Depends(get_notification_service),
+):
+    """
+    Send a test push notification to a specific subscription to verify delivery.
+
+    Useful for confirming a registered device can actually receive notifications.
+    Rate limited to 5 requests per minute to prevent abuse.
+    """
+    try:
+        subscription = service.get_subscription_by_guid(
+            user_id=ctx.user_id, team_id=ctx.team_id, guid=guid
+        )
+    except NotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subscription not found",
+        ) from err
+
+    device_label = subscription.device_name or "this device"
+    success = notif_service.deliver_push_to_subscription(
+        subscription=subscription,
+        payload={
+            "title": "Simulated notification",
+            "body": f"Simulated notification \u2014 Push is working on {device_label}",
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+            "data": {"url": "/profile"},
+        },
+    )
+
+    if success:
+        return TestPushResponse(success=True)
+    return TestPushResponse(success=False, error="Push delivery failed")
+
+
+@router.patch(
+    "/subscribe/{guid}",
+    response_model=PushSubscriptionResponse,
+    summary="Update a push subscription",
+)
+@limiter.limit("10/minute")
+async def update_push_subscription(
+    request: Request,
+    guid: str,
+    body: PushSubscriptionUpdate,
+    ctx: TenantContext = Depends(require_auth),
+    service: PushSubscriptionService = Depends(get_push_subscription_service),
+):
+    """
+    Update a push subscription's device name.
+
+    Allows users to assign friendly names to their devices.
+    """
+    try:
+        subscription = service.rename_subscription(
+            user_id=ctx.user_id,
+            team_id=ctx.team_id,
+            guid=guid,
+            device_name=body.device_name,
+        )
+    except NotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subscription not found",
+        ) from err
+
+    return PushSubscriptionResponse.model_validate(subscription)
 
 
 @router.get(

@@ -43,12 +43,18 @@ interface UsePushSubscriptionReturn {
   loading: boolean
   /** Error message from the last failed operation */
   error: string | null
+  /** GUID of the device currently being tested (null if none) */
+  testingGuid: string | null
   /** Subscribe this device for push notifications */
   subscribe: () => Promise<void>
   /** Unsubscribe this device from push notifications */
   unsubscribe: () => Promise<void>
   /** Remove a specific device subscription by GUID (e.g., lost devices) */
   removeDevice: (guid: string) => Promise<void>
+  /** Send a test push to a specific device */
+  testDevice: (guid: string) => Promise<boolean>
+  /** Rename a device subscription */
+  renameDevice: (guid: string, name: string) => Promise<void>
   /** Refresh subscription status from the server */
   refreshStatus: () => Promise<void>
 }
@@ -105,7 +111,7 @@ function detectBrowserName(): string {
   if (uaData?.brands) {
     // Pick the first "real" brand (skip "Not A;Brand" / "Chromium" filler entries)
     const real = uaData.brands.find(
-      (b) => !/not[\s._\-;)\/]?a/i.test(b.brand) && b.brand !== 'Chromium'
+      (b) => !/not[^a-z]*a[^a-z]*brand/i.test(b.brand) && b.brand !== 'Chromium'
     )
     if (real) return real.brand
   }
@@ -170,6 +176,7 @@ export const usePushSubscription = (
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [testingGuid, setTestingGuid] = useState<string | null>(null)
 
   const isSupported =
     typeof window !== 'undefined' &&
@@ -380,6 +387,75 @@ export const usePushSubscription = (
   )
 
   /**
+   * Send a test push notification to a specific device
+   */
+  const testDevice = useCallback(
+    async (guid: string): Promise<boolean> => {
+      setTestingGuid(guid)
+      setError(null)
+      try {
+        const result = await notificationService.testDevice(guid)
+        if (result.success) {
+          toast.success('Simulated notification sent')
+        } else {
+          toast.error('Simulated notification failed', {
+            description: result.error || 'Push delivery failed',
+          })
+        }
+        return result.success
+      } catch (err: unknown) {
+        if (mountedRef.current) {
+          const errorMessage =
+            (err as { userMessage?: string }).userMessage ||
+            (err as Error).message ||
+            'Failed to send simulated notification'
+          setError(errorMessage)
+          toast.error('Simulated notification failed', {
+            description: errorMessage,
+          })
+        }
+        return false
+      } finally {
+        if (mountedRef.current) {
+          setTestingGuid(null)
+        }
+      }
+    },
+    []
+  )
+
+  /**
+   * Rename a device subscription
+   */
+  const renameDevice = useCallback(
+    async (guid: string, name: string) => {
+      setLoading(true)
+      setError(null)
+      try {
+        await notificationService.renameDevice(guid, name)
+        await refreshStatus()
+        toast.success('Device renamed')
+      } catch (err: unknown) {
+        if (mountedRef.current) {
+          const errorMessage =
+            (err as { userMessage?: string }).userMessage ||
+            (err as Error).message ||
+            'Failed to rename device'
+          setError(errorMessage)
+          toast.error('Failed to rename device', {
+            description: errorMessage,
+          })
+        }
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false)
+        }
+      }
+    },
+    [refreshStatus]
+  )
+
+  /**
    * Unsubscribe this device from push notifications
    *
    * Flow: PushManager.unsubscribe → DELETE on server
@@ -483,9 +559,12 @@ export const usePushSubscription = (
     currentDeviceEndpoint,
     loading,
     error,
+    testingGuid,
     subscribe,
     unsubscribe,
     removeDevice,
+    testDevice,
+    renameDevice,
     refreshStatus,
   }
 }
