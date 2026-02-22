@@ -470,6 +470,40 @@ class NotificationService:
     # Push Delivery
     # ========================================================================
 
+    @staticmethod
+    def _to_declarative_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transform a flat push payload into Declarative Web Push format.
+
+        Declarative Web Push (Safari 18.4+) uses a standardized JSON schema
+        with ``web_push: 8030`` that lets the browser display notifications
+        without Service Worker JavaScript execution. Chromium browsers ignore
+        the declarative header and deliver the payload to the SW push event,
+        where our handler parses the same JSON.
+
+        PRD 026 — Declarative Web Push Support.
+        """
+        data = dict(payload.get("data", {}))
+        navigate = data.pop("url", "/")
+
+        notification: Dict[str, Any] = {
+            "title": payload.get("title", "Notification"),
+            "navigate": navigate,
+        }
+        if payload.get("body"):
+            notification["body"] = payload["body"]
+        if payload.get("tag"):
+            notification["tag"] = payload["tag"]
+        notification["silent"] = False
+        if data:
+            notification["data"] = data
+
+        return {
+            "web_push": 8030,
+            "notification": notification,
+            "app_badge": 1,
+        }
+
     def deliver_push(self, user_id: int, team_id: int, payload: Dict[str, Any]) -> int:
         """
         Send a push notification to all of a user's subscriptions.
@@ -497,7 +531,8 @@ class NotificationService:
         success_count = 0
         failed_count = 0
         removed_count = 0
-        payload_json = json.dumps(payload)
+        declarative = self._to_declarative_payload(payload)
+        payload_json = json.dumps(declarative)
         category = payload.get("data", {}).get("category", "unknown")
 
         for sub in subscriptions:
@@ -571,7 +606,8 @@ class NotificationService:
         Returns:
             True if delivery succeeded, False otherwise
         """
-        payload_json = json.dumps(payload)
+        declarative = self._to_declarative_payload(payload)
+        payload_json = json.dumps(declarative)
         endpoint_short = subscription.endpoint[:60] if subscription.endpoint else "?"
         try:
             self._send_push(subscription, payload_json)
@@ -640,7 +676,10 @@ class NotificationService:
                 vapid_private_key=self.vapid_private_key,
                 vapid_claims=self.vapid_claims,
                 ttl=86400,
-                headers={"Urgency": "high"},
+                headers={
+                    "Urgency": "high",
+                    "Content-Type": "application/notification+json",
+                },
             )
         except WebPushException as e:
             if hasattr(e, "response") and e.response is not None:
