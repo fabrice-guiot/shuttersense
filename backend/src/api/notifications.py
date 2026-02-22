@@ -147,7 +147,7 @@ async def create_push_subscription(
 
     # Send confirmation push to the newly registered device (every registration)
     device_label = subscription.device_name or "this device"
-    notif_service.deliver_push_to_subscription(
+    push_ok = notif_service.deliver_push_to_subscription(
         subscription=subscription,
         payload={
             "title": "Device registered",
@@ -157,6 +157,11 @@ async def create_push_subscription(
             "data": {"url": "/profile"},
         },
     )
+    if not push_ok:
+        logger.warning(
+            "Confirmation push failed for new subscription",
+            extra={"guid": subscription.guid, "user_id": ctx.user_id},
+        )
 
     return PushSubscriptionResponse.model_validate(subscription)
 

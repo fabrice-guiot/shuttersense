@@ -100,11 +100,13 @@ class PushSubscriptionUpdate(BaseModel):
         description="New device name",
     )
 
-    @field_validator("device_name")
+    @field_validator("device_name", mode="before")
     @classmethod
     def strip_device_name(cls, v: str) -> str:
-        """Strip whitespace from device name."""
-        return v.strip()
+        """Strip whitespace from device name before length validation."""
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
 
 class TestPushResponse(BaseModel):
