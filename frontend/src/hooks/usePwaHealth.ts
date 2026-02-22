@@ -515,7 +515,7 @@ function formatDiagnosticsText(result: PwaHealthResult): string {
   for (const section of result.sections) {
     lines.push(`=== ${section.title} ===`)
     for (const check of section.checks) {
-      const tag = check.status.toUpperCase().padEnd(4)
+      const tag = check.status.toUpperCase().padEnd(7)
       lines.push(`[${tag}] ${check.label}: ${check.message}`)
       if (check.detail) {
         for (const line of check.detail.split('\n')) {
@@ -611,20 +611,23 @@ export function usePwaHealth(): UsePwaHealthReturn {
   }, [result])
 
   const clearCacheAndReload = useCallback(async () => {
-    // Delete all caches
-    if ('caches' in window) {
-      const names = await caches.keys()
-      await Promise.all(names.map((name) => caches.delete(name)))
-    }
+    try {
+      // Delete all caches
+      if ('caches' in window) {
+        const names = await caches.keys()
+        await Promise.all(names.map((name) => caches.delete(name)))
+      }
 
-    // Unregister all service workers
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(registrations.map((r) => r.unregister()))
+      // Unregister all service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(registrations.map((r) => r.unregister()))
+      }
+    } catch {
+      // Best-effort cleanup — proceed to reload regardless
+    } finally {
+      window.location.reload()
     }
-
-    // Reload
-    window.location.reload()
   }, [])
 
   // Run automatically on mount

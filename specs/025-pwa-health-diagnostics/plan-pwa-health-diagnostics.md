@@ -66,7 +66,7 @@ This plan implements PRD 025: a **PWA Health Diagnostics** panel accessible from
 | `frontend/src/components/notifications/PwaHealthDialog.tsx` | Create |
 | `frontend/src/hooks/usePushSubscription.ts` | Modify (import extraction) |
 | `frontend/src/sw.ts` | Modify (GET_VERSION handler) |
-| `frontend/vite.config.ts` | Modify (define __SW_VERSION__) |
+| `frontend/vite.config.ts` | Modify (define `__SW_VERSION__`) |
 | `frontend/src/pages/NotificationsPage.tsx` | Modify (PWA Health button) |
 | `frontend/src/services/notifications.ts` | Modify (getPushHealth) |
 | `frontend/src/contracts/api/notification-api.ts` | Modify (PushHealthResponse) |

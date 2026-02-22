@@ -80,13 +80,22 @@ export function PwaHealthPanel({
       toast.error('No active subscription for this device')
       return
     }
-    await testDevice(currentDeviceSub.guid)
+    try {
+      await testDevice(currentDeviceSub.guid)
+    } catch {
+      toast.error('Could not send test notification. Check your connection.')
+    }
   }
 
   const handleClearCache = async () => {
     setClearing(true)
-    await clearCacheAndReload()
-    // Page will reload, so no need to reset state
+    try {
+      await clearCacheAndReload()
+      // Page will reload, so no need to reset state
+    } catch {
+      setClearing(false)
+      toast.error('Failed to clear cache. Try again or use browser DevTools.')
+    }
   }
 
   const isTesting = testingGuid === currentDeviceSub?.guid

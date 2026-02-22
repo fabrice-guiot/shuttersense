@@ -355,7 +355,7 @@ Push Notifications
 |------|---------|
 | `frontend/src/hooks/usePwaHealth.ts` | Core diagnostics hook — runs all checks, returns structured results |
 | `frontend/src/components/notifications/PwaHealthPanel.tsx` | Diagnostics UI panel with collapsible check categories |
-| `backend/src/api/routes/notification_push_health.py` | `GET /api/notifications/push/health` endpoint |
+| `backend/src/api/notifications.py` | `GET /api/notifications/push/health` endpoint |
 
 ### Key Files (Modified)
 
@@ -364,7 +364,7 @@ Push Notifications
 | `frontend/src/sw.ts` | Add `GET_VERSION` message handler |
 | `frontend/src/pages/NotificationsPage.tsx` | Add "PWA Health" button/tab to access diagnostics |
 | `frontend/src/hooks/usePushSubscription.ts` | Extract browser/platform detection helpers to shared utility |
-| `frontend/vite.config.ts` | Inject build version constant into SW via `define` |
+| `frontend/vite.config.ts` | Inject build version via custom `swVersionPlugin` transform |
 
 ### Implementation Phases
 

@@ -41,7 +41,7 @@ A practical reference for installing the ShutterSense PWA and troubleshooting pu
 | **Chrome** | Click install icon in address bar, or Menu > "Install ShutterSense" | Creates app shim in `~/Applications/Chrome Apps/` |
 | **Edge** | Click install icon in address bar, or Menu > Apps > "Install this site as an app" | Creates standalone app in Applications |
 | **Safari 17+** (Sonoma) | File > Add to Dock | Not a full PWA install — copies cookies at install time, then uses separate storage |
-| **Firefox** | Not supported | macOS PWA support not available (Windows-only experimentally since Firefox 143, Sept 2025) |
+| **Firefox** | Not supported | macOS PWA support not available (Windows-only since Firefox 143, Sept 2025; not available on Microsoft Store builds) |
 
 #### Windows
 
@@ -189,7 +189,7 @@ Safari (macOS Sonoma+ / Safari 17+) takes a fundamentally different approach:
 **Limitations:**
 - Safari's "Add to Dock" is not a full PWA install — it copies cookies at install time but uses separate storage afterward.
 - The Badging API (`navigator.setAppBadge()`) works for Dock web apps but not in regular Safari tabs.
-- Safari 18.4+ (iOS/iPadOS) and Safari 18.5+ (macOS 15.5+) support **Declarative Web Push** — notifications can be delivered without an active service worker (Safari-only feature as of early 2026).
+- Safari 18.4+ (iOS/iPadOS 18.4+, macOS 15.4+) supports **Declarative Web Push** — notifications can be delivered without an active service worker (Safari-only feature as of early 2026).
 
 ### iOS / iPadOS Push
 
@@ -322,7 +322,7 @@ const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
 > **PRD available:** See [026-declarative-web-push.md](prd/026-declarative-web-push.md) for the full implementation plan.
 
-Safari 18.4+ (macOS 15.4 / iOS 18.4) and Safari 26 (iOS 26) support **Declarative Web Push** — a standard where push payloads contain notification content directly, without requiring a Service Worker to process them. This is the most impactful improvement for iOS push reliability, as it eliminates silent notification loss caused by ITP evicting Service Workers.
+Safari 18.4+ (iOS/iPadOS 18.4+, macOS 15.4+) supports **Declarative Web Push** — a standard where push payloads contain notification content directly, without requiring a Service Worker to process them. This is the most impactful improvement for iOS push reliability, as it eliminates silent notification loss caused by ITP evicting Service Workers.
 
 **References:**
 - [WebKit Blog — Meet Declarative Web Push](https://webkit.org/blog/16535/meet-declarative-web-push/)
@@ -348,7 +348,7 @@ Since users may have multiple browsers installed, the app could detect the curre
 
 ### 6. Firefox PWA Support Monitoring
 
-Firefox added experimental PWA support on Windows in Firefox 143 (September 2025). macOS and Linux support is tracked in [Mozilla Bug #1407202](https://bugzilla.mozilla.org/show_bug.cgi?id=1407202). When Firefox ships macOS PWA support, the app should be tested and this documentation updated.
+Firefox added PWA support on Windows in Firefox 143 (September 2025; not available on Microsoft Store builds). macOS and Linux support is tracked in [Mozilla Bug #1407202](https://bugzilla.mozilla.org/show_bug.cgi?id=1407202). When Firefox ships macOS PWA support, the app should be tested and this documentation updated.
 
 ---
 

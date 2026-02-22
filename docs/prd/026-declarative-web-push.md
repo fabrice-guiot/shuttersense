@@ -13,7 +13,7 @@
 
 ## Executive Summary
 
-This PRD defines the adoption of **Declarative Web Push** — a Safari-originated standard (shipped in Safari 18.4+, available in Safari 26 / iOS 26) that enables push notifications to be delivered and displayed **without Service Worker JavaScript execution**. The browser parses a standardized JSON payload and renders the notification directly, removing the dependency on an active, healthy Service Worker.
+This PRD defines the adoption of **Declarative Web Push** — a Safari-originated standard (shipped in Safari 18.4+ on iOS/iPadOS 18.4+ and macOS 15.4+) that enables push notifications to be delivered and displayed **without Service Worker JavaScript execution**. The browser parses a standardized JSON payload and renders the notification directly, removing the dependency on an active, healthy Service Worker.
 
 ### Why Now
 
@@ -21,7 +21,7 @@ Push notifications are the primary reason users install the ShutterSense PWA. On
 
 Declarative Web Push solves this by design. Push subscriptions are decoupled from the Service Worker lifecycle. Even when ITP removes the SW, the subscription persists and the browser displays notifications directly from the JSON payload. This is the single most impactful improvement available for iOS push reliability today.
 
-Safari 26 (iOS 26) ships Declarative Web Push as a stable, default-enabled feature — no flags required. With iOS 26 adoption expected to reach the majority of iOS users by late 2026, implementing support now ensures ShutterSense push notifications work reliably across the growing Safari/iOS user base.
+Safari 18.4 (iOS/iPadOS 18.4, macOS 15.4) ships Declarative Web Push as a stable, default-enabled feature — no flags required. With iOS/iPadOS 18.4+ adoption growing steadily, implementing support now ensures ShutterSense push notifications work reliably across the Safari/iOS user base.
 
 ### Key Design Decisions
 

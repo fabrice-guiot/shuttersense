@@ -106,13 +106,28 @@ registerRoute(
 // ============================================================================
 
 self.addEventListener('push', (event: PushEvent) => {
-  if (!event.data) return
+  if (!event.data) {
+    // No payload — show fallback to satisfy Chromium's requirement
+    event.waitUntil(
+      self.registration.showNotification('ShutterSense', {
+        body: 'You have a new update.',
+        icon: '/icons/icon-192x192.png',
+      })
+    )
+    return
+  }
 
   let payload: Record<string, unknown>
   try {
     payload = event.data.json()
   } catch {
-    // Malformed JSON — silently ignore
+    // Malformed JSON — show fallback to satisfy Chromium's requirement
+    event.waitUntil(
+      self.registration.showNotification('ShutterSense', {
+        body: 'You have a new update.',
+        icon: '/icons/icon-192x192.png',
+      })
+    )
     return
   }
 
