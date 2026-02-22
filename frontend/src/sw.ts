@@ -17,7 +17,10 @@ import { NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 
 declare let self: ServiceWorkerGlobalScope
-declare const __SW_VERSION__: string
+
+// App version — injected at build time by swVersionPlugin (vite.config.ts).
+// The placeholder string is replaced with the git-derived version before compilation.
+const SW_VERSION: string = '__SW_BUILD_VERSION__'
 
 // ============================================================================
 // Immediate Activation (Silent Auto-Update)
@@ -45,7 +48,7 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'GET_VERSION') {
     event.ports[0]?.postMessage({
       type: 'SW_VERSION',
-      version: typeof __SW_VERSION__ !== 'undefined' ? __SW_VERSION__ : 'unknown',
+      version: SW_VERSION,
     })
   }
 })
