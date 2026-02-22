@@ -384,10 +384,13 @@ async function checkPushNotifications(): Promise<DiagnosticCheck[]> {
     })
 
     // Server sync — if subscriptions exist but Push API says no subscription, there may be a mismatch
+    // Note: use getRegistration() instead of .ready — .ready never resolves when no SW is registered.
     if (hasPush && 'serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.ready
-        const pushSub = await registration.pushManager.getSubscription()
+        const registration = await navigator.serviceWorker.getRegistration()
+        const pushSub = registration?.active
+          ? await registration.pushManager.getSubscription()
+          : null
         const hasLocalSub = pushSub !== null
         const hasServerSub = health.subscription_count > 0
 
