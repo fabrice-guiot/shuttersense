@@ -17,12 +17,14 @@ import type {
   PushSubscriptionResponse,
   SubscriptionStatusResponse,
 } from '@/contracts/api/notification-api'
-
-// ============================================================================
-// Types
-// ============================================================================
-
-type PermissionState = 'default' | 'granted' | 'denied' | 'unsupported'
+import {
+  getPermissionState,
+  isIos,
+  isStandalone,
+  urlBase64ToUint8Array,
+  detectDeviceName,
+  type PermissionState,
+} from '@/utils/pwa-detection'
 
 interface UsePushSubscriptionReturn {
   /** Active push subscriptions for the current user */
@@ -57,106 +59,6 @@ interface UsePushSubscriptionReturn {
   renameDevice: (guid: string, name: string) => Promise<void>
   /** Refresh subscription status from the server */
   refreshStatus: () => Promise<void>
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function getPermissionState(): PermissionState {
-  if (typeof window === 'undefined') return 'unsupported'
-  if (!('Notification' in window)) return 'unsupported'
-  return Notification.permission as PermissionState
-}
-
-function isIos(): boolean {
-  if (typeof navigator === 'undefined') return false
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
-}
-
-function isStandalone(): boolean {
-  if (typeof window === 'undefined') return false
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    ('standalone' in navigator &&
-      (navigator as Record<string, unknown>).standalone === true)
-  )
-}
-
-/**
- * Convert a Base64url-encoded string to a Uint8Array for PushManager.subscribe()
- */
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = window.atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
-  for (let i = 0; i < rawData.length; i++) {
-    outputArray[i] = rawData.charCodeAt(i)
-  }
-  return outputArray
-}
-
-/**
- * Detect the browser name from user agent data or UA string
- */
-interface NavigatorUAData {
-  brands?: { brand: string }[]
-  platform?: string
-}
-
-function detectBrowserName(): string {
-  // Prefer navigator.userAgentData (Chromium-based browsers)
-  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
-  if (uaData?.brands) {
-    // Pick the first "real" brand (skip "Not A;Brand" / "Chromium" filler entries)
-    const real = uaData.brands.find(
-      (b) => !/not[^a-z]*a[^a-z]*brand/i.test(b.brand) && b.brand !== 'Chromium'
-    )
-    if (real) return real.brand
-  }
-
-  // Fallback: parse the UA string
-  const ua = navigator.userAgent
-  if (/Edg\//i.test(ua)) return 'Edge'
-  if (/OPR\//i.test(ua) || /Opera/i.test(ua)) return 'Opera'
-  if (/Firefox\//i.test(ua)) return 'Firefox'
-  if (/CriOS/i.test(ua) || /Chrome\//i.test(ua)) return 'Chrome'
-  if (/Safari\//i.test(ua)) return 'Safari'
-  return 'Browser'
-}
-
-/**
- * Detect a friendly device name from the user agent in "{browser} on {platform}" format
- */
-function detectDeviceName(): string {
-  // Prefer navigator.userAgentData.platform when available
-  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
-  let platform: string | undefined
-  if (uaData?.platform) {
-    // Normalize common platform values
-    const p = uaData.platform
-    if (/macos/i.test(p)) platform = 'Mac'
-    else if (/windows/i.test(p)) platform = 'Windows'
-    else if (/android/i.test(p)) platform = 'Android'
-    else if (/linux/i.test(p)) platform = 'Linux'
-    else platform = p
-  }
-
-  // Fallback: parse the UA string
-  if (!platform) {
-    const ua = navigator.userAgent
-    if (/iPhone/i.test(ua)) platform = 'iPhone'
-    else if (/iPad/i.test(ua)) platform = 'iPad'
-    else if (/Android/i.test(ua)) platform = 'Android'
-    else if (/Macintosh/i.test(ua)) platform = 'Mac'
-    else if (/Windows/i.test(ua)) platform = 'Windows'
-    else if (/Linux/i.test(ua)) platform = 'Linux'
-    else platform = 'Unknown'
-  }
-
-  const browser = detectBrowserName()
-  return `${browser} on ${platform}`
 }
 
 // ============================================================================

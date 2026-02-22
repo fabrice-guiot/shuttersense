@@ -8,6 +8,9 @@ import { visualizer } from 'rollup-plugin-visualizer';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  define: {
+    __SW_VERSION__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     // PWA support (Issue #114)

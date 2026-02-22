@@ -17,6 +17,7 @@ import { NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 
 declare let self: ServiceWorkerGlobalScope
+declare const __SW_VERSION__: string
 
 // ============================================================================
 // Immediate Activation (Silent Auto-Update)
@@ -34,10 +35,18 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-// Handle explicit SKIP_WAITING message from the app (belt-and-suspenders)
+// Handle messages from the app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
+  }
+
+  // PWA Health Diagnostics: report SW build version (Issue #025)
+  if (event.data?.type === 'GET_VERSION') {
+    event.ports[0]?.postMessage({
+      type: 'SW_VERSION',
+      version: typeof __SW_VERSION__ !== 'undefined' ? __SW_VERSION__ : 'unknown',
+    })
   }
 })
 
