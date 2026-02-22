@@ -229,9 +229,12 @@ export function NotificationPreferences() {
   const handleConfirmRename = useCallback(
     async () => {
       if (!renamingGuid || !renameValue.trim()) return
-      await renameDevice(renamingGuid, renameValue.trim())
-      setRenamingGuid(null)
-      setRenameValue('')
+      try {
+        await renameDevice(renamingGuid, renameValue.trim())
+      } finally {
+        setRenamingGuid(null)
+        setRenameValue('')
+      }
     },
     [renamingGuid, renameValue, renameDevice]
   )
