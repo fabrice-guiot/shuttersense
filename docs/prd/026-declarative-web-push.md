@@ -200,6 +200,7 @@ The push payload MUST follow the Declarative Web Push JSON schema (RFC 8030 magi
 ```
 
 **Required fields:**
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `web_push` | `integer` | Must be `8030` (RFC 8030 identifier) |
@@ -207,6 +208,7 @@ The push payload MUST follow the Declarative Web Push JSON schema (RFC 8030 magi
 | `notification.navigate` | `string` | URL to open on click (relative or absolute, must be same-origin) |
 
 **Optional fields:**
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `notification.body` | `string` | Notification body text |
@@ -230,7 +232,7 @@ headers={
 
 This is the mechanism that triggers declarative handling on Safari 18.4+. On Chromium browsers, this Content-Type is not recognized as special, so the payload is delivered to the Service Worker `push` event handler as before.
 
-> **Note on pywebpush:** The `webpush()` function sets `Content-Type` to `application/octet-stream` by default (for the encrypted payload). The actual Content-Type of the *decrypted* payload is communicated inside the encrypted envelope via the `Content-Encoding` mechanism defined in RFC 8291. We need to verify whether pywebpush supports passing a Content-Type for the inner payload or whether we need to set it at the HTTP level. See [Implementation Phase 1](#phase-1-payload-format-migration) for the investigation task.
+> **Note on pywebpush:** The `webpush()` function sets `Content-Type` to `application/octet-stream` by default because the wire payload is encrypted binary. For Declarative Web Push, Safari requires `Content-Type: application/notification+json` as the **HTTP-level** header of the push request. We need to verify whether pywebpush's `headers` parameter propagates this header to the push service correctly, or whether a wrapper/patch is required. See [Implementation Phase 1](#phase-1-payload-format-migration-backend) for the investigation task.
 
 ### Payload Mapping
 
