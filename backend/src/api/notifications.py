@@ -32,6 +32,7 @@ from backend.src.schemas.notifications import (
     UnreadCountResponse,
     MarkAllReadResponse,
     VapidKeyResponse,
+    PushHealthResponse,
 )
 from backend.src.models.user import User
 from backend.src.services.push_subscription_service import PushSubscriptionService
@@ -577,6 +578,47 @@ async def run_deadline_check(
     """
     sent_count = service.check_deadlines(team_id=ctx.team_id)
     return {"sent_count": sent_count}
+
+
+# ============================================================================
+# Push Health Endpoint (Issue #025)
+# ============================================================================
+
+
+@router.get(
+    "/push/health",
+    response_model=PushHealthResponse,
+    summary="Get push notification health status",
+)
+@limiter.limit("10/minute")
+async def get_push_health(
+    request: Request,
+    ctx: TenantContext = Depends(require_auth),
+    sub_service: PushSubscriptionService = Depends(get_push_subscription_service),
+):
+    """
+    Returns push notification health information for the PWA diagnostics panel.
+
+    Includes VAPID configuration status, active subscription count,
+    and last push delivery timestamp.
+    """
+    settings = get_settings()
+    subscriptions = sub_service.list_subscriptions(
+        user_id=ctx.user_id, team_id=ctx.team_id
+    )
+
+    last_push_at = None
+    if subscriptions:
+        last_used_dates = [s.last_used_at for s in subscriptions if s.last_used_at]
+        if last_used_dates:
+            latest = max(last_used_dates)
+            last_push_at = latest.isoformat() + "Z"
+
+    return PushHealthResponse(
+        vapid_configured=settings.vapid_configured,
+        subscription_count=len(subscriptions),
+        last_push_at=last_push_at,
+    )
 
 
 # ============================================================================

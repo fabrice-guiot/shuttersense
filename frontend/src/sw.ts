@@ -18,6 +18,10 @@ import { ExpirationPlugin } from 'workbox-expiration'
 
 declare let self: ServiceWorkerGlobalScope
 
+// App version — injected at build time by swVersionPlugin (vite.config.ts).
+// The placeholder string is replaced with the git-derived version before compilation.
+const SW_VERSION: string = '__SW_BUILD_VERSION__'
+
 // ============================================================================
 // Immediate Activation (Silent Auto-Update)
 // ============================================================================
@@ -34,10 +38,18 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-// Handle explicit SKIP_WAITING message from the app (belt-and-suspenders)
+// Handle messages from the app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
+  }
+
+  // PWA Health Diagnostics: report SW build version (Issue #025)
+  if (event.data?.type === 'GET_VERSION') {
+    event.ports[0]?.postMessage({
+      type: 'SW_VERSION',
+      version: SW_VERSION,
+    })
   }
 })
 
@@ -59,13 +71,17 @@ cleanupOutdatedCaches()
 // except /api/ routes (which should go to the backend).
 // Uses createHandlerBoundToURL so the precached index.html is resolved
 // regardless of cache versioning / revision hashes.
-const navigationRoute = new NavigationRoute(
-  createHandlerBoundToURL('/index.html'),
-  {
-    denylist: [/^\/api\//],
-  }
-)
-registerRoute(navigationRoute)
+// Guard: in dev mode the precache manifest is empty, so createHandlerBoundToURL
+// would throw. Vite's dev server handles navigation in that case.
+if (self.__WB_MANIFEST.length > 0) {
+  const navigationRoute = new NavigationRoute(
+    createHandlerBoundToURL('/index.html'),
+    {
+      denylist: [/^\/api\//],
+    }
+  )
+  registerRoute(navigationRoute)
+}
 
 // ============================================================================
 // Runtime Caching for API
@@ -90,36 +106,80 @@ registerRoute(
 // ============================================================================
 
 self.addEventListener('push', (event: PushEvent) => {
-  if (!event.data) return
+  if (!event.data) {
+    // No payload — show fallback to satisfy Chromium's requirement
+    event.waitUntil(
+      self.registration.showNotification('ShutterSense', {
+        body: 'You have a new update.',
+        icon: '/icons/icon-192x192.png',
+      })
+    )
+    return
+  }
 
   let payload: Record<string, unknown>
   try {
     payload = event.data.json()
   } catch {
-    // Malformed JSON — silently ignore
+    // Malformed JSON — show fallback to satisfy Chromium's requirement
+    event.waitUntil(
+      self.registration.showNotification('ShutterSense', {
+        body: 'You have a new update.',
+        icon: '/icons/icon-192x192.png',
+      })
+    )
     return
   }
 
-  const safeTitle = (payload.title as string) || 'Notification'
-  const { body, icon, badge, tag, data } = payload as Record<string, unknown>
+  // Parse both Declarative Web Push (web_push: 8030) and legacy formats.
+  // Safari 18.4+ handles declarative payloads natively (this handler won't fire).
+  // On Chromium, the declarative JSON arrives via the SW push event as before.
+  let title: string
+  let body: string
+  let tag: string | undefined
+  let data: Record<string, unknown> | undefined
+  let appBadge: number | undefined
 
-  const notifTag = tag as string | undefined
+  if (payload.web_push === 8030 && payload.notification) {
+    // Declarative Web Push format (PRD 026)
+    const notif = payload.notification as Record<string, unknown>
+    title = (notif.title as string) || 'Notification'
+    body = (notif.body as string) || ''
+    tag = notif.tag as string | undefined
+    data = notif.data as Record<string, unknown> | undefined
+    const navigate = notif.navigate as string | undefined
+    // Merge navigate into data for notificationclick handler
+    if (navigate && data) {
+      data.url = navigate
+    } else if (navigate) {
+      data = { url: navigate }
+    }
+    appBadge = payload.app_badge as number | undefined
+  } else {
+    // Legacy format (backward compatibility)
+    title = (payload.title as string) || 'Notification'
+    body = (payload.body as string) || ''
+    tag = payload.tag as string | undefined
+    data = payload.data as Record<string, unknown> | undefined
+  }
 
   const options: NotificationOptions & { renotify?: boolean } = {
-    body: (body as string) || '',
-    icon: (icon as string) || '/icons/icon-192x192.png',
-    badge: (badge as string) || '/icons/badge-72x72.png',
-    tag: notifTag,
-    renotify: !!notifTag,
+    body,
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/badge-72x72.png',
+    tag,
+    renotify: !!tag,
     requireInteraction: false,
     data,
   }
 
   event.waitUntil(
     Promise.all([
-      self.registration.showNotification(safeTitle, options),
+      self.registration.showNotification(title, options),
       // Set app badge on dock/taskbar icon (Badging API)
-      self.navigator.setAppBadge?.(),
+      appBadge !== undefined
+        ? self.navigator.setAppBadge?.(appBadge)
+        : self.navigator.setAppBadge?.(),
     ])
   )
 })

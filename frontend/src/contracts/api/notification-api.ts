@@ -183,3 +183,12 @@ export interface MarkAllReadResponse {
 export interface VapidKeyResponse {
   vapid_public_key: string
 }
+
+/**
+ * Push health diagnostics response
+ */
+export interface PushHealthResponse {
+  vapid_configured: boolean
+  subscription_count: number
+  last_push_at: string | null
+}

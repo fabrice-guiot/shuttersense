@@ -236,3 +236,11 @@ class VapidKeyResponse(BaseModel):
     """Response schema for VAPID public key."""
 
     vapid_public_key: str = Field(..., description="Base64url-encoded VAPID public key")
+
+
+class PushHealthResponse(BaseModel):
+    """Response schema for push health diagnostics endpoint."""
+
+    vapid_configured: bool = Field(..., description="Whether VAPID keys are configured on the server")
+    subscription_count: int = Field(..., ge=0, description="Number of active push subscriptions for this user")
+    last_push_at: Optional[str] = Field(default=None, description="ISO 8601 timestamp of the last push delivery")

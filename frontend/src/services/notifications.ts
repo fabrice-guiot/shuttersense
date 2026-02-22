@@ -25,6 +25,7 @@ import type {
   UnreadCountResponse,
   MarkAllReadResponse,
   VapidKeyResponse,
+  PushHealthResponse,
 } from '@/contracts/api/notification-api'
 
 // ============================================================================
@@ -213,6 +214,20 @@ export const markAllAsRead = async (): Promise<MarkAllReadResponse> => {
 export const getVapidKey = async (): Promise<VapidKeyResponse> => {
   const response = await api.get<VapidKeyResponse>(
     '/notifications/vapid-key'
+  )
+  return response.data
+}
+
+// ============================================================================
+// Push Health
+// ============================================================================
+
+/**
+ * Get push notification health status for PWA diagnostics
+ */
+export const getPushHealth = async (): Promise<PushHealthResponse> => {
+  const response = await api.get<PushHealthResponse>(
+    '/notifications/push/health'
   )
   return response.data
 }

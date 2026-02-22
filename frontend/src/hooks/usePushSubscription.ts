@@ -17,12 +17,14 @@ import type {
   PushSubscriptionResponse,
   SubscriptionStatusResponse,
 } from '@/contracts/api/notification-api'
-
-// ============================================================================
-// Types
-// ============================================================================
-
-type PermissionState = 'default' | 'granted' | 'denied' | 'unsupported'
+import {
+  getPermissionState,
+  isIos,
+  isStandalone,
+  urlBase64ToUint8Array,
+  detectDeviceName,
+  type PermissionState,
+} from '@/utils/pwa-detection'
 
 interface UsePushSubscriptionReturn {
   /** Active push subscriptions for the current user */
@@ -59,104 +61,20 @@ interface UsePushSubscriptionReturn {
   refreshStatus: () => Promise<void>
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function getPermissionState(): PermissionState {
-  if (typeof window === 'undefined') return 'unsupported'
-  if (!('Notification' in window)) return 'unsupported'
-  return Notification.permission as PermissionState
-}
-
-function isIos(): boolean {
-  if (typeof navigator === 'undefined') return false
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
-}
-
-function isStandalone(): boolean {
-  if (typeof window === 'undefined') return false
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    ('standalone' in navigator &&
-      (navigator as Record<string, unknown>).standalone === true)
-  )
-}
-
 /**
- * Convert a Base64url-encoded string to a Uint8Array for PushManager.subscribe()
+ * Get an active SW registration, waiting briefly for activation if needed.
+ * Returns null if no registration exists or activation doesn't happen in time.
  */
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = window.atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
-  for (let i = 0; i < rawData.length; i++) {
-    outputArray[i] = rawData.charCodeAt(i)
-  }
-  return outputArray
-}
+async function getActiveRegistration(timeoutMs = 5000): Promise<ServiceWorkerRegistration | null> {
+  const reg = await navigator.serviceWorker.getRegistration()
+  if (!reg) return null
+  if (reg.active) return reg
 
-/**
- * Detect the browser name from user agent data or UA string
- */
-interface NavigatorUAData {
-  brands?: { brand: string }[]
-  platform?: string
-}
-
-function detectBrowserName(): string {
-  // Prefer navigator.userAgentData (Chromium-based browsers)
-  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
-  if (uaData?.brands) {
-    // Pick the first "real" brand (skip "Not A;Brand" / "Chromium" filler entries)
-    const real = uaData.brands.find(
-      (b) => !/not[^a-z]*a[^a-z]*brand/i.test(b.brand) && b.brand !== 'Chromium'
-    )
-    if (real) return real.brand
-  }
-
-  // Fallback: parse the UA string
-  const ua = navigator.userAgent
-  if (/Edg\//i.test(ua)) return 'Edge'
-  if (/OPR\//i.test(ua) || /Opera/i.test(ua)) return 'Opera'
-  if (/Firefox\//i.test(ua)) return 'Firefox'
-  if (/CriOS/i.test(ua) || /Chrome\//i.test(ua)) return 'Chrome'
-  if (/Safari\//i.test(ua)) return 'Safari'
-  return 'Browser'
-}
-
-/**
- * Detect a friendly device name from the user agent in "{browser} on {platform}" format
- */
-function detectDeviceName(): string {
-  // Prefer navigator.userAgentData.platform when available
-  const uaData = (navigator as { userAgentData?: NavigatorUAData }).userAgentData
-  let platform: string | undefined
-  if (uaData?.platform) {
-    // Normalize common platform values
-    const p = uaData.platform
-    if (/macos/i.test(p)) platform = 'Mac'
-    else if (/windows/i.test(p)) platform = 'Windows'
-    else if (/android/i.test(p)) platform = 'Android'
-    else if (/linux/i.test(p)) platform = 'Linux'
-    else platform = p
-  }
-
-  // Fallback: parse the UA string
-  if (!platform) {
-    const ua = navigator.userAgent
-    if (/iPhone/i.test(ua)) platform = 'iPhone'
-    else if (/iPad/i.test(ua)) platform = 'iPad'
-    else if (/Android/i.test(ua)) platform = 'Android'
-    else if (/Macintosh/i.test(ua)) platform = 'Mac'
-    else if (/Windows/i.test(ua)) platform = 'Windows'
-    else if (/Linux/i.test(ua)) platform = 'Linux'
-    else platform = 'Unknown'
-  }
-
-  const browser = detectBrowserName()
-  return `${browser} on ${platform}`
+  // SW exists but is installing/waiting — race .ready against a timeout
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ])
 }
 
 // ============================================================================
@@ -207,7 +125,11 @@ export const usePushSubscription = (
     async (serverSubscriptions: PushSubscriptionResponse[]): Promise<string | null> => {
       if (!isSupported) return null
       try {
-        const registration = await navigator.serviceWorker.ready
+        // Use getRegistration() instead of .ready — .ready never resolves
+        // when no service worker is registered, which would hang forever
+        // and keep the loading state stuck (all controls disabled).
+        const registration = await navigator.serviceWorker.getRegistration()
+        if (!registration?.active) return null
         const pushSub = await registration.pushManager.getSubscription()
         if (!pushSub) return null
         const match = serverSubscriptions.some((s) => s.endpoint === pushSub.endpoint)
@@ -280,8 +202,11 @@ export const usePushSubscription = (
       // 2. Get VAPID public key from server
       const { vapid_public_key } = await notificationService.getVapidKey()
 
-      // 3. Get the active service worker registration
-      const registration = await navigator.serviceWorker.ready
+      // 3. Get the active service worker registration (waits up to 5s for activation)
+      const registration = await getActiveRegistration()
+      if (!registration?.active) {
+        throw new Error('Service worker is not active. Try reloading the page.')
+      }
 
       // 4. Subscribe via PushManager
       const applicationServerKey = urlBase64ToUint8Array(vapid_public_key)
@@ -353,8 +278,10 @@ export const usePushSubscription = (
         const target = subscriptionsRef.current.find((s) => s.guid === guid)
         if (target && currentDeviceEndpoint && target.endpoint === currentDeviceEndpoint) {
           try {
-            const registration = await navigator.serviceWorker.ready
-            const pushSub = await registration.pushManager.getSubscription()
+            const registration = await getActiveRegistration()
+            const pushSub = registration?.active
+              ? await registration.pushManager.getSubscription()
+              : null
             if (pushSub) {
               await pushSub.unsubscribe()
             }
@@ -465,9 +392,10 @@ export const usePushSubscription = (
     setError(null)
     try {
       // 1. Unsubscribe from PushManager
-      const registration = await navigator.serviceWorker.ready
-      const pushSubscription =
-        await registration.pushManager.getSubscription()
+      const registration = await getActiveRegistration()
+      const pushSubscription = registration?.active
+        ? await registration.pushManager.getSubscription()
+        : null
 
       if (pushSubscription) {
         const endpoint = pushSubscription.endpoint

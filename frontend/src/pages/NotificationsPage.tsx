@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { BellOff, CheckCheck, RefreshCw, Search } from 'lucide-react'
+import { Activity, BellOff, CheckCheck, RefreshCw, Search } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +36,8 @@ import {
   useNotificationStats,
 } from '@/hooks/useNotifications'
 import { NotificationDetailDialog } from '@/components/notifications/NotificationDetailDialog'
+import { PwaHealthDialog } from '@/components/notifications/PwaHealthDialog'
+import { usePushSubscription } from '@/hooks/usePushSubscription'
 import { formatRelativeTime } from '@/utils/dateFormat'
 import type { NotificationResponse } from '@/contracts/api/notification-api'
 import type { NotificationCategory } from '@/contracts/domain-labels'
@@ -128,8 +130,17 @@ export default function NotificationsPage() {
   // State: detail dialog
   const [selected, setSelected] = useState<NotificationResponse | null>(null)
 
+  // State: PWA health dialog
+  const [healthDialogOpen, setHealthDialogOpen] = useState(false)
+
   // Hooks
   const { isAuthenticated } = useAuth()
+  const {
+    subscriptions: pushSubscriptions,
+    currentDeviceEndpoint,
+    testDevice,
+    testingGuid,
+  } = usePushSubscription()
   const { stats } = useNotificationStats()
   const { setStats } = useHeaderStats()
   const {
@@ -415,8 +426,16 @@ export default function NotificationsPage() {
       </div>
 
       {/* Actions */}
-      {hasUnread && (
-        <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setHealthDialogOpen(true)}
+        >
+          <Activity className="mr-1.5 h-4 w-4" />
+          PWA Health
+        </Button>
+        {hasUnread && (
           <Button
             variant="outline"
             size="sm"
@@ -426,8 +445,8 @@ export default function NotificationsPage() {
             <CheckCheck className="mr-1.5 h-4 w-4" />
             {markingAllRead ? 'Marking...' : 'Mark all read'}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Table */}
       <ResponsiveTable
@@ -498,6 +517,16 @@ export default function NotificationsPage() {
       <NotificationDetailDialog
         notification={selected}
         onClose={() => setSelected(null)}
+      />
+
+      {/* PWA Health dialog */}
+      <PwaHealthDialog
+        open={healthDialogOpen}
+        onOpenChange={setHealthDialogOpen}
+        currentDeviceEndpoint={currentDeviceEndpoint}
+        subscriptions={pushSubscriptions}
+        testDevice={testDevice}
+        testingGuid={testingGuid}
       />
     </div>
   )

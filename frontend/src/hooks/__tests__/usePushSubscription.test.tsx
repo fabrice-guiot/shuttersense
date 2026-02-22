@@ -58,6 +58,7 @@ describe('usePushSubscription', () => {
   }
 
   const mockRegistration = {
+    active: true,
     pushManager: mockPushManager,
   }
 
@@ -85,6 +86,7 @@ describe('usePushSubscription', () => {
       configurable: true,
       value: {
         ready: Promise.resolve(mockRegistration),
+        getRegistration: vi.fn().mockResolvedValue(mockRegistration),
       },
     })
 
