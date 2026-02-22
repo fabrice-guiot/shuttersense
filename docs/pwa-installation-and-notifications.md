@@ -21,7 +21,16 @@ A practical reference for installing the ShutterSense PWA and troubleshooting pu
   - [iOS / iPadOS Push](#ios--ipados-push)
   - [Android Push](#android-push)
   - [Cross-Platform Support Matrix](#cross-platform-support-matrix)
+- [PWA Health Diagnostics](#pwa-health-diagnostics)
+  - [Accessing the Diagnostics Panel](#accessing-the-diagnostics-panel)
+  - [Diagnostic Categories](#diagnostic-categories)
+  - [Self-Service Actions](#self-service-actions)
+- [Declarative Web Push](#declarative-web-push)
+  - [How It Works](#how-it-works)
+  - [Browser Support](#browser-support)
+  - [Payload Format](#payload-format)
 - [Troubleshooting](#troubleshooting)
+  - [Start Here: PWA Health Diagnostics](#start-here-pwa-health-diagnostics)
   - [macOS (Chrome)](#macos-chrome)
   - [macOS (Edge)](#macos-edge)
   - [iOS / iPadOS](#ios--ipados-1)
@@ -189,7 +198,8 @@ Safari (macOS Sonoma+ / Safari 17+) takes a fundamentally different approach:
 **Limitations:**
 - Safari's "Add to Dock" is not a full PWA install — it copies cookies at install time but uses separate storage afterward.
 - The Badging API (`navigator.setAppBadge()`) works for Dock web apps but not in regular Safari tabs.
-- Safari 18.4+ (iOS/iPadOS 18.4+, macOS 15.4+) supports **Declarative Web Push** — notifications can be delivered without an active service worker (Safari-only feature as of early 2026).
+**Declarative Web Push (implemented):**
+Safari 18.4+ (iOS/iPadOS 18.4+, macOS 15.4+) supports **Declarative Web Push**. ShutterSense sends all push payloads in this format, so Safari can display notifications natively without Service Worker execution. This eliminates the risk of silent notification loss from ITP-related Service Worker eviction. See [Declarative Web Push](#declarative-web-push) for details.
 
 ### iOS / iPadOS Push
 
@@ -203,7 +213,7 @@ Push notifications on iOS require:
 - No silent push — every push event must display a visible notification.
 - No notification action buttons (limited support).
 - No inline images in notifications.
-- Service workers may be evicted by Safari's Intelligent Tracking Prevention (ITP) if the user hasn't visited the PWA recently, breaking push subscriptions.
+- Service workers may be evicted by Safari's Intelligent Tracking Prevention (ITP) if the user hasn't visited the PWA recently. ShutterSense mitigates this via [Declarative Web Push](#declarative-web-push) — on Safari 18.4+, notifications are displayed by the browser directly, so SW eviction no longer causes silent notification loss.
 
 ### Android Push
 
@@ -225,10 +235,115 @@ Android has the most complete push notification support:
 | Rich media (images) | Yes | Yes | No | Yes | No |
 | `notificationclick` | Yes (macOS 15 bug) | Yes (macOS 15 bug) | Yes | Yes | Yes |
 | Service worker persistence | Reliable | Reliable | May be evicted (ITP) | Reliable | May be evicted (ITP) |
+| Declarative Web Push | No (uses SW) | No (uses SW) | Yes (18.4+) | No (uses SW) | Yes (18.4+, PWA only) |
+
+---
+
+## PWA Health Diagnostics
+
+ShutterSense includes a built-in **PWA Health Diagnostics** panel that automatically detects and reports PWA installation, service worker, cache, and push notification issues — with actionable remediation guidance.
+
+> **PRD:** See [025-pwa-health-diagnostics.md](prd/025-pwa-health-diagnostics.md) for the full specification.
+
+### Accessing the Diagnostics Panel
+
+1. Navigate to the **Notifications** page.
+2. Click the **PWA Health** button in the top-right area.
+3. The diagnostics dialog opens and runs all checks automatically.
+
+Diagnostics render progressively — each section appears as its checks complete, with a spinner showing the active section.
+
+### Diagnostic Categories
+
+The panel checks five areas:
+
+| Category | What It Checks |
+|----------|---------------|
+| **Installation** | Display mode (standalone vs. browser tab), web app manifest validity, browser/platform detection |
+| **Service Worker** | Registration status, controller state, build version (via MessageChannel), update status (waiting/installing) |
+| **Cache** | Cache API availability, cache names and entry counts, size warnings (>500 entries) |
+| **Push Notifications** | Push API support, notification permission, VAPID configuration (server), subscription count, browser-server sync, last delivery timestamp |
+| **Platform Warnings** | iOS not installed to Home Screen, Edge/macOS attribution flag, Safari ITP advisory |
+
+Each check produces a **pass**, **warn**, **fail**, or **unknown** status with a specific remediation message when applicable.
+
+### Self-Service Actions
+
+The diagnostics panel provides three actions:
+
+- **Send Test Notification** — Sends a test push to the current device via the server. Only available when the device has an active push subscription. Validates the full push pipeline (server → push service → service worker → OS notification).
+- **Clear Cache & Reload** — Deletes all cached data and unregisters the service worker, then reloads the page. Requires confirmation via an alert dialog. This is the primary fix for stale cache issues that prevent PWA installation or updates.
+- **Copy Report** — Copies a formatted plain-text summary of all diagnostic results to the clipboard, suitable for pasting into a support request or issue report.
+
+### Service Worker Version Reporting
+
+The service worker reports its build version when queried via `MessageChannel`. The version is injected at build time by a custom Vite plugin (`swVersionPlugin`) that replaces the `__SW_BUILD_VERSION__` placeholder with the git-based project version. The diagnostics panel displays this version and warns if the SW cannot be queried (indicating it may need to be updated).
+
+---
+
+## Declarative Web Push
+
+ShutterSense sends all push notification payloads in the **Declarative Web Push** format, a Safari-originated standard that enables push notifications to be displayed **without Service Worker JavaScript execution**.
+
+> **PRD:** See [026-declarative-web-push.md](prd/026-declarative-web-push.md) for the full specification.
+
+### How It Works
+
+Traditional Web Push requires a Service Worker `push` event handler to receive the payload and call `showNotification()`. If the Service Worker has been evicted (e.g., by Safari's ITP), the push message is silently lost.
+
+Declarative Web Push decouples notification display from the Service Worker. The browser parses a standardized JSON payload with `Content-Type: application/notification+json` and renders the notification directly. This means:
+
+- **On Safari 18.4+**: The browser handles the notification natively. The Service Worker `push` event handler is never invoked. Notifications survive ITP-related SW eviction.
+- **On Chromium browsers** (Chrome, Edge): The payload arrives at the SW `push` event handler as before. ShutterSense's handler parses the same JSON format and calls `showNotification()`. Chromium ignores the declarative header.
+
+This is a **backward-compatible, dual-path approach**: one payload format works on both Safari (natively) and Chromium (via SW).
+
+### Browser Support
+
+| Browser | Declarative Web Push | Fallback |
+|---------|---------------------|----------|
+| Safari 18.4+ (iOS/iPadOS 18.4+, macOS 15.4+) | Native — browser renders notification directly | N/A |
+| Chrome / Edge / Firefox | Not supported | SW `push` event handler parses the same JSON payload |
+
+### Payload Format
+
+All push payloads from ShutterSense use this structure:
+
+```json
+{
+  "web_push": 8030,
+  "notification": {
+    "title": "Job Complete",
+    "body": "PhotoStats analysis finished for 'Wedding 2026'",
+    "navigate": "/collections/col_01hgw2bbg.../results",
+    "tag": "job_complete_job_01hgw2bbg...",
+    "data": { "url": "/collections/col_01hgw2bbg.../results" }
+  },
+  "app_badge": 3
+}
+```
+
+Key fields:
+- `web_push: 8030` — Declarative Web Push version identifier (required by Safari).
+- `notification.navigate` — URL to open when the notification is clicked (Safari uses this natively; Chromium merges it into `data.url` for the `notificationclick` handler).
+- `app_badge` — Badge count for the dock/taskbar icon (Badging API). For legacy payloads without `app_badge`, a dot indicator is shown instead.
 
 ---
 
 ## Troubleshooting
+
+### Start Here: PWA Health Diagnostics
+
+Before manual troubleshooting, use the built-in **PWA Health Diagnostics** panel:
+
+1. Open the **Notifications** page.
+2. Click **PWA Health** to open the diagnostics dialog.
+3. Review all diagnostic sections for warnings or failures — each includes a specific remediation action.
+4. Use **Send Test Notification** to verify the full push pipeline.
+5. If caching issues are suspected, use **Clear Cache & Reload**.
+6. Use **Copy Report** to capture the diagnostics for a support request if needed.
+
+The diagnostics panel detects most common issues automatically, including Edge/macOS flag requirements, iOS installation requirements, stale caches, and VAPID configuration problems.
 
 ### macOS (Chrome)
 
@@ -268,7 +383,7 @@ This is almost certainly the attribution flag issue. When the flag is disabled/d
 
 **Notifications stop arriving after a while:**
 
-Safari's ITP may have evicted the service worker. Open the PWA from the Home Screen to re-register. The app's service worker lifecycle code includes automatic re-registration on activation.
+Safari's ITP may have evicted the service worker. On Safari 18.4+ (iOS/iPadOS 18.4+), this is mitigated by [Declarative Web Push](#declarative-web-push) — the browser displays notifications natively without requiring an active SW. On older iOS versions, open the PWA from the Home Screen to re-register. The app's service worker lifecycle code includes automatic re-registration on activation.
 
 **Notifications never arrive:**
 
@@ -278,57 +393,28 @@ Safari's ITP may have evicted the service worker. Open the PWA from the Home Scr
 
 ### General Checklist
 
-| Check | How to Verify |
-|-------|--------------|
-| HTTPS | App must be served over HTTPS (required by Web Push standard) |
-| VAPID keys | Server has `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` set |
-| Browser permission | Browser shows ShutterSense as "Allowed" in notification settings |
-| OS permission | System Settings > Notifications shows the browser/PWA as enabled |
-| Subscription active | Notifications page shows at least one active device |
-| Service worker | DevTools > Application > Service Workers shows active SW |
-| Focus/DND | OS-level Do Not Disturb or Focus mode is off |
-| macOS Edge flag | `edge://flags/#enable-mac-pwas-notification-attribution` is **Enabled** |
+> **Tip:** Most of these checks are automated by the [PWA Health Diagnostics](#pwa-health-diagnostics) panel. Open it from the Notifications page before working through this list manually.
+
+| Check | How to Verify | Automated? |
+|-------|--------------|-----------|
+| PWA Health Diagnostics | Notifications page > PWA Health button | — |
+| HTTPS | App must be served over HTTPS (required by Web Push standard) | No |
+| VAPID keys | Server has `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` set | Yes (VAPID Config check) |
+| Browser permission | Browser shows ShutterSense as "Allowed" in notification settings | Yes (Permission check) |
+| OS permission | System Settings > Notifications shows the browser/PWA as enabled | No (OS-level) |
+| Subscription active | Notifications page shows at least one active device | Yes (Subscriptions check) |
+| Service worker | Active SW registered and controlling the page | Yes (Registration + Controller checks) |
+| SW version | Service worker version matches app build | Yes (Version check) |
+| Browser-server sync | Browser push subscription matches server records | Yes (Server Sync check) |
+| Focus/DND | OS-level Do Not Disturb or Focus mode is off | No (OS-level) |
+| macOS Edge flag | `edge://flags/#enable-mac-pwas-notification-attribution` is **Enabled** | Yes (Platform Warnings) |
+| iOS installation | PWA is installed to Home Screen (not a browser tab) | Yes (Platform Warnings) |
 
 ---
 
 ## Future Improvements
 
-### 1. In-App Notification Permission Diagnostics
-
-Add a diagnostic panel in the notification settings page that checks and reports:
-
-- Whether the browser supports the Push API
-- Whether notification permission is granted, denied, or default
-- Whether a service worker is registered and active
-- Whether the VAPID public key is available from the server
-- Whether the push subscription endpoint is reachable
-- **Platform-specific warnings** (e.g., "You're using Edge on macOS — check that the notification attribution flag is enabled")
-
-This would replace manual troubleshooting with automated detection and guidance.
-
-### 2. Safari "Add to Dock" Detection and Guidance
-
-Safari's "Add to Dock" web apps get better notification attribution than Chromium PWAs on macOS. The app could detect when it's running in Safari on macOS and suggest "Add to Dock" as the preferred installation method, with instructions.
-
-Detection is possible via:
-```javascript
-// Safari standalone detection
-const isSafariStandalone = window.navigator.standalone === true;
-// Or via display-mode media query
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-```
-
-### 3. Declarative Web Push Support (Safari 18.4+)
-
-> **PRD available:** See [026-declarative-web-push.md](prd/026-declarative-web-push.md) for the full implementation plan.
-
-Safari 18.4+ (iOS/iPadOS 18.4+, macOS 15.4+) supports **Declarative Web Push** — a standard where push payloads contain notification content directly, without requiring a Service Worker to process them. This is the most impactful improvement for iOS push reliability, as it eliminates silent notification loss caused by ITP evicting Service Workers.
-
-**References:**
-- [WebKit Blog — Meet Declarative Web Push](https://webkit.org/blog/16535/meet-declarative-web-push/)
-- [WWDC25 Session 235 — Learn more about Declarative Web Push](https://developer.apple.com/videos/play/wwdc2025/235/)
-
-### 4. Push Subscription Health Monitoring
+### 1. Push Subscription Health Monitoring
 
 Implement server-side monitoring of push subscription health:
 
@@ -337,18 +423,24 @@ Implement server-side monitoring of push subscription health:
 - Alert users when their subscription appears unhealthy (e.g., consecutive delivery failures)
 - Periodic "keep-alive" test pushes (opt-in) to detect silently broken subscriptions
 
-### 5. Multi-Browser Installation Guidance
+### 2. Multi-Browser Installation Guidance
 
-Since users may have multiple browsers installed, the app could detect the current browser and provide tailored installation instructions, including:
+The diagnostics panel detects the current browser and platform, but could go further with browser-specific installation instructions:
 
-- Browser-specific steps for PWA installation
-- Known issues for that browser/platform combination
-- Whether any flags need to be enabled (e.g., Edge attribution flag)
+- Step-by-step install guides tailored to the detected browser
+- In-app "Add to Dock" prompt when Safari on macOS is detected (detection utilities already exist in `pwa-detection.ts`)
 - Link to this documentation for advanced troubleshooting
 
-### 6. Firefox PWA Support Monitoring
+### 3. Firefox PWA Support Monitoring
 
 Firefox added PWA support on Windows in Firefox 143 (September 2025; not available on Microsoft Store builds). macOS and Linux support is tracked in [Mozilla Bug #1407202](https://bugzilla.mozilla.org/show_bug.cgi?id=1407202). When Firefox ships macOS PWA support, the app should be tested and this documentation updated.
+
+### Previously Planned (Now Implemented)
+
+The following items from the original roadmap have been implemented:
+
+- **In-App Notification Permission Diagnostics** — implemented as the [PWA Health Diagnostics](#pwa-health-diagnostics) panel (PRD 025). Checks Push API support, notification permission, service worker status, VAPID configuration, push subscription sync, and platform-specific warnings.
+- **Declarative Web Push Support** — implemented as the [Declarative Web Push](#declarative-web-push) payload format (PRD 026). All push payloads use `Content-Type: application/notification+json` with the `web_push: 8030` schema. Safari 18.4+ renders notifications natively; Chromium browsers parse the same JSON via the SW `push` handler.
 
 ---
 
