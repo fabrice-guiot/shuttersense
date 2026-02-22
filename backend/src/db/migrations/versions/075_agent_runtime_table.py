@@ -89,7 +89,9 @@ def upgrade() -> None:
             FROM agents
         """))
     else:
-        # PostgreSQL: lowercase + cast — agents.status stores uppercase varchar
+        # PostgreSQL: agents.status is VARCHAR(20) but SQLAlchemy's Enum() stores
+        # enum .name (uppercase) by default. Cast via lower() to match the native
+        # agent_status enum which has lowercase values.
         bind.execute(sa.text("""
             INSERT INTO agent_runtime (agent_id, status, error_message, last_heartbeat,
                                        capabilities_json, authorized_roots_json,
@@ -179,18 +181,32 @@ def downgrade() -> None:
         op.add_column("agents", sa.Column("metrics_json", json_type, nullable=True))
 
     # ── Step 2: Copy data back ──
-    bind.execute(sa.text("""
-        UPDATE agents SET
-            status = rt.status,
-            error_message = rt.error_message,
-            last_heartbeat = rt.last_heartbeat,
-            capabilities_json = rt.capabilities_json,
-            authorized_roots_json = rt.authorized_roots_json,
-            pending_commands_json = rt.pending_commands_json,
-            metrics_json = rt.metrics_json
-        FROM agent_runtime rt
-        WHERE agents.id = rt.agent_id
-    """))
+    if is_sqlite:
+        # SQLite doesn't support UPDATE...FROM syntax
+        bind.execute(sa.text("""
+            UPDATE agents SET
+                status = (SELECT rt.status FROM agent_runtime rt WHERE rt.agent_id = agents.id),
+                error_message = (SELECT rt.error_message FROM agent_runtime rt WHERE rt.agent_id = agents.id),
+                last_heartbeat = (SELECT rt.last_heartbeat FROM agent_runtime rt WHERE rt.agent_id = agents.id),
+                capabilities_json = (SELECT rt.capabilities_json FROM agent_runtime rt WHERE rt.agent_id = agents.id),
+                authorized_roots_json = (SELECT rt.authorized_roots_json FROM agent_runtime rt WHERE rt.agent_id = agents.id),
+                pending_commands_json = (SELECT rt.pending_commands_json FROM agent_runtime rt WHERE rt.agent_id = agents.id),
+                metrics_json = (SELECT rt.metrics_json FROM agent_runtime rt WHERE rt.agent_id = agents.id)
+            WHERE agents.id IN (SELECT agent_id FROM agent_runtime)
+        """))
+    else:
+        bind.execute(sa.text("""
+            UPDATE agents SET
+                status = rt.status,
+                error_message = rt.error_message,
+                last_heartbeat = rt.last_heartbeat,
+                capabilities_json = rt.capabilities_json,
+                authorized_roots_json = rt.authorized_roots_json,
+                pending_commands_json = rt.pending_commands_json,
+                metrics_json = rt.metrics_json
+            FROM agent_runtime rt
+            WHERE agents.id = rt.agent_id
+        """))
 
     # ── Step 3: Recreate indexes ──
     op.create_index("ix_agents_team_status", "agents", ["team_id", "status"])
