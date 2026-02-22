@@ -158,6 +158,21 @@ Server                          Push Service              Client
 
 Key mechanism: The `Content-Type: application/notification+json` header tells Safari to handle the notification declaratively. Chromium browsers that don't recognize this Content-Type simply deliver the payload to the Service Worker's `push` event as before.
 
+### Self-Healing Lifecycle After SW Eviction
+
+A critical property of Declarative Web Push is that the notification-tap-to-open flow **automatically restores** the Service Worker, making the system self-healing:
+
+1. ITP evicts the Service Worker (user hasn't opened the PWA in 7+ days)
+2. Push arrives → browser displays notification from JSON (no SW needed)
+3. User taps notification → Safari opens the `navigate` URL natively (no SW `notificationclick` handler needed)
+4. PWA loads → `main.tsx` runs `initServiceWorkerLifecycle()` → vite-plugin-pwa re-registers the SW
+5. SW installs, precaches assets, activates — **fully restored**
+6. Push subscription was never lost (decoupled from SW in declarative mode)
+
+Compare this to the **death spiral** without Declarative Web Push: the notification is silently lost (step 2 fails), the user never opens the app, the SW stays evicted, and all subsequent notifications are also lost indefinitely.
+
+**Expected behavior on first load after SW restoration:** The precache is empty when the SW is first re-registered, so the initial page load fetches all assets from the network (slightly slower than a cache hit). The SW precaches assets during installation, so subsequent loads return to full cache speed. This is a minor, one-time UX blip that does not require mitigation.
+
 ---
 
 ## Technical Specification
