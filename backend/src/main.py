@@ -277,10 +277,11 @@ async def dead_agent_safety_net() -> None:
             db = SessionLocal()
 
             # Get all distinct team_ids from non-revoked agents
-            from backend.src.models import Agent, AgentStatus
+            from backend.src.models import Agent, AgentStatus, AgentRuntime
             team_ids = (
                 db.query(Agent.team_id)
-                .filter(Agent.status != AgentStatus.REVOKED)
+                .join(AgentRuntime, Agent.id == AgentRuntime.agent_id)
+                .filter(AgentRuntime.status != AgentStatus.REVOKED)
                 .distinct()
                 .all()
             )

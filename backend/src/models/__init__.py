@@ -50,6 +50,7 @@ from backend.src.models.collection import Collection, CollectionType, Collection
 
 # Agent models (Issue #90 - Distributed Agent Architecture)
 from backend.src.models.agent import Agent, AgentStatus
+from backend.src.models.agent_runtime import AgentRuntime
 from backend.src.models.agent_registration_token import AgentRegistrationToken
 from backend.src.models.job import Job, JobStatus
 
@@ -122,6 +123,7 @@ __all__ = [
     # Agent (Issue #90)
     "Agent",
     "AgentStatus",
+    "AgentRuntime",
     "AgentRegistrationToken",
     "Job",
     "JobStatus",
