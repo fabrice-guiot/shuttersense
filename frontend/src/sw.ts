@@ -58,7 +58,8 @@ self.addEventListener('message', (event) => {
 // ============================================================================
 
 // Precache all build assets (manifest injected by vite-plugin-pwa)
-precacheAndRoute(self.__WB_MANIFEST)
+const manifest = self.__WB_MANIFEST
+precacheAndRoute(manifest)
 
 // Clean up old caches from previous service worker versions
 cleanupOutdatedCaches()
@@ -73,7 +74,7 @@ cleanupOutdatedCaches()
 // regardless of cache versioning / revision hashes.
 // Guard: in dev mode the precache manifest is empty, so createHandlerBoundToURL
 // would throw. Vite's dev server handles navigation in that case.
-if (self.__WB_MANIFEST.length > 0) {
+if (manifest.length > 0) {
   const navigationRoute = new NavigationRoute(
     createHandlerBoundToURL('/index.html'),
     {
