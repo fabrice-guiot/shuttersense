@@ -30,25 +30,10 @@ def upgrade() -> None:
     # JSON column type per dialect
     json_type = sa.Text() if is_sqlite else JSONB()
 
-    # Status enum — ensure native PG type exists, then reuse it
-    if not is_sqlite:
-        bind.execute(sa.text("""
-            DO $$ BEGIN
-                CREATE TYPE agent_status AS ENUM ('online', 'offline', 'error', 'revoked');
-            EXCEPTION WHEN duplicate_object THEN null;
-            END $$;
-        """))
-
-    status_enum = sa.Enum(
-        "online", "offline", "error", "revoked",
-        name="agent_status",
-        create_constraint=False,
-        create_type=False,  # handled above for PG; irrelevant for SQLite
-    )
-    # PostgreSQL needs explicit cast for enum default; SQLite accepts plain string
-    status_default = "offline" if is_sqlite else sa.text("'offline'::agent_status")
-
     # ── Step 1: Create agent_runtime table ──
+    # Use VARCHAR(20) for the status column to avoid sa.Enum's automatic
+    # CREATE TYPE behaviour which conflicts with manual type management.
+    # After data migration we ALTER the column to a native PG enum.
     op.create_table(
         "agent_runtime",
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
@@ -61,9 +46,9 @@ def upgrade() -> None:
         ),
         sa.Column(
             "status",
-            status_enum,
+            sa.String(20),
             nullable=False,
-            server_default=status_default,
+            server_default="offline",
         ),
         sa.Column("error_message", sa.Text, nullable=True),
         sa.Column("last_heartbeat", sa.DateTime, nullable=True),
@@ -78,29 +63,36 @@ def upgrade() -> None:
     op.create_index("ix_agent_runtime_status", "agent_runtime", ["status"])
 
     # ── Step 2: Migrate data from agents to agent_runtime ──
-    if is_sqlite:
-        bind.execute(sa.text("""
-            INSERT INTO agent_runtime (agent_id, status, error_message, last_heartbeat,
-                                       capabilities_json, authorized_roots_json,
-                                       pending_commands_json, metrics_json)
-            SELECT id, status, error_message, last_heartbeat,
-                   capabilities_json, authorized_roots_json,
-                   pending_commands_json, metrics_json
-            FROM agents
-        """))
-    else:
-        # PostgreSQL: agents.status is VARCHAR(20) but SQLAlchemy's Enum() stores
-        # enum .name (uppercase) by default. Cast via lower() to match the native
-        # agent_status enum which has lowercase values.
-        bind.execute(sa.text("""
-            INSERT INTO agent_runtime (agent_id, status, error_message, last_heartbeat,
-                                       capabilities_json, authorized_roots_json,
-                                       pending_commands_json, metrics_json)
-            SELECT id, lower(status)::agent_status, error_message, last_heartbeat,
-                   capabilities_json, authorized_roots_json,
-                   pending_commands_json, metrics_json
-            FROM agents
-        """))
+    # Both dialects: agent_runtime.status is VARCHAR(20) at this point,
+    # matching agents.status (also VARCHAR). Normalize to lowercase for
+    # consistency (SQLAlchemy's Enum() stored uppercase .name values).
+    bind.execute(sa.text("""
+        INSERT INTO agent_runtime (agent_id, status, error_message, last_heartbeat,
+                                   capabilities_json, authorized_roots_json,
+                                   pending_commands_json, metrics_json)
+        SELECT id, lower(status), error_message, last_heartbeat,
+               capabilities_json, authorized_roots_json,
+               pending_commands_json, metrics_json
+        FROM agents
+    """))
+
+    # ── Step 2b: Convert status column to native PG enum (PostgreSQL only) ──
+    if not is_sqlite:
+        # Create the native enum type if it doesn't already exist
+        type_exists = bind.execute(sa.text(
+            "SELECT EXISTS(SELECT 1 FROM pg_type WHERE typname = 'agent_status')"
+        )).scalar()
+        if not type_exists:
+            bind.execute(sa.text(
+                "CREATE TYPE agent_status AS ENUM ('online', 'offline', 'error', 'revoked')"
+            ))
+
+        # Convert the VARCHAR column to the native enum type
+        bind.execute(sa.text(
+            "ALTER TABLE agent_runtime "
+            "ALTER COLUMN status TYPE agent_status USING status::agent_status, "
+            "ALTER COLUMN status SET DEFAULT 'offline'::agent_status"
+        ))
 
     # ── Step 3: Drop volatile columns and old index from agents ──
     if is_sqlite:
