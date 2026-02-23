@@ -87,10 +87,18 @@ def upgrade() -> None:
                 "CREATE TYPE agent_status AS ENUM ('online', 'offline', 'error', 'revoked')"
             ))
 
-        # Convert the VARCHAR column to the native enum type
+        # Convert the VARCHAR column to the native enum type.
+        # Must drop the VARCHAR default first — PostgreSQL cannot auto-cast
+        # the existing default during ALTER TYPE.
+        bind.execute(sa.text(
+            "ALTER TABLE agent_runtime ALTER COLUMN status DROP DEFAULT"
+        ))
         bind.execute(sa.text(
             "ALTER TABLE agent_runtime "
-            "ALTER COLUMN status TYPE agent_status USING status::agent_status, "
+            "ALTER COLUMN status TYPE agent_status USING status::agent_status"
+        ))
+        bind.execute(sa.text(
+            "ALTER TABLE agent_runtime "
             "ALTER COLUMN status SET DEFAULT 'offline'::agent_status"
         ))
 
