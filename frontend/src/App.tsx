@@ -47,6 +47,7 @@ import ProfilePage from './pages/ProfilePage'
 import AgentsPage from './pages/AgentsPage'
 import AgentDetailPage from './pages/AgentDetailPage'
 import NotificationsPage from './pages/NotificationsPage'
+import CollectionsPageDemo from './pages/CollectionsPageDemo'
 
 // ============================================================================
 // Route Configuration
@@ -142,6 +143,9 @@ function App() {
         <AuthProvider>
           <AuthRedirectHandler>
             <Routes>
+            {/* Demo page - public, no auth required, shows CollectionsPage with mock data */}
+            <Route path="/demo" element={<CollectionsPageDemo />} />
+            
             {/* Login page - public, no auth required */}
             <Route path="/login" element={<LoginPage />} />
 
@@ -240,6 +244,9 @@ function App() {
             {/* Issue #217 - Pipelines moved under Resources page */}
             <Route path="/pipelines" element={<Navigate to="/resources?tab=pipelines" replace />} />
 
+            {/* Redirect root to demo page for preview */}
+            <Route path="/" element={<Navigate to="/demo" replace />} />
+            
             {/* Catch-all 404 route */}
             <Route path="*" element={<NotFoundPage />} />
             </Routes>
