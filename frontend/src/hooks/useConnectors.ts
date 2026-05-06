@@ -15,6 +15,42 @@ import type {
   ConnectorStatsResponse
 } from '@/contracts/api/connector-api'
 
+// Demo mode: use mock data when backend is not running
+const DEMO_MODE = true
+
+const MOCK_CONNECTORS: Connector[] = [
+  {
+    guid: 'conn-s3-001',
+    name: 'AWS S3 Production',
+    type: 'S3',
+    is_active: true,
+    is_accessible: true,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-03-15T10:00:00Z',
+    config: { bucket: 'production-photos', region: 'us-east-1' }
+  },
+  {
+    guid: 'conn-local-001',
+    name: 'Local Storage',
+    type: 'LOCAL',
+    is_active: true,
+    is_accessible: true,
+    created_at: '2024-02-01T00:00:00Z',
+    updated_at: '2024-03-14T16:00:00Z',
+    config: { path: '/data' }
+  },
+  {
+    guid: 'conn-gcs-001',
+    name: 'Google Cloud Storage',
+    type: 'GCS_BETA',
+    is_active: false,
+    is_accessible: false,
+    created_at: '2023-06-01T00:00:00Z',
+    updated_at: '2024-02-28T12:00:00Z',
+    config: { bucket: 'events-archive' }
+  }
+]
+
 interface UseConnectorsReturn {
   connectors: Connector[]
   loading: boolean
@@ -38,6 +74,10 @@ export const useConnectors = (autoFetch = true): UseConnectorsReturn => {
     setLoading(true)
     setError(null)
     try {
+      if (DEMO_MODE) {
+        setConnectors(MOCK_CONNECTORS)
+        return MOCK_CONNECTORS
+      }
       const data = await connectorService.listConnectors(filters)
       setConnectors(data)
       return data

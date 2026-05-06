@@ -13,6 +13,19 @@ import { useAuth } from '@/hooks/useAuth'
 import { getPoolStatus, getPoolStatusWebSocketUrl } from '../services/agents'
 import type { AgentPoolStatusResponse } from '@/contracts/api/agent-api'
 
+// Demo mode: use mock data when backend is not running
+const DEMO_MODE = true
+
+const MOCK_POOL_STATUS: AgentPoolStatusResponse = {
+  total_count: 3,
+  online_count: 2,
+  offline_count: 1,
+  busy_count: 1,
+  idle_count: 1,
+  has_outdated: false,
+  pool_status: 'running'
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -47,7 +60,7 @@ export const useAgentPoolStatus = (
   autoConnect = true
 ): UseAgentPoolStatusReturn => {
   const { isAuthenticated } = useAuth()
-  const [poolStatus, setPoolStatus] = useState<AgentPoolStatusResponse | null>(null)
+  const [poolStatus, setPoolStatus] = useState<AgentPoolStatusResponse | null>(DEMO_MODE ? MOCK_POOL_STATUS : null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,6 +89,11 @@ export const useAgentPoolStatus = (
 
   // Single effect for WebSocket lifecycle - runs once on mount
   useEffect(() => {
+    // Skip WebSocket connection in demo mode
+    if (DEMO_MODE) {
+      return
+    }
+
     if (!autoConnect || !isAuthenticated) {
       return
     }

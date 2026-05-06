@@ -19,6 +19,42 @@ import type {
   PipelineHistoryEntry,
 } from '@/contracts/api/pipelines-api'
 
+// Demo mode: use mock data when backend is not running
+const DEMO_MODE = true
+
+const MOCK_PIPELINES: PipelineSummary[] = [
+  {
+    guid: 'pipe-001',
+    name: 'Wedding Photo Pipeline',
+    description: 'Process wedding photos with face detection and color correction',
+    version: 3,
+    is_active: true,
+    is_default: true,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-03-10T12:00:00Z'
+  },
+  {
+    guid: 'pipe-002',
+    name: 'Event Processing',
+    description: 'Standard event photo processing pipeline',
+    version: 1,
+    is_active: true,
+    is_default: false,
+    created_at: '2023-06-01T00:00:00Z',
+    updated_at: '2024-01-15T08:00:00Z'
+  },
+  {
+    guid: 'pipe-003',
+    name: 'Nature Analysis',
+    description: 'AI-powered nature and wildlife photo analysis',
+    version: 2,
+    is_active: true,
+    is_default: false,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-03-01T10:00:00Z'
+  }
+]
+
 // ============================================================================
 // Main Pipelines Hook
 // ============================================================================
@@ -58,6 +94,10 @@ export const usePipelines = (options: UsePipelinesOptions = {}): UsePipelinesRet
     setError(null)
     setLastParams(params)
     try {
+      if (DEMO_MODE) {
+        setPipelines(MOCK_PIPELINES)
+        return
+      }
       const data = await pipelinesService.listPipelines(params)
       setPipelines(data)
     } catch (err: any) {

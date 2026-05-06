@@ -42,9 +42,21 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
+// Demo mode: bypass authentication when backend is not running
+const DEMO_MODE = true
+
+const DEMO_USER: UserInfo = {
+  id: 1,
+  email: 'demo@shuttersense.ai',
+  display_name: 'Demo User',
+  is_super_admin: true,
+  current_team_id: 1,
+  current_team_name: 'Demo Team',
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<UserInfo | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<UserInfo | null>(DEMO_MODE ? DEMO_USER : null)
+  const [isLoading, setIsLoading] = useState(!DEMO_MODE)
   const [error, setError] = useState<string | null>(null)
 
   /**
@@ -93,9 +105,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await checkAuth()
   }, [checkAuth])
 
-  // Check auth on mount
+  // Check auth on mount (skip in demo mode)
   useEffect(() => {
-    checkAuth()
+    if (!DEMO_MODE) {
+      checkAuth()
+    }
   }, [checkAuth])
 
   const value: AuthContextValue = {
